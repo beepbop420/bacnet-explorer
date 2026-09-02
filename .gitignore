@@ -1,0 +1,21 @@
+# Python-miljø som start.bat bygger selv
+venv/
+__pycache__/
+*.pyc
+
+# Anleggsdata og notater — aldri i et repo
+sites.json
+notes.json
+notes-queue.json
+writelog.jsonl
+projects/
+*.log
+
+# Valgfri logo som hver installasjon legger inn selv
+logo.png
+logo.svg
+
+# Redigering
+.vscode/
+.idea/
+.DS_Store

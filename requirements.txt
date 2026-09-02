@@ -1,0 +1,5 @@
+fastapi
+uvicorn
+pydantic
+bacpypes3
+psutil

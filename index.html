@@ -1,0 +1,3751 @@
+<!doctype html>
+<html lang="no">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>BACnet Explorer</title>
+<style>
+:root{
+  /* Without this the browser assumes a light page and draws every native
+     control to match: the select's drop-down list, the number spinners and
+     the scrollbars all came out white on a dark UI. This is the one property
+     that fixes all of them at once, and it has to follow the theme. */
+  color-scheme:dark;
+  --bg:#0b0d10; --panel:#0f1216; --raised:#151a21; --hover:#1a2029;
+  --line:#222933; --line-2:#333c48;
+  /* Colours that were written straight into rules and so could not be themed:
+     the text that sits on an accent surface, the faint divider inside lists,
+     the sunken field background, and the red used for text rather than for a
+     block. Naming them is what makes a custom theme reach the whole app. */
+  --radius:4px;
+  --on-accent:#cfe0ff; --line-soft:#12161b; --sunken:#0a0c0f;
+  --err-fg:#ffb4a8; --accent-edge:#2d5490; --accent-press:#24487a;
+  /* Text scale verified against the #0b0d10 background:
+     fg 14.2:1 · fg-2 8.7:1 · fg-3 5.8:1 — all clear of WCAG AA (4.5:1).
+     The previous fg-3 sat at 3.19:1, which made unit symbols, column
+     headers and the status bar genuinely hard to read. */
+  --fg:#d5dde6; --fg-2:#a3aebc; --fg-3:#828d9a;
+  /* Status colours follow the palette used in the building-automation tools
+     that is the language read all day in Niagara: green is "på / normal
+     tilstand", yellow is "unormal tilstand, bør undersøkes", red is
+     "alarm/nødsituasjon", dodgerBlue is "manuell betjening kreves". The guide
+     is written for a whiteSmoke background, so red is the one that had to
+     move - #ff0000 sits at 4.87:1 here and vibrates against dark. The rest
+     carry over as they are.
+
+     darkOrange is the guide's "justerbart settpunkt": a value a person can
+     press and change. It is used here only where that is literally true. */
+  --accent:#1e90ff; --accent-dim:#14304f;   /* dodgerBlue, per guide */
+  --live:#2dd4bf;                            /* live stream, not a status */
+  --ok:#0ac80a;                              /* guide: på / driftsindikasjon */
+  --warn:#ffc900;                            /* guide: unormal tilstand */
+  --err:#ff6b57;                             /* guide red, lifted for dark */
+  --adjust:#ff8c00;                          /* guide: justerbart settpunkt */
+  /* A deep indigo as the brand surface. It is far too dark to use as
+     text on a dark UI, so it is used the way the book allows it — as an
+     identity surface with white text — while the data area stays neutral
+     for legibility. */
+  --merke:#282071; --merke-lys:#332a8c; --merke-aksent:#ff3a20;
+  --mono:ui-monospace,"Cascadia Mono","Segoe UI Mono",Consolas,monospace;
+  --sans:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",sans-serif;
+  --row:26px;
+}
+
+/* Light mode is not the dark palette inverted - the status colours were
+   tuned for a dark background and every one of them fails on a light one:
+   measured against #f4f6f8 they came in between 1.42:1 (yellow) and 2.99:1
+   (blue), where 4.5:1 is the floor for text.
+
+   So the hues are kept and the lightness moved. That lands closer to the SD
+   design guide than the dark theme can be, since the guide is written for a
+   whiteSmoke background in the first place - red goes back towards the
+   guide's own red rather than the lifted one dark mode needs.
+
+   Every value below is measured: the lowest text contrast in this theme is
+   4.5:1, against the lightest surface it is ever drawn on. */
+:root[data-theme="light"]{
+  color-scheme:light;
+  --bg:#f4f6f8; --panel:#ffffff; --raised:#f1f4f7; --hover:#dfe5eb;
+  --line:#dde3ea; --line-2:#bcc6d1;
+  --fg:#1b2430; --fg-2:#4b5765; --fg-3:#616c79;
+  --on-accent:#0b4f96; --line-soft:#e8edf2; --sunken:#ffffff;
+  --err-fg:#b81200; --accent-edge:#9dc2ea; --accent-press:#c3daf4;
+  --accent:#0f6fd1; --accent-dim:#d3e4f8;
+  --live:#0a7d72;
+  --ok:#077a07;
+  --warn:#8a6400;
+  --err:#d81400;
+  --adjust:#a85800;
+}
+/* Surfaces that were tinted for dark need their own light values: an alpha
+   tint designed to lift off near-black turns muddy over white. */
+:root[data-theme="light"] .selbar{background:rgba(15,111,209,.07)}
+:root[data-theme="light"] .dup-warn{background:rgba(138,100,0,.08);border-bottom-color:rgba(138,100,0,.30)}
+:root[data-theme="light"] .dup-warn.severe{background:rgba(216,20,0,.07);border-bottom-color:rgba(216,20,0,.28)}
+/* Chip tints: measured on white, .10 left the red chip at 4.41:1. Lighter
+   tint, more contrast for the number on it. */
+:root[data-theme="light"] .dev-flag.bad{background:#fdeeec}
+:root[data-theme="light"] .dev-flag.warn{background:#faf3e2}
+:root[data-theme="light"] .dev-seen.borte{background:rgba(138,100,0,.07)}
+/* Brand colours do not survive a white background as text: Schneider lands at
+   2.09:1, WAGO at 2.12, Tridium at 2.43. So in light mode the vendor name is
+   read in the normal text colour and the brand keeps the bar beside it, which
+   is a shape rather than something you have to read - darkened enough to stay
+   visible without becoming a different colour. */
+:root[data-theme="light"] .vgroup.av .vgroup-head{color:var(--fg-3)}
+:root[data-theme="light"] .vgroup-bar,
+:root[data-theme="light"] .vendor i{filter:brightness(.72) saturate(1.1)}
+/* No fill on light: even at 4% the tint pulled the red badge to 4.5:1, and
+   the border alone carries the shape just as well. */
+:root[data-theme="light"] .ctx-stat.bad{background:none;border-color:rgba(216,20,0,.45)}
+:root[data-theme="light"] .ctx-stat.warn{background:none;border-color:rgba(138,100,0,.45)}
+/* The top bar is a brand surface: the same indigo in both themes, with
+   light-on-dark controls. Light-mode rules must therefore stay out of it —
+   this one was written unscoped and turned the search fields into white
+   blocks with white text on the blue bar. */
+:root[data-theme="light"] .field:not(.topbar .field){background:#fff}
+:root[data-theme="light"] .note-field{background:#fff}
+:root[data-theme="light"] tbody tr:nth-child(even){background:rgba(0,0,0,.016)}
+:root[data-theme="light"] .btn.primary:not(.topbar .btn){color:#fff}
+/* On the brand-blue top bar the controls keep their light-on-dark treatment
+   in both themes - the bar itself does not change colour. */
+:root[data-theme="light"] .menu-pop,
+:root[data-theme="light"] .gs-modal{box-shadow:0 10px 30px rgba(20,30,45,.18)}
+:root[data-theme="light"] ::-webkit-scrollbar-thumb{background:#c8d1db;border-color:var(--bg)}
+:root[data-theme="light"] ::-webkit-scrollbar-thumb:hover{background:#aeb9c6}
+:root[data-theme="light"] .type-tag{background:var(--raised)}
+:root[data-theme="light"] .cmd-item[aria-selected="true"]{color:#0b4f96}
+:root[data-theme="light"] .btn.on:not(.topbar .btn),
+:root[data-theme="light"] .menu-item.on,
+:root[data-theme="light"] .btn.has-active:not(.topbar .btn),
+:root[data-theme="light"] .chip.on{color:#0b4f96}
+:root[data-theme="light"] .dev.sel .dev-cached{color:#0b4f96}
+:root[data-theme="light"] .dev.sel .dev-ip,
+:root[data-theme="light"] .dev.sel .dev-meta,
+:root[data-theme="light"] .dev.sel .vendor span{color:var(--fg-2)}
+
+/* Theme switch: a two-state slider rather than a button whose label has to
+   explain which mode you are in or about to enter. */
+/* The switch is a small sky.
+
+   It was a white dot that slid twenty pixels. Now the track holds a night and
+   a day, and the two bodies travel as a pair: the moon slides out to the right
+   as the sun comes in from the left, so the switch reads as time passing
+   rather than as a setting being flipped. Stars fade with the night; a
+   daylight wash comes up under the sun.
+
+   Everything moves on transform and opacity, and the whole thing is one
+   button 52px wide - it costs nothing to have it be nice. */
+.theme-tgl{
+  position:relative;flex:0 0 auto;width:52px;height:24px;border-radius:12px;
+  background:linear-gradient(90deg,#101a33,#1b2a4d);
+  border:1px solid rgba(255,255,255,.22);
+  cursor:pointer;padding:0;overflow:hidden;
+  transition:background 480ms ease, border-color 480ms ease;
+}
+.theme-tgl:hover{border-color:rgba(255,255,255,.42)}
+.theme-tgl:focus-visible{outline:2px solid #fff;outline-offset:2px}
+:root[data-theme="light"] .theme-tgl{
+  background:linear-gradient(90deg,#7cc4f5,#bfe4ff);border-color:rgba(255,255,255,.55);
+}
+
+/* Stars: three dots on the night side, gone by day. */
+.theme-tgl::before{
+  content:'';position:absolute;inset:0;pointer-events:none;
+  background:
+    radial-gradient(circle at 32px 7px, rgba(255,255,255,.9) 0 1px, transparent 1.6px),
+    radial-gradient(circle at 40px 15px, rgba(255,255,255,.7) 0 .9px, transparent 1.4px),
+    radial-gradient(circle at 25px 16px, rgba(255,255,255,.55) 0 .8px, transparent 1.3px);
+  opacity:1;transition:opacity 380ms ease;
+}
+:root[data-theme="light"] .theme-tgl::before{opacity:0}
+
+/* The moon: on the left in the dark, gone out the right in daylight. */
+.theme-tgl i{
+  position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:50%;
+  background:radial-gradient(circle at 35% 32%, #ffffff, #d7dced 70%);
+  box-shadow:0 0 8px rgba(200,220,255,.55), inset -3px -1px 0 -1px #b9c2d8;
+  font-size:0;
+  transition:transform 520ms cubic-bezier(.5,.05,.2,1), opacity 300ms ease;
+}
+:root[data-theme="light"] .theme-tgl i{
+  transform:translateX(34px) scale(.6);opacity:0;
+}
+
+/* The sun: waiting off the left edge while it is night, in place by day. */
+.theme-tgl::after{
+  content:'';position:absolute;top:3px;left:3px;width:18px;height:18px;
+  border-radius:50%;pointer-events:none;
+  background:radial-gradient(circle at 38% 34%, #fff6c8, #ffb020 72%);
+  box-shadow:0 0 10px rgba(255,190,60,.75);
+  transform:translateX(-30px) scale(.55);opacity:0;
+  transition:transform 520ms cubic-bezier(.5,.05,.2,1), opacity 320ms ease 90ms;
+}
+:root[data-theme="light"] .theme-tgl::after{
+  transform:translateX(25px) scale(1);opacity:1;
+}
+body.uten-bevegelse .theme-tgl,
+body.uten-bevegelse .theme-tgl i,
+body.uten-bevegelse .theme-tgl::before,
+body.uten-bevegelse .theme-tgl::after{transition-duration:0s}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{
+  background:var(--bg);color:var(--fg);font:13px/1.45 var(--sans);
+  overflow:hidden;-webkit-font-smoothing:antialiased;
+}
+button,input,select{font:inherit;color:inherit}
+button{background:none;border:none;cursor:pointer}
+::-webkit-scrollbar{width:10px;height:10px}
+::-webkit-scrollbar-thumb{background:#232a33;border-radius:5px;border:2px solid var(--bg)}
+::-webkit-scrollbar-thumb:hover{background:#323b47}
+::-webkit-scrollbar-track{background:transparent}
+
+.app{display:flex;flex-direction:column;height:100%}
+/* The tool itself has stopped - said plainly, because the alternative was a
+   raw "Failed to fetch" that reads as a problem with the plant. */
+.backend-warn{
+  flex:0 0 auto;padding:8px 14px;font-size:12px;font-weight:600;
+  color:#fff;background:var(--err);
+  display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;
+}
+.backend-warn[hidden]{display:none}
+
+/* Banneret faller ned, det dukker ikke opp.
+
+   Dette er meldinga om at selve programmet er borte - alt paa skjermen er fra
+   naa av historie - og den kom uten en bevegelse, midt i en side full av tall
+   som fortsatt ser levende ut. Naa skyver den seg ned ovenfra og setter seg,
+   saa oyet fanger den selv om du saa et annet sted. */
+@keyframes banner-faller{
+  0%  {opacity:0;transform:translateY(-100%)}
+  62% {opacity:1;transform:translateY(4px)}
+  82% {transform:translateY(-2px)}
+  100%{opacity:1;transform:none}
+}
+.backend-warn:not([hidden]){animation:banner-faller 520ms cubic-bezier(.16,1,.3,1)}
+
+/* Sammenlikninga mot EDE-fila er et resultat, ikke en liste.
+
+   Avvikene kom ferdig oppslaatt i det oyeblikket knappen ble sluppet. Naa
+   telles de fram: overskrifta foerst, saa radene under seg etter tur, saa det
+   leses som noe som ble gjennomgaatt. */
+@keyframes ede-inn{
+  from{opacity:0;transform:translateX(-10px)}
+  to  {opacity:1;transform:none}
+}
+#edeBody .ede-sec{animation:ede-inn 300ms var(--mot-kurve) both}
+#edeBody .ede-sec:nth-child(1){animation-delay:0ms}
+#edeBody .ede-sec:nth-child(2){animation-delay:110ms}
+#edeBody .ede-sec:nth-child(3){animation-delay:200ms}
+#edeBody .ede-sec:nth-child(n+4){animation-delay:270ms}
+/* Bare de tolv foerste radene i hver bolk baerer kaskaden - er det hundre
+   avvik, er ikke poenget lenger at de kommer inn etter tur. */
+#edeBody .ede-sec .ede-row:nth-child(-n+13){animation:ede-inn 260ms var(--mot-kurve) both}
+#edeBody .ede-sec .ede-row:nth-child(2){animation-delay:40ms}
+#edeBody .ede-sec .ede-row:nth-child(3){animation-delay:70ms}
+#edeBody .ede-sec .ede-row:nth-child(4){animation-delay:98ms}
+#edeBody .ede-sec .ede-row:nth-child(5){animation-delay:124ms}
+#edeBody .ede-sec .ede-row:nth-child(6){animation-delay:148ms}
+#edeBody .ede-sec .ede-row:nth-child(7){animation-delay:170ms}
+#edeBody .ede-sec .ede-row:nth-child(8){animation-delay:190ms}
+#edeBody .ede-sec .ede-row:nth-child(9){animation-delay:208ms}
+#edeBody .ede-sec .ede-row:nth-child(10){animation-delay:224ms}
+#edeBody .ede-sec .ede-row:nth-child(n+11){animation-delay:238ms}
+@media (prefers-reduced-motion:reduce){
+  .backend-warn:not([hidden]),#edeBody .ede-sec,#edeBody .ede-sec .ede-row{animation:none}
+}
+.bw-note{font-weight:400;font-size:11px;opacity:.92}
+.bw-note b{font-weight:600}
+
+/* ---------- top bar ---------- */
+.topbar{
+  display:flex;align-items:center;gap:10px;height:46px;flex:0 0 46px;
+  padding:0 12px;background:var(--merke);
+  border-bottom:1px solid #1b1650;
+  /* Without this the scan controls push the right-hand buttons off the
+     window on a narrow screen - and a menu anchored to a button that is
+     itself off-screen opens off-screen too. */
+  min-width:0;
+}
+/* The scan controls give up width first; the brand and the right-hand
+   buttons must always stay reachable. */
+.topbar .brand{flex:0 0 auto}
+.topbar .tb-group{min-width:0;flex:0 1 auto}
+.topbar .field{min-width:0}
+.topbar #localAddr{flex:1 1 110px}
+.topbar #rangeInput{flex:1 1 96px;width:auto}
+.topbar #modeSel{flex:0 1 auto}
+.topbar .menu,.topbar #helpBtn,.topbar #scanBtn{flex:0 0 auto}
+.topbar .conn{min-width:0;overflow:hidden;flex:0 1 auto}
+/* On a narrow window the bound address is the first thing to go - it is
+   also visible in the interface picker right next to it. */
+@media (max-width:1000px){ .topbar .conn code{display:none} }
+@media (max-width:820px){ .topbar .conn{display:none} }
+.brand{
+  display:flex;align-items:center;gap:9px;flex:0 0 auto;
+  text-decoration:none;color:inherit;cursor:default;
+  padding:3px 7px;margin-left:-7px;border-radius:6px;transition:background .14s;
+}
+/* Only clickable when the Portal actually lives on this host — the local
+   version runs on 127.0.0.1 where there is no Portal to go back to. */
+.brand.linked{cursor:pointer}
+.brand.linked:hover{background:rgba(255,255,255,.10)}
+.brand.linked:hover .brand-back{opacity:1;transform:translateX(0)}
+.brand-back{
+  color:rgba(255,255,255,.6);font-size:11px;font-weight:500;white-space:nowrap;
+  opacity:0;transform:translateX(-4px);transition:.14s;margin-left:1px;
+}
+.brand-logo{height:26px;width:auto;display:block;flex:0 0 auto}
+.brand-mark{
+  display:flex;align-items:center;justify-content:center;
+  width:24px;height:24px;border-radius:5px;flex:0 0 24px;
+  background:linear-gradient(135deg,var(--merke-aksent),#fc6924);
+  color:#fff;font-weight:700;font-size:13px;letter-spacing:-.02em;
+}
+.brand-text{line-height:1.1}
+.brand-text b{display:block;color:#fff;font-size:13px;font-weight:600;letter-spacing:-.01em}
+.brand-text span{display:block;color:rgba(255,255,255,.55);font-size:10px}
+
+/* Controls sit on the brand surface, so they get their own light-on-dark
+   treatment rather than inheriting the neutral panel styling. */
+.topbar .field{background:rgba(255,255,255,.10);border-color:rgba(255,255,255,.20);color:#fff}
+.topbar .field:focus{border-color:#fff;background:rgba(255,255,255,.16)}
+.topbar .field option{background:#1a1550;color:#fff}
+.topbar .btn{background:rgba(255,255,255,.12);border-color:rgba(255,255,255,.22);color:#fff}
+.topbar .btn:hover:not(:disabled){background:rgba(255,255,255,.20)}
+.topbar .btn.primary{background:var(--merke-aksent);border-color:var(--merke-aksent);color:#fff;font-weight:500}
+.topbar .btn.primary:hover:not(:disabled){background:#e63218;border-color:#e63218}
+.topbar .conn{color:rgba(255,255,255,.75)}
+/* Measured against the brand blue: .45 gives 3.92:1, under the 4.5:1 needed
+   for text this size. .55 gives 5.13:1 and still reads as secondary. */
+.topbar .conn code{color:rgba(255,255,255,.55)}
+.tb-sep{width:1px;height:20px;background:rgba(255,255,255,.18)}
+.tb-group{display:flex;align-items:center;gap:6px}
+.tb-label{color:rgba(255,255,255,.5);font-size:10px;text-transform:uppercase;letter-spacing:.06em}
+.spacer{flex:1}
+
+.field{
+  background:var(--sunken);border:1px solid var(--line-2);border-radius:var(--radius);
+  padding:4px 8px;font-family:var(--mono);font-size:12px;color:var(--fg);
+  outline:none;transition:border-color .12s;
+}
+.field:focus{border-color:var(--accent)}
+.field::placeholder{color:var(--fg-3)}
+select.field{font-family:var(--sans);cursor:pointer}
+
+.btn{
+  border:1px solid var(--line-2);border-radius:var(--radius);padding:4px 10px;font-size:12px;
+  color:var(--fg);background:var(--raised);transition:.12s;white-space:nowrap;
+}
+.btn:hover:not(:disabled){background:var(--hover);border-color:#3a444f}
+.btn:disabled{opacity:.35;cursor:not-allowed}
+.btn.primary{background:var(--accent-dim);border-color:var(--accent-edge);color:var(--on-accent)}
+.btn.primary:hover:not(:disabled){background:var(--accent-press)}
+.btn.on{background:var(--accent-dim);border-color:var(--accent);color:var(--on-accent)}
+.btn-icon{padding:4px 6px;display:inline-flex;align-items:center}
+
+.conn{display:flex;align-items:center;gap:7px;font-size:11px;color:rgba(255,255,255,.55)}
+.conn.down{color:var(--err-fg)}
+.conn code{font-family:var(--mono);font-size:11px;color:var(--fg-3)}
+
+/* ---------- dropdown menus ----------
+   Occasional actions live behind one button instead of lining the toolbar.
+   Everything used on every visit - search, type, live - stays in the open. */
+.menu{position:relative;display:inline-flex}
+.menu-pop{
+  position:absolute;top:calc(100% + 5px);left:0;z-index:90;min-width:210px;
+  background:var(--panel);border:1px solid var(--line-2);border-radius:5px;
+  padding:4px;box-shadow:0 10px 30px rgba(0,0,0,.55);
+}
+.menu-pop.menu-right{left:auto;right:0}
+/* Never wider than the window, and never off its right edge. */
+.menu-pop{max-width:calc(100vw - 24px)}
+.menu-pop[hidden]{display:none}
+.menu-item{
+  display:flex;align-items:center;gap:8px;width:100%;text-align:left;
+  padding:6px 9px;border-radius:var(--radius);font-size:12px;color:var(--fg);
+}
+.menu-item:hover{background:var(--hover)}
+.menu-item.on{color:var(--on-accent)}
+.menu-sep{height:1px;background:var(--line);margin:4px 2px}
+/* D3, i den formen som taalte maalinga.
+
+   Foerste utkast var det lista sa: hver rad toner inn naar den kommer til
+   syne, drevet av animation-timeline: view(). Det virket, og det kostet en
+   tredjedel av bildefrekvensen - 33 til 23 bilder i sekundet paa 2418 rader,
+   fordi det er 2418 rulledrevne animasjoner. Rulling er hovedhandlingen i en
+   lang liste, og en pynt som gjor den tregere har ikke fortjent plassen.
+
+   Ideen bak - at innholdet mykner mot kanten i stedet for aa bli kappet - er
+   fortsatt riktig. Her ligger den paa ETT element: en tonet kant i bunnen som
+   forsvinner naar du er nede. Den er ogsaa rulledrevet, men det er en
+   animasjon, ikke to tusen. */
+@supports (animation-timeline: scroll()){
+  #pointsWrap{position:relative}
+  #pointsWrap::after{
+    content:'';position:sticky;bottom:0;left:0;display:block;
+    height:34px;margin-top:-34px;pointer-events:none;z-index:3;
+    background:linear-gradient(180deg,transparent,var(--panel));
+    animation:kant-toner linear both;
+    animation-timeline:scroll(nearest block);
+    animation-range:contain 86% contain 100%;
+  }
+  @keyframes kant-toner{
+    from{opacity:1}
+    to  {opacity:0}
+  }
+}
+
+/* C3: settpunktet som referanse i kurva. Stiplet, i varselfargen, saa den
+   ikke forveksles med maalt verdi - den ER ikke en maaling. */
+.trend-sp{
+  stroke:var(--warn);stroke-width:1;stroke-dasharray:4 3;opacity:.75;
+  vector-effect:non-scaling-stroke;
+}
+.meta-sp{color:var(--warn);font-weight:600}
+/* C2: der du grep inn. Streken gaar gjennom hele hoyden saa den finnes ogsaa
+   naar kurva ligger langt unna, og prikken sitter paa selve verdien. */
+.trend-merke{
+  stroke:var(--accent);stroke-width:1;opacity:.45;stroke-dasharray:2 2;
+  vector-effect:non-scaling-stroke;
+}
+.trend-merke-p{fill:var(--accent);opacity:.9}
+
+/* C1 - to enheter side ved side. */
+.cmp-velg{
+  display:flex;gap:8px;align-items:center;padding:8px 12px;
+  border-bottom:1px solid var(--line);flex-wrap:wrap;
+}
+.cmp-velg .field{flex:1 1 200px;min-width:0}
+.cmp-mot{color:var(--fg-3);font-size:11px}
+.cmp-bare{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--fg-2);cursor:pointer}
+.cmp-rad{
+  display:grid;grid-template-columns:1fr 110px 110px 74px;gap:8px;
+  align-items:center;padding:4px 12px;font-size:11.5px;
+  border-bottom:1px solid var(--line-soft,rgba(255,255,255,.04));
+}
+.cmp-hode{
+  position:sticky;top:0;z-index:2;background:var(--panel);
+  color:var(--fg-3);text-transform:uppercase;font-size:9.5px;letter-spacing:.05em;
+  font-weight:600;
+}
+.cmp-navn{font-family:var(--mono);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cmp-v{font-family:var(--mono);text-align:right}
+.cmp-merke{font-size:9.5px;text-transform:uppercase;letter-spacing:.04em;text-align:right}
+.cmp-rad.ulik{background:color-mix(in srgb,var(--warn) 9%,transparent)}
+.cmp-rad.ulik .cmp-merke{color:var(--warn)}
+.cmp-rad.bare-a,.cmp-rad.bare-b{background:color-mix(in srgb,var(--err) 8%,transparent)}
+.cmp-rad.bare-a .cmp-merke,.cmp-rad.bare-b .cmp-merke{color:var(--err)}
+.cmp-mangler{color:var(--fg-3)}
+
+/* C4/C5 - rapportene. Lesbare paa skjerm, og de skal kunne limes rett inn i
+   en e-post - derfor tekstlig oppbygning og en kopiknapp, ikke en tabell. */
+.rapport{padding:12px 16px;font-size:12px;line-height:1.65}
+.rap-bolk{margin:0 0 16px}
+.rap-h{
+  font-size:10px;text-transform:uppercase;letter-spacing:.06em;
+  color:var(--fg-3);font-weight:600;margin-bottom:5px;
+}
+.rap-linje{display:flex;gap:8px;padding:1px 0}
+.rap-nokkel{color:var(--fg-2);min-width:170px}
+.rap-verdi{font-family:var(--mono)}
+.rap-liste{margin:2px 0 0;padding-left:16px}
+.rap-liste li{padding:1px 0}
+.rap-tom{color:var(--fg-3);font-style:italic}
+.rap-tall{font-family:var(--mono);font-weight:600}
+.rap-tall.bad{color:var(--err)}
+.rap-tall.warn{color:var(--warn)}
+
+/* B3 - handlingsmenyen paa raden. Absolutt plassert i punktruta, som ruller,
+   saa den foelger raden i stedet for aa bli staaende igjen. */
+#radmeny{
+  position:absolute;z-index:20;min-width:210px;
+  animation:meny-inn 160ms var(--mot-kurve);
+}
+#radmeny .menu-gruppe{
+  font-family:var(--mono);font-size:10px;color:var(--accent);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+
+/* D2 - segmentene i paletten. Uten dem blandes handlinger, punkter og
+   enheter i en liste, og et soek paa "RT4" gir bade en kommando og tretti
+   punkter uten at man kan si hva man var ute etter. */
+.cmd-seg{
+  display:flex;gap:2px;padding:6px 10px 0;border-bottom:1px solid var(--line);
+}
+.cmd-segk{
+  border:0;background:transparent;color:var(--fg-3);cursor:pointer;
+  font-size:11px;padding:4px 9px;border-radius:5px 5px 0 0;
+  border-bottom:2px solid transparent;
+  transition:color 120ms ease,border-color 120ms ease;
+}
+.cmd-segk:hover{color:var(--fg-2)}
+.cmd-segk.sel{color:var(--fg);border-bottom-color:var(--accent)}
+
+/* D1 - treffene baerer det som skiller dem: typemerke og verdi paa et punkt,
+   adresse paa en enhet. Uten det maa man aapne treffet for aa vite om det var
+   det rette. */
+.cmd-merke{
+  font-family:var(--mono);font-size:9px;font-weight:600;
+  padding:1px 4px;border-radius:3px;margin-right:6px;
+  background:var(--sunken,rgba(255,255,255,.06));color:var(--fg-3);
+  flex:0 0 auto;
+}
+.cmd-verdi{
+  font-family:var(--mono);font-size:10.5px;color:var(--fg-2);
+  margin-left:auto;padding-left:10px;flex:0 0 auto;
+}
+
+/* A5 - feltet i cella. Samme hoyde som verdien det erstatter, saa raden ikke
+   hopper naar det aapnes. */
+.inline-skriv{
+  width:100%;box-sizing:border-box;
+  font-family:var(--mono);font-size:11.5px;text-align:right;
+  padding:0 2px;height:18px;line-height:18px;
+  background:var(--sunken,rgba(255,255,255,.06));
+  border:1px solid var(--accent);border-radius:3px;
+  color:var(--fg);outline:none;
+}
+
+/* Stripa som sier at faerre svarte enn sist. Den staar oeverst i enhetslista,
+   over kortene, saa den ikke kan overses - og den forsvinner av seg selv naar
+   neste skann finner like mange. */
+.skann-avvik{
+  padding:9px 11px;margin:0 0 4px;
+  background:color-mix(in srgb,var(--warn) 12%,transparent);
+  border-bottom:1px solid color-mix(in srgb,var(--warn) 34%,transparent);
+  animation:tom-inn 280ms var(--mot-kurve) both;
+}
+.sa-tekst{font-size:11px;line-height:1.5;color:var(--fg-2)}
+.sa-tekst b{color:var(--fg);font-family:var(--mono)}
+.sa-knapper{display:flex;gap:5px;margin-top:7px;flex-wrap:wrap}
+.sa-knapper .btn{font-size:10.5px;padding:3px 8px}
+
+/* Ping-svaret. Adressene settes i monospace fordi de leses som tall - man
+   sammenlikner dem med det man har i hodet. */
+.ping-del{margin-top:10px}
+.ping-svar{font-size:11px;line-height:1.55;color:var(--fg-2);margin-top:7px}
+.ping-svar b{color:var(--fg)}
+.ping-svar code{
+  font-family:var(--mono);font-size:10.5px;
+  background:var(--sunken,rgba(255,255,255,.06));padding:1px 4px;border-radius:3px;
+}
+.wr-ok{color:var(--ok)!important}
+.wr-nei{color:var(--fg-3)!important}
+.ping-nb{display:block;margin-top:5px;color:var(--fg-3);font-size:10.5px}
+.ping-liste{
+  font-family:var(--mono);font-size:10.5px;color:var(--ok);
+  margin-top:6px;line-height:1.7;word-spacing:6px;
+}
+
+/* Ruta som forklarer et tomt skann. Den staar i enhetslista, der man ser
+   etter enhetene - ikke som en toast som er borte for man rakk aa lese den. */
+.tomt-skann{padding:16px 14px;font-size:11.5px;line-height:1.6}
+.tomt-tittel{font-size:13px;font-weight:600;color:var(--warn);margin-bottom:2px}
+.tomt-omr{font-family:var(--mono);font-size:10.5px;color:var(--fg-3);margin-bottom:10px}
+.tomt-grunner{margin:0;padding-left:16px;color:var(--fg-2)}
+.tomt-grunner li{margin-bottom:7px}
+.tomt-grunner b{color:var(--fg)}
+.tomt-grunner code{
+  font-family:var(--mono);font-size:10.5px;
+  background:var(--sunken,rgba(255,255,255,.06));padding:1px 4px;border-radius:3px;
+}
+.tomt-knapper{margin-top:12px}
+
+.sb-tot{color:var(--fg-3)}
+/* Rutene kan ta imot fokus for tastatursekvensene (g p, g o). De skal ikke
+   tegne en ring rundt hele flaten - markeringa inne i dem er signalet. */
+#pointsWrap:focus,#watchList:focus,#devList:focus{outline:none}
+#pointsWrap:focus-visible,#watchList:focus-visible,#devList:focus-visible{
+  outline:2px solid var(--accent);outline-offset:-2px;
+}
+.feilrute{display:flex;flex-direction:column;align-items:center;gap:6px;padding:34px 18px}
+.feil-tittel{font-size:13px;font-weight:600;color:var(--err)}
+.feil-detalj{font-size:11.5px;color:var(--fg-2);max-width:46ch;text-align:center;line-height:1.5}
+.feil-adr{font-family:var(--mono);font-size:10.5px;color:var(--fg-3)}
+.feil-knapper{display:flex;gap:8px;margin-top:10px}
+.vis-slett{
+  margin-left:8px;opacity:0;color:var(--fg-3);font-size:10px;
+  padding:0 3px;border-radius:3px;transition:opacity 120ms ease,color 120ms ease;
+}
+.menu-item:hover .vis-slett{opacity:1}
+.vis-slett:hover{color:var(--err)}
+.menu-state{margin-left:auto;font-size:10px;color:var(--fg-3);font-family:var(--mono)}
+.menu-item.on .menu-state{color:var(--accent)}
+/* A toolbar button whose menu holds an active filter should say so. */
+.btn.has-active{border-color:var(--accent);color:var(--on-accent)}
+/* ---------- workspace ---------- */
+.workspace{flex:1;display:flex;min-height:0}
+.pane{display:flex;flex-direction:column;min-height:0;min-width:0}
+/* position:relative forankrer det som ligger absolutt plassert i ruta -
+   radverktoyet og plassholderne for kort som er i lufta. Uten den fester
+   de seg til naermeste posisjonerte forelder lenger ute, og havner et
+   annet sted enn ruta de hoerer til. */
+.pane-devices{flex:0 0 var(--w-devices,250px);min-width:160px;
+  background:var(--panel);position:relative}
+.pane-main{flex:1 1 auto;min-width:220px;background:var(--bg)}
+.pane-side{flex:0 0 var(--w-side,400px);min-width:240px;background:var(--panel)}
+
+/* Drag handles between panes. The hit area is wider than the visible line
+   so it is actually grabbable without hunting for a 1px target. */
+.splitter{
+  flex:0 0 5px;cursor:col-resize;position:relative;background:var(--line);
+  transition:background .12s;
+}
+.splitter::after{content:"";position:absolute;inset:0 -3px;}
+.splitter:hover,.splitter.dragging{background:var(--accent)}
+body.resizing{cursor:col-resize;user-select:none}
+body.resizing iframe{pointer-events:none}
+
+.pane-head{
+  display:flex;align-items:center;gap:8px;height:30px;flex:0 0 30px;padding:0 10px;
+  border-bottom:1px solid var(--line);
+  font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--fg-3);font-weight:600;
+}
+.pane-head .count{
+  font-family:var(--mono);font-size:10px;color:var(--fg-3);background:var(--raised);
+  padding:1px 5px;border-radius:2px;letter-spacing:0;text-transform:none;
+}
+.pane-body{flex:1;overflow:auto;min-height:0}
+
+/* ---------- device list ---------- */
+.dev{
+  display:block;width:100%;text-align:left;padding:7px 10px;
+  border-bottom:1px solid #14181e;cursor:pointer;transition:background .1s;
+}
+.dev:hover{background:var(--raised)}
+.dev.sel{background:var(--accent-dim);box-shadow:inset 2px 0 0 var(--accent)}
+.dev-top{display:flex;align-items:baseline;gap:7px}
+.dev-id{font-family:var(--mono);font-size:12px;font-weight:600;color:var(--fg)}
+.dev-ip{font-family:var(--mono);font-size:11px;color:var(--fg-3);margin-left:auto}
+.dev-name{
+  font-size:11px;color:var(--fg-2);margin-top:1px;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  /* Keeps the row height identical whether or not the device reports a
+     name, so the list scans as an even column. */
+  min-height:15px;
+}
+.dev-meta{
+  font-size:10px;color:var(--fg-3);margin-top:2px;font-family:var(--mono);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+/* Devices whose points are already read say so, so it is obvious at a glance
+   which ones will open instantly and which still need a read. */
+.dev-meta.vendor{display:flex;align-items:center;gap:5px}
+.dev-meta.vendor>span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dev-cached{
+  margin-left:auto;flex:0 0 auto;font-style:normal;font-size:10px;
+  color:var(--fg-3);font-family:var(--mono);
+}
+/* dodgerBlue on the selection fill is only 4.1:1 — on the highlighted row the
+   badge needs a lighter tint of the same hue. */
+.dev.sel .dev-cached{color:#8ec5ff}
+/* Secondary text has to lift on the highlighted row: --fg-3 reads at 5.8:1 on
+   the panel but only 3.4:1 on the selection fill, and that was true of the old
+   palette too. Measured, not assumed. */
+.dev.sel .dev-ip,.dev.sel .dev-meta,.dev.sel .vendor span{color:var(--fg-2)}
+.dev-cached.pre{color:var(--live)}
+/* A device carrying a note says so - the note itself is one hover away. */
+.dev-note{
+  margin-left:6px;font-size:9px;font-family:var(--mono);color:var(--accent);
+  border:1px solid var(--accent-dim);border-radius:2px;padding:0 4px;
+  vertical-align:1px;cursor:help;
+}
+.note-field{
+  width:100%;background:var(--sunken);border:1px solid var(--line-2);border-radius:var(--radius);
+  padding:7px 8px;font:12px/1.5 var(--sans);color:var(--fg);resize:vertical;
+  outline:none;min-height:56px;
+}
+.note-field:focus{border-color:var(--accent)}
+.note-field::placeholder{color:var(--fg-3)}
+.note-foot{display:flex;align-items:center;gap:10px;margin-top:7px}
+.note-foot span{flex:1 1 auto;font-size:10px;color:var(--fg-3);line-height:1.4}
+.note-foot span.advarsel{color:var(--warn)}
+
+/* Vendor grouping. The maker gets real colour here — in the section heading,
+   where it is identity and nothing else. It stays out of the row's left rail,
+   which carries state, so the two channels never argue: you scan headings for
+   "which system", and rails for "what is wrong". */
+.vgroup{border-bottom:1px solid var(--line)}
+.vgroup:last-child{border-bottom:none}
+/* The name is read; the bar is looked at. Brand colours are not reliable as
+   text in either theme - measured, Exor and FieldServer land at 3.1:1 on dark
+   and Schneider at 2.1:1 on white - so the heading takes the normal text
+   colour and the brand keeps the bar beside it. */
+.vgroup-head{
+  display:flex;align-items:center;gap:8px;width:100%;text-align:left;
+  padding:7px 9px 7px 0;font-size:11px;font-weight:600;
+  color:var(--fg);
+  position:sticky;top:0;z-index:2;background:var(--panel);
+}
+.vgroup-head:hover{background:var(--hover)}
+.vgroup-bar{flex:0 0 3px;align-self:stretch;background:var(--vc,var(--line-2));border-radius:0 2px 2px 0}
+.vgroup-name{flex:1 1 auto;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.vgroup-n{
+  flex:0 0 auto;font-family:var(--mono);font-size:10px;font-weight:400;
+  color:var(--fg-2);background:var(--raised);border-radius:2px;padding:0 5px;line-height:15px;
+}
+/* Sjevronen snur seg, den byttes ikke ut. */
+.vgroup-chev{
+  flex:0 0 auto;color:var(--fg-3);font-size:10px;padding-right:2px;
+  display:inline-block;transition:transform 280ms var(--mot-kurve);
+}
+.vgroup.av .vgroup-chev{transform:rotate(180deg)}
+
+/* Og gruppa faller sammen i stedet for aa forsvinne.
+
+   Foer ble innholdet utelatt fra DOM-en naar gruppa var slaatt av, saa det
+   fantes ikke noe aa animere - enhetene bare var der, eller var det ikke.
+
+   grid-template-rows fra 1fr til 0fr er den ene maaten aa animere en hoyde man
+   ikke kjenner paa forhaand, uten aa maale den i JavaScript foerst. Barnet maa
+   ha overflow:hidden og min-height:0, ellers nekter det aa krympe. */
+.vgroup-body{
+  display:grid;grid-template-rows:1fr;
+  transition:grid-template-rows 300ms var(--mot-kurve);
+}
+.vgroup.av .vgroup-body{grid-template-rows:0fr}
+.vgroup-inner{overflow:hidden;min-height:0}
+@media (prefers-reduced-motion:reduce){
+  .vgroup-body{transition:none}
+  .vgroup-chev{transition:none}
+  td.c-val{transition:none}
+}
+.vgroup-body{padding-bottom:3px}
+.vgroup.av .vgroup-head{color:var(--fg-3)}
+.vgroup.av .vgroup-bar{opacity:.45}
+/* Inside a group the maker is already stated above, so the per-row repeat
+   steps back rather than saying it twice at full strength. */
+.vgroup .vendor i{display:none}
+.vgroup .vendor-name{color:var(--fg-3)}
+/* Counts of what is wrong inside a device, shown on the device itself.
+   Deliberately quiet: a number in a tinted chip, no icon, nothing round. */
+.dev-flag{
+  flex:0 0 auto;font-style:normal;font-size:9.5px;font-family:var(--mono);
+  padding:0 4px;border-radius:2px;line-height:15px;
+}
+/* Opaque, not a tint: on the selected row the tinted version sat on the blue
+   selection fill and dropped to 4.29:1. A chip that means the same thing
+   should read the same whichever row it is on. */
+.dev-flag.bad{color:var(--err);background:#1a1114}
+.dev-flag.warn{color:var(--warn);background:#1a1610}
+/* Two counts side by side read as one number if they are too close - the
+   tinted backgrounds separate them, but not at 3px. */
+.dev-flag + .dev-flag{margin-left:5px}
+.dev-flag + .dev-cached{margin-left:5px}
+/* Site-level faults. Collapsed to one line by default — five drifted clocks
+   expanded pushed the device list off screen. The accent bar follows the
+   language already used for vendor colour: a thin vertical rule, not a dot. */
+.dup-warn{
+  flex:0 0 auto;background:rgba(255,201,0,.09);
+  border-bottom:1px solid rgba(255,201,0,.28);
+  box-shadow:inset 2px 0 0 var(--warn);
+}
+.dup-warn[hidden]{display:none}
+.dup-warn.severe{
+  background:rgba(255,107,87,.09);
+  border-bottom-color:rgba(255,107,87,.30);
+  box-shadow:inset 2px 0 0 var(--err);
+}
+.warn-head{
+  display:flex;align-items:center;gap:8px;width:100%;text-align:left;
+  padding:7px 9px 7px 11px;font-size:11px;line-height:1.35;color:var(--warn);
+  font-weight:600;
+}
+.warn-head.severe{color:var(--err)}
+.warn-head:hover{background:rgba(255,255,255,.05)}
+.warn-title{flex:1 1 auto;min-width:0}
+.warn-chev{flex:0 0 auto;color:var(--fg-3);font-size:11px}
+.warn-body{padding:0 9px 8px 11px}
+.warn-sect + .warn-sect{margin-top:8px;padding-top:8px;border-top:1px solid rgba(255,201,0,.20)}
+/* Only the fault is coloured. The instance and address stay neutral so the
+   eye lands on what is wrong instead of on the whole block. */
+.warn-row{
+  display:flex;align-items:baseline;gap:7px;width:100%;text-align:left;
+  padding:2px 4px;border-radius:var(--radius);font-size:10.5px;font-family:var(--mono);
+}
+.warn-row:hover{background:rgba(255,255,255,.06)}
+.wr-id{flex:0 0 auto;color:var(--fg-2);min-width:46px}
+.wr-ip{flex:0 0 auto;color:var(--fg-3);min-width:96px;overflow:hidden;text-overflow:ellipsis}
+.wr-txt{flex:1 1 auto;color:var(--warn);min-width:0}
+.warn-row.severe .wr-txt{color:var(--err);font-weight:600}
+.wr-fiks{
+  margin-left:auto;padding:2px 8px;border:1px solid var(--line-2);border-radius:var(--radius);
+  color:var(--fg-2);font-size:10px;white-space:nowrap;
+}
+.wr-fiks:hover{color:var(--fg);border-color:var(--accent);background:var(--accent-dim)}
+.warn-note{
+  margin-top:6px;font-size:10px;line-height:1.5;color:var(--fg-3);
+  font-family:var(--sans);
+}
+.dev-id.dup{color:var(--warn);text-decoration:underline dotted}
+
+/* ---------- context bar: which device am I looking at ---------- */
+.ctx-bar{
+  display:flex;align-items:center;gap:9px;height:34px;flex:0 0 34px;
+  padding:0 12px;background:var(--raised);border-bottom:1px solid var(--line);
+  box-shadow:inset 3px 0 0 var(--vc,transparent);
+  overflow:hidden;white-space:nowrap;
+}
+.ctx-empty{color:var(--fg-3);font-size:12px}
+.ctx-id{font-family:var(--mono);font-size:13px;font-weight:600;flex:0 0 auto}
+/* The device name is the only part allowed to shrink; the identity
+   (instance, vendor, IP) must stay readable at any pane width. */
+.ctx-name{font-size:12px;color:var(--fg-2);overflow:hidden;text-overflow:ellipsis;flex:0 1 auto;min-width:0}
+.ctx-ip{font-family:var(--mono);font-size:11px;color:var(--fg-3);flex:0 0 auto}
+.ctx-bar .vendor{flex:0 0 auto}
+/* The part of every point name that is the same on every row, shown once so
+   that trimming it from the table hides nothing. */
+.ctx-prefix{
+  font-family:var(--mono);font-size:10.5px;color:var(--fg-3);flex:0 1 auto;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:help;
+  padding:1px 6px;border:1px dashed var(--line-2);border-radius:var(--radius);
+}
+@media (max-width:1250px){ .ctx-prefix{display:none} }
+.ctx-ident{
+  font-family:var(--mono);font-size:10.5px;color:var(--fg-3);flex:0 1 auto;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:help;
+  padding-left:9px;border-left:1px solid var(--line-2);
+}
+@media (max-width:1100px){ .ctx-ident{display:none} }
+.ctx-stat{flex:0 0 auto}
+/* Below this the counters are noise — the numbers are in the status bar too. */
+@media (max-width:1150px){ .ctx-stat:not(.bad):not(.warn){display:none} }
+.ctx-stat{
+  font-family:var(--mono);font-size:10px;color:var(--fg-2);
+  background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:2px 6px;
+}
+.ctx-stat.bad{color:var(--err);border-color:rgba(255,107,87,.35);background:rgba(255,107,87,.10)}
+/* Overridden and out-of-service are not faults - someone did that on purpose.
+   They are still the first thing you want to see before handing a plant back,
+   so they get their own colour rather than being hidden or shown as errors. */
+.ctx-stat.warn{color:var(--warn);border-color:rgba(255,201,0,.35);background:rgba(255,201,0,.10)}
+.ctx-stat[data-flag]{cursor:pointer}
+.ctx-stat[data-flag]:hover{filter:brightness(1.25)}
+
+/* ---------- filter bar ---------- */
+.filterbar{
+  display:flex;align-items:center;gap:5px;padding:5px 10px;
+  border-bottom:1px solid var(--line);background:var(--panel);flex-wrap:wrap;
+}
+.filterbar .field{padding:3px 7px;font-size:11px}
+/* The search box absorbs the slack so the controls stay on as few rows as
+   possible instead of the fixed-width input pushing them onto a third. */
+.filterbar #q{flex:1 1 120px;min-width:80px;width:auto}
+.filterbar #typeSel{flex:0 1 auto;max-width:130px}
+.filterbar .chip{padding:2px 7px}
+.filterbar .btn{padding:3px 8px}
+.chip{
+  border:1px solid var(--line-2);background:transparent;border-radius:var(--radius);
+  padding:2px 8px;font-size:11px;color:var(--fg-2);transition:.1s;
+}
+.chip:hover{background:var(--raised);color:var(--fg)}
+.chip.on{background:var(--accent-dim);border-color:var(--accent);color:var(--on-accent)}
+/* Read-only is a safety state, so it reads as a warning rather than as
+   just another toggled button. */
+.btn.ro-on{background:rgba(255,201,0,.18);border-color:var(--warn);color:var(--warn)}
+
+/* ---------- points table ---------- */
+/* Fixed layout keeps the value column on screen no matter how long the
+   point names and descriptions are; the description column absorbs the
+   remaining width and ellipsises. */
+table{width:100%;border-collapse:collapse;font-size:12px;table-layout:fixed}
+thead th{
+  position:sticky;top:0;z-index:2;background:var(--panel);
+  text-align:left;padding:5px 8px;font-size:10px;font-weight:600;
+  text-transform:uppercase;letter-spacing:.05em;color:var(--fg-3);
+  border-bottom:1px solid var(--line);cursor:pointer;user-select:none;white-space:nowrap;
+}
+thead th:hover{color:var(--fg-2)}
+/* This arrow is the only thing saying what the table is sorted by, and at
+   .6 opacity on a 9px glyph it sat at 2.8:1 — effectively invisible. It is a
+   state indicator, so it gets the accent rather than a dimmer grey. */
+thead th .arr{font-size:9px;color:var(--accent);margin-left:3px}
+.arr-nr{
+  font-size:8px;font-weight:700;vertical-align:super;margin-left:1px;
+  color:var(--accent);
+}
+tbody tr{height:var(--row);border-bottom:1px solid #151a20;cursor:pointer}
+/* Faint banding makes it far easier to follow one row across to the value
+   column on a wide table. Kept under 2% so it never reads as a colour. */
+tbody tr:nth-child(even){background:rgba(255,255,255,.017)}
+tbody tr:hover{background:var(--hover)}
+tbody tr.sel{background:var(--accent-dim);box-shadow:inset 2px 0 0 var(--accent)}
+/* The selection background is a solid blue, so the muted greys that read fine
+   on the table background drop to about 4:1 on top of it - the type tag, the
+   instance number, the value and the pin star all at once, which is most of
+   what the row says. On the selected row they step up one level. */
+tbody tr.sel td,
+tbody tr.sel .inst,
+tbody tr.sel .type-tag,
+tbody tr.sel .pin,
+tbody tr.sel .st-txt{color:var(--fg-2)}
+tbody tr.sel td.c-val{color:var(--fg)}
+/* Rows picked with shift or ctrl.
+
+   These were a 9 % blue wash, which on the dark background is very nearly the
+   background - you could shift-pick twenty rows and not see which twenty. They
+   now carry the same solid blue as the row being inspected, because that is
+   what the colour already means here: this row is chosen. The two are still
+   told apart the way a file manager does it - the inspected row keeps the
+   accent bar down its left edge, the picked ones do not. */
+tbody tr.picked{background:var(--accent-dim)}
+tbody tr.picked td,
+tbody tr.picked .inst,
+tbody tr.picked .type-tag,
+tbody tr.picked .pin,
+tbody tr.picked .st-txt{color:var(--fg-2)}
+tbody tr.picked td.c-name{color:var(--fg)}
+tbody tr.picked td.c-val{color:var(--fg)}
+/* Picked and inspected at once: the bar is what separates them. */
+tbody tr.picked.sel{background:var(--accent-dim);box-shadow:inset 2px 0 0 var(--accent)}
+/* Hovering a picked row has to still read as picked. */
+tbody tr.picked:hover{background:var(--accent-press)}
+tbody td{padding:0 8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+td.c-name{font-family:var(--mono);font-weight:500}
+td.c-desc{color:var(--fg-2);font-size:11px}
+/* Emphasis follows meaning, not column order: where the description is
+   visible it is the label and the BACnet path is the address. */
+.desc-primary td.c-desc{color:var(--fg);font-size:12px;font-weight:500}
+.desc-primary td.c-name{color:var(--fg-2);font-weight:400;font-size:11px}
+.desc-primary tr:hover td.c-name,
+.desc-primary tr.sel td.c-name{color:var(--fg)}
+/* An alarm or override still claims the name cell, whatever the emphasis. */
+.desc-primary tr.alarm td.c-name{color:var(--err)}
+
+/* Et punkt som gaar i alarm.
+
+   Dette er den viktigste hendelsen verktoyet kan vise, og fram til naa var den
+   en tekstfarge. Sto du og saa paa lista mens noe tippet over, var det
+   ingenting som fortalte deg det - fargen var der bare neste gang du saa etter.
+
+   To ting skjer naa. Raden tenner: et rodt glimt slaar ut og legger seg, en
+   gang. Og saa blir den staaende og puste - en rod kant i venstrekanten som
+   gaar sakte opp og ned saa lenge alarmen staar, slik at du ser hvilke rader
+   det gjelder uten aa lese en eneste bokstav. */
+@keyframes alarm-tenn{
+  0%  {background-color:color-mix(in srgb,var(--err) 55%,transparent);
+       box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--err) 80%,transparent)}
+  18% {background-color:color-mix(in srgb,var(--err) 44%,transparent)}
+  100%{background-color:transparent;box-shadow:inset 0 0 0 1px transparent}
+}
+tbody tr.tenn{animation:alarm-tenn 1.15s cubic-bezier(.2,0,.2,1)}
+/* Navnet er rodt fordi raden er i alarm - men mens glimtet staar er bakgrunnen
+   ogsaa rod, og da faller navnet til 2,68:1. Nettopp naar du vil lese hvilket
+   punkt det gjelder. Det loeftes til full tekstfarge saa lenge glimtet varer,
+   og faller tilbake til rodt etterpaa. */
+/* Begge variantene. .desc-primary tr.alarm td.c-name har tre klasser og slaar
+   en naken tbody tr.tenn td.c-name - saa foerste forsok endret ingenting, og
+   navnet sto fortsatt paa 2,49:1 mens glimtet gikk. */
+tbody tr.tenn td.c-name,
+.desc-primary tbody tr.tenn td.c-name{color:var(--fg)}
+
+/* Et punkt som blir overstyrt.
+
+   Dette er den nest viktigste hendelsen i verktoyet, og den var - som alarmen
+   var - en tekstfarge. En overstyring betyr at noen har satt anlegget i manuell
+   og at reguleringa er koblet ut. Paa en I/O-modul sto ti analoge utganger tvunget
+   paa prioritet 8, og ingenting paa skjermen fortalte at det hadde skjedd.
+
+   Samme grep som alarmen: gult glimt en gang, saa en stille gul kant som blir
+   staaende saa lenge overstyringa staar. Gul og ikke rod, fordi en overstyring
+   ikke er en feil - den er noen sitt valg som er glemt. */
+@keyframes tvang-tenn{
+  /* 38 og ikke 46: gult er lysere enn rodt, saa selv full tekstfarge laa paa
+     4,19:1 mot alarmens 5,08. Samme glimt, samme lengde - bare dempet nok til
+     at navnet holder seg lesbart mens det staar. */
+  0%  {background-color:color-mix(in srgb,var(--warn) 38%,transparent);
+       box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--warn) 64%,transparent)}
+  18% {background-color:color-mix(in srgb,var(--warn) 30%,transparent)}
+  100%{background-color:transparent;box-shadow:inset 0 0 0 1px transparent}
+}
+tbody tr.tvang{animation:tvang-tenn 1.15s cubic-bezier(.2,0,.2,1)}
+/* Navnet er gult; paa gul bakgrunn forsvinner det. Loftes mens glimtet staar,
+   samme grunn som paa alarmen. */
+tbody tr.tvang td.c-name,
+.desc-primary tbody tr.tvang td.c-name{color:var(--fg)}
+tbody tr.over:not(.alarm) td.c-act{position:relative}
+tbody tr.over:not(.alarm) td.c-act::before{
+  content:'';position:absolute;left:0;top:2px;bottom:2px;width:3px;
+  border-radius:0 2px 2px 0;background:var(--warn);opacity:.85;
+}
+
+/* En verdi som har gaatt fra det du tok snapshot av.
+
+   Snapshot finnes for at du skal kunne se hva som beveget seg mens du jobbet.
+   Avviket var en farge paa tallet; naa slaar tallet fra seg i det oyeblikket
+   det forlater utgangspunktet, saa du fanger det selv om du saa et annet sted. */
+@keyframes drift-ut{
+  0%  {background-color:color-mix(in srgb,var(--warn) 40%,transparent)}
+  100%{background-color:transparent}
+}
+tbody tr.drift td.c-val{animation:drift-ut 900ms ease-out}
+
+/* Regulatoren svarer igjen.
+
+   Flatlinja hadde ingen motsats - streken bare forsvant, og en gjenoppretting
+   er verdt aa se like mye som et bortfall. Streken trekker seg sammen mot
+   venstre og kortet slaar gronnt en gang. */
+@keyframes strek-vekk{
+  from{transform:scaleX(1);opacity:.65}
+  to  {transform:scaleX(0);opacity:0}
+}
+@keyframes kort-tilbake{
+  0%  {box-shadow:0 0 0 0 color-mix(in srgb,var(--ok) 60%,transparent)}
+  60% {box-shadow:0 0 0 8px color-mix(in srgb,var(--ok) 0%,transparent)}
+  100%{box-shadow:0 0 0 0 transparent}
+}
+.dev.tilbake{animation:kort-tilbake 820ms cubic-bezier(.16,1,.3,1)}
+.dev.tilbake::after{
+  content:'';position:absolute;left:0;right:0;bottom:5px;height:1px;
+  background:var(--err);transform-origin:left center;
+  animation:strek-vekk 480ms cubic-bezier(.4,0,.2,1) forwards;
+}
+
+@media (prefers-reduced-motion:reduce){
+  tbody tr.tvang,tbody tr.drift td.c-val,
+  .dev.tilbake,.dev.tilbake::after{animation:none}
+  .dev.tilbake::after{display:none}
+}
+
+/* Den staaende markeringa staar STILLE.
+
+   Foerste utkast lot den puste evig. Paa 558269 er 1236 av 2418 punkter
+   flagget - det er 1236 uendelige animasjoner som aldri faar sove, og en vegg
+   som blinker mot deg saa lenge lista er aapen. En markering skal kunne staa
+   der uten aa kreve noe.
+
+   Regelen for hele verktoyet: evige animasjoner bare der de biter noe som er
+   sjeldent og ett - alt annet gaar en gang og legger seg. */
+tbody tr.alarm td.c-act{position:relative}
+tbody tr.alarm td.c-act::before{
+  content:'';position:absolute;left:0;top:2px;bottom:2px;width:3px;
+  border-radius:0 2px 2px 0;background:var(--err);
+}
+/* Sammendragskortet er ETT element, og det slaar tre ganger naar tallet har
+   endret seg - ikke for alltid. */
+@keyframes alarm-slag{
+  0%,100%{box-shadow:0 0 0 0 transparent}
+  50%    {box-shadow:0 0 0 3px color-mix(in srgb,var(--err) 34%,transparent)}
+}
+.sum-card.alarm.slaar{animation:alarm-slag 900ms ease-in-out 3}
+@media (prefers-reduced-motion:reduce){
+  tbody tr.tenn,.sum-card.alarm.slaar{animation:none}
+}
+
+/* Sammendragstallene teller opp i stedet for aa staa der ferdig.
+   Fire tall som snapper inn samtidig leses som en overskrift; fire som teller
+   opp etter hverandre leses som et resultat. */
+.sum-card b{font-variant-numeric:tabular-nums}
+@keyframes kort-inn{
+  from{opacity:0;transform:translateY(7px) scale(.97)}
+  to  {opacity:1;transform:none}
+}
+.sum-grid .sum-card{animation:kort-inn 340ms cubic-bezier(.16,1,.3,1) both}
+.sum-grid .sum-card:nth-child(1){animation-delay:0ms}
+.sum-grid .sum-card:nth-child(2){animation-delay:45ms}
+.sum-grid .sum-card:nth-child(3){animation-delay:85ms}
+.sum-grid .sum-card:nth-child(4){animation-delay:120ms}
+.sum-grid .sum-card:nth-child(5){animation-delay:150ms}
+.sum-grid .sum-card:nth-child(n+6){animation-delay:175ms}
+.desc-primary tr.over td.c-name{color:var(--warn)}
+td.c-obj{font-family:var(--mono);font-size:11px;color:var(--fg-3)}
+td.c-val{font-family:var(--mono);text-align:right;font-weight:600}
+/* The state label sits with the number rather than replacing it: the number is
+   what you write back, the text is what it means. */
+.st-txt{
+  font-family:var(--sans);font-weight:400;font-size:11px;
+  color:var(--fg-2);margin-left:7px;
+}
+#pointsWrap.cramped .st-txt{display:none}
+/* Units are data, not chrome — they belong at reading contrast. */
+td.c-unit{color:var(--fg-2);font-size:11px}
+td.c-act{text-align:center}
+/* Only the narrow columns get fixed widths. Name and description are left
+   auto so they share whatever space is left instead of overflowing the pane
+   on a small window. */
+.selbar{
+  display:flex;align-items:center;gap:8px;padding:5px 10px;
+  background:rgba(30,144,255,.10);border-bottom:1px solid var(--accent-dim);
+}
+/* Author display rules beat the UA stylesheet's [hidden]{display:none}. */
+.selbar[hidden]{display:none}
+.selbar-count{font-family:var(--mono);font-size:11px;font-weight:600;color:var(--on-accent)}
+.selbar-hint{font-size:10.5px;color:var(--fg-3)}
+.selbar .btn{padding:2px 8px;font-size:11px}
+/* Same trap as .selbar itself: any author display rule would beat the UA
+   stylesheet's [hidden]{display:none}, so say it explicitly for the release
+   controls, which are shown only for writable selections. */
+.selbar .btn[hidden],.selbar .field[hidden]{display:none}
+.selbar .field{padding:2px 6px;font-size:11px}
+col.w-act{width:26px} col.w-obj{width:104px} col.w-val{width:150px} col.w-unit{width:34px}
+.inst{margin-left:5px}
+/* Narrow table: give the name column its space back by dropping the object
+   instance number and tightening the value column. Nothing is lost — the
+   instance is in the inspector, the tooltip and every export. */
+#pointsWrap.cramped col.w-obj{width:38px}
+#pointsWrap.cramped col.w-val{width:64px}
+#pointsWrap.cramped .inst{display:none}
+#pointsWrap.cramped td.c-obj,#pointsWrap.cramped th.c-obj{padding-right:2px}
+
+/* The description column is added/removed in JS (see DESC_MIN_WIDTH) — a
+   CSS-only hide would leave its <col> reserving width. */
+@media (max-width:820px){
+  .pane-devices{flex-basis:170px}
+  .pane-side{flex-basis:220px}
+}
+td.c-val{font-variant-numeric:tabular-nums}
+/* The guide gives "verdifelt – målt verdi" a plain neutral (#404040 on its
+   light background) and spends colour only where it carries meaning. Every
+   number here used to be teal, which meant teal said nothing. Measured values
+   are now neutral; colour is left to state. */
+.val-num{color:var(--fg)}
+.val-on{color:var(--ok)}          /* guide: på / driftsindikasjon */
+.val-off{color:var(--fg-3)}       /* guide: hvit = inaktiv, dimmed on dark */
+.val-str{color:var(--fg-2)}
+.val-null{color:var(--fg-3)}
+/* A controller exposes hundreds of unused points sitting at zero. Rendering
+   them as brightly as a live reading buries the values that matter, so they
+   are dimmed to let real measurements stand out. */
+/* Dim enough to recede, still above 3:1 so it can be read when looked at. */
+/* A zero is a real reading, not missing data — it was set two steps below
+   the dim token and landed at 3.6:1. --fg-3 keeps it clearly secondary while
+   staying legible; the text already distinguishes it from "—". */
+.val-zero{color:var(--fg-3)}
+tr:hover .val-zero{color:var(--fg-2)}
+/* Writing a value is the most consequential thing this tool does - it changes
+   a plant that is running - and until now it happened in complete silence, with
+   a four-word toast in the corner. It gets two beats, because it genuinely is
+   two things: the command goes out, and the value is read back from the
+   controller. A band sweeps the row on the way out, and the row settles green
+   when the readback confirms it. If the second beat never comes, that silence
+   now means something. */
+@keyframes skriv-ut{
+  from{background-position:-120% 0}
+  to{background-position:260% 0}
+}
+/* On the row, not the cells. Each td paints its own background over its own
+   width, and the first one is the 26px star column - so a per-cell gradient is
+   twelve separate micro-sweeps, none of them visible. The row paints once,
+   across its whole width, which is the only place a travelling band can live. */
+/* tbody-prefikset er ikke pynt: tbody tr:nth-child(even) setter background som
+   kortform, som nullstiller background-image, og slaar en naken tr.sender paa
+   spesifisitet. Da ble baandet aldri tegnet i det hele tatt. */
+tbody tr.sender{
+  background-image:linear-gradient(90deg,transparent 30%,
+    color-mix(in srgb,var(--accent) 30%,transparent) 42%,
+    /* 62 og ikke 88: baandet passerer under verdien, og paa 88% falt
+       tallet til 2,92:1 mot 4,81:1 her. Et lysglimt er ikke verdt aa gjore
+       tallet uleselig akkurat mens det endrer seg. */
+    color-mix(in srgb,var(--accent) 62%,transparent) 50%,
+    color-mix(in srgb,var(--accent) 30%,transparent) 58%,transparent 70%);
+  background-size:200% 100%;background-repeat:no-repeat;
+  animation:skriv-ut 460ms cubic-bezier(.35,0,.2,1);
+}
+@keyframes skriv-ok{
+  0%  {background-color:color-mix(in srgb,var(--ok) 46%,transparent)}
+  22% {background-color:color-mix(in srgb,var(--ok) 38%,transparent)}
+  100%{background-color:transparent}
+}
+tbody tr.bekreftet td{animation:skriv-ok 1s ease-out}
+
+/* And the controller that received it answers in the device list, so the two
+   panes are visibly part of the same event rather than two separate screens. */
+@keyframes kort-mottok{
+  0%  {box-shadow:0 0 0 0 color-mix(in srgb,var(--accent) 62%,transparent)}
+  55% {box-shadow:0 0 0 7px color-mix(in srgb,var(--accent) 0%,transparent)}
+  100%{box-shadow:0 0 0 0 color-mix(in srgb,var(--accent) 0%,transparent)}
+}
+/* Forsinkelsen er poenget. Baandet gaar hoyre mot venstre, altsaa mot
+   enhetslista, og ringen slaar ut naar det kommer fram - saa de to rutene
+   forteller en hendelse i rekkefolge i stedet for to ting samtidig. */
+.dev.mottok{animation:kort-mottok 780ms cubic-bezier(.16,1,.3,1) 190ms both}
+
+@keyframes flash{0%{background:rgba(45,212,191,.28)}100%{background:transparent}}
+tr.flash td{animation:flash .7s ease-out}
+tr.diff td.c-val{color:var(--warn)}
+tr.alarm td.c-name{color:var(--err)}
+tr.over td.c-name{color:var(--warn)}
+/* A point can be both; the fault is the more urgent of the two. */
+tr.alarm.over td.c-name{color:var(--err)}
+.pin{color:var(--fg-3);font-size:13px;line-height:1}
+.pin:hover{color:var(--accent)}
+.pin.on{color:var(--accent)}
+.type-tag{
+  font-family:var(--mono);font-size:9px;padding:1px 4px;border-radius:2px;
+  background:var(--raised);color:var(--fg-3);border:1px solid var(--line);
+}
+
+/* ---------- inspector / watch ---------- */
+.sect{border-bottom:1px solid var(--line)}
+.sect-head{
+  display:flex;align-items:center;gap:8px;padding:7px 10px;
+  font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--fg-3);font-weight:600;
+}
+.sect-body{padding:0 10px 10px}
+.kv{
+  display:grid;grid-template-columns:minmax(84px,38%) 1fr;
+  gap:3px 10px;font-size:11px;padding:2px 0;min-width:0;
+}
+.kv dt{color:var(--fg-3);font-family:var(--mono);font-size:10px;padding-top:2px;min-width:0;overflow-wrap:anywhere}
+.kv dd{font-family:var(--mono);color:var(--fg);min-width:0;overflow-wrap:anywhere}
+.insp-title{
+  font-family:var(--mono);font-size:13px;font-weight:600;padding:8px 10px 2px;
+  overflow-wrap:anywhere;display:flex;gap:6px;align-items:flex-start;
+}
+.insp-title span{flex:1;min-width:0}
+.insp-sub{font-size:11px;color:var(--fg-2);padding:0 10px 8px;overflow-wrap:anywhere}
+.pane-side .pane-body{overflow-x:hidden}
+
+/* Copy-to-clipboard affordance — engineers paste point names constantly. */
+.cp{
+  color:var(--fg-3);font-size:11px;padding:1px 4px;border-radius:var(--radius);
+  border:1px solid transparent;flex:0 0 auto;
+}
+.cp:hover{color:var(--accent);border-color:var(--line-2);background:var(--raised)}
+
+/* Larger live trend for the selected point */
+.trend{width:100%;height:64px;display:block}
+.trend-wrap{padding:4px 10px 10px}
+.trend-meta{display:flex;justify-content:space-between;font-family:var(--mono);font-size:9px;color:var(--fg-3);margin-top:2px}
+
+/* Stored trend-log history. The table is the point here, so it gets a fixed
+   scroll box rather than growing the inspector past the fold. */
+.tl-note{font-size:10px;color:var(--fg-3);font-family:var(--mono);margin-bottom:6px}
+.tl-scroll{max-height:190px;overflow:auto;border:1px solid var(--line);border-radius:var(--radius);margin-top:6px}
+.tl-tab{width:100%;border-collapse:collapse;font-family:var(--mono);font-size:10px}
+.tl-tab tr:nth-child(even){background:var(--raised)}
+.tl-tab td{padding:2px 6px;white-space:nowrap}
+.tl-tab th{position:sticky;top:0;background:var(--panel);padding:3px 6px;text-align:left;
+  font-weight:600;font-size:9px;letter-spacing:.04em;text-transform:uppercase;
+  color:var(--fg-3);border-bottom:1px solid var(--line)}
+.tl-tab th.tl-v{text-align:right}
+.tl-t{color:var(--fg-3)}
+.tl-v{text-align:right;color:var(--fg);font-variant-numeric:tabular-nums}
+.tl-foot{display:flex;justify-content:space-between;align-items:center;gap:6px;margin-top:6px;font-size:10px;color:var(--fg-3)}
+.tl-foot .btn{font-size:10px;padding:3px 8px}
+
+/* Vendor identity: brand-tinted badge, no fake logos. */
+.vendor{
+  display:inline-flex;align-items:center;gap:5px;font-size:10px;
+  color:var(--fg-3);min-width:0;
+}
+/* Kept, but quiet: 2x10 px of vendor tint is a useful glance and costs almost
+   no salience next to a full-height state rail. */
+.vendor i{
+  width:2px;height:10px;border-radius:1px;flex:0 0 2px;
+  background:var(--vc,var(--accent));opacity:.55;
+}
+.vendor span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* State, not identity: neutral until the device has something wrong in it.
+   A device that has not been read yet stays neutral rather than claiming to
+   be healthy - absence of data is not a green light. */
+.dev{border-left:2px solid transparent}
+.dev.sel{box-shadow:none}
+.dev.st-ok{border-left-color:var(--line-2)}
+.dev.st-warn{border-left-color:var(--warn)}
+.dev.st-bad{border-left-color:var(--err)}
+
+/* Object-type colour coding so scanning the list is fast. */
+/* One neutral treatment; the AI/AO/BV letters already identify the type.
+   Nine competing tag colours turned the table into confetti. */
+.type-tag{color:var(--fg-3);border-color:var(--line-2);background:transparent}
+.insp-val{
+  font-family:var(--mono);font-size:26px;font-weight:600;color:var(--live);
+  padding:2px 10px 0;letter-spacing:-.02em;
+}
+.insp-val small{font-size:14px;color:var(--fg-3);margin-left:4px;font-weight:400}
+
+/* Rullende sifre.
+
+   Verdien i inspektoren er det eneste tallet paa skjermen som endrer seg av
+   seg selv - hvert andre sekund naar Live staar paa. Foer byttet det bare
+   tegn, og et tall som hopper fra 20.4 til 20.6 forteller ingenting om hvilken
+   vei det gikk. Naa ruller sifferet, og retningen ER informasjonen: opp er
+   opp. Bare sifrene som faktisk endret seg beveger seg.
+
+   linear() gir en ekte fjaer i ren CSS - ett overskudd og ro. cubic-bezier kan
+   ikke uttrykke det uten aa bomme paa enten toppen eller landingen. */
+:root{
+  --fjaer:linear(0, .218 2.1%, .416 4.4%, .717 9%, .916 13.5%, 1.05 19.1%,
+    1.077 22.5%, 1.081 26.1%, 1.055 32.4%, 1.008 41.2%, .99 47.1%, .997 61.3%, 1);
+}
+.od{display:inline-flex;align-items:baseline;font-variant-numeric:tabular-nums}
+.od-sif{
+  display:inline-block;height:1em;line-height:1;overflow:hidden;
+  vertical-align:baseline;
+}
+.od-strip{display:block;transform:translateY(calc(var(--d,0) * -1em))}
+.od-sif.rull .od-strip{transition:transform 620ms var(--fjaer)}
+.od-strip b{display:block;height:1em;line-height:1;font-weight:inherit}
+/* Tegn som ikke er siffer - komma, minus, bokstaver - staar stille. */
+.od-fast{display:inline-block;height:1em;line-height:1}
+@media (prefers-reduced-motion:reduce){
+  .od-sif.rull .od-strip{transition:none}
+}
+
+/* The guide colours "justerbart settpunkt" darkOrange — a value a person can
+   press and change. Here that is exactly a commandable object, and it is the
+   one place the distinction matters enough to spend a colour on: the table
+   would be a sea of orange, since most points on a controller are writable. */
+.insp-val.adjustable{color:var(--adjust)}
+
+/* Two rows rather than one: at 200px the name, sparkline and value cannot
+   share a single line without the name collapsing to nothing. */
+/* Grows with its contents up to a ceiling instead of always reserving a
+   fixed block, so an empty watchlist gives its space back to the inspector. */
+#watchList{flex:0 1 auto;max-height:230px;overflow:auto}
+#watchList:empty{display:none}
+.watch-row{padding:5px 10px;border-bottom:1px solid var(--line-soft);font-size:11px}
+.watch-row:hover{background:var(--raised)}
+.watch-r1{display:flex;align-items:center;gap:6px}
+.watch-r2{display:flex;align-items:center;gap:6px;margin-top:2px}
+.watch-name{
+  font-family:var(--mono);flex:1;min-width:0;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+.watch-ip{font-family:var(--mono);font-size:9px;color:var(--fg-3);flex:0 0 auto}
+.watch-val{font-family:var(--mono);font-weight:600;color:var(--live);text-align:right;margin-left:auto}
+.spark{flex:1 1 auto;min-width:0;height:18px}
+.x{color:var(--fg-3);font-size:14px;line-height:1;padding:0 2px}
+.x:hover{color:var(--err)}
+
+/* Progress + cancel while a controller loads */
+.loadbox{padding:22px 18px;max-width:420px;margin:0 auto}
+.loadbox-top{display:flex;align-items:center;gap:9px;font-size:12px;color:var(--fg-2)}
+.loadbox-top .btn{margin-left:auto;padding:2px 9px;font-size:11px}
+.prog{height:4px;background:var(--raised);border-radius:2px;overflow:hidden;margin-top:12px}
+/* The same two passes as the device card, in the same two colours. The box in
+   the middle of the screen and the card in the list are reporting on one job,
+   and until now they said it in different languages - one bar here, two there.
+   Width rather than transform because the bar is 4px tall and there is nothing
+   to gain from a layer. */
+.prog{position:relative}
+.prog-fill{height:100%;background:var(--accent);transition:width .2s ease}
+.prog-fill2{
+  position:absolute;left:0;top:0;height:100%;
+  background:var(--live);transition:width .2s ease;
+}
+.loadbox-meta{font-family:var(--mono);font-size:10.5px;color:var(--fg-3);margin-top:6px}
+/* What the device has already told us, shown while the rest is still being
+   read. Facts, not filler — it is the same information you would otherwise
+   go looking for once the table finally appeared. */
+.load-ident{
+  display:flex;flex-wrap:wrap;gap:5px 16px;margin-top:12px;
+  padding-top:11px;border-top:1px solid var(--line);
+  font-size:11px;color:var(--fg-2);
+}
+.load-ident b{color:var(--fg-3);font-weight:500;margin-right:5px}
+.load-types{display:flex;flex-wrap:wrap;align-items:center;gap:5px 9px;margin-top:11px}
+.load-types-sum{
+  font-family:var(--mono);font-size:10.5px;color:var(--fg-3);
+  width:100%;margin-bottom:1px;
+}
+.load-types .lt{display:inline-flex;align-items:center;gap:5px;font-size:11px;color:var(--fg-2)}
+.load-types .lt b{font-family:var(--mono);font-weight:600;color:var(--fg)}
+/* A point we never got an answer for must not look like one with no value. */
+td.c-val.unread{color:var(--warn)}
+/* Values reused from the cache are real readings, just not current ones.
+   Dimming says "do not trust this as live" without hiding it; a poll or a
+   re-read brings them back to full strength. */
+/* Verdiene toner ut naar de blir gamle.
+
+   markFreshness slaar klassen paa naar tallene har staatt urort lenger enn
+   grensa, og opasiteten hoppet fra 1 til 0,55 mellom to bilder. Et hopp leses
+   som at noe ble tegnet om; en toning leses som at noe eldes - og det er
+   nettopp det som skjer. To sekunder, saa rolig at du ikke ser den starte, bare
+   at skjermen etter hvert forteller at dette ikke lenger er sanntid. */
+body.stale-values td.c-val{opacity:.55}
+td.c-val{transition:opacity 2s ease}
+body.stale-values td.c-val.unread{opacity:1}
+/* Values already drawn dim — off, zero, no-answer — were pushed to 2.5:1 by a
+   second round of dimming, which told the reader nothing they could not
+   already see. They keep their own colour and skip the staleness fade. */
+body.stale-values td.c-val.val-off,
+body.stale-values td.c-val.val-zero,
+body.stale-values td.c-val.val-null{opacity:1}
+#sbLive.stale{color:var(--warn)}
+.empty{padding:26px 16px;text-align:center;color:var(--fg-3);font-size:12px}
+.empty svg{opacity:.25;margin-bottom:8px}
+
+/* Keyboard use is first-class in a tool like this, so focus must be visible. */
+:focus-visible{outline:2px solid var(--accent);outline-offset:1px;border-radius:var(--radius)}
+tbody tr.cursor{box-shadow:inset 0 0 0 1px var(--accent)}
+
+/* Comfortable / compact row density */
+body.dense{--row:22px}
+body.dense tbody td{padding:0 6px}
+body.dense table{font-size:11.5px}
+
+/* Device summary shown in the inspector while no point is selected */
+.sum-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:6px;padding:0 10px 10px}
+.sum-card{background:var(--raised);border:1px solid var(--line);border-radius:var(--radius);padding:7px 8px}
+.sum-card b{display:block;font-family:var(--mono);font-size:16px;font-weight:600;color:var(--fg)}
+.sum-card span{font-size:10px;color:var(--fg-3);text-transform:uppercase;letter-spacing:.04em}
+.sum-card.alarm b{color:var(--err)}
+.sum-card.over b{color:var(--warn)}
+
+/* ---------- write form ---------- */
+.wf{display:flex;flex-direction:column;gap:6px;padding:8px 10px}
+.wf-row{display:flex;gap:6px;align-items:center}
+.wf-row .field{flex:1;min-width:0}
+.warn-box{
+  font-size:10px;color:var(--warn);background:rgba(255,201,0,.08);
+  border:1px solid rgba(255,201,0,.25);border-radius:var(--radius);padding:5px 7px;line-height:1.4;
+}
+
+/* ---------- status bar ---------- */
+.statusbar{
+  display:flex;align-items:center;gap:14px;height:24px;flex:0 0 24px;padding:0 12px;
+  background:var(--panel);border-top:1px solid var(--line);
+  font-size:11px;color:var(--fg-3);font-family:var(--mono);
+}
+.statusbar .sb-item{display:flex;align-items:center;gap:5px}
+.statusbar .sb-item[hidden]{display:none}
+#sbPre{color:var(--fg-3)}
+#sbRescan{color:var(--fg-3)}
+#sbRescan.stale{color:var(--warn)}
+#sbRescan.stale b{color:var(--warn)}
+/* How reliably a device answers, shown only when it has missed something. */
+.dev-seen{
+  flex:0 0 auto;font-style:normal;font-size:9.5px;font-family:var(--mono);
+  padding:0 4px;border-radius:2px;line-height:15px;
+  color:var(--fg-3);background:var(--raised);
+}
+.dev-seen.borte{color:var(--warn);background:rgba(255,201,0,.14)}
+.dev-seen + .dev-flag{margin-left:5px}
+.statusbar b{color:var(--fg-2);font-weight:600}
+
+.spin{
+  width:11px;height:11px;border:1.5px solid #2c343f;border-top-color:var(--accent);
+  border-radius:50%;animation:sp .65s linear infinite;display:inline-block;vertical-align:-1px;
+}
+@keyframes sp{to{transform:rotate(360deg)}}
+
+/* ---------- global search ---------- */
+.gs-overlay{
+  position:fixed;inset:0;z-index:70;background:rgba(4,6,9,.72);
+  display:flex;align-items:flex-start;justify-content:center;padding-top:9vh;
+}
+.gs-overlay[hidden]{display:none}
+.gs-modal{
+  width:min(860px,calc(100vw - 40px));max-height:76vh;display:flex;flex-direction:column;
+  background:var(--panel);border:1px solid var(--line-2);border-radius:8px;
+  box-shadow:0 18px 60px rgba(0,0,0,.6);overflow:hidden;
+}
+.gs-head{display:flex;align-items:center;gap:8px;padding:10px 12px;border-bottom:1px solid var(--line)}
+.gs-input{
+  flex:1;background:transparent;border:none;outline:none;color:var(--fg);
+  font-family:var(--mono);font-size:15px;
+}
+.gs-input::placeholder{color:var(--fg-3)}
+/* The close button was a 12x22 hit target - under the 24px WCAG minimum and
+   genuinely hard to land on a trackpad. It is the only way out of a modal,
+   so it gets a real target and a label that says what it does. */
+.gs-close{
+  display:inline-flex;align-items:center;gap:5px;
+  min-width:34px;min-height:34px;padding:0 10px;
+  border:1px solid var(--line-2);border-radius:6px;background:var(--raised);
+  color:var(--fg-2);font-size:13px;line-height:1;cursor:pointer;
+}
+.gs-close:hover{color:var(--fg);background:var(--line);border-color:var(--fg-3)}
+.gs-close:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.gs-close .lbl{font-size:11px}
+.gs-meta{padding:6px 12px;font-size:10.5px;color:var(--fg-3);border-bottom:1px solid var(--line)}
+
+/* ---------- background picture ---------- */
+#bgLag,#bgScrim{position:fixed;inset:0;z-index:0;pointer-events:none}
+#bgLag[hidden],#bgScrim[hidden]{display:none}
+/* The app sits above the picture; without this the panes cover it entirely. */
+.app{position:relative;z-index:1}
+/* Surfaces let the picture through only when one is set, and blur what is
+   behind them so text stays readable over a busy photograph. */
+body.gjennomsiktig .pane,
+body.gjennomsiktig .gs-modal,
+body.gjennomsiktig .menu-pop{backdrop-filter:blur(14px) saturate(1.1)}
+
+.brand-mark.eget-bilde{background:none;padding:0;overflow:hidden}
+.brand-mark.eget-bilde img{width:100%;height:100%;object-fit:contain;display:block}
+
+/* ---------- motion ----------
+   Everything here animates transform and opacity only. Those two are handled
+   by the compositor, so they keep running at full rate while the main thread
+   is busy parsing two thousand BACnet points - which is exactly when the tool
+   is being used. Animating height, width or top would put the work back on
+   the main thread and produce the stutter this is meant to avoid.
+
+   A JS animation library was considered and rejected: GSAP is 23 kB and
+   Framer Motion 46 kB of machinery for timelines and scroll choreography this
+   tool does not have, and both would then compete with the point load for the
+   same thread. The platform does dialogs, menus and cross-fades natively.
+
+   Anyone who has switched motion off at the OS level means it. */
+:root{
+  --mot-rask:120ms;
+  --mot:180ms;
+  --mot-rolig:260ms;
+  --mot-kurve:cubic-bezier(.2,.8,.25,1);
+}
+@media (prefers-reduced-motion:reduce){
+  :root{--mot-rask:0ms; --mot:0ms; --mot-rolig:0ms}
+}
+body.uten-bevegelse{--mot-rask:0ms; --mot:0ms; --mot-rolig:0ms}
+body.uten-bevegelse *{
+  animation-duration:.001ms !important;animation-iteration-count:1 !important;
+}
+@media (prefers-reduced-motion:reduce){
+  *{animation-duration:.001ms !important;animation-iteration-count:1 !important}
+}
+
+/* Menus grow from the corner they are anchored to, which is where the eye
+   already is after clicking the button. */
+@keyframes meny-inn{
+  from{opacity:0;transform:translateY(-6px) scale(.97)}
+  to{opacity:1;transform:none}
+}
+.menu-pop{
+  transform-origin:top right;
+  opacity:1;transform:none;
+  transition:opacity 130ms ease, transform 130ms ease,
+             display 130ms allow-discrete;
+}
+.menu-pop:not(.menu-right){transform-origin:top left}
+/* Ut paa 130 ms - en meny du har valgt fra skal komme deg ut av veien. */
+.menu-pop[hidden]{opacity:0;transform:translateY(-4px) scale(.985);pointer-events:none}
+@starting-style{
+  .menu-pop:not([hidden]){opacity:0;transform:translateY(-6px) scale(.97)}
+}
+
+/* The panel arriving was the whole animation, and a panel is a rectangle -
+   there is nothing in a rectangle to watch. The items assemble inside it
+   instead, which is the part you are actually reading. Ten stops is enough:
+   past that the last item is still arriving after the hand has moved. */
+@keyframes menyvalg-inn{
+  from{opacity:0;transform:translateX(-8px)}
+  to{opacity:1;transform:none}
+}
+.menu-pop:not([hidden]) .menu-item,
+.menu-pop:not([hidden]) .menu-sep,
+.menu-pop:not([hidden]) .menu-gruppe{
+  animation:menyvalg-inn 190ms var(--mot-kurve) both;
+}
+.menu-pop:not([hidden]) > *:nth-child(1){animation-delay:20ms}
+.menu-pop:not([hidden]) > *:nth-child(2){animation-delay:34ms}
+.menu-pop:not([hidden]) > *:nth-child(3){animation-delay:46ms}
+.menu-pop:not([hidden]) > *:nth-child(4){animation-delay:57ms}
+.menu-pop:not([hidden]) > *:nth-child(5){animation-delay:67ms}
+.menu-pop:not([hidden]) > *:nth-child(6){animation-delay:76ms}
+.menu-pop:not([hidden]) > *:nth-child(7){animation-delay:84ms}
+.menu-pop:not([hidden]) > *:nth-child(8){animation-delay:91ms}
+.menu-pop:not([hidden]) > *:nth-child(9){animation-delay:97ms}
+.menu-pop:not([hidden]) > *:nth-child(n+10){animation-delay:102ms}
+
+/* A dialog fades its backdrop and lifts the panel - the panel is what the
+   eye follows, so it gets the longer of the two. */
+@keyframes bakteppe-inn{from{opacity:0} to{opacity:1}}
+/* Lifting a panel ten pixels is a transition; this one has a landing. And the
+   backdrop blurs in rather than simply darkening, so what is behind the dialog
+   goes out of focus the way attention does. */
+@keyframes modal-inn{
+  0%  {opacity:0;transform:translateY(22px) scale(.96)}
+  62% {opacity:1;transform:translateY(-4px) scale(1.008)}
+  82% {transform:translateY(1px) scale(.999)}
+  100%{opacity:1;transform:none}
+}
+@keyframes bakteppe-blur{
+  from{opacity:0;backdrop-filter:blur(0px)}
+  to{opacity:1;backdrop-filter:blur(3px)}
+}
+/* Inn OG ut.
+
+   Alt i verktoyet animerte inn og forsvant. En dialog som glir opp og saa bare
+   er borte i neste bilde er halvferdig - oyet foelger noe som ankommer og blir
+   etterlatt naar det gaar.
+
+   @starting-style og transition-behavior:allow-discrete er maaten aa gjore det
+   paa uten JavaScript: display faar lov aa vaere med i overgangen, saa
+   display:none settes foerst NAAR utgangen er ferdig. Da holder ett regelsett
+   begge veier, og ingen maa huske aa fjerne en klasse etterpaa.
+
+   Fjaera er en ekte linear()-kurve, ikke en cubic-bezier. En bezier kan ikke
+   svinge forbi maalet og komme tilbake; en fjaer gjor det, og det er derfor
+   den foles som noe fysisk i stedet for noe som ble tegnet. */
+.gs-overlay{
+  opacity:1;backdrop-filter:blur(3px);
+  transition:opacity 240ms ease, backdrop-filter 240ms ease,
+             display 240ms allow-discrete, overlay 240ms allow-discrete;
+}
+/* Doed for pekeren i det du ber om aa lukke. Uten dette staar dialogen
+   igjen i 240 ms som en usynlig flate du kan klikke paa - avgjorelsen om aa
+   lukke er tatt, og da skal den ikke ta imot noe mer. */
+.gs-overlay[hidden]{opacity:0;backdrop-filter:blur(0px);pointer-events:none}
+@starting-style{
+  .gs-overlay:not([hidden]){opacity:0;backdrop-filter:blur(0px)}
+}
+.gs-modal{
+  transition:transform 420ms var(--fjaer), opacity 200ms ease;
+}
+/* Ut: raskere og rett ned. Aa gaa er en avgjorelse som allerede er tatt, og
+   den skal ikke ta like lang tid som aa komme. */
+.gs-overlay[hidden] .gs-modal{opacity:0;transform:translateY(10px) scale(.98)}
+@starting-style{
+  .gs-overlay:not([hidden]) .gs-modal{opacity:0;transform:translateY(24px) scale(.96)}
+}
+/* Zoom-ruta gaar begge veier som dialogene. Den apnes for aa lese en verdi
+   paa avstand og lukkes like ofte; da skal begge halvdeler finnes. */
+.zoom-overlay{
+  opacity:1;
+  transition:opacity 200ms ease, display 200ms allow-discrete,
+             overlay 200ms allow-discrete;
+}
+.zoom-overlay[hidden]{opacity:0;pointer-events:none}
+@starting-style{ .zoom-overlay:not([hidden]){opacity:0} }
+.zoom-card{transition:transform 380ms var(--fjaer), opacity 180ms ease}
+
+}
+.zoom-overlay[hidden] .zoom-card{opacity:0;transform:scale(.97)}
+@starting-style{
+  .zoom-overlay:not([hidden]) .zoom-card{opacity:0;transform:scale(.93)}
+}
+
+/* The toast comes from the edge it lives on. */
+/* A toast that fades up is a notification you have seen ten thousand times.
+   This one arrives with weight - overshoots, settles - and carries a coloured
+   edge that says at a glance whether it is news or a problem, without reading
+   it. */
+@keyframes skaal-inn{
+  0%  {opacity:0;transform:translateY(26px) scale(.94)}
+  55% {opacity:1;transform:translateY(-5px) scale(1.02)}
+  78% {transform:translateY(1px) scale(.998)}
+  100%{opacity:1;transform:none}
+}
+@keyframes skaal-kant{
+  from{transform:scaleY(0)}
+  to{transform:scaleY(1)}
+}
+.toast{
+  animation:skaal-inn 420ms cubic-bezier(.16,1,.3,1);
+  position:relative;overflow:hidden;
+}
+.toast::before{
+  content:'';position:absolute;left:0;top:0;bottom:0;width:3px;
+  background:var(--ok);transform-origin:top center;
+  animation:skaal-kant 380ms var(--mot-kurve) 90ms both;
+}
+.toast.err::before{background:var(--err)}
+
+/* Rows that changed value already flash; give the flash a real curve instead
+   of a step. The table itself is never animated per row - at two thousand
+   rows that would be two thousand animations and a dropped frame budget. */
+tbody tr.flash{animation:blink 1.1s var(--mot-kurve)}
+
+/* Rangordning paa raden. Den maa staa HER, etter blink.
+
+   En rad kan ha flere ting paa gang samtidig, og bare en animasjon kan eie
+   bakgrunnen. Alle kandidatene har samme spesifisitet, saa den som staar sist
+   i fila vinner - og det var blink, den minst betydningsfulle av dem.
+
+   Foelgen var alvorlig: et punkt som gaar i alarm mens verdien endrer seg -
+   altsaa normaltilfellet, for verdiendringa ER det som utloeser alarmen - viste
+   den vanlige turkise "verdi endret"-blinken i stedet for roedt. Alarmtenninga
+   var usynlig nettopp i det tilfellet den finnes for.
+
+   Rekkefolgen under er hva som betyr mest, ikke hva som ser kraftigst ut:
+   alarm slaar overstyring slaar skriving slaar "verdien endret seg". */
+tbody tr.sender.flash{animation:skriv-ut 460ms cubic-bezier(.35,0,.2,1)}
+tbody tr.tvang.flash{animation:tvang-tenn 1.15s cubic-bezier(.2,0,.2,1)}
+tbody tr.tenn.flash{animation:alarm-tenn 1.15s cubic-bezier(.2,0,.2,1)}
+/* Og cellene skal ikke vaske turkis over et roedt eller gult glimt. Verdicella
+   er unntatt: der kan drift eller en skrivebekreftelse ha noe aa si. */
+tbody tr.tenn.flash td:not(.c-val),
+tbody tr.tvang.flash td:not(.c-val){animation:none}
+
+/* Buttons and rows: a transition, not an animation, so interrupting it
+   half-way is free. */
+.btn,.menu-item,.sett-rad,.dev,.tema-null,.gs-close,.sch-tab,.mn-rad{
+  transition:background var(--mot-rask) ease,
+             border-color var(--mot-rask) ease,
+             color var(--mot-rask) ease,
+             transform var(--mot-rask) var(--mot-kurve);
+}
+.btn:active:not(:disabled),.tema-null:active:not(:disabled),.gs-close:active{
+  transform:scale(.97);
+}
+
+/* Panels sliding in when a device is picked: one element, one transform. */
+@keyframes panel-inn{
+  from{opacity:0;transform:translateX(8px)}
+  to{opacity:1;transform:none}
+}
+.insp-title,.loadbox{animation:panel-inn var(--mot) var(--mot-kurve)}
+
+/* The settings tabs cross-fade their panel. */
+@keyframes fane-inn{
+  from{opacity:0;transform:translateX(14px)}
+  to{opacity:1;transform:none}
+}
+#settOppsett:not([hidden]),#settTagging:not([hidden]),#temaBody:not([hidden]){
+  animation:fane-inn 260ms var(--mot-kurve);
+}
+/* The strip under the selected tab slides between them instead of jumping,
+   so the tabs read as one control rather than three buttons. */
+.sett-fane{position:relative}
+.sett-faner{position:relative}
+.sett-faner::after{
+  content:'';position:absolute;bottom:-1px;height:2px;background:var(--accent);
+  left:var(--fane-x,0);width:var(--fane-w,0);
+  transition:left 280ms var(--mot-kurve), width 280ms var(--mot-kurve);
+}
+
+/* The schedule grid draws its blocks once when a schedule is opened. Capped
+   at eight steps so a day with thirty transitions does not turn into a queue.
+*/
+@keyframes blokk-inn{from{opacity:0;transform:scaleY(.94)} to{opacity:1;transform:none}}
+.wk-blk{animation:blokk-inn var(--mot) var(--mot-kurve) both;transform-origin:top}
+.wk-col:nth-child(1) .wk-blk{animation-delay:0ms}
+.wk-col:nth-child(2) .wk-blk{animation-delay:25ms}
+.wk-col:nth-child(3) .wk-blk{animation-delay:50ms}
+.wk-col:nth-child(4) .wk-blk{animation-delay:75ms}
+.wk-col:nth-child(5) .wk-blk{animation-delay:100ms}
+.wk-col:nth-child(6) .wk-blk{animation-delay:125ms}
+.wk-col:nth-child(7) .wk-blk{animation-delay:150ms}
+
+/* View Transitions: the whole screen changes over, and the direction says
+   which way. Going to daylight the new theme wipes in from the left, the way
+   morning arrives; going to night it comes from the right, following the same
+   sense as the switch itself. Slow enough to be a moment rather than a blink -
+   a theme change is not something you do forty times an hour.
+
+   Two snapshots and a clip-path, all on the compositor. Unsupported browsers
+   fall straight through to the plain switch. */
+::view-transition-old(root),::view-transition-new(root){
+  animation:none;mix-blend-mode:normal;
+}
+::view-transition-old(root){z-index:1}
+::view-transition-new(root){z-index:2}
+:root[data-theme="light"]::view-transition-new(root){
+  animation:daggry 900ms cubic-bezier(.32,.06,.2,1);
+}
+:root:not([data-theme="light"])::view-transition-new(root){
+  animation:skumring 900ms cubic-bezier(.32,.06,.2,1);
+}
+@keyframes daggry{
+  from{clip-path:inset(0 100% 0 0)}
+  to  {clip-path:inset(0 0 0 0)}
+}
+@keyframes skumring{
+  from{clip-path:inset(0 0 0 100%)}
+  to  {clip-path:inset(0 0 0 0)}
+}
+
+/* The body that is arriving, drawn over the wipe and travelling with it. The
+   sun climbs from below the horizon on the way into daylight; the moon comes
+   down from above on the way into night, with the sky it brings behind it. */
+#himmel{
+  position:fixed;inset:0;z-index:9998;pointer-events:none;overflow:hidden;
+}
+#himmel[hidden]{display:none}
+#himmel .kropp{
+  position:absolute;width:132px;height:132px;border-radius:50%;
+  will-change:transform,opacity;
+}
+#himmel.dag .kropp{
+  background:radial-gradient(circle at 38% 34%,#fff9d8,#ffd166 46%,#ff9e2c 74%);
+  box-shadow:0 0 90px 30px rgba(255,180,60,.5), 0 0 220px 90px rgba(255,150,40,.22);
+  animation:sol-opp 900ms cubic-bezier(.22,.7,.3,1) both;
+}
+#himmel.natt .kropp{
+  background:radial-gradient(circle at 36% 32%,#ffffff,#dfe6f5 62%,#aeb9d4 84%);
+  box-shadow:0 0 70px 24px rgba(190,215,255,.42), 0 0 200px 80px rgba(120,150,220,.2);
+  animation:maane-ned 900ms cubic-bezier(.22,.7,.3,1) both;
+}
+/* Seen frozen at 430 ms the sun was already down to 33 %: the easing curve
+   pulls the opacity along with the position, so a plain 30 %-to-100 % fade
+   disappears while the body is still climbing. It holds full brightness
+   across the middle of the arc now and only lets go at the end. */
+@keyframes sol-opp{
+  0%  {left:6%;bottom:-200px;opacity:0;transform:scale(.72)}
+  /* Held at 0.85, not 1: at full strength the disc blanks the pane it
+     crosses, and this is a transition over a tool, not a splash screen. */
+  18% {opacity:.85}
+  72% {opacity:.85}
+  100%{left:80%;bottom:56%;opacity:0;transform:scale(1.06)}
+}
+@keyframes maane-ned{
+  0%  {right:6%;top:-200px;opacity:0;transform:scale(.72)}
+  18% {opacity:.85}
+  72% {opacity:.85}
+  100%{right:76%;top:50%;opacity:0;transform:scale(1.06)}
+}
+/* A wash in the colour of the hour, crossing the way the wipe does. */
+#himmel .skjaer{
+  position:absolute;inset:0;
+  animation:skjaer-inn 900ms ease-out both;
+}
+#himmel.dag .skjaer{
+  background:linear-gradient(105deg,rgba(255,196,92,.30),rgba(255,150,60,.14) 42%,transparent 72%);
+}
+#himmel.natt .skjaer{
+  background:linear-gradient(255deg,rgba(90,120,210,.30),rgba(40,60,130,.16) 42%,transparent 72%);
+}
+@keyframes skjaer-inn{
+  0%  {opacity:0}
+  20% {opacity:1}
+  68% {opacity:1}
+  100%{opacity:0}
+}
+/* Stars, only on the way into night, fading up as the moon settles. */
+#himmel .stjerner{
+  position:absolute;inset:0;opacity:0;
+  background:
+    radial-gradient(circle at 14% 22%, #fff 0 1.4px, transparent 2px),
+    radial-gradient(circle at 27% 63%, rgba(255,255,255,.85) 0 1.1px, transparent 1.8px),
+    radial-gradient(circle at 41% 15%, rgba(255,255,255,.75) 0 1.2px, transparent 1.9px),
+    radial-gradient(circle at 58% 44%, #fff 0 1.3px, transparent 2px),
+    radial-gradient(circle at 69% 19%, rgba(255,255,255,.8) 0 1.1px, transparent 1.8px),
+    radial-gradient(circle at 82% 57%, rgba(255,255,255,.9) 0 1.3px, transparent 2px),
+    radial-gradient(circle at 91% 31%, rgba(255,255,255,.7) 0 1px, transparent 1.7px),
+    radial-gradient(circle at 35% 82%, rgba(255,255,255,.8) 0 1.2px, transparent 1.9px),
+    radial-gradient(circle at 74% 79%, rgba(255,255,255,.65) 0 1px, transparent 1.7px);
+}
+#himmel.natt .stjerner{animation:stjerner-fram 900ms ease-out both}
+@keyframes stjerner-fram{
+  0%  {opacity:0;transform:scale(1.04)}
+  45% {opacity:.95}
+  100%{opacity:0;transform:scale(1)}
+}
+body.uten-bevegelse #himmel{display:none}
+
+/* --- a device filling up while it is read ------------------------------
+   The progress was in a box in the middle of the screen, which is not where
+   you are looking: you clicked a card in the list, and that card is the thing
+   you are waiting for. So the card fills. A wash for the magnitude, because a
+   glance should say roughly how far along it is, and a hard line along the
+   bottom for the part that wants to be read precisely.
+
+   Both are scaleX on a full-width layer rather than an animated width - the
+   same reason as everywhere else, transform stays on the compositor and a
+   width does not. */
+/* Two passes, two bars.
+
+   Reading a controller is two different jobs: getting the objects and their
+   values, then going back for the descriptions, state texts and schedules. One
+   bar could only say "busy" - and since the second pass runs after the table
+   is already on screen, a single bar crawling from 75 % to 100 % looked like
+   the first job had stalled. Now the blue bar is the objects and the teal one
+   is everything read afterwards, each filling its own 0 to 100, so a glance
+   says which of the two is running.
+
+   The track is on the card itself, which leaves both pseudo-elements free to
+   be bars. */
+.dev.laster{
+  position:relative;
+  background-image:linear-gradient(color-mix(in srgb,var(--accent) 7%,transparent),
+                                   color-mix(in srgb,var(--accent) 7%,transparent));
+}
+.dev.laster::before,
+.dev.laster::after{
+  content:'';position:absolute;inset:0;pointer-events:none;
+  transform:scaleX(0);transform-origin:left center;
+  transition:transform 260ms cubic-bezier(.16,1,.3,1);
+}
+/* Objects and values. */
+.dev.laster::before{
+  background:linear-gradient(90deg,
+    color-mix(in srgb,var(--accent) 30%,transparent) 0%,
+    color-mix(in srgb,var(--accent) 38%,transparent) calc(100% - 26px),
+    color-mix(in srgb,var(--accent) 70%,transparent) calc(100% - 2px),
+    color-mix(in srgb,var(--accent) 95%,transparent) 100%);
+  transform:scaleX(var(--frem,0));
+}
+/* Descriptions, state texts, schedules - drawn over the first, so the second
+   pass reads as going back over ground already covered. */
+.dev.laster::after{
+  /* Lighter than the blue one, and it lands on top of it - measured where the
+     two overlap, the text fell to 4.23:1, just under AA. The body of the fill
+     is dialled back so the pair stays dark enough to read on; the leading edge
+     keeps its brightness because it is two pixels wide and no text sits on
+     it. */
+  background:linear-gradient(90deg,
+    color-mix(in srgb,var(--live) 15%,transparent) 0%,
+    color-mix(in srgb,var(--live) 21%,transparent) calc(100% - 26px),
+    color-mix(in srgb,var(--live) 62%,transparent) calc(100% - 2px),
+    color-mix(in srgb,var(--live) 90%,transparent) 100%);
+  transform:scaleX(var(--frem2,0));
+}
+/* Nothing to fill toward yet, so a band paces across instead of a bar that
+   would have to invent a number. */
+.dev.laster.ukjent::before{
+  background:linear-gradient(90deg,transparent,
+    color-mix(in srgb,var(--accent) 42%,transparent),transparent);
+  transform:none;
+  animation:ubestemt 1.3s ease-in-out infinite;
+}
+.dev.laster.ukjent::after{background:none;transform:scaleX(0)}
+
+.dev.laster .dev-top,.dev.laster .dev-name,.dev.laster .dev-meta{position:relative}
+/* A fill strong enough to read as a bar is also strong enough to swallow the
+   text on top of it: measured at 96 %, the address, name, vendor and point
+   count all sat at 2.8:1. On a card that is loading, the muted greys step up
+   to the full text colour - the row is busy, not resting, and it can afford
+   the weight. */
+.dev.laster .dev-ip,
+.dev.laster .dev-name,
+.dev.laster .vendor-name,
+.dev.laster .dev-cached,
+.dev.laster .dev-seen{color:var(--fg)}
+
+/* Done: one wash of the ok colour across the card, then gone. Short, because
+   finishing is not news for long. */
+@keyframes ferdig-blink{
+  0%  {opacity:0}
+  25% {opacity:.5}
+  100%{opacity:0}
+}
+.dev.ferdig::before{
+  content:'';position:absolute;inset:0;pointer-events:none;
+  background:linear-gradient(90deg,transparent,
+    color-mix(in srgb,var(--ok) 45%,transparent),transparent);
+  animation:ferdig-blink 620ms ease-out both;
+}
+
+/* ---------- motion, the parts with something to say ----------
+
+   The first pass was polite: things faded, things lifted. Correct, and
+   forgettable. These are the four moments where the tool is actually doing
+   something, and they earn a bigger gesture - a controller answering, a value
+   moving, a list arriving, the link being alive. Everything still rides on
+   transform and opacity, so it is still the compositor's problem and not the
+   main thread's. */
+
+/* --- a controller answers ---------------------------------------------
+   The one moment worth staging. Pressing Skann and watching controllers
+   arrive one by one is the tool at its most alive, and they used to appear
+   as static text. Now each lands with a small overshoot and sends one ring
+   out from its left edge - the edge that already carries its state colour. */
+/* A controller that answers arrives from the button that called it, and falls
+   into its place in the list under gravity.
+
+   The shape is the point. Horizontal speed stays constant and vertical speed
+   builds, the way a thrown thing behaves - so the stops trace distance
+   remaining as (1 - t squared) down and (1 - t) across, with linear timing so
+   the keyframes and not an easing curve decide the arc. An ease-out on both
+   axes would give a swoop, which reads as decoration; this reads as weight.
+
+   The trip is over at 88 %; the rest is the landing squashing and recovering.
+   --fra-x and --fra-y are written per card once its final position is known. */
+/* Thrown, not slid.
+
+   The first version varied the path by 7 % of its length, which is not a
+   variation anyone can see. The second overcorrected upward: the button sits
+   thirty pixels from the top of the window, so a lob of two hundred sent the
+   card straight off the screen and the layer clipped it - a card that leaves
+   the frame mid-flight is worse than one that never varied.
+
+   There is no room above the button, so the spread goes sideways instead.
+   --sving swings the card out from the direct line and back, peaking halfway
+   down: some arc wide left, some wide right, some come almost straight. That
+   reads as different throws and stays inside the window.
+
+   And the part that sells gravity is the landing. A fall that simply stops is
+   an element arriving at a coordinate. This one hits at 68 %, squashes,
+   bounces, hits again smaller, and settles. */
+@keyframes fly-inn{
+  /* Landinga eier under halvparten av tida, og hvert steg har sin egen kurve.
+
+     To ting var galt. Nedslaget laa paa 70 %, saa alt etter det - klemme, to
+     sprett og et sett - skulle skje paa de siste tretti prosentene: maalt til
+     45 ms per sprett ved 640 ms varighet, altsaa under tre bilder. Tre bilder
+     er ikke en bevegelse, det er et klipp, og det er derfor det ikke saa jevnt
+     ut.
+
+     Og alt gikk paa linear. Et kort som stiger i konstant fart og stopper
+     braatt paa toppen oppfoerer seg ikke som noe med vekt. Naa bremser hver
+     stigning og hvert fall akselererer, slik tyngdekraften faktisk virker -
+     animation-timing-function inne i et keyframe gjelder strekket som STARTER
+     der, saa hver fase kan ha sin egen.
+
+     Nedslaget er flyttet til 52 %. Da faar sprettet 143 ms opp og 121 ms ned:
+     ni og aatte bilder, nok til aa lese som en bue.
+
+     Selve innflyvinga staar paa linear med vilje. Parabelen ligger allerede i
+     verdiene - 0,74 og 0,50 og 0,24 er ikke jevnt fordelt - saa en ease-in
+     paa toppen teller akselerasjonen to ganger, og det gav et maalbart hakk:
+     farten falt fra 9,6 til 2,0 px per bilde og steg igjen. Bare det siste
+     strekket foer nedslaget akselererer, og det gaar helt inn i veggen
+     (kontrollpunkt i 1,1) - et fall er raskest i det oyeblikket det treffer,
+     ikke litt foer. */
+
+  0%  {opacity:0;animation-timing-function:linear;
+       transform:translate(var(--fra-x,0px),var(--fra-y,0px))
+                 rotate(var(--rot,0deg)) scaleX(.34) scaleY(.34)}
+  7%  {opacity:1;animation-timing-function:linear;
+       transform:translate(calc(var(--fra-x,0px)*.93 + var(--sving,0px)*.22),
+                           calc(var(--fra-y,0px)*.99 - var(--bue,0px)*.3))
+                 rotate(calc(var(--rot,0deg)*.93)) scaleX(.41) scaleY(.41)}
+  20% {animation-timing-function:linear;
+       transform:translate(calc(var(--fra-x,0px)*.74 + var(--sving,0px)*.62),
+                           calc(var(--fra-y,0px)*.93 - var(--bue,0px)*.7))
+                 rotate(calc(var(--rot,0deg)*.74)) scaleX(.55) scaleY(.55)}
+  34% {animation-timing-function:linear;
+       transform:translate(calc(var(--fra-x,0px)*.50 + var(--sving,0px)),
+                           calc(var(--fra-y,0px)*.72 - var(--bue,0px)))
+                 rotate(calc(var(--rot,0deg)*.44)) scaleX(.73) scaleY(.73)}
+  45% {animation-timing-function:cubic-bezier(.45,0,1,1);
+       transform:translate(calc(var(--fra-x,0px)*.24 + var(--sving,0px)*.42),
+                           calc(var(--fra-y,0px)*.38 - var(--bue,0px)*.4))
+                 rotate(calc(var(--rot,0deg)*.15)) scaleX(.90) scaleY(.90)}
+
+  /* Nedslag. Kortet er i ro og i full storrelse i akkurat ett oyeblikk. */
+  52% {opacity:1;animation-timing-function:cubic-bezier(.3,0,.55,1);
+       transform:translate(0,0) rotate(0deg) scaleX(1) scaleY(1)}
+
+  /* Klemmen. Den SKAL vaere rask - et sammenstot er raskt - men den er ikke
+     lenger den eneste fasen som er det. */
+  57% {animation-timing-function:cubic-bezier(.05,.7,.25,1);
+       transform:translate(0,0) rotate(0deg) scaleX(1.045) scaleY(.86)}
+
+  /* Opp, og farten tas av mot toppen. */
+  70% {animation-timing-function:cubic-bezier(.55,0,.85,.45);
+       transform:translate(0,calc(var(--sprett,16px)*-1)) rotate(0deg)
+                 scaleX(.975) scaleY(1.06)}
+
+  /* Ned igjen, akselererende. */
+  81% {animation-timing-function:cubic-bezier(.1,.6,.3,1);
+       transform:translate(0,0) rotate(0deg) scaleX(1.022) scaleY(.94)}
+
+  /* Andre sprett, halve hoyden. */
+  88% {animation-timing-function:cubic-bezier(.55,0,.85,.5);
+       transform:translate(0,calc(var(--sprett,16px)*-.3)) rotate(0deg)
+                 scaleX(.992) scaleY(1.022)}
+  95% {animation-timing-function:cubic-bezier(.2,.7,.4,1);
+       transform:translate(0,0) rotate(0deg) scaleX(1.008) scaleY(.982)}
+
+  /* Og siste rest av spenst, saa kortet ikke stopper mens det er i bevegelse. */
+  100%{opacity:1;transform:translate(0,0) rotate(0deg) scaleX(1) scaleY(1)}
+}
+
+/* The card cannot make this trip itself: it lives inside the device pane, and
+   the pane clips anything that leaves it - so a card animating up towards the
+   top bar simply vanished at the pane's edge. What flies is a copy in a layer
+   above everything, and the real card is held invisible until the copy lands
+   on it. */
+#flylag{position:fixed;inset:0;z-index:9997;pointer-events:none;overflow:hidden}
+#flylag[hidden]{display:none}
+#flylag .dev{
+  position:fixed;margin:0;border-radius:var(--radius,4px);
+  background:var(--panel);border:1px solid var(--line-2);
+  box-shadow:0 10px 24px rgba(0,0,0,.45);
+  animation:fly-inn var(--varighet,640ms) linear both;
+  transform-origin:center bottom;
+}
+/* Plassen er OPPTATT mens kortet er i lufta.
+
+   Foer var kortet visibility:hidden hele flyvningen. Maalt paa et ekte skann:
+   enheten svarte etter 442 ms, men kortet dukket ikke opp foer 1601 - og de
+   1,1 sekundene leses som at skanningen er treg, ikke som at animasjonen er
+   lang. Verst maalte tilfelle var 1,4 s.
+
+   Naa staar det en svak avtegning der kortet skal lande, med en gang enheten
+   har svart. Da vet du at noe kom, og klonen som flyr inn fyller ut en plass
+   du allerede ser. Femten prosent er nok til aa se plassen og for lite til aa
+   forveksles med kortet som er paa vei. */
+/* Foerste forsok var opacity:.15 paa hele kortet. Hoyden ble reservert, saa
+   maalinga sa at plassen var synlig - men et naesten hvitt kort paa 15 % mot en
+   hvit rute er ingenting, og i lysmodus sto det bare et tomt gap. Maalingen
+   besto mens det saa feil ut.
+
+   Naa er plassen tegnet med farge og kant i stedet: du ser at noe er paa vei
+   dit, ikke at det mangler noe. */
+.dev.venter{
+  pointer-events:none;
+  background:color-mix(in srgb,var(--accent) 15%,transparent);
+  box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--accent) 34%,transparent);
+}
+.dev.venter > *{opacity:0}
+
+/* Handlinger som foerst finnes naar du peker paa raden.
+
+   Fra curated.design, der kortene holder kontrollene sine skjult til musa er
+   over dem. Her loeser det et tetthetsproblem: tre knapper per rad ganger 2400
+   rader er en kolonne som stjeler plass fra navn og beskrivelse hele tiden, for
+   noe du gjor med en rad av gangen.
+
+   De ligger i hoyre kant og seiler inn fra hoyre - kort vei, saa de er framme
+   foer haanden rekker dit. Tastaturmarkoeren tar dem ogsaa fram, ellers ville
+   de vaere utilgjengelige uten mus. */
+tbody tr{position:relative}
+/* Ett sett, som flyttes. Toppen og hoyden settes fra raden under peker; at
+   den GLIR dit gjor dessuten at settet leses som det samme settet, ikke som
+   noe som blinker fram paa hver rad du passerer. */
+#radVerktoy{
+  position:absolute;right:4px;
+  display:flex;gap:2px;align-items:center;
+  opacity:0;pointer-events:none;
+  transform:translateX(6px);
+  transition:opacity 110ms ease, transform 150ms var(--mot-kurve),
+             top 130ms var(--mot-kurve);
+  background:linear-gradient(90deg,transparent,var(--panel) 22%);
+  padding-left:26px;z-index:5;
+}
+#radVerktoy.paa{opacity:1;transform:none;pointer-events:auto}
+#radVerktoy [hidden]{display:none}
+.rv-knapp{
+  width:22px;height:22px;padding:0;border:0;border-radius:4px;
+  background:var(--raised);color:var(--fg-2);cursor:pointer;
+  font-size:11px;line-height:1;
+  display:inline-flex;align-items:center;justify-content:center;
+  transition:background 110ms ease,color 110ms ease,transform 110ms ease;
+}
+.rv-knapp:hover{background:var(--accent);color:var(--on-accent,#fff);transform:scale(1.08)}
+.rv-knapp:active{transform:scale(.94)}
+.rv-knapp:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+
+@media (prefers-reduced-motion:reduce){
+  #radVerktoy{transition:none}
+}
+
+/* Hva som faktisk snevrer inn lista - alltid synlig, en om gangen aa fjerne.
+
+   Filtrene sto i en meny med haker, og de ble bare NEVNT naar ingenting
+   matchet. Ser du en liste med treff i, er det ingenting som forteller at du
+   ser paa et utvalg - og et punkt som er filtrert bort ser ut som et punkt som
+   ikke finnes. Paa et anlegg med 2418 punkter er det en dyr misforstaaelse.
+
+   Chip-raden er tatt fra curated.design, der filtrene ligger som piller over
+   rutenettet. Her baerer hver pille i tillegg krysset som slaar den av, saa du
+   kommer ut av et filter der du oppdaget det. */
+.filter-chips{
+  display:flex;flex-wrap:wrap;gap:5px;align-items:center;
+  padding:6px 10px 0;
+}
+.filter-chips[hidden]{display:none}
+.fchip{
+  display:inline-flex;align-items:center;gap:5px;
+  padding:2px 4px 2px 8px;border-radius:999px;
+  font-size:10.5px;line-height:1.7;
+  background:color-mix(in srgb,var(--accent) 15%,transparent);
+  border:1px solid color-mix(in srgb,var(--accent) 34%,transparent);
+  color:var(--fg);
+  animation:fchip-inn 220ms var(--fjaer) both;
+}
+@keyframes fchip-inn{
+  from{opacity:0;transform:scale(.82)}
+  to  {opacity:1;transform:none}
+}
+.fchip b{font-weight:600}
+.fchip-x{
+  display:inline-flex;align-items:center;justify-content:center;
+  width:15px;height:15px;border-radius:50%;border:0;padding:0;
+  background:transparent;color:var(--fg-2);cursor:pointer;
+  font-size:11px;line-height:1;
+  transition:background 120ms ease,color 120ms ease;
+}
+.fchip-x:hover{background:color-mix(in srgb,var(--accent) 40%,transparent);color:var(--fg)}
+.fchip-alle{
+  background:transparent;border:1px solid var(--line-2);color:var(--fg-3);
+  padding:2px 9px;cursor:pointer;border-radius:999px;font-size:10.5px;
+  transition:color 120ms ease,border-color 120ms ease;
+}
+.fchip-alle:hover{color:var(--fg);border-color:var(--fg-3)}
+@media (prefers-reduced-motion:reduce){.fchip{animation:none}}
+/* Kept for the case where a device appears without a scan behind it - loading
+   a saved site, for one - where there is no button for it to come from. */
+/* Ingen forflytning - bare storrelse og opasitet.
+
+   Foer gled kortet inn med translateX(-18px). Det fungerte fram til
+   leverandorgruppene ble et ekte trekkspill: den kollapsen krever
+   overflow:hidden paa innpakningen, og da ble de atten pikslene klippet vekk.
+   Kortet kom inn halvt utenfor sin egen beholder.
+
+   En skalering kan ikke klippes, for den krymper innover. Samme inntrykk av at
+   noe ankommer, uten aa vaere avhengig av plass som ikke finnes. */
+@keyframes enhet-inn{
+  from{opacity:0;transform:scale(.94)}
+  to  {opacity:1;transform:none}
+}
+
+/* Seen at 15 % and 35 % of its run, the first version read as a thick left
+   border rather than a signal: a 2px bar scaled to 28px in a 250px pane is a
+   smear, not a pulse. This sweeps the device's own colour across the whole
+   card and out the right side, which is what "this one just answered" should
+   look like. */
+/* Timed by looking at it frozen at 15 % and 35 %: on a strong ease-out the
+   sweep had already left the card by a third of the way through, and on a
+   dark vendor colour there was nothing to see anyway. Linear, so it crosses
+   at an even pace, and a light sheen so it reads whatever colour the vendor
+   brings. */
+@keyframes puls-ring{
+  0%  {opacity:0;transform:translateX(-105%)}
+  18% {opacity:1}
+  70% {opacity:1}
+  100%{opacity:0;transform:translateX(105%)}
+}
+.dev.ny{animation:enhet-inn 520ms cubic-bezier(.16,1,.3,1) both}
+.dev.ny::after{
+  content:'';position:absolute;inset:0;pointer-events:none;
+  background:linear-gradient(90deg,transparent 10%,
+    color-mix(in srgb,var(--vc,var(--accent)) 60%,transparent) 42%,
+    rgba(255,255,255,.13) 50%,
+    color-mix(in srgb,var(--vc,var(--accent)) 60%,transparent) 58%,transparent 90%);
+  animation:puls-ring 760ms linear both;
+}
+.dev{position:relative;overflow:hidden}
+
+/* --- a value moves ------------------------------------------------------
+   A flash said "this changed". Which way it went is the thing you actually
+   want, and the colour can carry it for free: green rising, amber falling.
+   The sweep runs left to right across the cell so several changing at once
+   read as a wave rather than a blink. */
+@keyframes verdi-opp{
+  0%  {background:color-mix(in srgb,var(--ok) 34%,transparent);transform:translateY(2px)}
+  100%{background:transparent;transform:none}
+}
+@keyframes verdi-ned{
+  0%  {background:color-mix(in srgb,var(--warn) 34%,transparent);transform:translateY(-2px)}
+  100%{background:transparent;transform:none}
+}
+td.c-val.opp{animation:verdi-opp 900ms var(--mot-kurve)}
+td.c-val.ned{animation:verdi-ned 900ms var(--mot-kurve)}
+
+/* --- the table arrives --------------------------------------------------
+   Two thousand rows cannot each have an animation; the browser would spend
+   the frame budget on bookkeeping. The first fifteen carry it and the rest
+   simply are there - by row sixteen the eye has already accepted the list. */
+/* Radene toner inn. De flytter seg ikke.
+
+   Foerst kom de nedenfra, saa endret jeg det til aa komme fra venstre - fra
+   enhetsruta - fordi retning skulle bety noe. Maalt paa en ekte tabell flyttet
+   det beskrivelsen 22 piksler til venstre og tilbake igjen mens den ble lest:
+   767 til 789 i lopet av inngangen.
+
+   En rad ER teksten. I en liste man leser tall i, konkurrerer bevegelse med
+   lesinga - og retningen var uansett en finesse jeg hadde funnet paa, ikke noe
+   noen trengte. Opasitet alene sier "her er de" uten aa flytte et eneste
+   tegn. */
+@keyframes rad-inn{
+  from{opacity:0}
+  to{opacity:1}
+}
+tbody.ferske tr:nth-child(-n+15){animation:rad-inn 300ms var(--mot-kurve) both}
+tbody.ferske tr:nth-child(1){animation-delay:0ms}
+tbody.ferske tr:nth-child(2){animation-delay:18ms}
+tbody.ferske tr:nth-child(3){animation-delay:36ms}
+tbody.ferske tr:nth-child(4){animation-delay:54ms}
+tbody.ferske tr:nth-child(5){animation-delay:72ms}
+tbody.ferske tr:nth-child(6){animation-delay:90ms}
+tbody.ferske tr:nth-child(7){animation-delay:105ms}
+tbody.ferske tr:nth-child(8){animation-delay:118ms}
+tbody.ferske tr:nth-child(9){animation-delay:130ms}
+tbody.ferske tr:nth-child(10){animation-delay:140ms}
+tbody.ferske tr:nth-child(n+11){animation-delay:150ms}
+
+/* --- the link is alive --------------------------------------------------
+   The Live badge breathes on the poll interval, so a glance says the tool is
+   still talking to the plant without reading anything. */
+@keyframes puster{
+  0%,100%{opacity:1;transform:scale(1)}
+  50%    {opacity:.55;transform:scale(.93)}
+}
+#sbLive[data-live]::before{
+  content:'';display:inline-block;width:6px;height:6px;border-radius:50%;
+  background:var(--live);margin-right:5px;vertical-align:1px;
+  animation:puster 2s ease-in-out infinite;
+}
+
+/* --- the scan is running ------------------------------------------------
+   A sheen crosses the device pane header while the sweep is out. It says
+   "working" without a spinner competing with the count that is already
+   there. */
+@keyframes sveip{
+  from{transform:translateX(-100%)}
+  to  {transform:translateX(100%)}
+}
+/* Kortene maa ligge over sveipet, ikke i det. */
+.pane-devices .pane-head,.pane-devices .pane-body,.pane-devices .dup-warn{
+  position:relative;z-index:1;
+}
+
+.pane-devices .pane-head{position:relative;overflow:hidden}
+body.skanner .pane-devices .pane-head::after{
+  content:'';position:absolute;inset:0;pointer-events:none;
+  background:linear-gradient(90deg,transparent,
+    color-mix(in srgb,var(--accent) 26%,transparent),transparent);
+  animation:sveip 1.5s ease-in-out infinite;
+}
+
+/* Hvor langt ned i lista du er.
+
+   2418 punkter er atten skjermer med rader som ligner paa hverandre, og
+   rullefeltet i nettleseren er tre piksler bredt. Denne streken sier det samme,
+   men i selve grensesnittet - og den drives av scroll-timeline, saa den koster
+   ingen JavaScript i det hele tatt: nettleseren knytter animasjonen direkte til
+   rulleposisjonen paa kompositoren. */
+/* Navnet slaas opp oppover i treet, saa panelet som inneholder BAADE streken
+   og rullefeltet maa aapne omfanget. Panelet heter pane-main - ikke
+   pane-points, som ikke finnes. */
+.pane-main{timeline-scope:--punktrull}
+/* Skjult naar lista ikke kan rulle.
+
+   En rullefelt-indikator over en liste som faar plass paa skjermen er en strek
+   som aldri gjor noe, og en strek som aldri gjor noe leses som noe som er i
+   stykker. Den skal bare finnes naar den har noe aa vise. */
+#punktrull{
+  position:relative;height:2px;flex:0 0 2px;
+  background:var(--line-soft,rgba(255,255,255,.05));
+}
+#punktrull:not(.aktiv){display:none}
+
+/* 1 --- Skjelettrader mens punktene leses --------------------------------
+   Lasteboksen forteller hvor langt det er kommet, men ikke HVA som kommer.
+   Under den ligger naa formen paa tabellen: rader i riktig hoyde, med felt der
+   objekt, navn, verdi og beskrivelse skal staa, og et lysstroeyk som gaar over
+   dem. Ventinga blir da noe man ser innholdet av i stedet for en tom flate.
+
+   Stroket gaar over hele blokka som EN bevegelse - ikke en per rad - saa det
+   leser som lys over et bord, ikke som ti separate blink. */
+@keyframes skjelett-strok{
+  from{background-position:-40% 0}
+  to  {background-position:140% 0}
+}
+.skjelett{
+  padding:0 10px;
+  -webkit-mask-image:linear-gradient(180deg,#000 55%,transparent);
+  mask-image:linear-gradient(180deg,#000 55%,transparent);
+}
+.skjelett-rad{
+  display:flex;align-items:center;gap:10px;
+  height:var(--row,26px);border-bottom:1px solid var(--line-soft,rgba(255,255,255,.04));
+}
+.skjelett-felt{
+  height:8px;border-radius:3px;
+  background:linear-gradient(90deg,
+    var(--sunken,rgba(255,255,255,.05)) 0%,
+    color-mix(in srgb,var(--accent) 16%,var(--sunken,rgba(255,255,255,.05))) 45%,
+    var(--sunken,rgba(255,255,255,.05)) 90%);
+  background-size:260% 100%;
+  animation:skjelett-strok 1.6s linear infinite;
+}
+/* Hver kolonne faar sin egen bredde, saa formen ligner tabellen som kommer. */
+.sk-obj{flex:0 0 46px}
+.sk-navn{flex:0 0 34%}
+.sk-verdi{flex:0 0 52px;margin-left:auto}
+.sk-desc{flex:0 0 26%}
+/* Forsinkelsen gjor stroket til en skraa linje over blokka i stedet for en
+   vannrett kant. */
+.skjelett-rad:nth-child(2) .skjelett-felt{animation-delay:-.08s}
+.skjelett-rad:nth-child(3) .skjelett-felt{animation-delay:-.16s}
+.skjelett-rad:nth-child(4) .skjelett-felt{animation-delay:-.24s}
+.skjelett-rad:nth-child(5) .skjelett-felt{animation-delay:-.32s}
+.skjelett-rad:nth-child(6) .skjelett-felt{animation-delay:-.40s}
+.skjelett-rad:nth-child(7) .skjelett-felt{animation-delay:-.48s}
+.skjelett-rad:nth-child(8) .skjelett-felt{animation-delay:-.56s}
+.skjelett-rad:nth-child(n+9) .skjelett-felt{animation-delay:-.64s}
+
+/* 2 --- Tastaturmarkoeren glir ------------------------------------------
+   Med piltastene hoppet markeringa fra rad til rad, og i en liste paa to tusen
+   rader mister oyet hvor det var. En strek som GLIR dit kan foelges, og da vet
+   du hvilken vei du gikk uten aa lete etter den blaa raden.
+
+   Bare ved tastatur. Bruker du musa vet du selv hvor du klikket, og da er
+   streken bare enda et element som beveger seg. */
+#radmarkor{
+  position:absolute;left:0;width:3px;border-radius:0 3px 3px 0;
+  background:var(--accent);pointer-events:none;z-index:4;
+  opacity:0;transform:scaleY(.4);
+  transition:top 240ms var(--mot-kurve), height 240ms var(--mot-kurve),
+             opacity 160ms ease, transform 240ms var(--fjaer);
+}
+#radmarkor.paa{opacity:1;transform:scaleY(1)}
+
+/* 3 --- Bolgen gaar ut fra der du faktisk traff ---------------------------
+   En knapp som skifter farge naar du trykker forteller AT du trykket. En bolge
+   som gaar ut fra punktet under fingeren forteller HVOR - og det er forskjellen
+   mellom en flate som reagerer og en flate du tar paa. Posisjonen settes fra
+   musepekeren, saa den er aldri i midten med mindre du traff midten. */
+@keyframes klikkbolge{
+  from{transform:translate(-50%,-50%) scale(0);opacity:.5}
+  60% {opacity:.28}
+  to  {transform:translate(-50%,-50%) scale(1);opacity:0}
+}
+.bolge{
+  position:absolute;border-radius:50%;pointer-events:none;z-index:2;
+  left:var(--bx);top:var(--by);
+  width:var(--bd);height:var(--bd);
+  background:radial-gradient(circle,
+    color-mix(in srgb,var(--accent) 60%,transparent) 0%,
+    color-mix(in srgb,var(--accent) 22%,transparent) 55%,transparent 72%);
+  animation:klikkbolge 620ms cubic-bezier(.2,.7,.3,1) forwards;
+}
+.dev{position:relative;overflow:hidden}
+
+/* 4 --- Kortet puster naar tallene kommer inn ----------------------------
+   Under Live oppdateres verdiene i tabellen, men enhetskortet - som er stedet
+   tallene KOMMER fra - sto helt stille. Naa gaar det et svakt drag gjennom
+   kortet hver gang den regulatoren faktisk leverte noe nytt, saa du ser hvilken
+   av dem som er i bevegelse uten aa lese lista. Svakt med vilje: dette skjer
+   annethvert sekund, og alt som skjer annethvert sekund maa vaere stille. */
+@keyframes kort-puls{
+  0%  {background-position:-30% 0;opacity:0}
+  20% {opacity:1}
+  100%{background-position:130% 0;opacity:0}
+}
+.dev.puls::after{
+  content:'';position:absolute;inset:0;pointer-events:none;z-index:1;
+  background:linear-gradient(90deg,transparent 35%,
+    color-mix(in srgb,var(--live) 20%,transparent) 50%,transparent 65%);
+  background-size:220% 100%;
+  animation:kort-puls 900ms ease-out forwards;
+}
+
+/* 5 --- Skann-knappen lader opp foer den fyrer --------------------------
+   Trykket og selve skannet skjedde i samme oyeblikk, saa knappen var bare en
+   knapp. Naa fylles den bakfra i to tideler og slipper - ladningen gjor at
+   ringene som gaar ut etterpaa leses som noe som ble AVFYRT, ikke noe som
+   plutselig var der. */
+/* Fra venstre mot hoyre. Med background-size over 100 % flytter bildet seg
+   MOTSATT vei av prosenten, saa en stigende verdi drar strøket til venstre -
+   som leser som noe som passerer, ikke som noe som lades. Synkende verdi
+   fyller knappen forfra. */
+@keyframes skann-lad{
+  from{background-position:150% 0}
+  to  {background-position:-40% 0}
+}
+@keyframes skann-kast{
+  0%  {transform:scale(1)}
+  30% {transform:scale(.93)}
+  55% {transform:scale(1.03)}
+  100%{transform:scale(1)}
+}
+/* Ladningen ligger paa knappens EGEN bakgrunn.
+
+   To utkast feilet foer dette, og begge av samme grunn: alt jeg la inne i eller
+   paa knappen ble revet vekk.
+
+   Foerst ::before - men ping-ringene bruker allerede baade ::before og ::after,
+   og to regler kan ikke dele samme pseudo-element.
+
+   Saa et barn, <span class="lad"> - men runScan bygger om knappen til en
+   Avbryt-knapp med en gang, og den innerHTML-tilordninga sletter barnet. Maalt:
+   aatti millisekunder etter klikket sto det allerede "Avbryt" der, og
+   ladningen var borte foer den rakk ett bilde.
+
+   background-image paa selve knappen overlever begge deler. Den ligger over
+   bakgrunnsfargen, under innholdet, og bryr seg ikke om at teksten byttes ut. */
+#scanBtn.lader{
+  /* Strøket gaar jevnt (linear) - en kurve som bremser mot slutten gjor at
+     baandet staar nesten stille i siste halvdel, og da ser to bilder tatt paa
+     ulike tidspunkt like ut. Smalere baand, saa det leses som en kant som
+     passerer og ikke som at hele knappen ble lysere. */
+  animation:skann-kast 320ms cubic-bezier(.3,0,.2,1),
+            skann-lad 300ms linear;
+  background-image:linear-gradient(90deg,
+    rgba(255,255,255,0) 42%, rgba(255,255,255,.70) 50%,
+    rgba(255,255,255,0) 58%);
+  background-size:260% 100%;
+  background-repeat:no-repeat;
+}
+@media (prefers-reduced-motion:reduce){
+  .bolge,.dev.puls::after,#scanBtn.lader{animation:none}
+  .bolge{display:none}
+}
+@media (prefers-reduced-motion:reduce){
+  .skjelett-felt{animation:none}
+  #radmarkor{transition:none}
+}
+
+/* Tomme tilstander stiger fram i stedet for aa bare vaere der.
+
+   "Velg en enhet", "Ingen treff", "Lasting avbrutt" - det er beskjeder som
+   dukker opp fordi noe skjedde, og de kom uten en bevegelse midt i en rute som
+   nettopp hadde innhold. */
+@keyframes tom-inn{
+  from{opacity:0;transform:translateY(6px)}
+  to  {opacity:1;transform:none}
+}
+.empty,.gs-empty{animation:tom-inn 300ms var(--mot-kurve) both}
+
+/* Trendloggen leses ovenfra og ned, saa den kommer ovenfra og ned.
+   Bare de foerste tjue baerer kaskaden - en logg kan ha hundrevis av rader, og
+   da er poenget for lengst tapt. */
+@keyframes tl-inn{
+  from{opacity:0;transform:translateX(-8px)}
+  to  {opacity:1;transform:none}
+}
+.tl-tab tbody tr:nth-child(-n+20){animation:tl-inn 240ms var(--mot-kurve) both}
+.tl-tab tbody tr:nth-child(2){animation-delay:16ms}
+.tl-tab tbody tr:nth-child(3){animation-delay:31ms}
+.tl-tab tbody tr:nth-child(4){animation-delay:45ms}
+.tl-tab tbody tr:nth-child(5){animation-delay:58ms}
+.tl-tab tbody tr:nth-child(6){animation-delay:70ms}
+.tl-tab tbody tr:nth-child(7){animation-delay:81ms}
+.tl-tab tbody tr:nth-child(8){animation-delay:91ms}
+.tl-tab tbody tr:nth-child(n+9){animation-delay:100ms}
+
+/* Globalsoket deler ut treffene sine - men bare naar ruta apnes.
+   Lista bygges om paa hvert tastetrykk, saa en kaskade som kan sees ville
+   stroboskopere mens du skriver. Samme grep som kommandopaletten. */
+@keyframes gs-inn{
+  from{opacity:0;transform:translate(-10px,-2px)}
+  to  {opacity:1;transform:none}
+}
+#gsResults.kaskade .gs-row{animation:gs-inn 240ms var(--mot-kurve) both}
+#gsResults.kaskade .gs-row:nth-child(1){animation-delay:0ms}
+#gsResults.kaskade .gs-row:nth-child(2){animation-delay:26ms}
+#gsResults.kaskade .gs-row:nth-child(3){animation-delay:50ms}
+#gsResults.kaskade .gs-row:nth-child(4){animation-delay:72ms}
+#gsResults.kaskade .gs-row:nth-child(5){animation-delay:92ms}
+#gsResults.kaskade .gs-row:nth-child(6){animation-delay:110ms}
+#gsResults.kaskade .gs-row:nth-child(7){animation-delay:126ms}
+#gsResults.kaskade .gs-row:nth-child(n+8){animation-delay:140ms}
+
+/* Notatet bekrefter at det ble lagret.
+
+   Et notat er det eneste i verktoyet som bare finnes fordi noen skrev det, og
+   kvitteringa var fire ord i hjornet. Feltet slaar kort gronnt, der du
+   allerede ser. */
+@keyframes notat-lagret{
+  0%  {box-shadow:inset 0 0 0 2px color-mix(in srgb,var(--ok) 75%,transparent)}
+  100%{box-shadow:inset 0 0 0 2px transparent}
+}
+.note-field.lagret{animation:notat-lagret 1s ease-out}
+
+/* Kolonner som dras: raden under peker aapner en glipe, saa du ser hvor den
+   havner foer du slipper. */
+.cols-row{transition:transform 180ms var(--mot-kurve),opacity 180ms ease}
+.cols-row.dragging{opacity:.4}
+.cols-row.over{transform:translateY(5px)}
+
+@media (prefers-reduced-motion:reduce){
+  .empty,.gs-empty,.tl-tab tbody tr,#gsResults.kaskade .gs-row,
+  .note-field.lagret{animation:none}
+  .cols-row{transition:none}
+}
+#punktrull::after{
+  content:'';position:absolute;inset:0;
+  background:linear-gradient(90deg,
+    color-mix(in srgb,var(--accent) 55%,transparent),var(--accent));
+  transform-origin:left center;transform:scaleX(0);
+  animation:rull-frem linear both;
+  animation-timeline:--punktrull;
+}
+@keyframes rull-frem{from{transform:scaleX(0)} to{transform:scaleX(1)}}
+
+/* Trendkurven tegner seg selv.
+
+   Grafen ER en historie - verdien over tid - og den kom ferdig oppslaatt. Naa
+   legges den ned fra venstre mot hoyre, samme vei som tida gaar, og flaten
+   under toner inn etterpaa slik at linja faar vaere alene foerst.
+
+   pathLength="1" er nokkelen: uten den maa lengden paa hver enkelt kurve maales
+   i JavaScript for aa sette dasharray riktig. Med den normaliseres kurven til
+   1 uansett form, og hele greia blir ren CSS. */
+/* Et punkt som festes flyr dit det havner.
+
+   Overvaakingslista staar nederst til hoyre, tabellen i midten - to ruter som
+   ikke ser paa hverandre. Naar du festet et punkt dukket det bare opp der
+   nede, og hvis ruta var rullet ut av syne skjedde det ingenting i det hele
+   tatt. Naa gaar navnet dit, saa du ser HVOR det ble av.
+
+   Samme lag og samme tanke som enhetene som flyr fra Skann-knappen. */
+/* Forbindelsen ryker, og forbindelsen kommer tilbake.
+
+   Dette er en tilstandsendring som gjelder HELE verktoyet - fra det oyeblikket
+   linja er nede er hvert tall paa skjermen historie - og den ble meldt med en
+   toast i hjornet som forsvant etter fire sekunder. Var du borte i ti, gikk du
+   tilbake til en skjerm full av tall som saa levende ut.
+
+   Naa gaar det en linje tvers over hele appen: rod nedover naar den ryker,
+   gronn oppover naar den er tilbake. Retningen er ikke tilfeldig - ned er noe
+   som faller fra hverandre, opp er noe som reiser seg. */
+/* Live slaas paa, og tabellen vaakner.
+
+   Foer var forskjellen mellom en levende og en doed tabell to ord i en knapp.
+   Naa gaar det en bolge nedover lista i det oyeblikket den begynner aa
+   oppdatere seg - en gang, ikke gjentatt - saa du ser at tallene foran deg er
+   i bevegelse. Prikken i statuslinja fortsetter aa puste og holder tilstanden;
+   bolgen er selve overgangen. */
+#pointsWrap{position:relative}
+#pointsWrap.vaakner::after{
+  content:'';position:absolute;left:0;right:0;top:0;height:120px;
+  pointer-events:none;z-index:3;
+  background:linear-gradient(180deg,transparent,
+    color-mix(in srgb,var(--live) 22%,transparent) 55%,
+    color-mix(in srgb,var(--live) 40%,transparent) 82%,transparent);
+  animation:vaakne-bolge 900ms cubic-bezier(.35,0,.3,1) forwards;
+}
+@keyframes vaakne-bolge{
+  from{transform:translateY(-130px);opacity:0}
+  15% {opacity:1}
+  85% {opacity:1}
+  to  {transform:translateY(100vh);opacity:0}
+}
+
+/* Rader som er kopiert ut.
+
+   Kopiering er den vanligste maaten data forlater verktoyet paa, og den var en
+   toast. Naa lyser radene som faktisk ble med, ovenfra og ned, saa du ser
+   omfanget - at det var atten rader og ikke de tre du hadde oye paa. */
+@keyframes kopiert{
+  0%  {background-color:color-mix(in srgb,var(--ok) 40%,transparent)}
+  100%{background-color:transparent}
+}
+tbody tr.kopiert td{animation:kopiert 800ms ease-out}
+
+@media (prefers-reduced-motion:reduce){
+  #pointsWrap.vaakner::after{animation:none;display:none}
+  tbody tr.kopiert td{animation:none}
+}
+
+#linjelag{position:fixed;inset:0;pointer-events:none;z-index:95;overflow:hidden}
+.samband{
+  position:absolute;left:0;right:0;height:2px;
+  box-shadow:0 0 22px 5px currentColor;
+}
+.samband.ned{
+  color:var(--err);background:var(--err);
+  animation:samband-ned 900ms cubic-bezier(.5,0,.75,0) forwards;
+}
+.samband.opp{
+  color:var(--ok);background:var(--ok);
+  animation:samband-opp 900ms cubic-bezier(.22,1,.36,1) forwards;
+}
+@keyframes samband-ned{
+  0%  {top:0;opacity:0}
+  12% {opacity:1}
+  85% {opacity:1}
+  100%{top:100%;opacity:0}
+}
+@keyframes samband-opp{
+  0%  {top:100%;opacity:0}
+  12% {opacity:1}
+  85% {opacity:1}
+  100%{top:0;opacity:0}
+}
+/* Og mens linja er nede staar tallene dempet. Ikke skjult - du skal fortsatt
+   kunne lese dem - men tydelig merket som noe som ikke lenger oppdateres. */
+body.frakoblet .pane-points,body.frakoblet .pane-inspect{
+  filter:saturate(.35);transition:filter 700ms ease;
+}
+body:not(.frakoblet) .pane-points,body:not(.frakoblet) .pane-inspect{
+  transition:filter 900ms ease;
+}
+
+/* En regulator som slutter aa svare.
+
+   Sto den i lista saa den helt frisk ut - tallet i hjornet gikk opp, og det
+   var alt. Naa flatliner kortet: en strek gaar tvers over det og blir
+   liggende, og kortet mister farge. Kommer den tilbake, forsvinner streken. */
+.dev.borte{position:relative;filter:saturate(.3) brightness(.86)}
+/* Streken TEGNES en gang, naar regulatoren blir stille - og blir saa staaende.
+
+   Foerste utkast la animasjonen paa .borte. Enhetslista bygges om hver gang
+   overvaakinga gaar en runde, og et nytt element starter animasjonen forfra,
+   saa streken tegnet seg selv opp igjen med jevne mellomrom uten at noe hadde
+   skjedd. Maalt: tjue starter paa ti omtegninger. Samme feil som trendkurven
+   hadde - og det er derfor selve overgangen naa har sin egen klasse. */
+/* Streken ligger i bunnen av kortet, ikke midt over det.
+
+   Paa 50 % gikk den tvers gjennom regulatornavnet - nettopp det du trenger for
+   aa se HVILKEN enhet som ble stille. I bunnen leses den dessuten riktigere:
+   en kurve som har falt til null, ikke et navn som er strykt ut. */
+.dev.borte::after{
+  content:'';position:absolute;left:0;right:0;bottom:5px;height:1px;
+  background:var(--err);transform-origin:left center;opacity:.7;
+}
+.dev.borte.nyborte::after{animation:flatline 620ms cubic-bezier(.3,0,.1,1) both}
+@keyframes flatline{
+  from{transform:scaleX(0);opacity:.35}
+  60% {opacity:1}
+  to  {transform:scaleX(1);opacity:.65}
+}
+@media (prefers-reduced-motion:reduce){
+  .samband{display:none}
+  .dev.borte.nyborte::after{animation:none}
+}
+
+#festlag{position:fixed;inset:0;pointer-events:none;z-index:60}
+.fest-fly{
+  position:fixed;font-family:var(--mono);font-size:11px;font-weight:600;
+  color:var(--accent);background:var(--panel);
+  border:1px solid var(--accent-edge,var(--accent));border-radius:5px;
+  padding:2px 7px;white-space:nowrap;
+  animation:fest-flyr var(--flytid,560ms) cubic-bezier(.4,0,.2,1) forwards;
+}
+@keyframes fest-flyr{
+  0%  {opacity:0;transform:translate(0,0) scale(1)}
+  12% {opacity:1;transform:translate(calc(var(--dx)*.12),
+                                     calc(var(--dy)*.12 - 16px)) scale(1.04)}
+  70% {opacity:1}
+  100%{opacity:0;transform:translate(var(--dx),var(--dy)) scale(.72)}
+}
+/* Og maalet svarer naar det kommer fram. */
+@keyframes fest-mottok{
+  0%  {background:color-mix(in srgb,var(--accent) 30%,transparent)}
+  100%{background:transparent}
+}
+#watchList.mottok{animation:fest-mottok 700ms ease-out}
+@media (prefers-reduced-motion:reduce){
+  .fest-fly{display:none}
+}
+
+@keyframes tegn-linje{from{stroke-dashoffset:1} to{stroke-dashoffset:0}}
+@keyframes flate-inn{from{opacity:0} to{opacity:.10}}
+.trend polyline,.spark polyline{
+  stroke-dasharray:1;stroke-dashoffset:1;
+  animation:tegn-linje 760ms cubic-bezier(.22,.61,.36,1) forwards;
+}
+.trend polygon{opacity:0;animation:flate-inn 420ms ease-out 420ms forwards}
+/* Sparklinen i tabellen er 40 piksler bred og det er mange av dem - den skal
+   vaere raskere, ellers ser lista ut som den flimrer. */
+.spark polyline{animation-duration:520ms}
+@media (prefers-reduced-motion:reduce){
+  .trend polyline,.spark polyline{animation:none;stroke-dashoffset:0}
+  .trend polygon{animation:none;opacity:.10}
+}
+
+/* --- the palette ---------------------------------------------------------
+   Results cascade rather than appear, which makes the list read top-down. */
+/* 160ms in 14ms steps is a cascade nobody can see - by the time the eye has
+   found the list it is over. Slower, further apart, and each row comes in from
+   the side rather than straight down, so the list reads as being dealt out. */
+@keyframes cmd-inn{
+  from{opacity:0;transform:translate(-14px,-3px)}
+  to{opacity:1;transform:none}
+}
+/* Only when the palette opens. The list rebuilds on every keystroke, so a
+   cascade anyone can actually see would strobe the whole list while typing -
+   which is exactly why the old one was set to 160ms in 14ms steps and could
+   not be seen at all. Dealt out once on open, then still while you search.
+
+   Counted over every child rather than the items alone, because the group
+   headings sit between them and skipping those would space the rows unevenly. */
+#cmdList.kaskade > *{animation:cmd-inn 240ms var(--mot-kurve) both}
+#cmdList.kaskade > *:nth-child(1){animation-delay:0ms}
+#cmdList.kaskade > *:nth-child(2){animation-delay:26ms}
+#cmdList.kaskade > *:nth-child(3){animation-delay:50ms}
+#cmdList.kaskade > *:nth-child(4){animation-delay:72ms}
+#cmdList.kaskade > *:nth-child(5){animation-delay:92ms}
+#cmdList.kaskade > *:nth-child(6){animation-delay:110ms}
+#cmdList.kaskade > *:nth-child(7){animation-delay:126ms}
+#cmdList.kaskade > *:nth-child(8){animation-delay:140ms}
+#cmdList.kaskade > *:nth-child(n+9){animation-delay:152ms}
+
+/* --- picking rows -------------------------------------------------------
+   scale(1.006) on a 26px row is under a third of a pixel: it was not an
+   animation, it was a rounding error. A pick now sweeps in from the left edge
+   the way the fill arrives, which is a gesture you can actually see at the
+   size these rows are. */
+@keyframes plukk-sveip{
+  from{transform:scaleX(0);opacity:.9}
+  to  {transform:scaleX(1);opacity:0}
+}
+tbody tr.picked{position:relative}
+tbody tr.picked > td:first-child::before{
+  content:'';position:absolute;left:0;top:0;bottom:0;width:100vw;
+  background:linear-gradient(90deg,
+    color-mix(in srgb,var(--accent) 45%,transparent),transparent 55%);
+  transform-origin:left center;pointer-events:none;
+  animation:plukk-sveip 480ms var(--mot-kurve) both;
+}
+
+/* --- the header arrives from the list it belongs to ----------------------
+   This started as a shared-element morph: the same view-transition-name on
+   the device card and on the context bar, letting the browser move one into
+   the other. That is the right pattern when the source disappears - and here
+   it does not. Both stay on screen, so two live elements carried one name,
+   which is invalid and makes the browser skip the transition altogether. It
+   looked like nothing happening, which is worse than not trying.
+
+   What fits this layout: the bar enters from the side the device list is on,
+   carrying that device's own colour, so it reads as having come from there.
+   The colour is the link, and the colour is already correct. */
+@keyframes ctx-inn{
+  0%  {opacity:0;transform:translateX(-22px)}
+  70% {opacity:1;transform:translateX(3px)}
+  100%{opacity:1;transform:none}
+}
+@keyframes ctx-stripe{
+  0%  {transform:scaleX(0);opacity:1}
+  70% {transform:scaleX(1);opacity:1}
+  100%{transform:scaleX(1);opacity:0}
+}
+#ctxBar.byttet{animation:ctx-inn 380ms cubic-bezier(.16,1,.3,1) both;position:relative}
+#ctxBar.byttet::after{
+  content:'';position:absolute;left:0;right:0;bottom:0;height:2px;
+  background:var(--vc,var(--accent));transform-origin:left center;
+  animation:ctx-stripe 620ms var(--mot-kurve) both;pointer-events:none;
+}
+
+/* ---------- the scan ----------
+   Pressing Skann puts a Who-Is out on the wire and waits to see who answers.
+   That is a broadcast going out and echoes coming back, and the button can say
+   so: rings leave it when it is pressed, it fills while the sweep runs, and it
+   pulses each time a controller answers.
+
+   The button is 78px wide and the rings are two pseudo-elements on transform
+   and opacity - the whole thing costs a compositor layer and nothing else. */
+#scanBtn{position:relative;overflow:visible}
+
+/* Rings leaving the button: the request going out. */
+@keyframes ping-ut{
+  0%  {opacity:.8;transform:scale(.5)}
+  60% {opacity:.28}
+  100%{opacity:0;transform:scale(3.4)}
+}
+/* Circles, not the button's own shape scaled up. Inheriting the border-radius
+   and scaling it 2.5x turned the ring into a long rounded rectangle whose
+   straight edges ran out across the panels below - it read as a rendering
+   fault rather than as a signal leaving. A circle centred on the button has
+   no edges to run anywhere. */
+#scanBtn.sender::before,
+#scanBtn.sender::after{
+  content:'';position:absolute;top:50%;left:50%;
+  width:46px;height:46px;margin:-23px 0 0 -23px;border-radius:50%;
+  border:1.5px solid var(--merke-aksent);pointer-events:none;
+  animation:ping-ut 900ms cubic-bezier(.2,.7,.3,1) both;
+}
+#scanBtn.sender::after{animation-delay:220ms}
+
+/* Filling while the sweep runs. The fill sits under the label, so "Avbryt"
+   stays readable the whole way across. */
+/* No overflow:hidden here - it would clip the rings that are still on their
+   way out when the first progress tick lands. The fill is scaleX from the
+   left, so it can never reach past the edge and has nothing to clip. */
+#scanBtn.skanner > span.fyll{
+  position:absolute;inset:0;pointer-events:none;border-radius:inherit;
+  background:linear-gradient(90deg,
+    rgba(255,255,255,.16) 0%,
+    rgba(255,255,255,.24) calc(100% - 14px),
+    rgba(255,255,255,.62) 100%);
+  transform:scaleX(var(--skann,0));transform-origin:left center;
+  transition:transform 320ms cubic-bezier(.16,1,.3,1);
+}
+/* Before the sweep has a denominator, a band paces instead of a bar guessing. */
+@keyframes skann-pacer{
+  0%  {transform:translateX(-105%)}
+  100%{transform:translateX(105%)}
+}
+#scanBtn.skanner.ukjent > span.fyll{
+  background:linear-gradient(90deg,transparent,rgba(255,255,255,.4),transparent);
+  transform:none;animation:skann-pacer 1.2s ease-in-out infinite;
+}
+
+/* One answered. A short flare, so twelve controllers arriving read as twelve
+   events rather than one long glow. */
+@keyframes svar-blink{
+  0%  {box-shadow:0 0 0 0 rgba(255,255,255,.75)}
+  100%{box-shadow:0 0 0 9px rgba(255,255,255,0)}
+}
+#scanBtn.svar{animation:svar-blink 520ms ease-out}
+
+/* ---------- tagging ---------- */
+.tg-gruppe{margin-bottom:18px}
+.tg-rad{display:grid;grid-template-columns:170px 1fr;align-items:center;gap:8px 12px;padding:5px 0}
+.tg-rad > label{font-size:11.5px;color:var(--fg-2)}
+.tg-rad > label small{display:block;font-size:10px;color:var(--fg-3);margin-top:1px;line-height:1.4}
+.tg-rad input[type=text],.tg-rad select{
+  padding:6px 8px;font-size:12px;background:var(--sunken);
+  border:1px solid var(--line-2);border-radius:var(--radius,4px);color:var(--fg);
+  font-family:var(--mono);min-height:30px;
+}
+.tg-rad input[type=text]:focus-visible,.tg-rad select:focus-visible{
+  outline:2px solid var(--accent);outline-offset:1px;
+}
+.tg-rad.avkryss{grid-template-columns:auto 1fr}
+.tg-rad.avkryss input{accent-color:var(--accent);width:16px;height:16px;margin:0}
+.tg-advarsel{
+  font-size:10.5px;color:var(--warn);background:color-mix(in srgb,var(--warn) 10%,transparent);
+  border:1px solid color-mix(in srgb,var(--warn) 28%,transparent);
+  border-radius:var(--radius,4px);padding:7px 9px;margin-top:6px;
+}
+.tg-anlegg{
+  font-size:10.5px;color:var(--fg-3);font-family:var(--mono);
+  padding-bottom:10px;margin-bottom:12px;border-bottom:1px solid var(--line);
+}
+.tg-forhaandsvis{
+  font-family:var(--mono);font-size:12px;color:var(--fg);
+  background:var(--sunken);border:1px solid var(--line-2);border-radius:var(--radius,4px);
+  padding:9px 11px;margin-top:8px;word-break:break-all;
+}
+.tg-foot{display:flex;gap:8px;align-items:center;margin-top:14px}
+
+/* ---------- settings ---------- */
+/* A section label, so seven switches read as three short lists instead of one
+   long one. */
+.menu-gruppe{
+  padding:5px 10px 3px;font-size:9.5px;text-transform:uppercase;letter-spacing:.07em;
+  color:var(--fg-3);font-weight:600;
+}
+.menu-hint{margin-left:auto;font-size:9.5px;color:var(--fg-3);font-family:var(--mono)}
+.menu-item.menu-tung{font-weight:500}
+
+.sett-faner{display:flex;gap:2px;padding:0 12px;border-bottom:1px solid var(--line)}
+.sett-fane{
+  padding:8px 12px;font-size:11.5px;color:var(--fg-3);border-bottom:2px solid transparent;
+  margin-bottom:-1px;cursor:pointer;
+}
+.sett-fane:hover{color:var(--fg-2)}
+.sett-fane.sel{color:var(--fg);border-bottom-color:transparent}
+.sett-fane:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+
+.sett-gruppe{margin-bottom:16px}
+.sett-rad{
+  display:grid;grid-template-columns:1fr auto;align-items:center;gap:2px 12px;
+  width:100%;text-align:left;padding:8px 10px;border-radius:var(--radius,4px);
+  color:var(--fg);font-size:12px;cursor:pointer;
+}
+.sett-rad:hover{background:var(--hover)}
+.sett-rad:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+.sett-rad small{
+  grid-column:1;grid-row:2;font-size:10.5px;color:var(--fg-3);line-height:1.4;
+}
+/* The state word sits in its own column and turns into the accent when on, so
+   "på" reads as on without hunting for it. */
+.sett-rad .menu-state{
+  grid-column:2;grid-row:1/3;align-self:center;margin:0;
+  padding:3px 9px;border-radius:999px;border:1px solid var(--line-2);
+  background:var(--raised);color:var(--fg-3);font-size:10px;min-width:52px;text-align:center;
+}
+.sett-rad.on .menu-state{
+  border-color:var(--accent);background:var(--accent-dim);color:var(--on-accent);
+}
+
+/* ---------- remembered sites ---------- */
+.mn-rad{
+  display:flex;align-items:center;gap:10px;padding:8px 4px;
+  border-bottom:1px solid var(--line-soft);
+}
+.mn-rad:last-child{border-bottom:none}
+.mn-navn{flex:1;min-width:0}
+.mn-tittel{font-size:12px;color:var(--fg);font-weight:500}
+.mn-tittel.uten{color:var(--fg-3);font-weight:400;font-style:italic}
+.mn-omrade{font-family:var(--mono);font-size:10.5px;color:var(--fg-2);margin-top:1px}
+.mn-under{font-size:10px;color:var(--fg-3);margin-top:2px}
+.mn-tall{
+  font-family:var(--mono);font-size:11px;color:var(--fg-2);text-align:right;
+  white-space:nowrap;flex:none;
+}
+.mn-knapper{display:flex;gap:5px;flex:none}
+.mn-knapper .btn{font-size:10px;padding:3px 8px}
+.mn-vendor{
+  display:inline-block;margin-right:5px;padding:1px 5px;border-radius:3px;
+  background:var(--raised);color:var(--fg-3);font-size:9.5px;
+}
+
+/* ---------- appearance editor ---------- */
+.tema-gruppe{margin-bottom:16px}
+.tema-tittel{
+  font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--fg-3);
+  margin-bottom:7px;font-weight:600;
+}
+.tema-rad{display:flex;align-items:center;gap:10px;padding:3px 0}
+.tema-rad.endret .tema-navn{color:var(--fg);font-weight:500}
+.tema-navn{flex:1;font-size:11.5px;color:var(--fg-2)}
+.tema-farge{
+  width:34px;height:26px;padding:0;border:1px solid var(--line-2);border-radius:5px;
+  background:none;cursor:pointer;flex:none;
+}
+.tema-hex{
+  width:88px;padding:4px 6px;font-family:var(--mono);font-size:11px;text-align:center;
+  background:var(--sunken);border:1px solid var(--line-2);border-radius:5px;color:var(--fg);
+}
+.tema-hex:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.tema-null{
+  width:26px;height:26px;flex:none;border:1px solid var(--line-2);border-radius:5px;
+  background:var(--raised);color:var(--fg-3);cursor:pointer;font-size:12px;line-height:1;
+}
+.tema-null:hover:not(:disabled){color:var(--fg);border-color:var(--fg-3)}
+.tema-null:disabled{opacity:.3;cursor:default}
+.tema-forvalg{display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin-bottom:16px}
+.tema-forvalg .tema-tittel{margin:0 4px 0 0}
+.tema-tall{
+  width:52px;text-align:right;font-family:var(--mono);font-size:11px;color:var(--fg-3);flex:none;
+}
+.tema-rad input[type=range]{flex:1;accent-color:var(--accent);max-width:260px}
+.tema-navn small{display:block;font-size:9.5px;color:var(--fg-3);font-weight:400}
+.tema-tekst{
+  flex:1;max-width:260px;padding:5px 8px;font-size:11.5px;
+  background:var(--sunken);border:1px solid var(--line-2);border-radius:5px;color:var(--fg);
+}
+.tema-tekst:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.bilde-rad{border-radius:var(--radius,4px);transition:background .12s,box-shadow .12s}
+.bilde-rad:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.bilde-rad.slipp-her{
+  background:var(--accent-dim);box-shadow:inset 0 0 0 2px var(--accent);
+}
+.tema-hjelp{font-size:10.5px;color:var(--fg-3);padding:2px 0 6px}
+.tema-advarsel{
+  font-size:10.5px;color:var(--warn);background:rgba(255,201,0,.08);
+  border:1px solid rgba(255,201,0,.25);border-radius:var(--radius);
+  padding:6px 9px;margin:4px 0 8px;line-height:1.45;
+}
+.bilde-rad{gap:10px}
+.bilde-visning{
+  width:46px;height:30px;flex:none;border:1px solid var(--line-2);border-radius:5px;
+  overflow:hidden;background:var(--sunken);display:flex;align-items:center;
+  justify-content:center;
+}
+.bilde-visning img{width:100%;height:100%;object-fit:cover;display:block}
+.bilde-visning i{font-style:normal;font-size:9px;color:var(--fg-3)}
+.tema-foot{
+  display:flex;align-items:center;justify-content:space-between;gap:10px;
+  padding:10px 14px;border-top:1px solid var(--line);background:var(--raised);
+}
+.tema-foot .btn{margin-right:6px}
+
+/* Weekly schedule editing. The handles are deliberately generous: a 4px edge
+   is unhittable with a trackpad in a plant room, which is the situation this
+   is used in. */
+.wk-blk.redigerbar{cursor:grab}
+.wk-blk.redigerbar:hover{outline:1px solid rgba(255,255,255,.35);outline-offset:-1px}
+body.drar,body.drar .wk-blk.redigerbar{cursor:grabbing;user-select:none}
+.wk-grep{position:absolute;left:0;right:0;height:9px;cursor:ns-resize}
+.wk-grep.topp{top:-2px}
+.wk-grep.bunn{bottom:-2px}
+.wk-blk.redigerbar:hover .wk-grep::after{
+  content:'';position:absolute;left:50%;transform:translateX(-50%);
+  width:26px;height:2px;border-radius:2px;background:rgba(255,255,255,.55);
+}
+.wk-grep.topp::after{top:3px}
+.wk-grep.bunn::after{bottom:3px}
+.wk-foot{
+  display:flex;align-items:center;justify-content:space-between;gap:10px;
+  margin-top:12px;padding-top:10px;border-top:1px solid var(--line);flex-wrap:wrap;
+}
+.wk-hint{font-size:10.5px;color:var(--fg-3);max-width:62ch;line-height:1.5}
+.wk-foot .btn{margin-left:6px}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.gs-results{overflow:auto;min-height:0}
+/* Before leaving a site the question is not "where is this point" but "is
+   anything still forced, anywhere". These answer it from the cache without
+   touching the network. */
+.gs-chips{display:flex;flex-wrap:wrap;gap:6px;padding:0 14px 2px}
+.gs-chips:empty{display:none}
+.gs-chip{
+  border:1px solid var(--line-2);border-radius:11px;padding:2px 10px;
+  font-size:11px;color:var(--fg-2);background:var(--raised);white-space:nowrap;
+}
+.gs-chip:hover{background:var(--hover)}
+.gs-chip.on{border-color:var(--accent);color:var(--on-accent);background:var(--accent-dim)}
+.gs-chip.warn{border-color:rgba(255,201,0,.40);color:var(--warn)}
+.gs-chip.warn.on{background:rgba(255,201,0,.18);border-color:var(--warn)}
+.gs-chip.bad{border-color:rgba(255,107,87,.40);color:var(--err)}
+.gs-chip.bad.on{background:rgba(255,107,87,.16);border-color:var(--err)}
+/* One keyboard-first entry point to everything. The features live behind three
+   menus and a set of shortcuts, which is fine once you know them and a wall
+   otherwise — this is the path for people who do not use the tool daily. */
+.cmd-list{max-height:52vh;overflow-y:auto;padding:4px 6px 6px}
+.cmd-group{
+  font-size:9.5px;text-transform:uppercase;letter-spacing:.08em;color:var(--fg-3);
+  padding:9px 8px 4px;
+}
+.cmd-item{
+  display:flex;align-items:center;gap:10px;width:100%;text-align:left;
+  padding:7px 9px;border-radius:var(--radius);font-size:12.5px;color:var(--fg);
+}
+.cmd-item[aria-selected="true"]{background:var(--accent-dim);color:var(--on-accent)}
+.cmd-item:hover{background:var(--hover)}
+.cmd-label{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cmd-sub{color:var(--fg-3);font-size:11px;margin-left:7px}
+.cmd-item[aria-selected="true"] .cmd-sub{color:#9dc0f0}
+.cmd-hint{flex:0 0 auto;font-family:var(--mono);font-size:10px;color:var(--fg-3)}
+.cmd-state{flex:0 0 auto;font-size:10px;color:var(--accent);font-family:var(--mono)}
+.cmd-foot{
+  display:flex;gap:16px;padding:8px 14px 12px;border-top:1px solid var(--line);
+  font-size:10.5px;color:var(--fg-3);
+}
+.cmd-foot kbd{
+  font-family:var(--mono);font-size:9.5px;background:var(--raised);
+  border:1px solid var(--line-2);border-radius:var(--radius);padding:1px 4px;margin-right:3px;
+}
+.cols-list{padding:6px 10px 2px}
+.cols-row{
+  display:flex;align-items:center;gap:9px;padding:7px 9px;margin-bottom:4px;
+  background:var(--raised);border:1px solid var(--line);border-radius:var(--radius);
+  font-size:12px;cursor:grab;user-select:none;
+}
+.cols-row:hover{border-color:var(--line-2)}
+.cols-row.dragging{opacity:.45;cursor:grabbing}
+.cols-row.over{border-color:var(--accent);background:var(--hover)}
+.cols-grip{color:var(--fg-3);font-size:12px;line-height:1;letter-spacing:1px}
+.cols-name{flex:1 1 auto}
+.cols-row input{accent-color:var(--accent)}
+.cols-foot{display:flex;align-items:center;gap:12px;padding:8px 12px 14px;border-top:1px solid var(--line);margin-top:6px}
+.cols-hint{flex:1 1 auto;font-size:10.5px;color:var(--fg-3);line-height:1.5}
+.gs-empty{padding:26px;text-align:center;color:var(--fg-3);font-size:12px}
+.gs-row{
+  display:grid;grid-template-columns:52px minmax(0,1.1fr) minmax(0,1.4fr) 96px 104px;
+  gap:10px;align-items:center;width:100%;text-align:left;
+  padding:6px 12px;border-bottom:1px solid var(--line-soft);font-size:12px;
+}
+.gs-row:hover{background:var(--hover)}
+.gs-dev{font-family:var(--mono);font-size:11px;color:var(--fg-3)}
+.gs-name{font-family:var(--mono);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.gs-desc{color:var(--fg-2);font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.gs-val{font-family:var(--mono);text-align:right;font-variant-numeric:tabular-nums}
+.gs-ip{font-family:var(--mono);font-size:10px;color:var(--fg-3);text-align:right}
+.prj-row{display:flex;align-items:stretch;border-bottom:1px solid var(--line-soft)}
+.prj-open{
+  flex:1;display:grid;grid-template-columns:1fr auto;gap:2px 12px;
+  text-align:left;padding:9px 12px;
+}
+.prj-open:hover{background:var(--hover)}
+.prj-name{font-family:var(--mono);font-size:13px;font-weight:600}
+.prj-meta{grid-column:1;font-size:10.5px;color:var(--fg-3)}
+.prj-date{grid-row:1;grid-column:2;font-family:var(--mono);font-size:10px;color:var(--fg-3)}
+.prj-del{padding:0 12px;color:var(--fg-3)}
+.prj-del:hover{color:var(--err);background:var(--hover)}
+.ede-sec{border-bottom:1px solid var(--line)}
+.ede-h{
+  display:flex;align-items:center;gap:8px;padding:7px 12px;
+  font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;
+  background:var(--raised);color:var(--fg-2);
+}
+.ede-h span{font-family:var(--mono);font-size:10px;color:var(--fg-3)}
+.ede-h.bad{color:var(--err-fg)} .ede-h.warn{color:var(--warn)} .ede-h.info{color:var(--fg-2)}
+.ede-row{
+  display:grid;grid-template-columns:150px minmax(0,1fr) minmax(0,1fr);gap:10px;
+  padding:5px 12px;font-size:11.5px;border-bottom:1px solid var(--line-soft);
+}
+.ede-row code{font-family:var(--mono);font-size:10.5px;color:var(--fg-3)}
+.ede-row span{font-family:var(--mono);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ede-row s{color:var(--fg-3)}
+.ede-row em{color:var(--fg-3);font-style:normal;font-size:10.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ede-more{padding:6px 12px;font-size:10.5px;color:var(--fg-3)}
+/* ---------- weekly schedule ---------- */
+/* A flat row of tabs works for six schedules and hides the rest behind the
+   edge of the dialog head - on a central with thirty of them there was no way
+   to reach the ones past the fold. A list that scrolls, with a filter above
+   it, does not care how many there are. */
+.sch-split{display:flex;min-height:0;flex:1}
+.sch-side{
+  width:230px;flex:none;display:flex;flex-direction:column;min-height:0;
+  border-right:1px solid var(--line);
+}
+.sch-filter{margin:8px;flex:none}
+.sch-list{overflow-y:auto;flex:1;padding:0 6px 8px}
+.sch-main{flex:1;min-width:0;display:flex;flex-direction:column}
+.sch-grid{flex:1;min-height:0;overflow:auto;padding:14px}
+
+/* The row along the bottom: whatever block is selected, stated in numbers you
+   can type into. Dragging is good for roughing a period out and useless for
+   "11:30 exactly", which is the number an operator actually has. */
+.wk-edit{
+  flex:none;display:flex;align-items:center;gap:14px;flex-wrap:wrap;
+  padding:10px 14px;border-top:1px solid var(--line);background:var(--raised);
+  font-size:11px;color:var(--fg-2);
+}
+.wk-edit[hidden]{display:none}
+
+/* Which day, said once, so the fields do not have to repeat it. */
+.wk-dag{
+  flex:none;padding:4px 9px;border-radius:5px;background:var(--accent-dim);
+  color:var(--fg);font-weight:600;font-size:11px;letter-spacing:.03em;
+}
+
+.wk-felt{display:flex;align-items:center;gap:7px}
+.wk-felt > span:first-child{color:var(--fg-3);white-space:nowrap}
+
+/* Two digits, a colon, nothing else. The native number spinner is a pair of
+   3px arrows nobody can hit, and it strips the leading zero so 08:00 showed
+   as 8:0 - so these are plain fields that format themselves and step on the
+   arrow keys instead. */
+.tid-boks{
+  display:inline-flex;align-items:center;gap:1px;
+  background:var(--panel);border:1px solid var(--line-2);border-radius:6px;
+  padding:2px 4px;
+}
+.tid-boks:focus-within{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-dim)}
+.tid-boks input{
+  width:26px;min-height:26px;padding:2px 0;text-align:center;border:none;outline:none;
+  background:transparent;color:var(--fg);font-family:var(--mono);font-size:13px;
+  font-variant-numeric:tabular-nums;
+}
+.tid-boks .kolon{color:var(--fg-3);font-family:var(--mono);font-size:13px}
+
+/* Native select chrome does not follow a theme; the arrow is drawn here. */
+.sel-boks{position:relative;display:inline-flex;align-items:center}
+.sel-boks select{
+  appearance:none;-webkit-appearance:none;
+  min-width:118px;min-height:30px;padding:4px 26px 4px 26px;
+  background:var(--panel);border:1px solid var(--line-2);border-radius:6px;
+  color:var(--fg);font-size:12px;cursor:pointer;
+}
+.sel-boks select:hover{border-color:var(--fg-3)}
+.sel-boks select:focus-visible{border-color:var(--accent);outline:none;box-shadow:0 0 0 2px var(--accent-dim)}
+.sel-boks select:disabled{opacity:.45;cursor:not-allowed}
+.sel-boks::after{
+  content:'';position:absolute;right:10px;top:50%;width:6px;height:6px;
+  border-right:1.5px solid var(--fg-3);border-bottom:1.5px solid var(--fg-3);
+  transform:translateY(-70%) rotate(45deg);pointer-events:none;
+}
+/* The colour the block is drawn in, so the value and the grid agree. */
+.sel-boks .prikk{
+  position:absolute;left:9px;top:50%;transform:translateY(-50%);
+  width:9px;height:9px;border-radius:50%;pointer-events:none;
+  box-shadow:0 0 0 1px rgba(0,0,0,.35) inset;
+}
+
+.wk-null{display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none}
+.wk-null input{accent-color:var(--accent);width:15px;height:15px;cursor:pointer;margin:0}
+
+.wk-varighet{color:var(--fg-3);font-family:var(--mono);font-size:11px;white-space:nowrap}
+.wk-handling{display:flex;align-items:center;gap:7px;margin-left:auto}
+.wk-handling .btn{min-height:30px}
+.wk-edit .fare:hover:not(:disabled){border-color:var(--err);color:var(--err)}
+
+@media (max-width:900px){
+  .wk-edit{gap:10px;font-size:10.5px}
+  .wk-handling{margin-left:0;width:100%;justify-content:flex-end}
+}
+
+/* The selected block, marked the way the scheduler in Niagara marks it. */
+.wk-blk.valgt{outline:2px solid var(--accent);outline-offset:-2px;z-index:2}
+/* Ghost drawn while dragging out a new period in an empty part of a day. */
+.wk-ny{
+  position:absolute;left:0;right:0;border:1px dashed rgba(255,255,255,.75);
+  background:rgba(255,255,255,.14);pointer-events:none;z-index:3;
+}
+.wk-ny b{display:block;font-size:10px;padding:2px 4px;font-family:var(--mono);color:#fff}
+@media (max-width:820px){
+  .sch-split{flex-direction:column}
+  .sch-side{width:auto;border-right:none;border-bottom:1px solid var(--line)}
+  .sch-list{max-height:150px}
+}
+.sch-list .sch-tab{
+  display:block;width:100%;text-align:left;margin-bottom:3px;white-space:normal;
+  line-height:1.35;
+}
+.sch-list .sch-tab .st-sub{display:block;font-size:9.5px;color:var(--fg-3);font-family:var(--mono)}
+.sch-list .sch-tab.sel .st-sub{color:var(--fg-2)}
+.sch-tab{
+  padding:3px 10px;border-radius:var(--radius);font-size:11.5px;color:var(--fg-2);
+  border:1px solid transparent;
+}
+.sch-tab:hover{background:var(--hover)}
+.sch-tab.sel{background:var(--raised);border-color:var(--line-2);color:var(--fg)}
+.wk-wrap{display:flex;gap:6px}
+.wk-axis{position:relative;width:44px;flex:0 0 44px}
+.wk-h{
+  position:absolute;right:6px;transform:translateY(-50%);
+  font-family:var(--mono);font-size:10px;color:var(--fg-3);
+}
+.wk-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:2px;flex:1;min-width:0}
+.wk-col{min-width:0}
+.wk-day{
+  text-align:center;font-size:11px;color:var(--fg-2);padding-bottom:5px;
+}
+.wk-body{position:relative;background:var(--sunken);border:1px solid var(--line);border-radius:2px;overflow:hidden}
+.wk-blk{
+  position:absolute;left:0;right:0;padding:3px 5px;overflow:hidden;
+  border-bottom:1px solid rgba(0,0,0,.35);color:#fff;
+}
+.wk-blk b{display:block;font-size:11px;font-weight:600;line-height:1.2}
+.wk-blk i{display:block;font-style:normal;font-size:10px;opacity:.8;font-family:var(--mono)}
+/* A block carried over from the previous day is shown, but marked as inferred
+   rather than as something the controller states for this day. */
+.wk-blk.carried{opacity:.55}
+.wk-blk.carried b::after{content:" ·";opacity:.7}
+.wk-empty{padding:8px;font-size:10.5px;color:var(--fg-3);text-align:center}
+.wk-note{
+  font-size:11px;color:var(--warn);background:rgba(255,201,0,.08);
+  border:1px solid rgba(255,201,0,.25);border-radius:var(--radius);padding:7px 10px;margin-bottom:12px;
+}
+/* ---------- zoom display ---------- */
+.zoom-overlay{
+  position:fixed;inset:0;z-index:80;background:rgba(4,6,9,.92);
+  display:flex;align-items:center;justify-content:center;padding:24px;
+}
+/* An author `display` rule beats the UA stylesheet's [hidden]{display:none},
+   so without this the overlay covers the whole app permanently. */
+.zoom-overlay[hidden]{display:none}
+.zoom-card{text-align:center;max-width:90vw;position:relative}
+.zoom-x{
+  position:absolute;top:-16px;right:-8px;color:var(--fg-3);font-size:20px;
+  width:36px;height:36px;display:flex;align-items:center;justify-content:center;
+  border-radius:50%;
+}
+.zoom-x:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.zoom-x:hover{color:var(--fg)}
+.zoom-name{font-family:var(--mono);font-size:clamp(16px,3vw,26px);font-weight:600;color:var(--fg)}
+.zoom-desc{font-size:clamp(11px,1.4vw,15px);color:var(--fg-2);margin-top:4px;max-width:60ch}
+.zoom-val{
+  font-family:var(--mono);font-weight:700;color:var(--live);
+  font-size:clamp(64px,17vw,190px);line-height:1.05;letter-spacing:-.03em;margin-top:10px;
+  font-variant-numeric:tabular-nums;
+}
+.zoom-val small{font-size:.32em;color:var(--fg-2);margin-left:.15em;font-weight:400}
+.zoom-meta{font-family:var(--mono);font-size:12px;color:var(--fg-3);margin-top:8px}
+.zoom-val.alarm{color:var(--err)}
+
+/* ---------- help popover ---------- */
+.help-pop{
+  position:absolute;top:46px;right:12px;z-index:60;width:290px;
+  background:var(--panel);border:1px solid var(--line-2);border-radius:5px;
+  padding:12px 14px;box-shadow:0 10px 32px rgba(0,0,0,.55);
+}
+.help-title{font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--fg-3);font-weight:600;margin-bottom:6px}
+.help-list{display:grid;grid-template-columns:82px 1fr;gap:3px 8px;font-size:11px}
+.help-list dt{font-family:var(--mono);color:var(--accent);font-size:10px}
+.help-list dd{color:var(--fg-2)}
+.help-steps{margin:0;padding-left:16px;font-size:11px;color:var(--fg-2);line-height:1.6}
+.help-steps code{font-family:var(--mono);color:var(--fg);background:var(--raised);padding:0 3px;border-radius:2px}
+
+/* ---------- first-run guidance ---------- */
+.guide{padding:22px 16px;color:var(--fg-3);font-size:12px}
+.guide ol{margin:8px 0 0;padding-left:18px;line-height:1.8;text-align:left}
+.guide b{color:var(--fg-2)}
+
+.toast{
+  position:fixed;bottom:34px;left:50%;transform:translateX(-50%);
+  background:var(--raised);border:1px solid var(--line-2);border-radius:var(--radius);
+  padding:7px 14px;font-size:12px;box-shadow:0 6px 24px rgba(0,0,0,.5);z-index:50;
+}
+.toast.err{border-color:#5c2b26;color:var(--err-fg)}
+</style>
+</head>
+<body>
+<div id="linjelag" aria-hidden="true"></div>
+<div class="app">
+
+  <!-- Behind everything: the picture, then a dimming layer over it. Both are
+       empty until the user puts something there. -->
+  <div id="flylag" hidden></div>
+  <div id="himmel" hidden>
+    <div class="skjaer"></div>
+    <div class="stjerner"></div>
+    <div class="kropp"></div>
+  </div>
+  <div id="bgLag" hidden></div>
+  <div id="bgScrim" hidden></div>
+
+  <header class="topbar">
+    <a class="brand" id="brandLink">
+      <!-- The logo is injected by app.js only after /logo is confirmed to
+           exist (drop logo.svg or logo.png next to server.py). Embedding
+           the <img> here instead would flash its alt text whenever no file
+           is installed. -->
+      <span id="brandMark" class="brand-mark">N</span>
+      <span class="brand-text"><b>BACnet Explorer</b><span id="brandSub">lokal</span></span>
+    </a>
+
+    <div class="tb-sep"></div>
+
+    <div class="tb-group">
+      <select id="localAddr" class="field" style="max-width:210px" title="Nettverkskortet forespørslene sendes fra">
+        <option value="">Laster nettverkskort…</option>
+      </select>
+      <datalist id="kjenteOmrader"></datalist>
+      <input id="rangeInput" class="field" list="kjenteOmrader" style="width:148px" placeholder="10.75.1.0/24, …" title="Ett eller flere IP-områder. Skill dem med komma, semikolon eller mellomrom — de skannes etter tur inn i én liste."
+             list="recentRanges" autocomplete="off">
+      <datalist id="recentRanges"></datalist>
+      <select id="modeSel" class="field" title="Grundig prøver stille adresser en gang til, langsomt — finner enheter som ellers mistes over VPN. Rask tar én runde. Who-Is blokkeres ofte.">
+        <option value="unicast_sweep">Sweep — grundig</option>
+        <option value="unicast_fast">Sweep — rask</option>
+        <option value="broadcast">Who-Is</option>
+      </select>
+      <button id="scanBtn" class="btn primary" disabled>Skann</button>
+    </div>
+
+    <div class="spacer"></div>
+
+    <div id="conn" class="conn"><span id="connText"></span><code id="connAddr"></code></div>
+
+    <div class="menu">
+      <button id="toolsBtn" class="btn btn-icon" title="Mer">⋯</button>
+      <!-- Commands only. Everything that changes how the tool behaves from now
+           on lives in Innstillinger, because a dropdown you reopen to flip a
+           switch is a settings window wearing the wrong clothes - and mixing
+           the two is what made this list fourteen items long. -->
+      <div id="toolsPop" class="menu-pop menu-right" hidden>
+        <div class="menu-gruppe">Anlegg</div>
+        <button id="prjSave" class="menu-item">Lagre anlegg</button>
+        <button id="prjOpen" class="menu-item">Åpne anlegg…</button>
+        <button id="minneBtn" class="menu-item">Anlegg jeg har vært på…</button>
+        <button id="cmpBtn" class="menu-item">Sammenlikn to enheter…</button>
+        <div class="menu-sep"></div>
+        <div class="menu-gruppe">Nettverk</div>
+        <button id="rescanNow" class="menu-item">Søk etter enheter nå</button>
+        <button id="reconnBtn" class="menu-item">Koble til på nytt</button>
+        <div class="menu-sep"></div>
+        <div class="menu-gruppe">Vis</div>
+        <button id="colsBtn" class="menu-item">Kolonner…</button>
+        <button id="wlogBtn" class="menu-item">Skrivelogg</button>
+        <div class="menu-sep"></div>
+        <button id="temaBtn" class="menu-item menu-tung">Innstillinger…
+          <span class="menu-hint">Ctrl+K for alt</span></button>
+      </div>
+    </div>
+    <button id="themeBtn" class="theme-tgl" title="Bytt mellom mørk og lys visning" aria-label="Bytt visning"><i></i></button>
+    <button id="helpBtn" class="btn btn-icon" title="Hurtigtaster">?</button>
+  </header>
+
+  <!-- Weekly schedule, laid out like a Niagara scheduler -->
+  <div id="schOverlay" class="gs-overlay" role="dialog" aria-modal="true" hidden>
+    <div class="gs-modal" style="max-width:1120px">
+      <div class="gs-head">
+        <span style="font-size:13px;font-weight:600">Ukeprogram</span>
+        <span id="schCount" class="gs-meta" style="border:none;padding:0"></span>
+        <button class="gs-close" style="margin-left:auto" onclick="closeSchedules()"><span class="lbl">Lukk</span> ✕</button>
+      </div>
+      <div id="schMeta" class="gs-meta"></div>
+      <div class="sch-split">
+        <div class="sch-side">
+          <input id="schFilter" class="field sch-filter" type="search"
+                 placeholder="Filtrer ur…" autocomplete="off">
+          <div id="schTabs" class="sch-list"></div>
+        </div>
+        <div class="sch-main">
+          <div id="schBody" class="gs-results sch-grid"></div>
+          <div id="schEdit" class="wk-edit" hidden></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- EDE comparison result -->
+  <div id="raportOverlay" class="gs-overlay" role="dialog" aria-modal="true" hidden>
+    <div class="gs-modal" style="max-width:820px">
+      <div class="gs-head">
+        <span id="rapTittel" style="font-size:13px;font-weight:600">Rapport</span>
+        <button class="btn" id="rapKopi" style="margin-left:auto">Kopier</button>
+        <button class="gs-close" onclick="closeRapport()"><span class="lbl">Lukk</span> ✕</button>
+      </div>
+      <div id="rapBody" class="gs-results rapport"></div>
+    </div>
+  </div>
+
+  <div id="cmpOverlay" class="gs-overlay" role="dialog" aria-modal="true" hidden>
+    <div class="gs-modal" style="max-width:980px">
+      <div class="gs-head">
+        <span style="font-size:13px;font-weight:600">Sammenlikn to enheter</span>
+        <button class="gs-close" style="margin-left:auto" onclick="closeSammenlign()"><span class="lbl">Lukk</span> ✕</button>
+      </div>
+      <div class="cmp-velg">
+        <select id="cmpA" class="field"></select>
+        <span class="cmp-mot">mot</span>
+        <select id="cmpB" class="field"></select>
+        <label class="cmp-bare"><input type="checkbox" id="cmpBareUlike" checked> Bare det som er ulikt</label>
+      </div>
+      <div id="cmpMeta" class="gs-meta"></div>
+      <div id="cmpBody" class="gs-results"></div>
+    </div>
+  </div>
+
+  <div id="edeOverlay" class="gs-overlay" role="dialog" aria-modal="true" hidden>
+    <div class="gs-modal" style="max-width:860px">
+      <div class="gs-head">
+        <span style="font-size:13px;font-weight:600">EDE mot anlegg</span>
+        <button class="gs-close" style="margin-left:auto" onclick="closeEde()"><span class="lbl">Lukk</span> ✕</button>
+      </div>
+      <div id="edeMeta" class="gs-meta"></div>
+      <div id="edeBody" class="gs-results"></div>
+    </div>
+  </div>
+
+  <!-- Saved sites -->
+  <div id="prjOverlay" class="gs-overlay" role="dialog" aria-modal="true" hidden>
+    <div class="gs-modal" style="max-width:640px">
+      <div class="gs-head">
+        <span style="font-size:13px;font-weight:600">Lagrede anlegg</span>
+        <button class="gs-close" style="margin-left:auto" onclick="closeProjects()"><span class="lbl">Lukk</span> ✕</button>
+      </div>
+      <div id="prjList" class="gs-results"></div>
+    </div>
+  </div>
+
+  <!-- Search across every device opened this session -->
+  <div id="cmdOverlay" class="gs-overlay" role="dialog" aria-modal="true" hidden>
+    <div class="gs-modal" style="max-width:560px">
+      <div class="gs-head">
+        <input id="cmdInput" class="gs-input" type="text" placeholder="Søk etter handling eller enhet…" autocomplete="off">
+        <button class="gs-close" onclick="closeCmd()"><span class="lbl">Lukk</span> ✕</button>
+      </div>
+      <div id="cmdSeg" class="cmd-seg">
+        <button class="cmd-segk sel" data-seg="alt">Alt</button>
+        <button class="cmd-segk" data-seg="handling">Handlinger</button>
+        <button class="cmd-segk" data-seg="punkt">Punkter</button>
+        <button class="cmd-segk" data-seg="enhet">Enheter</button>
+      </div>
+      <div id="cmdList" class="cmd-list"></div>
+      <div class="cmd-foot"><span><kbd>↑</kbd><kbd>↓</kbd> velg</span><span><kbd>Enter</kbd> kjør</span><span><kbd>Esc</kbd> lukk</span></div>
+    </div>
+  </div>
+
+  <div id="colsOverlay" class="gs-overlay" role="dialog" aria-modal="true" hidden>
+    <div class="gs-modal" style="max-width:380px">
+      <div class="gs-head">
+        <b style="font-size:13px">Kolonner</b>
+        <button class="gs-close" onclick="closeCols()"><span class="lbl">Lukk</span> ✕</button>
+      </div>
+      <div class="gs-meta">Dra for å endre rekkefølge. Overskriftene i tabellen er uendret.</div>
+      <div id="colsList" class="cols-list"></div>
+      <div class="cols-foot">
+        <span class="cols-hint">Punktnavn forkortes av/på i ⋯-menyen.</span>
+        <button id="colsReset" class="btn">Tilbakestill</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="gsOverlay" class="gs-overlay" role="dialog" aria-modal="true" hidden>
+    <div class="gs-modal">
+      <div class="gs-head">
+        <input id="gsInput" class="gs-input" type="text" placeholder="Søk i alle enheter…" autocomplete="off">
+        <button class="gs-close" onclick="closeGlobal()"><span class="lbl">Lukk</span> ✕</button>
+      </div>
+      <div id="gsChips" class="gs-chips"></div>
+      <div id="gsMeta" class="gs-meta"></div>
+      <div id="gsResults" class="gs-results"></div>
+    </div>
+  </div>
+
+  <!-- Zoom view: one value, readable from across a plant room while you
+       stand at the panel. Borrowed from BACeye's "Zoom Display". -->
+  <!-- Appearance -->
+  <!-- Remembered sites -->
+  <div id="minneOverlay" class="gs-overlay" role="dialog" aria-modal="true" hidden>
+    <div class="gs-modal" style="max-width:780px">
+      <div class="gs-head">
+        <span style="font-size:13px;font-weight:600">Anlegg jeg har vært på</span>
+        <span id="minneAntall" class="gs-meta" style="border:none;padding:0"></span>
+        <button class="gs-close" style="margin-left:auto" onclick="closeMinne()"><span class="lbl">Lukk</span> ✕</button>
+      </div>
+      <div class="gs-meta">Hvert skann huskes med området, hvilke enheter som svarte og når. Klikk et anlegg for å skanne det på nytt.</div>
+      <div id="minneBody" class="gs-results" style="padding:10px 14px"></div>
+    </div>
+  </div>
+
+  <div id="temaOverlay" class="gs-overlay" role="dialog" aria-modal="true" hidden>
+    <div class="gs-modal" style="max-width:760px">
+      <div class="gs-head">
+        <span style="font-size:13px;font-weight:600">Innstillinger</span>
+        <span id="temaModus" class="gs-meta" style="border:none;padding:0"></span>
+        <button class="gs-close" style="margin-left:auto" onclick="closeTema()"><span class="lbl">Lukk</span> ✕</button>
+      </div>
+      <div class="gs-meta">Endringer vises med en gang og lagres pa denne maskinen. Lys og mørk visning huskes hver for seg.</div>
+      <div class="sett-faner" role="tablist">
+        <button class="sett-fane sel" data-fane="oppsett" role="tab">Oppsett</button>
+        <button class="sett-fane" data-fane="tagging" role="tab">Tagging</button>
+        <button class="sett-fane" data-fane="utseende" role="tab">Utseende</button>
+      </div>
+
+      <!-- Moved here from the overflow menu, markup and ids intact so the
+           existing handlers and state sync keep working untouched. What
+           changed is that each one now has room to say what it does. -->
+      <div id="settOppsett" class="gs-results" style="padding:14px">
+        <div class="sett-gruppe"><div class="tema-tittel">Tabellen</div>
+          <button id="denseBtn" class="sett-rad">Tett visning
+            <small>Flere rader på skjermen, mindre luft</small>
+            <span id="denseState" class="menu-state"></span></button>
+          <button id="shortBtn" class="sett-rad">Forkort punktnavn
+            <small>Skjuler den delen av navnet alle punkter deler</small>
+            <span id="shortState" class="menu-state"></span></button>
+          <button id="allTypesBtn" class="sett-rad">Objekttyper i tabellen
+            <small>Ta med trendlogger, programmer og enhetsobjektet</small>
+            <span id="allTypesState" class="menu-state"></span></button>
+        </div>
+        <div class="sett-gruppe"><div class="tema-tittel">Enhetslista</div>
+          <button id="groupBtn" class="sett-rad">Grupper enheter
+            <small>Samle listen etter leverandør eller IP-område</small>
+            <span id="groupState" class="menu-state"></span></button>
+          <button id="preBtn" class="sett-rad">Forhåndsles enheter
+            <small>Leser de andre enhetene i bakgrunnen etter et skann</small>
+            <span id="preState" class="menu-state"></span></button>
+          <button id="rescanBtn" class="sett-rad">Overvåk nettet
+            <small>Søker jevnlig etter enheter som faller inn og ut</small>
+            <span id="rescanState" class="menu-state"></span></button>
+        </div>
+        <div class="sett-gruppe"><div class="tema-tittel">Bevegelse</div>
+          <button id="motionBtn" class="sett-rad">Animasjoner
+            <small>Menyer, dialoger og temabytte beveger seg. Slås av
+              automatisk hvis Windows er satt til redusert bevegelse</small>
+            <span id="motionState" class="menu-state"></span></button>
+        </div>
+        <div class="sett-gruppe"><div class="tema-tittel">Skriving</div>
+          <button id="roBtn" class="sett-rad">Lesemodus
+            <small>Blokkerer all skriving til anlegget</small>
+            <span id="roState" class="menu-state"></span></button>
+        </div>
+      </div>
+
+      <div id="settTagging" class="gs-results" style="padding:14px" hidden></div>
+      <div id="temaBody" class="gs-results" style="padding:14px" hidden></div>
+      <div class="tema-foot">
+        <span>
+          <button class="btn" id="temaImport">Hent fra fil</button>
+          <button class="btn" id="temaEksport">Lagre til fil</button>
+        </span>
+        <button class="btn" id="temaNullstill">Tilbakestill alt</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="zoomOverlay" class="zoom-overlay" role="dialog" aria-modal="true" hidden>
+    <div class="zoom-card">
+      <button id="zoomClose" class="zoom-x" title="Lukk (Esc)" aria-label="Lukk">✕</button>
+      <div id="zoomName" class="zoom-name"></div>
+      <div id="zoomDesc" class="zoom-desc"></div>
+      <div id="zoomVal" class="zoom-val">—</div>
+      <div id="zoomMeta" class="zoom-meta"></div>
+    </div>
+  </div>
+
+  <div id="helpPop" class="help-pop" hidden>
+    <div class="help-title">Hurtigtaster</div>
+    <dl class="help-list">
+      <dt>/</dt><dd>Søk i punkter</dd>
+      <dt>↑ ↓</dt><dd>Bla mellom punkter</dd>
+      <dt>PgUp PgDn</dt><dd>Hopp 15 punkter</dd>
+      <dt>Mellomrom</dt><dd>Fest punkt til overvåking</dd>
+      <dt>L</dt><dd>Live av/på</dd>
+      <dt>Z</dt><dd>Zoom — stor visning av valgt punkt</dd>
+      <dt>Dobbeltklikk på verdi</dt><dd>Skriv til et skrivbart punkt — bekreftelsen kommer som vanlig</dd>
+      <dt>Ctrl+.</dt><dd>Handlinger for punktet du staar på</dd>
+      <dt>F6</dt><dd>Neste rute — enheter, punkter, overvåking</dd>
+      <dt>Ctrl+1/2/3</dt><dd>Rett til en rute</dd>
+      <dt>g d / g p / g o / g s</dt><dd>Gå til enheter, punkter, overvåking, søk</dd>
+      <dt>?</dt><dd>Denne lista</dd>
+      <dt>Ctrl+K</dt><dd>Kommandopalett — alt verktøyet kan gjøre, ett søkefelt</dd>
+      <dt>? / Ctrl+F</dt><dd>Søk i alle enheter samtidig</dd>
+      <dt>Ctrl-klikk</dt><dd>Velg enkeltrad · Shift for område · Ctrl+A alle</dd>
+      <dt>Esc</dt><dd>Lukk</dd>
+    </dl>
+    <div class="help-title" style="margin-top:10px">Slik bruker du den</div>
+    <ol class="help-steps">
+      <li>Velg nettverkskortet som når anlegget (øverst til venstre).</li>
+      <li>Skriv IP-området, f.eks. <code>10.75.1.0/24</code>, og trykk Skann.</li>
+      <li>Klikk en enhet for å laste punktene.</li>
+      <li>Klikk et punkt for detaljer, trend og skriving.</li>
+    </ol>
+  </div>
+
+  <div id="backendWarn" class="backend-warn" hidden></div>
+
+  <div class="workspace">
+
+    <aside class="pane pane-devices">
+      <!-- Radaren ligger i sitt eget lag som klipper seg selv, ikke paa panelet.
+           Panelet kan ikke faa overflow:hidden - da forsvinner menyene som
+           spretter ut av det. -->
+      <div class="pane-head">Enheter <span id="devCount" class="count">0</span></div>
+      <div id="dupWarn" class="dup-warn" hidden></div>
+      <div id="devList" tabindex="-1" class="pane-body">
+        <div class="empty">
+          <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 10h.01M10 10h.01"/></svg>
+          <div>Ingen enheter</div>
+          <div style="font-size:11px;margin-top:3px">Koble til og skann et IP-område</div>
+        </div>
+      </div>
+    </aside>
+
+    <div class="splitter" data-pane="devices" title="Dra for å endre bredde · dobbeltklikk for å nullstille"></div>
+
+    <main class="pane pane-main">
+      <div id="ctxBar" class="ctx-bar"><span class="ctx-empty">Ingen enhet valgt</span></div>
+      <div id="filterChips" class="filter-chips" hidden></div>
+      <div class="filterbar">
+        <input id="q" class="field" placeholder="Søk… (/) — flere ord = alle må treffe"
+               title="Mellomrom betyr og: KG32 RT601 finner alle RT601 på KG32.  -ord utelater.  &quot;to ord&quot; søker som frase.">
+        <select id="typeSel" class="field"><option value="">Alle typer</option></select>
+
+        <div class="menu">
+          <button id="filtBtn" class="btn">Filter</button>
+          <div id="filtPop" class="menu-pop" hidden>
+            <button class="menu-item" data-flag="in-alarm">Kun i alarm <span class="menu-state"></span></button>
+            <button class="menu-item" data-flag="fault">Kun med feil <span class="menu-state"></span></button>
+            <button class="menu-item" data-flag="overridden">Kun overstyrte <span class="menu-state"></span></button>
+            <button class="menu-item" data-flag="out-of-service">Kun ute av drift <span class="menu-state"></span></button>
+            <button id="fWrit" class="menu-item">Kun skrivbare <span class="menu-state"></span></button>
+            <button id="fDiff" class="menu-item">Kun endret siden snapshot <span class="menu-state"></span></button>
+          </div>
+        </div>
+
+        <div class="menu">
+          <button id="visBtn" class="btn" title="Lagrede visninger — filter, sortering og kolonner under ett navn">Visninger</button>
+          <div id="visPop" class="menu-pop" hidden></div>
+        </div>
+
+        <div class="spacer"></div>
+
+        <button id="reloadBtn" class="btn btn-icon" disabled title="Les punktene fra enheten på nytt">⟳</button>
+        <button id="pollBtn" class="btn" disabled title="Start/stopp live-oppdatering (L)">Live av</button>
+        <select id="pollInt" class="field" title="Intervall">
+          <option value="1000">1s</option><option value="2000" selected>2s</option>
+          <option value="5000">5s</option><option value="10000">10s</option>
+        </select>
+
+        <div class="menu">
+          <button id="expBtn" class="btn" disabled>Eksport</button>
+          <div id="expPop" class="menu-pop menu-right" hidden>
+            <button id="snapBtn" class="menu-item">Ta snapshot</button>
+            <button id="rapOktBtn" class="menu-item">Sesjonsrapport…</button>
+            <button id="rapSnapBtn" class="menu-item">Endret siden snapshot…</button>
+            <div class="menu-sep"></div>
+            <button id="csvBtn" class="menu-item">CSV…</button>
+            <button id="edeBtn" class="menu-item">EDE 2.3…</button>
+            <div class="menu-sep"></div>
+            <button id="edeCmpBtn" class="menu-item">Sammenlign med EDE-fil…</button>
+            <div class="menu-sep"></div>
+            <button id="schBtn" class="menu-item">Ukeprogram…</button>
+          </div>
+        </div>
+      </div>
+      <div id="selBar" class="selbar" hidden>
+        <span id="selCount" class="selbar-count">0 valgt</span>
+        <span class="selbar-hint">Ctrl-klikk for enkeltrader, Shift for område, Ctrl+A for alle</span>
+        <div class="spacer"></div>
+        <select id="selPri" class="field" style="flex:0 0 84px" title="Prioritet som frigis" hidden></select>
+        <button id="selRel" class="btn" title="Skriv Null til valgt prioritet på alle markerte punkter" hidden>⏏ Frigi</button>
+        <button id="selPin" class="btn">☆ Fest</button>
+        <button id="selCopy" class="btn">⧉ Kopier</button>
+        <button id="selClear" class="btn">Tøm utvalg</button>
+      </div>
+      <div id="punktrull" aria-hidden="true"></div>
+      <div id="pointsWrap" class="pane-body" tabindex="-1" style="scroll-timeline:--punktrull block">
+        <div class="empty">
+          <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 12h4l3 8 4-16 3 8h4"/></svg>
+          <div>Velg en enhet for å laste punkter</div>
+        </div>
+      </div>
+    </main>
+
+    <div class="splitter" data-pane="side" title="Dra for å endre bredde · dobbeltklikk for å nullstille"></div>
+
+    <aside class="pane pane-side">
+      <div class="pane-head">Inspektør</div>
+      <div id="inspector" class="pane-body">
+        <div class="empty" style="padding:20px 16px">Velg et punkt</div>
+      </div>
+      <div class="pane-head" style="border-top:1px solid var(--line)">
+        Overvåking <span id="watchCount" class="count">0</span>
+        <div class="spacer"></div>
+        <button id="watchExport" class="btn btn-icon" title="Eksporter loggede verdier som CSV">⭳</button>
+        <button id="watchClear" class="btn btn-icon" title="Tøm overvåkingslista">Tøm</button>
+      </div>
+      <div id="festlag" aria-hidden="true"></div>
+      <div id="watchList" tabindex="-1">
+        <div class="empty" style="padding:16px">Fest punkter med ☆ for å følge dem live på tvers av enheter</div>
+      </div>
+    </aside>
+
+  </div>
+
+  <footer class="statusbar">
+    <div class="sb-item"><span id="sbLive">Live av</span></div>
+    <div class="sb-item"><b id="sbDev">—</b> enhet</div>
+    <div class="sb-item"><b id="sbPts">0</b> punkter</div>
+    <div class="sb-item"><b id="sbShown">0</b><span id="sbShownTot" class="sb-tot"></span> vist</div>
+    <div class="sb-item" id="sbRescan" hidden></div>
+    <div class="sb-item" id="sbPre" hidden></div>
+    <div class="sb-item" id="sbSnap"></div>
+    <div class="spacer"></div>
+    <div class="sb-item" id="sbMsg" role="status" aria-live="polite"></div>
+  </footer>
+
+</div>
+<input id="edeFile" type="file" accept=".csv,.txt" hidden>
+<script src="/app.js"></script>
+</body>
+</html>
