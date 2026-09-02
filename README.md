@@ -36,7 +36,7 @@ Needs **Python 3.10 or newer**. On Windows, tick *Add Python to PATH* during
 installation.
 
 ```
-git clone https://github.com/<you>/bacnet-explorer.git
+git clone https://github.com/martinlundelillebo-beep/bacnet-explorer.git
 cd bacnet-explorer
 start.bat
 ```
