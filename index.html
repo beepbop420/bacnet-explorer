@@ -45,7 +45,20 @@
      text on a dark UI, so it is used the way the book allows it — as an
      identity surface with white text — while the data area stays neutral
      for legibility. */
-  --merke:#282071; --merke-lys:#332a8c; --merke-aksent:#ff3a20;
+  /* Brand. The data area has already spent every hue on meaning - dodgerBlue
+     is --accent, teal is --live, and green/yellow/orange/red are the four
+     status colours read all day. Violet is the only hue left that cannot be
+     mistaken for a status, so the brand takes it.
+
+     The top bar is a real surface in both themes, not a fixed dark slab, so
+     these have light values too - otherwise an accent "tuned for the theme"
+     would never be visible, since every use of it sits up there. */
+  --merke:#191b2e; --merke-lys:#23263f;
+  --merke-aksent:#7856f8; --merke-aksent-2:#a86ce8; --merke-aksent-press:#6a49ec;
+  --tb-fg:#e9eaf6; --tb-fg-2:rgba(233,234,246,.56);
+  --tb-ctl:rgba(255,255,255,.10); --tb-ctl-line:rgba(255,255,255,.20);
+  --tb-ctl-hover:rgba(255,255,255,.19); --tb-ctl-focus:rgba(255,255,255,.16);
+  --tb-line:#0d0f1c; --tb-option:#23263f; --tb-sep:rgba(255,255,255,.18);
   --mono:ui-monospace,"Cascadia Mono","Segoe UI Mono",Consolas,monospace;
   --sans:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",sans-serif;
   --row:26px;
@@ -76,6 +89,15 @@
   --warn:#8a6400;
   --err:#d81400;
   --adjust:#a85800;
+  /* The band goes light with the rest of the page. Violet-tinted so it still
+     reads as its own surface next to --bg #f4f6f8, and the accent drops in
+     lightness so white text on it stays above 4.5:1. */
+  --merke:#eae7f8; --merke-lys:#ded9f3;
+  --merke-aksent:#5b3fd6; --merke-aksent-2:#8b4fc9; --merke-aksent-press:#4c33bb;
+  --tb-fg:#1b1830; --tb-fg-2:#5a5470;
+  --tb-ctl:#ffffff; --tb-ctl-line:#c6bfe2;
+  --tb-ctl-hover:#f2effc; --tb-ctl-focus:#ffffff;
+  --tb-line:#cec7e6; --tb-option:#ffffff; --tb-sep:rgba(27,24,48,.16);
 }
 /* Surfaces that were tinted for dark need their own light values: an alpha
    tint designed to lift off near-black turns muddy over white. */
@@ -262,7 +284,7 @@ button{background:none;border:none;cursor:pointer}
 .topbar{
   display:flex;align-items:center;gap:10px;height:46px;flex:0 0 46px;
   padding:0 12px;background:var(--merke);
-  border-bottom:1px solid #1b1650;
+  border-bottom:1px solid var(--tb-line);
   /* Without this the scan controls push the right-hand buttons off the
      window on a narrow screen - and a menu anchored to a button that is
      itself off-screen opens off-screen too. */
@@ -290,7 +312,7 @@ button{background:none;border:none;cursor:pointer}
 /* Only clickable when the Portal actually lives on this host — the local
    version runs on 127.0.0.1 where there is no Portal to go back to. */
 .brand.linked{cursor:pointer}
-.brand.linked:hover{background:rgba(255,255,255,.10)}
+.brand.linked:hover{background:var(--tb-ctl)}
 .brand.linked:hover .brand-back{opacity:1;transform:translateX(0)}
 .brand-back{
   color:rgba(255,255,255,.6);font-size:11px;font-weight:500;white-space:nowrap;
@@ -300,29 +322,34 @@ button{background:none;border:none;cursor:pointer}
 .brand-mark{
   display:flex;align-items:center;justify-content:center;
   width:24px;height:24px;border-radius:5px;flex:0 0 24px;
-  background:linear-gradient(135deg,var(--merke-aksent),#fc6924);
-  color:#fff;font-weight:700;font-size:13px;letter-spacing:-.02em;
+  background:linear-gradient(135deg,var(--merke-aksent),var(--merke-aksent-2));
+  color:#fff;
 }
+/* There is no default mark. A 24px glyph next to the name only competes with
+   it, and any glyph generic enough to mean "network scanner" reads as stock
+   art. The bar gets its identity from the band and the wordmark instead.
+   The slot stays, empty, for whoever drops a logo.png next to server.py. */
+.brand-mark:empty{display:none}
 .brand-text{line-height:1.1}
-.brand-text b{display:block;color:#fff;font-size:13px;font-weight:600;letter-spacing:-.01em}
-.brand-text span{display:block;color:rgba(255,255,255,.55);font-size:10px}
+.brand-text b{display:block;color:var(--tb-fg);font-size:13px;font-weight:600;letter-spacing:-.01em}
+.brand-text span{display:block;color:var(--tb-fg-2);font-size:10px}
 
 /* Controls sit on the brand surface, so they get their own light-on-dark
    treatment rather than inheriting the neutral panel styling. */
-.topbar .field{background:rgba(255,255,255,.10);border-color:rgba(255,255,255,.20);color:#fff}
-.topbar .field:focus{border-color:#fff;background:rgba(255,255,255,.16)}
-.topbar .field option{background:#1a1550;color:#fff}
-.topbar .btn{background:rgba(255,255,255,.12);border-color:rgba(255,255,255,.22);color:#fff}
-.topbar .btn:hover:not(:disabled){background:rgba(255,255,255,.20)}
+.topbar .field{background:var(--tb-ctl);border-color:var(--tb-ctl-line);color:var(--tb-fg)}
+.topbar .field:focus{border-color:var(--merke-aksent);background:var(--tb-ctl-focus)}
+.topbar .field option{background:var(--tb-option);color:var(--tb-fg)}
+.topbar .btn{background:var(--tb-ctl);border-color:var(--tb-ctl-line);color:var(--tb-fg)}
+.topbar .btn:hover:not(:disabled){background:var(--tb-ctl-hover)}
 .topbar .btn.primary{background:var(--merke-aksent);border-color:var(--merke-aksent);color:#fff;font-weight:500}
-.topbar .btn.primary:hover:not(:disabled){background:#e63218;border-color:#e63218}
-.topbar .conn{color:rgba(255,255,255,.75)}
+.topbar .btn.primary:hover:not(:disabled){background:var(--merke-aksent-press);border-color:var(--merke-aksent-press)}
+.topbar .conn{color:var(--tb-fg);opacity:.8}
 /* Measured against the brand blue: .45 gives 3.92:1, under the 4.5:1 needed
    for text this size. .55 gives 5.13:1 and still reads as secondary. */
-.topbar .conn code{color:rgba(255,255,255,.55)}
-.tb-sep{width:1px;height:20px;background:rgba(255,255,255,.18)}
+.topbar .conn code{color:var(--tb-fg-2)}
+.tb-sep{width:1px;height:20px;background:var(--tb-sep)}
 .tb-group{display:flex;align-items:center;gap:6px}
-.tb-label{color:rgba(255,255,255,.5);font-size:10px;text-transform:uppercase;letter-spacing:.06em}
+.tb-label{color:var(--tb-fg-2);font-size:10px;text-transform:uppercase;letter-spacing:.06em}
 .spacer{flex:1}
 
 .field{
@@ -3327,7 +3354,7 @@ body.drar,body.drar .wk-blk.redigerbar{cursor:grabbing;user-select:none}
            exist (drop logo.svg or logo.png next to server.py). Embedding
            the <img> here instead would flash its alt text whenever no file
            is installed. -->
-      <span id="brandMark" class="brand-mark">N</span>
+      <span id="brandMark" class="brand-mark"></span>
       <span class="brand-text"><b>BACnet Explorer</b><span id="brandSub">lokal</span></span>
     </a>
 

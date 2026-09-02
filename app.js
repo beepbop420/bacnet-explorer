@@ -2518,6 +2518,8 @@ function rgbaAv(hex, alfa) {
    removed the element the other needed. */
 let LOGO_FRA_SERVER = null;
 
+/* With no logo file the slot stays empty and CSS hides it. */
+
 function settMerke(kilde) {
   const merke = $('brandMark');
   if (!merke) return;
@@ -2530,8 +2532,8 @@ function settMerke(kilde) {
     ny.src = kilde;
     merke.appendChild(ny);
     merke.classList.add('eget-bilde');
-  } else if (merke.querySelector('img') || merke.textContent !== 'N') {
-    merke.innerHTML = 'N';
+  } else if (merke.firstChild) {
+    merke.innerHTML = '';
     merke.classList.remove('eget-bilde');
   }
 }
@@ -3255,7 +3257,7 @@ const TEMA_GRUPPER = [
     ['--err', 'Alarm'], ['--err-fg', 'Alarmtekst'], ['--adjust', 'Justerbart settpunkt'],
   ]},
   {navn: 'Merkevare', felt: [
-    ['--merke', 'Merkefarge'], ['--merke-lys', 'Merkefarge, lysere'],
+    ['--merke', 'Topplinje'], ['--merke-lys', 'Topplinje, lysere'],
     ['--merke-aksent', 'Merkeaksent'],
   ]},
 ];
@@ -3267,9 +3269,9 @@ const TEMA_FORVALG = {
   'Standard': null,
   'Indigo': {
     dark: {'--accent': '#4f7bd6', '--accent-dim': '#1b2b4d', '--accent-edge': '#33518f',
-           '--accent-press': '#2a4478', '--on-accent': '#d5e2ff', '--merke': '#282071'},
-    light: {'--accent': '#282071', '--accent-dim': '#dcdcf2', '--accent-edge': '#a9a9d8',
-            '--accent-press': '#c9c9e8', '--on-accent': '#1a1550'},
+           '--accent-press': '#2a4478', '--on-accent': '#d5e2ff'},
+    light: {'--accent': '#3b3a8f', '--accent-dim': '#dcdcf2', '--accent-edge': '#a9a9d8',
+            '--accent-press': '#c9c9e8', '--on-accent': '#26246b'},
   },
   'Høy kontrast': {
     dark: {'--bg': '#000000', '--panel': '#0a0a0a', '--raised': '#141414',
@@ -8286,22 +8288,10 @@ $('zoomClose').onclick = closeZoom;
 $('zoomOverlay').onclick = e => { if (e.target === $('zoomOverlay')) closeZoom(); };
 $('watchExport').onclick = exportWatchHistory;
 
-/* Clicking the logo returns to the Portal — but only when this instance is
-   actually served from the server. The local copy runs on 127.0.0.1, where
-   port 8000 is not the Portal, so linking there would just be a dead end. */
-(function portalBackLink() {
-  const el = $('brandLink');
-  const host = location.hostname;
-  const isLocal = ['127.0.0.1', 'localhost', '::1', ''].includes(host);
-  if (isLocal) {
-    el.title = 'Lokal versjon — portalen ligger på serveren';
-    $('brandSub').textContent = loadPrefs().undertittel || 'lokal';
-    return;
-  }
-  el.href = `http://${host}:8000/`;
-  el.title = 'Tilbake til portalen';
-  el.classList.add('linked');
-  el.insertAdjacentHTML('beforeend', '<span class="brand-back">← Portal</span>');
+/* The subtitle under the wordmark. Set it under Settings -> Appearance;
+   with nothing set it reads "lokal", which is what this tool always is. */
+(function undertekst() {
+  $('brandSub').textContent = loadPrefs().undertittel || 'lokal';
 })();
 
 /* Build the image off-DOM with both handlers attached before src is set, so
