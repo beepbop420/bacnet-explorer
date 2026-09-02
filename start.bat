@@ -29,7 +29,8 @@ if not exist "venv\Scripts\python.exe" (
   echo   Ferdig.
 )
 
-REM Sett NOTES_UPSTREAM hvis notater skal deles med en felles server.
+REM Skal notater deles med en felles instans:
+REM   set NOTES_UPSTREAM=http://vertsnavn:8090
 
 echo.
 echo   BACnet Explorer kjoerer paa http://127.0.0.1:8090

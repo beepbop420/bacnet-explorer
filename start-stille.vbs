@@ -23,11 +23,10 @@ If Not fso.FileExists(exe) Then
   WScript.Quit 1
 End If
 
-' Miljoevariabelen settes via cmd: tilordning til WScript.Shell.Environment
-' sitt PROCESS-omraade feiler og avbryter skriptet foer starten.
-'
-' Notater skrives lokalt uansett, men deles med fellesserveren naar den er
-' naabar. Er nettet hos kunden lukket, legges de i ko og sendes automatisk
+' Skal notater deles med en felles instans, settes NOTES_UPSTREAM her - via
+' cmd, ikke via WScript.Shell.Environment: tilordning til PROCESS-omraadet
+' feiler og avbryter skriptet foer serveren rekker aa starte.
+'   kommando = "cmd /c cd /d ... && set NOTES_UPSTREAM=http://vert:8090 && ..."
 kommando = "cmd /c cd /d """ & mappe & """ && " & _
            """" & exe & """ -m uvicorn server:app --host 127.0.0.1 --port 8090" & _
            " > autostart.log 2>&1"
