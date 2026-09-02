@@ -8526,3 +8526,365 @@ renderDevices();
   if (!S.connected) await connectTo($('localAddr').value, {quiet: true});
   if (!S.connected) status('Velg nettverkskort øverst til venstre');
 })();
+
+/* ==========================================================================
+   Language
+
+   The interface is written in Norwegian, inline, in about 3500 string
+   literals across this file. Wrapping every one of them in a lookup would
+   have been 3500 edits through code that is otherwise working, so the
+   translation happens on the way out instead: the DOM is swept and any text
+   that matches a dictionary entry exactly is replaced.
+
+   Sweeping has one property that matters more than the saved edits: plant
+   data passes through untouched. A device called "Skann" is not a phrase in
+   the dictionary as a whole text node unless it is exactly that, and point
+   names, IP addresses and values never match, so nothing a controller
+   reports can be mangled by a language switch.
+
+   What it cannot do is translate a sentence that was built around a value -
+   "5 enheter i 2 områder". Those are handled by MONSTER below, pattern by
+   pattern, and anything not covered stays in Norwegian rather than coming
+   out half-translated. */
+
+const ORDBOK = {
+  /* --- top bar and scanning --- */
+  'Skann': 'Scan',
+  'Avbryt': 'Cancel',
+  'Sweep — grundig': 'Sweep — thorough',
+  'Sweep — rask': 'Sweep — fast',
+  'Who-Is (kringkasting)': 'Who-Is (broadcast)',
+  'Laster nettverkskort…': 'Loading adapters…',
+  'Nettverkskortet forespørslene sendes fra': 'The adapter requests are sent from',
+  'Ett eller flere IP-områder. Skill dem med komma, semikolon eller mellomrom — de skannes etter tur inn i én liste.':
+    'One or more IP ranges. Separate them with a comma, semicolon or space — they are scanned in turn into a single list.',
+  'Grundig prøver stille adresser en gang til, langsomt — finner enheter som ellers mistes over VPN. Rask tar én runde. Who-Is blokkeres ofte.':
+    'Thorough re-probes silent addresses once more, slowly — it finds devices that are otherwise missed over a VPN. Fast takes one pass. Who-Is is often blocked.',
+  'Bytt mellom mørk og lys visning': 'Switch between dark and light',
+  'Bytt visning': 'Switch appearance',
+  'Hurtigtaster': 'Keyboard shortcuts',
+  'Mer': 'More',
+
+  /* --- panes --- */
+  'Enheter': 'Devices',
+  'Punkter': 'Points',
+  'Overvåking': 'Watch',
+  'Inspektør': 'Inspector',
+  'Ingen enhet valgt': 'No device selected',
+  'Ingen enheter': 'No devices',
+  'Velg en enhet for å laste punkter': 'Select a device to load points',
+  'Velg et punkt': 'Select a point',
+  'Koble til og skann et IP-område': 'Connect and scan an IP range',
+
+  /* --- getting started ---
+     A bold word inside a sentence splits it into several text nodes, so
+     these are the fragments as they actually reach the DOM, not the
+     sentences as they read in the source. */
+  'Kom i gang': 'Getting started',
+  'Sjekk at': 'Check that',
+  'Fra': 'From',
+  'viser nettverkskortet som når anlegget.': 'shows the adapter that reaches the plant.',
+  'Skriv IP-området i': 'Enter the IP range in',
+  ', f.eks.': ', e.g.',
+  'Trykk': 'Press',
+  '— enhetene dukker opp her.': '— the devices appear here.',
+  'Fest punkter med ☆ (eller mellomrom) — også fra andre enheter':
+    'Pin points with ☆ (or space) — from other devices too',
+  'Velg nettverkskortet som når anlegget (øverst til venstre).':
+    'Pick the adapter that reaches the plant (top left).',
+  'Skriv IP-området, f.eks.': 'Enter the IP range, e.g.',
+  ', og trykk Skann.': ', then press Scan.',
+  'Klikk en enhet for å laste punktene.': 'Click a device to load its points.',
+  'Klikk et punkt for detaljer, trend og skriving.':
+    'Click a point for details, trend and writing.',
+
+  /* --- search and filtering --- */
+  'Søk i punkter': 'Search points',
+  'Søk… (/) — flere ord = alle må treffe': 'Search… (/) — several words = all must match',
+  'Mellomrom betyr og: KG32 RT601 finner alle RT601 på KG32.  -ord utelater.  "to ord" søker som frase.':
+    'A space means and: KG32 RT601 finds every RT601 on KG32.  -word excludes.  "two words" searches as a phrase.',
+  'Søk i alle enheter…': 'Search every device…',
+  'Søk i alle enheter samtidig': 'Search every device at once',
+  'Søk etter handling eller enhet…': 'Search for an action or a device…',
+  'Kommandopalett — alt verktøyet kan gjøre, ett søkefelt':
+    'Command palette — everything the tool can do, one search field',
+  'Alle typer': 'All types',
+  'Filter': 'Filter',
+  'Visninger': 'Views',
+  'Lagrede visninger — filter, sortering og kolonner under ett navn':
+    'Saved views — filter, sorting and columns under one name',
+  'Denne lista': 'This list',
+  'Kun med feil': 'Only with a fault',
+  'Kun ute av drift': 'Only out of service',
+  'Kun endret siden snapshot': 'Only changed since the snapshot',
+  'Bare det som er ulikt': 'Only what differs',
+  'Kun i alarm': 'Only in alarm',
+  'Kun overstyrte': 'Only overridden',
+  'Kun skrivbare': 'Only writable',
+  'kun verdier': 'values only',
+  'leverandør': 'vendor',
+  'Leverandør': 'Vendor',
+  'IP-område': 'IP range',
+  'ingen felles start': 'no common prefix',
+  'På, men punktnavnene her har ingen felles start å utelate':
+    'On, but the point names here have no common prefix to drop',
+  'Menyer, dialoger og temabytte beveger seg. Slås av\n              automatisk hvis Windows er satt til redusert bevegelse':
+    'Menus, dialogs and the theme switch move. Turned off\n              automatically if Windows is set to reduced motion',
+
+  /* --- table and selection --- */
+  'Kopier': 'Copy',
+  '⧉ Kopier': '⧉ Copy',
+  'Tøm': 'Clear',
+  'Tøm utvalg': 'Clear selection',
+  'Tøm overvåkingslista': 'Clear the watch list',
+  'Velg enkeltrad · Shift for område · Ctrl+A alle':
+    'Single row · Shift for a range · Ctrl+A for all',
+  'Ctrl-klikk for enkeltrader, Shift for område, Ctrl+A for alle':
+    'Ctrl-click for single rows, Shift for a range, Ctrl+A for all',
+  'Dra for å endre bredde · dobbeltklikk for å nullstille':
+    'Drag to resize · double-click to reset',
+  'Dra for å endre rekkefølge. Overskriftene i tabellen er uendret.':
+    'Drag to reorder. The table headings are unchanged.',
+  'Skjuler den delen av navnet alle punkter deler':
+    'Hides the part of the name every point shares',
+  'Punktnavn forkortes av/på i ⋯-menyen.': 'Point names are shortened on/off in the ⋯ menu.',
+
+  /* --- live and watch --- */
+  'Live av': 'Live off',
+  'Live på': 'Live on',
+  'Live av/på': 'Live on/off',
+  'Start/stopp live-oppdatering (L)': 'Start/stop live updating (L)',
+  'Les punktene fra enheten på nytt': 'Read the points from the device again',
+  'Fest punkt til overvåking': 'Pin the point to the watch list',
+  'Fest punkter med ☆ for å følge dem live på tvers av enheter':
+    'Pin points with ☆ to follow them live across devices',
+  'Zoom — stor visning av valgt punkt': 'Zoom — large view of the selected point',
+
+  /* --- menu: sites --- */
+  'Anlegg': 'Sites',
+  'Lagre anlegg': 'Save site',
+  'Åpne anlegg…': 'Open site…',
+  'Anlegg jeg har vært på': 'Sites I have visited',
+  'Anlegg jeg har vært på…': 'Sites I have visited…',
+  'Hvert skann huskes med området, hvilke enheter som svarte og når. Klikk et anlegg for å skanne det på nytt.':
+    'Every scan is remembered with its range, which devices answered and when. Click a site to scan it again.',
+  'Sammenlikn to enheter': 'Compare two devices',
+  'Sammenlikn to enheter…': 'Compare two devices…',
+
+  /* --- menu: network --- */
+  'Nettverk': 'Network',
+  'Søk etter enheter nå': 'Look for devices now',
+  'Koble til på nytt': 'Reconnect',
+  'Overvåk nettet': 'Watch the network',
+  'Søker jevnlig etter enheter som faller inn og ut':
+    'Looks regularly for devices that come and go',
+  'Forhåndsles enheter': 'Pre-read devices',
+  'Leser de andre enhetene i bakgrunnen etter et skann':
+    'Reads the other devices in the background after a scan',
+  'Grupper enheter': 'Group devices',
+  'Samle listen etter leverandør eller IP-område':
+    'Collect the list by vendor or IP range',
+
+  /* --- menu: view and settings --- */
+  'Vis': 'View',
+  'Flere rader på skjermen, mindre luft': 'More rows on screen, less air',
+  'Innstillinger…': 'Settings…',
+  'Ctrl+K for alt': 'Ctrl+K for everything',
+  'Endringer vises med en gang og lagres pa denne maskinen. Lys og mørk visning huskes hver for seg.':
+    'Changes apply at once and are stored on this machine. Light and dark are remembered separately.',
+  'Blokkerer all skriving til anlegget': 'Blocks all writing to the plant',
+  'Lesemodus': 'Read-only mode',
+
+  /* --- export --- */
+  'Eksport': 'Export',
+  'Eksporter loggede verdier som CSV': 'Export logged values as CSV',
+  'Endret siden snapshot…': 'Changed since the snapshot…',
+  'EDE mot anlegg': 'EDE against the plant',
+  'Sammenlign med EDE-fil…': 'Compare with an EDE file…',
+  'Ta med trendlogger, programmer og enhetsobjektet':
+    'Include trend logs, programs and the device object',
+  'Lagre til fil': 'Save to a file',
+  'Hent fra fil': 'Load from a file',
+
+  /* --- writing --- */
+  'Dobbeltklikk på verdi': 'Double-click a value',
+  'Skriv til et skrivbart punkt — bekreftelsen kommer som vanlig':
+    'Write to a writable point — the confirmation appears as usual',
+  'Skriv Null til valgt prioritet på alle markerte punkter':
+    'Write Null at the chosen priority on every selected point',
+  'Prioritet som frigis': 'Priority to release',
+  'Handlinger for punktet du staar på': 'Actions for the point you are on',
+
+  /* --- navigation --- */
+  'Bla mellom punkter': 'Move between points',
+  'Hopp 15 punkter': 'Jump 15 points',
+  'Neste rute — enheter, punkter, overvåking': 'Next pane — devices, points, watch',
+  'Rett til en rute': 'Straight to a pane',
+  'Gå til enheter, punkter, overvåking, søk': 'Go to devices, points, watch, search',
+
+  /* --- generic --- */
+  'Lukk': 'Close',
+  'Lukk (Esc)': 'Close (Esc)',
+  'lukk': 'close',
+  'velg': 'select',
+  'kjør': 'run',
+  'mot': 'to',
+  'enhet': 'device',
+  'enheter': 'devices',
+  'punkt': 'point',
+  'punkter': 'points',
+  'vist': 'shown',
+  /* Deliberately absent: Av, På, Ja, Nei. Those are state texts, and a
+     controller supplies them - translating one would be editing what the
+     plant reports, not what the tool says. */
+};
+
+/* Sentences built around a value. Each entry is the Norwegian shape, the
+   English shape, and the group order that maps one to the other. Anything
+   not listed here stays Norwegian rather than coming out half-translated. */
+const MONSTER = [
+  [/^(\d+) enhet\(er\) i (\d+) områder$/, (m) => `${m[1]} device(s) in ${m[2]} ranges`,
+   /^(\d+) device\(s\) in (\d+) ranges$/, (m) => `${m[1]} enhet(er) i ${m[2]} områder`],
+  [/^(\d+) enheter$/, (m) => `${m[1]} devices`,
+   /^(\d+) devices$/, (m) => `${m[1]} enheter`],
+  [/^(\d+) punkter$/, (m) => `${m[1]} points`,
+   /^(\d+) points$/, (m) => `${m[1]} punkter`],
+  [/^(\d+) vist$/, (m) => `${m[1]} shown`,
+   /^(\d+) shown$/, (m) => `${m[1]} vist`],
+  [/^(\d+) min siden$/, (m) => `${m[1]} min ago`,
+   /^(\d+) min ago$/, (m) => `${m[1]} min siden`],
+  [/^([\d.]+) t siden$/, (m) => `${m[1]} h ago`,
+   /^([\d.]+) h ago$/, (m) => `${m[1]} t siden`],
+  [/^(\d+) døgn siden$/, (m) => `${m[1]} days ago`,
+   /^(\d+) days ago$/, (m) => `${m[1]} døgn siden`],
+];
+
+let ORDBOK_REV = null;
+function revOrdbok() {
+  if (!ORDBOK_REV) {
+    ORDBOK_REV = Object.create(null);
+    for (const [nb, en] of Object.entries(ORDBOK)) ORDBOK_REV[en] = nb;
+  }
+  return ORDBOK_REV;
+}
+
+/* Whitespace is preserved around the match so a text node that is only
+   padding inside markup does not collapse when it is swapped. */
+function oversettTekst(s, tilEn) {
+  if (!s) return s;
+  const kjerne = s.trim();
+  if (kjerne.length < 2) return s;
+  const bok = tilEn ? ORDBOK : revOrdbok();
+  let ny = bok[kjerne];
+  if (ny === undefined) {
+    for (const [nbRe, nbUt, enRe, enUt] of MONSTER) {
+      const m = (tilEn ? nbRe : enRe).exec(kjerne);
+      if (m) { ny = (tilEn ? nbUt : enUt)(m); break; }
+    }
+  }
+  if (ny === undefined || ny === kjerne) return s;
+  return s.replace(kjerne, ny);
+}
+
+const ATTR_SPRAAK = ['title', 'placeholder', 'aria-label'];
+const HOPP_OVER = /^(SCRIPT|STYLE|CODE|SVG|PATH)$/;
+
+/* Where the plant speaks rather than the tool. Point names, device names,
+   descriptions and pinned rows are read straight off the equipment, and a
+   controller is entirely free to call a point "Filter" or "Vis". Nothing in
+   here is looked at, so no dictionary entry can reach it.
+
+   These are the fields that carry the data, not the panes that contain them:
+   the device list also holds the getting-started text and the watch pane its
+   own empty state, and both of those are the tool talking. */
+const DATA_SONE = 'tbody, .dev-name, .dev-ip, .dev-note, '
+  + '.watch-name, .watch-ip, .insp-title, .insp-sub';
+
+function iDataSone(n) {
+  const el = n.nodeType === 1 ? n : n.parentElement;
+  return !!(el && el.closest && el.closest(DATA_SONE));
+}
+
+function sveipSprak(rot, tilEn) {
+  if (!rot) return;
+  if (rot.nodeType === 3) {
+    if (iDataSone(rot)) return;
+    const ny = oversettTekst(rot.nodeValue, tilEn);
+    if (ny !== rot.nodeValue) rot.nodeValue = ny;
+    return;
+  }
+  if (rot.nodeType !== 1) return;
+  if (iDataSone(rot)) return;
+
+  const tw = document.createTreeWalker(rot, NodeFilter.SHOW_TEXT, {
+    acceptNode: (n) => (n.parentNode
+      && (HOPP_OVER.test(n.parentNode.nodeName) || iDataSone(n)))
+      ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT,
+  });
+  const noder = [];
+  while (tw.nextNode()) noder.push(tw.currentNode);
+  for (const n of noder) {
+    const ny = oversettTekst(n.nodeValue, tilEn);
+    if (ny !== n.nodeValue) n.nodeValue = ny;
+  }
+
+  const med = rot.matches && rot.matches('[title],[placeholder],[aria-label]')
+    ? [rot, ...rot.querySelectorAll('[title],[placeholder],[aria-label]')]
+    : (rot.querySelectorAll ? rot.querySelectorAll('[title],[placeholder],[aria-label]') : []);
+  for (const el of med) {
+    if (iDataSone(el)) continue;
+    for (const a of ATTR_SPRAAK) {
+      const v = el.getAttribute(a);
+      if (v == null) continue;
+      const ny = oversettTekst(v, tilEn);
+      if (ny !== v) el.setAttribute(a, ny);
+    }
+  }
+}
+
+/* Anything the app renders after the switch has to be caught too. Only
+   added nodes are swept, so the cost follows what was rendered rather than
+   the size of the table. Text and attribute writes are not childList
+   mutations, so this cannot feed itself. */
+let SPRAAK_OBS = null;
+function startSprakObs() {
+  if (SPRAAK_OBS) return;
+  SPRAAK_OBS = new MutationObserver((muts) => {
+    for (const m of muts) {
+      for (const n of m.addedNodes) sveipSprak(n, true);
+    }
+  });
+  SPRAAK_OBS.observe(document.body, {childList: true, subtree: true});
+}
+function stoppSprakObs() {
+  if (!SPRAAK_OBS) return;
+  SPRAAK_OBS.disconnect();
+  SPRAAK_OBS = null;
+}
+
+let SPRAAK = 'nb';
+
+function settSprak(kode, lagre) {
+  const til = kode === 'en';
+  if ((SPRAAK === 'en') !== til) {
+    stoppSprakObs();
+    sveipSprak(document.body, til);
+    SPRAAK = til ? 'en' : 'nb';
+    if (til) startSprakObs();
+  }
+  if (lagre) savePrefs({sprak: SPRAAK});
+  const b = $('langBtn');
+  if (b) {
+    b.textContent = til ? 'NO' : 'EN';
+    b.title = til ? 'Bytt til norsk' : 'Switch to English';
+    b.setAttribute('aria-label', b.title);
+  }
+  document.documentElement.lang = til ? 'en' : 'no';
+}
+
+(function sprakOppstart() {
+  const b = $('langBtn');
+  if (b) b.onclick = () => settSprak(SPRAAK === 'en' ? 'nb' : 'en', true);
+  const lagret = loadPrefs().sprak;
+  if (lagret === 'en') settSprak('en', false); else settSprak('nb', false);
+})();
