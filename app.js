@@ -5859,7 +5859,7 @@ function renderInspector() {
     ${ukeBlock(p)}
     ${loggBlock(p)}
     ${alarmHtml}
-    <div class="sect"><div class="sect-head">Egenskaper</div><div class="sect-body">${propsBody}</div></div>
+    <div class="sect"><div class="sect-head">Egenskaper</div><div class="sect-body data-verdier">${propsBody}</div></div>
     ${paHtml}
     ${p.writable ? (S.readOnly ? roNotice() : writeForm(p, d)) : ''}
   `;
@@ -8639,6 +8639,7 @@ const ORDBOK = {
   'Tøm overvåkingslista': 'Clear the watch list',
   'Velg enkeltrad · Shift for område · Ctrl+A alle':
     'Single row · Shift for a range · Ctrl+A for all',
+  'Ctrl-klikk': 'Ctrl-click',
   'Ctrl-klikk for enkeltrader, Shift for område, Ctrl+A for alle':
     'Ctrl-click for single rows, Shift for a range, Ctrl+A for all',
   'Dra for å endre bredde · dobbeltklikk for å nullstille':
@@ -8734,6 +8735,334 @@ const ORDBOK = {
   'punkt': 'point',
   'punkter': 'points',
   'vist': 'shown',
+
+  /* --- the rest of the interface --- */
+  'Kobler til': 'Connecting',
+  'Kobler til…': 'Connecting…',
+  'Ikke tilkoblet': 'Not connected',
+  'Tilkoblet på nytt': 'Reconnected',
+  'Klarte ikke koble til': 'Could not connect',
+  'Kunne ikke starte': 'Could not start',
+  'Proxy er ikke startet': 'The proxy has not been started',
+  'Sender fra': 'Sending from',
+  'Denne PC-en:': 'This PC:',
+  'Forbindelsen ble gjenopprettet — sender fra': 'The connection is back — sending from',
+  'Kontakt gjenopprettet — sender fra': 'Contact restored — sending from',
+  'Kontakt gjenopprettet — velg nettverkskort': 'Contact restored — pick an adapter',
+  'Mistet kontakt med BACnet Explorer på denne PC-en': 'Lost contact with BACnet Explorer on this PC',
+  'Ingen kontakt med BACnet Explorer på denne PC-en — kjører start.bat?': 'No contact with BACnet Explorer on this PC — is start.bat running?',
+  'Uventet svar fra serveren (ikke JSON)': 'Unexpected reply from the server (not JSON)',
+  'Velg nettverkskort øverst til venstre': 'Pick an adapter at the top left',
+  'Fant ingen nettverkskort': 'Found no adapters',
+  'Kunne ikke lese nettverkskort': 'Could not read the adapters',
+  'Skriv inn et IP-område': 'Enter an IP range',
+  'Ingen enheter svarte': 'No devices answered',
+  'Ingen BACnet-enheter i omraadet': 'No BACnet devices in the range',
+  'Ukjent område': 'Unknown range',
+  'Ingen område skannet ennå — lagres som standard for neste anlegg': 'No range scanned yet — saved as the default for the next site',
+  'Skann på nytt': 'Scan again',
+  'Prøv igjen': 'Try again',
+  'Prøv «Sweep — grundig»': 'Try “Sweep — thorough”',
+  'Velg en annen enhet': 'Pick another device',
+  'Sjekk med ping': 'Check with ping',
+  'Svarer denne adressen på ping?': 'Does this address answer a ping?',
+  'Søker…': 'Searching…',
+  'Overvåker nettet i bakgrunnen': 'Watching the network in the background',
+  'Sok etter enheter na': 'Look for devices now',
+  'Koble til pa nytt': 'Reconnect',
+  'Laster punkter…': 'Loading points…',
+  'Leser verdier fra': 'Reading values from',
+  'Leser beskrivelser fra': 'Reading descriptions from',
+  'Leser objektliste fra': 'Reading the object list from',
+  'Leser tilstandstekster fra': 'Reading state texts from',
+  'Leser av/på-tekster fra': 'Reading on/off texts from',
+  'Leser ukeprogram fra': 'Reading the schedule from',
+  'leser verdier': 'reading values',
+  'leser av/på-tekster': 'reading on/off texts',
+  'Fortsetter lastingen som allerede var i gang…': 'Continuing the load that was already running…',
+  'venter på svar fra enheten…': 'waiting for the device to answer…',
+  'Kunne ikke lese enheten': 'Could not read the device',
+  'Feil ved lesing': 'Read failed',
+  'Enheten svarte ikke på egenskapsforespørselen.': 'The device did not answer the property request.',
+  'Ingen svar fra enheten på dette punktet': 'No answer from the device for this point',
+  'Ingenting er lest fra enheten.': 'Nothing has been read from the device.',
+  'Les punktet på nytt': 'Read the point again',
+  'Forhåndsleser enheter i bakgrunnen': 'Pre-reading devices in the background',
+  'Forhandsles enheter i bakgrunnen': 'Pre-read devices in the background',
+  'Forhåndslesing av enheter er av': 'Pre-reading devices is off',
+  'Flere enheter svarer på denne ID-en': 'Several devices answer this ID',
+  'Forespørsler treffer den som svarer først, så lesinger og skrivinger': 'Requests reach whichever answers first, so reads and writes',
+  'kan lande på feil sentral.': 'can land on the wrong controller.',
+  'Ingen treff': 'No matches',
+  'Ingen punkter': 'No points',
+  'Ingen punkter valgt': 'No points selected',
+  'Ingen punkter i overvåkingen': 'No points on the watch list',
+  'Ingen skrivbare punkter valgt': 'No writable points selected',
+  'Ingen handling matcher': 'No action matches',
+  'Ingen ur matcher': 'No schedule matches',
+  'Ingen lagrede anlegg ennå': 'No saved sites yet',
+  'Ingen lagret ennå': 'None saved yet',
+  'Ingen skrivinger logget': 'No writes logged',
+  'Loggen er tom': 'The log is empty',
+  'Ingen felles punkter.': 'No points in common.',
+  'Ingen avvik — de to er like.': 'No differences — the two are the same.',
+  'Ingen avvik — filen stemmer med anlegget.': 'No differences — the file matches the plant.',
+  'To enheter som begge er lest.': 'Two devices that have both been read.',
+  'Enheten har ingen skjema-objekter.': 'The device has no schedule objects.',
+  'Ingen aktive kommandoer — styres av lokal logikk': 'No active commands — driven by local logic',
+  'Ingen skift lagt inn på denne ukedagen': 'No periods entered on this weekday',
+  'ingen skift i dag': 'no periods today',
+  'ingen verdier har endret seg': 'no values have changed',
+  'Velg en enhet først': 'Pick a device first',
+  'Velg et punkt først': 'Pick a point first',
+  'Åpne en enhet først': 'Open a device first',
+  'Velg to forskjellige enheter': 'Pick two different devices',
+  'Åpne minst to enheter først — sammenlikningen bruker det som er lest': 'Open at least two devices first — the comparison uses what has been read',
+  'Velg et punkt i tabellen for detaljer, live trend og skriving.': 'Pick a point in the table for details, a live trend and writing.',
+  'Slå på Live for å se trend': 'Turn Live on to see a trend',
+  'Skriv verdi': 'Write value',
+  'Skriv verdi…': 'Write value…',
+  'Skriv verdi @ prioritet': 'Write value @ priority',
+  'Ny verdi for': 'New value for',
+  'Enheten står nå på:': 'The device is now at:',
+  'Nå:': 'Now:',
+  'Slik blir det': 'What it becomes',
+  'Dette endrer et anlegg i drift. Fortsette?': 'This changes a plant in operation. Continue?',
+  'Skriving påvirker et anlegg i drift. Kontroller punkt og prioritet før du sender.': 'Writing affects a plant in operation. Check the point and the priority before you send.',
+  'Blir stående til du frigir den.': 'It stays until you release it.',
+  'Frigis automatisk etter': 'Released automatically after',
+  'Frigjør prioriteten automatisk etter valgt tid': 'Releases the priority automatically after the chosen time',
+  'Frigi valgte punkter': 'Release the selected points',
+  'Skriv Null — frigjør prioriteten': 'Write Null — releases the priority',
+  'Punktene faller tilbake til anleggets egen styring.': 'The points fall back to the plant’s own control.',
+  'Kommanderbart punkt — kan skrives': 'Commandable point — can be written',
+  'Fant ikke skriveskjemaet — bruk feltet i inspektøren': 'Could not find the write form — use the field in the inspector',
+  'Lesemodus er på — skriving er blokkert': 'Read-only mode is on — writing is blocked',
+  'Lesemodus er på — skriving er blokkert.': 'Read-only mode is on — writing is blocked.',
+  'Lesemodus på — skriving blokkert': 'Read-only — writing blocked',
+  'Lesemodus er på — ukeprogrammet kan ikke endres.': 'Read-only mode is on — the schedule cannot be changed.',
+  'Skrivelogg (nyeste først)': 'Write log (newest first)',
+  'etter 5 min': 'after 5 min',
+  'etter 15 min': 'after 15 min',
+  'etter 30 min': 'after 30 min',
+  'etter 1 time': 'after 1 hour',
+  'av — blir stående til du frigir': 'off — stays until you release it',
+  'Ukeprogram': 'Schedule',
+  'Åpne ukeprogram': 'Open the schedule',
+  'Ukeprogram — vis og rediger': 'Schedule — view and edit',
+  'Ukeprogrammet er ikke lest': 'The schedule has not been read',
+  'Ukeprogrammet er uendret — ingenting å skrive': 'The schedule is unchanged — nothing to write',
+  'Skrive ukeprogrammet til': 'Write the schedule to',
+  'Lagre til kontroller': 'Save to the controller',
+  'Du har ulagrede endringer i ukeprogrammet. Forkaste dem?': 'You have unsaved changes to the schedule. Discard them?',
+  'Ulagrede endringer i ukeprogrammet går tapt. Lukke likevel?': 'Unsaved changes to the schedule will be lost. Close anyway?',
+  'Endringene er forkastet': 'The changes were discarded',
+  'Klikk en blokk og endre tidene nederst · «Del i to» lager en ny': 'Click a block and change the times below · “Split in two” makes a new one',
+  'dra i en tom dag for å tegne en periode': 'drag on an empty day to draw a period',
+  'Perioden er for kort til å deles': 'The period is too short to split',
+  'hele uka': 'the whole week',
+  '· uendret hele uka': '· unchanged all week',
+  '· til midnatt': '· to midnight',
+  'lør': 'Sat',
+  'søn': 'Sun',
+  'feil klokke': 'wrong clock',
+  'Sette klokka på': 'Set the clock on',
+  'Sett klokka på denne enheten fra denne PC-en': 'Set this device’s clock from this PC',
+  'Klokka er stilt — enheten er nå': 'The clock is set — the device is now',
+  'Klarte ikke å stille klokka': 'Could not set the clock',
+  'Ukeprogram kjører etter enhetens egen klokke, og trendlogger stemples med den.': 'The schedule runs on the device’s own clock, and trend logs are stamped with it.',
+  'Ukeprogram og trendlogger på enheten følger denne klokka.': 'The schedule and trend logs on the device follow this clock.',
+  'står på': 'is at',
+  'Hva heter dette anlegget?': 'What is this site called?',
+  'Navn på anlegget:': 'Site name:',
+  'Navn på visningen:': 'View name:',
+  'Lagre nåværende…': 'Save the current one…',
+  'Lagre notat': 'Save note',
+  'Kunne ikke lagre notatet': 'Could not save the note',
+  'lagret her': 'saved here',
+  'ikke delt': 'not shared',
+  'delt med fellesserveren': 'shared with the common server',
+  'lagret her · fellesserveren er ikke tilgjengelig': 'saved here · the common server is unreachable',
+  'lagret her, men ikke delt — fellesserveren svarte ikke': 'saved here, but not shared — the common server did not answer',
+  'Taggeinnstillinger for dette anlegget...': 'Tag settings for this site…',
+  'Tømme taggeinnstillingene for dette anlegget?': 'Clear the tag settings for this site?',
+  'Bygg-ID først': 'Building ID first',
+  'Foran systemnummeret, som i BTG': 'Before the system number, as in BTG',
+  'Hvilket ledd systemnummeret står i': 'Which segment the system number is in',
+  'Mellom prefiks og system': 'Between the prefix and the system',
+  'Finnes bare i anlegget': 'Only in the plant',
+  'Ulikt navn': 'Different name',
+  'Endret verdi': 'Changed value',
+  'Endrede verdier': 'Changed values',
+  'Nye punkter': 'New points',
+  'Nye siden snapshot': 'New since the snapshot',
+  'Borte siden snapshot': 'Gone since the snapshot',
+  'endret siden snapshot': 'changed since the snapshot',
+  'kun A': 'A only',
+  'kun B': 'B only',
+  'Last ned CSV': 'Download CSV',
+  'Velg fil': 'Choose a file',
+  'kunne ikke lese filen': 'could not read the file',
+  'Fant ingen punkter i filen': 'Found no points in the file',
+  'EDE-filen mangler object-name, object-type eller object-instance.': 'The EDE file is missing object-name, object-type or object-instance.',
+  'Fant ikke EDE-kolonneoverskriften (object-name / object-type).': 'Could not find the EDE column heading (object-name / object-type).',
+  'Overvåkingshistorikk eksportert': 'Watch history exported',
+  'Rapporten er kopiert - lim inn der du vil': 'The report is copied — paste it wherever you want',
+  'Innstillingene er kopiert': 'The settings are copied',
+  'Kunne ikke kopiere': 'Could not copy',
+  'Kopier navn': 'Copy name',
+  'Kopier punktnavn': 'Copy the point name',
+  'Kopier til BTG': 'Copy for BTG',
+  'Hva du fant, hva som gjenstår, hva neste mann bør vite…': 'What you found, what is left, what the next person should know…',
+  'Ta et snapshot forst - rapporten viser hva som har endret seg siden da': 'Take a snapshot first — the report shows what has changed since then',
+  'Fjern dette filteret': 'Remove this filter',
+  'Nullstill alle': 'Reset all',
+  'Vis alle punkter': 'Show all points',
+  'Vis alle objekttyper (ukeprogram, kalender, trendlogg)': 'Show every object type (schedule, calendar, trend log)',
+  'Viser alle objekttyper — les enheten på nytt': 'Showing every object type — read the device again',
+  'Viser kun punkter med verdi — les enheten på nytt': 'Showing only points with a value — read the device again',
+  'alle objekttyper': 'every object type',
+  'alle tilstander': 'every state',
+  'kun overstyrte': 'overridden only',
+  'Minst én kolonne må vises': 'At least one column must be shown',
+  'Grupperes etter': 'Grouped by',
+  'Enheter vises i én liste': 'Devices are shown in one list',
+  'Grupper enheter (leverandor / IP-omrade / av)': 'Group devices (vendor / IP range / off)',
+  'Punktnavn vises fullt ut': 'Point names are shown in full',
+  'Alle punktnavn på denne enheten starter med dette. Det er utelatt fra tabellen for lesbarhet — hold over et navn for å se det fullt ut.': 'Every point name on this device starts with this. It is dropped from the table for readability — hover a name to see it in full.',
+  'Live og trend': 'Live and trend',
+  'Stor visning av valgt punkt': 'Large view of the selected point',
+  'Fest til overvåking': 'Pin to the watch list',
+  'Løs fra overvåking': 'Unpin from the watch list',
+  'Alle var allerede festet': 'They were all pinned already',
+  'Type, saa navn': 'Type, then name',
+  'Sok i punkter pa denne enheten': 'Search points on this device',
+  'Sok i alle leste enheter': 'Search every device read',
+  'Søket dekker navn, beskrivelse og objekt-ID på denne enheten.': 'The search covers name, description and object ID on this device.',
+  'Flere ord må alle treffe, uansett rekkefølge — «360.001 RT601»': 'Several words must all match, in any order — “360.001 RT601”',
+  'finner punkter som inneholder begge. Sett minus foran et ord for': 'finds points containing both. Put a minus in front of a word to',
+  'å utelate det. Trykk Ctrl+F for å søke i alle leste enheter.': 'exclude it. Press Ctrl+F to search every device read.',
+  'hvor er RT401': 'where is RT401',
+  'søker i': 'searching in',
+  'gaa til punkter': 'go to points',
+  'gaa til enheter / punkter / overvaaking': 'go to devices / points / watch',
+  'Utseende — farger, bilder og størrelse...': 'Appearance — colours, images and size…',
+  'Utseendet er tilbakestilt': 'Appearance reset',
+  'Tilbakestille alle farger og størrelser til standard?': 'Reset every colour and size to the default?',
+  'Hele grensesnittet': 'The whole interface',
+  'Radhøyde i tabellen': 'Row height in the table',
+  'Runde hjørner': 'Rounded corners',
+  'Størrelse og form': 'Size and shape',
+  'Tekst mot bakgrunn:': 'Text against the background:',
+  'Tekst på aksent': 'Text on the accent',
+  'Høy kontrast': 'High contrast',
+  'mørk visning': 'dark appearance',
+  'Mørklegging': 'Dimming',
+  'Mørklegging satt til': 'Dimming set to',
+  'Gjentas som fliser': 'Repeated as tiles',
+  'Hele bildet synlig': 'The whole image visible',
+  'bak hele vinduet': 'behind the whole window',
+  'bak knappene øverst': 'behind the buttons at the top',
+  'Legg inn et bakgrunnsbilde for å få flere valg.': 'Add a background image for more options.',
+  'Velg fil, dra et bilde hit, eller lim inn med Ctrl+V': 'Choose a file, drag an image here, or paste with Ctrl+V',
+  'Velg fil, dra et bilde inn i raden, eller lim inn': 'Choose a file, drag an image onto the row, or paste',
+  'med Ctrl+V når raden er markert.': 'with Ctrl+V when the row is selected.',
+  'Det er ikke et bilde': 'That is not an image',
+  'ikke et bilde': 'not an image',
+  'Kunne ikke lese bildet:': 'Could not read the image:',
+  'Bildet er for stort til å lagres — prøv et mindre': 'The image is too large to store — try a smaller one',
+  'Bildet er for lyst — dempet det og gjorde flatene mer dekkende': 'The image is too light — dimmed it and made the surfaces more opaque',
+  '% — teksten er lesbar igjen': '% — the text is legible again',
+  'Kunne ikke lese temafilen': 'Could not read the theme file',
+  'Kunne ikke åpne': 'Could not open',
+  'Navn': 'Name',
+  'Verdi': 'Value',
+  'Enhet': 'Device',
+  'Feil': 'Fault',
+  'Ukjent': 'Unknown',
+  'Ukjent feil': 'Unknown error',
+  'Høy': 'High',
+  'Normal / på': 'Normal / on',
+  'automatisk nød': 'automatic emergency',
+  'manuell nød': 'manual emergency',
+  'operatør': 'operator',
+  'Skjul': 'Hide',
+  'Vis detaljer': 'Show details',
+  'Skjul detaljer': 'Hide details',
+  '(ingen)': '(none)',
+  '(kun valgte)': '(selected only)',
+  'i går': 'yesterday',
+  'nå nettopp': 'just now',
+  'Peker over': 'Pointing at',
+  'viser de 40 nyeste': 'showing the 40 newest',
+  'Punkter lest': 'Points read',
+  'Punkter naa': 'Points now',
+  'Slik bruker du den': 'How to use it',
+  'Åpne minst to enheter først': 'Open at least two devices first',
+  'på denne enheten': 'on this device',
+  'svarer ikke': 'does not answer',
+  'svarte ikke': 'did not answer',
+  'svarer fra': 'answers from',
+  'svarer på ping': 'answers a ping',
+  'svarer på ping — prøv «Sweep — grundig»': 'answers a ping — try “Sweep — thorough”',
+  'utløst': 'triggered',
+  'områder': 'ranges',
+  'døgn': 'days',
+  'dager siden': 'days ago',
+  'Ping kom i en nyere serverversjon — kjør start.bat igjen': 'Ping arrived in a newer server version — run start.bat again',
+  /* --- settings and menu state --- */
+  'Innstillinger': 'Settings',
+  'Oppsett': 'Setup',
+  'Tagging': 'Tagging',
+  'Tabellen': 'The table',
+  'Enhetslista': 'The device list',
+  'Bevegelse': 'Motion',
+  'Animasjoner': 'Animations',
+  'Tett visning': 'Dense view',
+  'Forkort punktnavn': 'Shorten point names',
+  'Objekttyper i tabellen': 'Object types in the table',
+  'Tilbakestill alt': 'Restore defaults',
+  'Filtrer ur…': 'Filter schedules…',
+  'Intervall': 'Interval',
+  'Sammendrag': 'Summary',
+  'Objekttyper': 'Object types',
+  'Egenskaper': 'Properties',
+  'Notat': 'Note',
+  'objekter': 'objects',
+  'lokal': 'local',
+  /* The tool's own on/off pills. Safe to translate because every element a
+     controller's own state text lands in - the table, the big value, the
+     property list - is excluded above. */
+  'av': 'off',
+  'på': 'on',
+  'Alt': 'All',
+  'Mellomrom': 'Space',
+  'Piltaster': 'Arrow keys',
+  'Handling': 'Action',
+  'Handlinger': 'Actions',
+  'Innstillinger...': 'Settings...',
+  'Kolonner...': 'Columns...',
+  'Kolonner…': 'Columns…',
+  'Lys visning': 'Light appearance',
+  'Mørk visning': 'Dark appearance',
+  'Naviger': 'Navigate',
+  'Overvak nettet kontinuerlig': 'Watch the network continuously',
+  'Sesjonsrapport…': 'Session report…',
+  'Sesjonsrapport...': 'Session report...',
+  'Skann IP-omrade': 'Scan an IP range',
+  'Skrivelogg': 'Write log',
+  'Visning': 'Display',
+  'pa': 'on',
+  /* The command palette carries ASCII variants of the same labels - three
+     dots rather than an ellipsis, and no diacritics - so they are their own
+     entries rather than being folded into the ones above. */
+  'Skriving': 'Writing',
+  'Utseende': 'Appearance',
+  'Anlegg jeg har vært på...': 'Sites I have visited...',
+  'Apne anlegg...': 'Open site...',
+  'Lesemodus - blokker all skriving': 'Read-only mode - block all writing',
+  'Sammenlign med EDE-fil...': 'Compare with an EDE file...',
+  'Utseende - farger, bilder og størrelse...': 'Appearance - colours, images and size...',
   /* Deliberately absent: Av, På, Ja, Nei. Those are state texts, and a
      controller supplies them - translating one would be editing what the
      plant reports, not what the tool says. */
@@ -8757,13 +9086,38 @@ const MONSTER = [
    /^([\d.]+) h ago$/, (m) => `${m[1]} t siden`],
   [/^(\d+) døgn siden$/, (m) => `${m[1]} days ago`,
    /^(\d+) days ago$/, (m) => `${m[1]} døgn siden`],
+  [/^(\d+) punkter frigitt$/, (m) => `${m[1]} points released`,
+   /^(\d+) points released$/, (m) => `${m[1]} punkter frigitt`],
+  [/^(\d+) enheter med feil$/, (m) => `${m[1]} devices with a fault`,
+   /^(\d+) devices with a fault$/, (m) => `${m[1]} enheter med feil`],
+  [/^(\d+) enheter med overstyringer$/, (m) => `${m[1]} devices with overrides`,
+   /^(\d+) devices with overrides$/, (m) => `${m[1]} enheter med overstyringer`],
+  [/^(\d+) punkter i alarm eller med feil$/, (m) => `${m[1]} points in alarm or with a fault`,
+   /^(\d+) points in alarm or with a fault$/, (m) => `${m[1]} punkter i alarm eller med feil`],
+  [/^(\d+) punkter overstyrt eller ute av drift$/, (m) => `${m[1]} points overridden or out of service`,
+   /^(\d+) points overridden or out of service$/, (m) => `${m[1]} punkter overstyrt eller ute av drift`],
+  [/^(\d+) enheter lest$/, (m) => `${m[1]} devices read`,
+   /^(\d+) devices read$/, (m) => `${m[1]} enheter lest`],
+  [/^(\d+) rader kopiert - lim inn i Excel$/, (m) => `${m[1]} rows copied — paste into Excel`,
+   /^(\d+) rows copied — paste into Excel$/, (m) => `${m[1]} rader kopiert - lim inn i Excel`],
+  [/^(\d+) punkt\(er\) festet$/, (m) => `${m[1]} point(s) pinned`,
+   /^(\d+) point\(s\) pinned$/, (m) => `${m[1]} punkt(er) festet`],
+  [/^(\d+) punkter er filtrert bort$/, (m) => `${m[1]} points filtered out`,
+   /^(\d+) points filtered out$/, (m) => `${m[1]} punkter er filtrert bort`],
 ];
 
 let ORDBOK_REV = null;
 function revOrdbok() {
   if (!ORDBOK_REV) {
     ORDBOK_REV = Object.create(null);
-    for (const [nb, en] of Object.entries(ORDBOK)) ORDBOK_REV[en] = nb;
+    /* First declaration wins. Some English words are reached from two
+       Norwegian spellings - the command palette strips diacritics, so it
+       says "Sok etter enheter na" where the menu says "Søk etter enheter
+       nå". Both must translate, but only one can come back, and the one
+       that comes back should be the properly spelled one. */
+    for (const [nb, en] of Object.entries(ORDBOK)) {
+      if (ORDBOK_REV[en] === undefined) ORDBOK_REV[en] = nb;
+    }
   }
   return ORDBOK_REV;
 }
@@ -8798,7 +9152,7 @@ const HOPP_OVER = /^(SCRIPT|STYLE|CODE|SVG|PATH)$/;
    the device list also holds the getting-started text and the watch pane its
    own empty state, and both of those are the tool talking. */
 const DATA_SONE = 'tbody, .dev-name, .dev-ip, .dev-note, '
-  + '.watch-name, .watch-ip, .insp-title, .insp-sub';
+  + '.watch-name, .watch-ip, .insp-title, .insp-sub, .insp-val, .data-verdier';
 
 function iDataSone(n) {
   const el = n.nodeType === 1 ? n : n.parentElement;
@@ -8847,14 +9201,36 @@ function sveipSprak(rot, tilEn) {
    the size of the table. Text and attribute writes are not childList
    mutations, so this cannot feed itself. */
 let SPRAAK_OBS = null;
+let SKRIVER = false;
+function oversettAttr(el, navn, tilEn) {
+  if (!el || el.nodeType !== 1 || !navn) return;
+  if (iDataSone(el)) return;
+  const v = el.getAttribute(navn);
+  if (v == null) return;
+  const ny = oversettTekst(v, tilEn);
+  if (ny !== v) el.setAttribute(navn, ny);
+}
+
 function startSprakObs() {
   if (SPRAAK_OBS) return;
   SPRAAK_OBS = new MutationObserver((muts) => {
-    for (const m of muts) {
-      for (const n of m.addedNodes) sveipSprak(n, true);
-    }
+    if (SKRIVER) return;
+    SKRIVER = true;
+    try {
+      for (const m of muts) {
+        if (m.type === 'attributes') { oversettAttr(m.target, m.attributeName, true); continue; }
+        for (const n of m.addedNodes) sveipSprak(n, true);
+      }
+    } finally { SKRIVER = false; }
   });
-  SPRAAK_OBS.observe(document.body, {childList: true, subtree: true});
+  /* Attributes are watched too: a tooltip written after the sweep - the one
+     explaining why point names are not being shortened, for instance - would
+     otherwise stay Norwegian for the rest of the session. SKRIVER stops the
+     write from being read back as a new mutation. */
+  SPRAAK_OBS.observe(document.body, {
+    childList: true, subtree: true,
+    attributes: true, attributeFilter: ATTR_SPRAAK,
+  });
 }
 function stoppSprakObs() {
   if (!SPRAAK_OBS) return;
