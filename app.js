@@ -9170,11 +9170,21 @@ function sveipSprak(rot, tilEn) {
   if (rot.nodeType !== 1) return;
   if (iDataSone(rot)) return;
 
-  const tw = document.createTreeWalker(rot, NodeFilter.SHOW_TEXT, {
-    acceptNode: (n) => (n.parentNode
-      && (HOPP_OVER.test(n.parentNode.nodeName) || iDataSone(n)))
-      ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT,
-  });
+  /* Elements are walked as well as text, and that is the whole point: a
+     rejected ELEMENT takes its subtree with it, while rejecting a text node
+     only skips that one node. Filtering text alone meant one closest() call
+     per text node - 14 400 of them on a full points table, which cost about
+     5ms per render. Rejecting tbody once costs one. */
+  const tw = document.createTreeWalker(rot,
+    NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT, {
+      acceptNode: (n) => {
+        if (n.nodeType === 1) {
+          return (HOPP_OVER.test(n.nodeName) || (n.matches && n.matches(DATA_SONE)))
+            ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_SKIP;
+        }
+        return NodeFilter.FILTER_ACCEPT;
+      },
+    });
   const noder = [];
   while (tw.nextNode()) noder.push(tw.currentNode);
   for (const n of noder) {
