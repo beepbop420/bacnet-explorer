@@ -8593,6 +8593,35 @@ function diagTegn(i, tilstand, detalj, forklaring) {
     + '</div>';
 }
 
+
+/* The button beside the range field. It exists because of where the question
+   arrives: you are next to a controller, its IP is on a label, and you type
+   that IP. Burying the answer two clicks into a menu asks you to know the
+   feature is there before you need it, which is backwards.
+
+   Shown only for a single address, because that is the only time it means
+   anything, and because a range in the field means you want the scan. */
+function enkeltAdresse(tekst) {
+  const t = String(tekst || '').trim();
+  if (!t || /[\s,;]/.test(t)) return null;          // flere oppforinger = omraade
+  const m = t.match(/^(\d{1,3}(?:\.\d{1,3}){3})(?::\d+)?(?:\/32)?$/);
+  if (!m) return null;
+  if (m[1].split('.').some(d => +d > 255)) return null;
+  return t;
+}
+
+function oppdaterDiagKjapp() {
+  const b = $('diagKjapp');
+  if (!b) return;
+  const ip = enkeltAdresse($('rangeInput').value);
+  b.classList.toggle('vis', !!ip);
+  /* Out of the tab order while it is invisible: a focus ring landing on
+     nothing is worse than the button not being reachable at all. Back in it
+     the moment it means something. */
+  if (ip) b.removeAttribute('tabindex'); else b.setAttribute('tabindex', '-1');
+  b.title = ip ? 'Sjekk ' + ip + ' — hvorfor svarer den ikke?' : '';
+}
+
 let DIAG_GEN = 0;
 
 async function diagKjor() {
@@ -8671,7 +8700,7 @@ function diagOppsummer(ip, s) {
   };
 }
 
-function diagApne(ip) {
+function diagApne(ip, kjorStraks) {
   const o = $('diagOverlay');
   if (!o) return;
   o.hidden = false;
@@ -8681,11 +8710,18 @@ function diagApne(ip) {
   f.value = ip || f.value || '';
   f.focus();
   f.select();
+  /* Opened from the field with an address already in it, the next click would
+     only ever be Check. Asking for it is a step that carries no decision. */
+  if (kjorStraks && f.value.trim()) diagKjor();
 }
 function diagLukk() { const o = $('diagOverlay'); if (o) { o.hidden = true; DIAG_GEN++; } }
 
 (function diagKoble() {
   const mb = $('diagBtn'); if (mb) mb.onclick = () => { closeMenus(); diagApne(); };
+  const kb = $('diagKjapp');
+  if (kb) kb.onclick = () => diagApne(enkeltAdresse($('rangeInput').value), true);
+  const ri = $('rangeInput');
+  if (ri) { ri.addEventListener('input', oppdaterDiagKjapp); oppdaterDiagKjapp(); }
   const k = $('diagKjor'); if (k) k.onclick = diagKjor;
   const l = $('diagClose'); if (l) l.onclick = diagLukk;
   const f = $('diagIp');
@@ -9350,6 +9386,8 @@ const ORDBOK = {
   'leverandorer': 'vendors',
   'leverandorer / IP-omrader': 'vendors / IP ranges',
   /* --- check an address --- */
+  'Sjekk én': 'Check one',
+  'Sjekk én': 'Check one',
   'Sjekk en adresse': 'Check an address',
   'Sjekk en adresse…': 'Check an address…',
   'Sjekk': 'Check',

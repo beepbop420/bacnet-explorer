@@ -1982,6 +1982,25 @@ body.uten-bevegelse #himmel{display:none}
 }
 
 
+
+/* The check button lives next to the range field and only when it applies.
+   The top bar already carries five controls, and a sixth that is dark most of
+   the time costs every user width to serve one moment. Typing a single
+   address is that moment, and it is unambiguous - a range has a slash or a
+   comma in it - so the button can simply appear then. */
+.diag-kjapp{
+  flex:0 0 auto;overflow:hidden;white-space:nowrap;
+  max-width:0;padding-left:0;padding-right:0;margin-left:0;
+  opacity:0;pointer-events:none;
+  transition:max-width .22s cubic-bezier(.16,1,.3,1),opacity .18s,
+             padding .22s cubic-bezier(.16,1,.3,1),margin .22s;
+}
+.diag-kjapp.vis{
+  max-width:120px;opacity:1;pointer-events:auto;
+  padding-left:8px;padding-right:8px;margin-left:6px;
+}
+@media (prefers-reduced-motion:reduce){ .diag-kjapp{transition:none} }
+
 /* ---------- diagnose
    Four checks in the order they stop being guesses. The last two are the pair
    that matters: ping answering while BACnet does not is a different fault from
@@ -3450,6 +3469,7 @@ body.drar,body.drar .wk-blk.redigerbar{cursor:grabbing;user-select:none}
       <input id="rangeInput" class="field" list="kjenteOmrader" style="width:148px" placeholder="10.75.1.0/24, …" title="Ett eller flere IP-områder. Skill dem med komma, semikolon eller mellomrom — de skannes etter tur inn i én liste."
              list="recentRanges" autocomplete="off">
       <datalist id="recentRanges"></datalist>
+      <button id="diagKjapp" class="btn diag-kjapp" type="button" tabindex="-1">Sjekk én</button>
       <select id="modeSel" class="field" title="Grundig prøver stille adresser en gang til, langsomt — finner enheter som ellers mistes over VPN. Rask tar én runde. Who-Is blokkeres ofte.">
         <option value="unicast_sweep">Sweep — grundig</option>
         <option value="unicast_fast">Sweep — rask</option>
