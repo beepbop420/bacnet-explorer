@@ -8528,6 +8528,105 @@ renderDevices();
 })();
 
 /* ==========================================================================
+   Keyboard containment for the overlays, and a guard on unsaved work
+
+   Eleven overlays carry role="dialog" aria-modal="true". Nothing enforced it:
+   Tab walked straight out of the dialog and into the page behind, where the
+   focused control was hidden under the backdrop. aria-modal was a promise the
+   page did not keep, which is worse than not making it - a screen reader is
+   told the rest of the page is inert while the keyboard proves it is not.
+
+   The overlays are toggled by `hidden` in forty-three places and share no
+   open/close function, so this hangs off the attribute rather than off those
+   forty-three sites. Nothing else has to remember to call it. */
+
+(function fokusfelle() {
+  const FOKUSERBAR = [
+    'a[href]', 'button:not([disabled])', 'input:not([disabled])',
+    'select:not([disabled])', 'textarea:not([disabled])',
+    '[tabindex]:not([tabindex="-1"])',
+  ].join(',');
+  const OVERLEGG = '.gs-overlay, .zoom-overlay';
+
+  let forrige = null;
+
+  const apenDialog = () => {
+    const alle = document.querySelectorAll(OVERLEGG);
+    for (let i = alle.length - 1; i >= 0; i--) {
+      if (!alle[i].hidden) return alle[i];   // den øverste, om flere er åpne
+    }
+    return null;
+  };
+
+  const iDialog = (d) => [...d.querySelectorAll(FOKUSERBAR)]
+    .filter(el => el.offsetParent !== null || el === document.activeElement);
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Tab') return;
+    const d = apenDialog();
+    if (!d) return;
+    const f = iDialog(d);
+    if (!f.length) return;
+    const forst = f[0], sist = f[f.length - 1];
+    if (!d.contains(document.activeElement)) {
+      e.preventDefault();
+      (e.shiftKey ? sist : forst).focus();
+    } else if (e.shiftKey && document.activeElement === forst) {
+      e.preventDefault();
+      sist.focus();
+    } else if (!e.shiftKey && document.activeElement === sist) {
+      e.preventDefault();
+      forst.focus();
+    }
+  }, true);
+
+  /* Several dialogs already focus a field of their own when they open - the
+     command palette its search box, the site dialog its name field. This waits
+     a frame and only steps in when nothing took focus, so those keep winning. */
+  const obs = new MutationObserver((muts) => {
+    for (const m of muts) {
+      const d = m.target;
+      if (!d.hidden) {
+        forrige = document.activeElement;
+        requestAnimationFrame(() => {
+          if (d.hidden || d.contains(document.activeElement)) return;
+          const f = iDialog(d)[0];
+          if (f) f.focus();
+        });
+      } else if (forrige && document.contains(forrige) && forrige.offsetParent !== null) {
+        forrige.focus();
+        forrige = null;
+      }
+    }
+  });
+  for (const d of document.querySelectorAll(OVERLEGG)) {
+    obs.observe(d, {attributes: true, attributeFilter: ['hidden']});
+  }
+})();
+
+
+/* Typing a handover note at a site and closing the window used to lose it
+   without a word. The browser only allows this prompt when the page has been
+   interacted with, which it always has by the time there is a note to lose. */
+(function ulagretVern() {
+  const ulagret = () => {
+    const ta = document.getElementById('devNote');
+    if (!ta || !S.activeDev) return false;
+    try {
+      return ta.value !== noteFor(S.activeDev);
+    } catch (e) {
+      return false;
+    }
+  };
+
+  window.addEventListener('beforeunload', (e) => {
+    if (!ulagret() && !S.job) return;
+    e.preventDefault();
+    e.returnValue = '';        // teksten bestemmer nettleseren, ikke vi
+  });
+})();
+
+/* ==========================================================================
    Language
 
    The interface is written in Norwegian, inline, in about 3500 string
