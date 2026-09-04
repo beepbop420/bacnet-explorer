@@ -4960,7 +4960,11 @@ function tomtSkannResultat(mode, omraader) {
     + '<div class="tomt-tittel">Ingen enheter svarte</div>'
     + '<div class="tomt-omr">' + esc(omr) + '</div>'
     + '<ul class="tomt-grunner">' + grunner.map(g => '<li>' + g + '</li>').join('') + '</ul>'
-    + '<div class="tomt-knapper">' + knapp + '</div>'
+    + '<div class="tomt-knapper">' + knapp
+    /* The moment you most want to interrogate one address is the moment a
+       whole range came back empty. Offering it here saves knowing the
+       feature exists. Prefilled when the range was a single address. */
+    + '<button class="btn" id="tomtEn">Sjekk én adresse…</button></div>'
     + pingDel(omraader)
     + '</div>';
 
@@ -4969,6 +4973,8 @@ function tomtSkannResultat(mode, omraader) {
   if (g) g.onclick = () => { $('modeSel').value = 'unicast_sweep'; runScan(); };
   const i = $('tomtIgjen');
   if (i) i.onclick = () => runScan();
+  const e1 = $('tomtEn');
+  if (e1) e1.onclick = () => diagApne(enkeltAdresse($('rangeInput').value), false);
 }
 
 /* Den antall-baserte varslinga er tatt ut.
@@ -4989,6 +4995,7 @@ function tomtSkannResultat(mode, omraader) {
 let RENDER_GEN = 0;
 
 function renderPoints() {
+  oppdaterSynlighet();
   const wrap = $('pointsWrap');
   /* Chipsene tegnes foerst, ikke sist.
 
@@ -6447,6 +6454,7 @@ function oppdaterWatch() {
 }
 
 function renderWatch() {
+  oppdaterSynlighet();
   $('watchCount').textContent = S.watch.length;
   const el = $('watchList');
   // Er det de samme punktene som sist, holder det aa oppdatere tallene.
@@ -8601,6 +8609,17 @@ function diagTegn(i, tilstand, detalj, forklaring) {
 
    Shown only for a single address, because that is the only time it means
    anything, and because a range in the field means you want the scan. */
+
+/* --------------------------------------------------- hide what cannot act
+   Called from the two renders that already run whenever this could change,
+   so nothing new has to remember to call it. */
+function oppdaterSynlighet() {
+  const fb = document.querySelector('.filterbar');
+  if (fb) fb.hidden = !S.activeDev;
+  const wv = document.querySelector('.watch-verktoy');
+  if (wv) wv.hidden = !(S.watch && S.watch.length);
+}
+
 function enkeltAdresse(tekst) {
   const t = String(tekst || '').trim();
   if (!t || /[\s,;]/.test(t)) return null;          // flere oppforinger = omraade
@@ -9388,6 +9407,7 @@ const ORDBOK = {
   /* --- check an address --- */
   'Sjekk én': 'Check one',
   'Sjekk én': 'Check one',
+  'Sjekk én adresse…': 'Check one address…',
   'Sjekk en adresse': 'Check an address',
   'Sjekk en adresse…': 'Check an address…',
   'Sjekk': 'Check',

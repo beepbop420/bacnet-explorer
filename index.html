@@ -2001,6 +2001,23 @@ body.uten-bevegelse #himmel{display:none}
 }
 @media (prefers-reduced-motion:reduce){ .diag-kjapp{transition:none} }
 
+
+/* Controls that cannot do anything yet are not shown yet.
+
+   With no device open the points toolbar had ten controls in it and three of
+   them admitted they were dead. The other seven looked ready: Filter opened a
+   filter panel over an empty table, the search field accepted text that could
+   never match, Views offered to save a view of nothing. Greying them out
+   would have been honest but still noisy; the pane already says what to do,
+   and one sentence with nothing competing is easier to obey than one sentence
+   under a row of buttons.
+
+   The trigger is having a device selected, not having points loaded. Points
+   arrive asynchronously, and a toolbar that appeared when the last one landed
+   would jump into place halfway through the read. */
+.filterbar[hidden],
+.watch-verktoy[hidden]{display:none}
+
 /* ---------- diagnose
    Four checks in the order they stop being guesses. The last two are the pair
    that matters: ping answering while BACnet does not is a different fault from
@@ -3795,7 +3812,7 @@ body.drar,body.drar .wk-blk.redigerbar{cursor:grabbing;user-select:none}
     <main class="pane pane-main">
       <div id="ctxBar" class="ctx-bar"><span class="ctx-empty">Ingen enhet valgt</span></div>
       <div id="filterChips" class="filter-chips" hidden></div>
-      <div class="filterbar">
+      <div class="filterbar" hidden>
         <input id="q" class="field" placeholder="Søk… (/) — flere ord = alle må treffe"
                title="Mellomrom betyr og: KG32 RT601 finner alle RT601 på KG32.  -ord utelater.  &quot;to ord&quot; søker som frase.">
         <select id="typeSel" class="field"><option value="">Alle typer</option></select>
@@ -3871,8 +3888,10 @@ body.drar,body.drar .wk-blk.redigerbar{cursor:grabbing;user-select:none}
       <div class="pane-head" style="border-top:1px solid var(--line)">
         Overvåking <span id="watchCount" class="count">0</span>
         <div class="spacer"></div>
-        <button id="watchExport" class="btn btn-icon" title="Eksporter loggede verdier som CSV">⭳</button>
-        <button id="watchClear" class="btn btn-icon" title="Tøm overvåkingslista">Tøm</button>
+        <div class="watch-verktoy" hidden>
+          <button id="watchExport" class="btn btn-icon" title="Eksporter loggede verdier som CSV">⭳</button>
+          <button id="watchClear" class="btn btn-icon" title="Tøm overvåkingslista">Tøm</button>
+        </div>
       </div>
       <div id="festlag" aria-hidden="true"></div>
       <div id="watchList" tabindex="-1">
