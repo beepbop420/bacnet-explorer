@@ -17,7 +17,16 @@
      the text that sits on an accent surface, the faint divider inside lists,
      the sunken field background, and the red used for text rather than for a
      block. Naming them is what makes a custom theme reach the whole app. */
-  --radius:4px;
+  /* Two scales, and everything is on them. The file used to carry fourteen
+     font sizes and seventeen corner radii - 9.5px here, 10.5px there, 3px on
+     one control and 5px on the next. Nothing was wrong with any single value;
+     what was wrong was that there was no scale, only a decision per element.
+     A tool people use all day should look like it was measured once. */
+  --radius:4px; --r-sm:2px; --r-lg:6px; --r-pill:999px;
+  --t-1:9px; --t-2:10px; --t-3:11px; --t-4:12px; --t-5:13px;
+  /* Small uppercase labels are the one place tracking earns its keep: it is
+     what makes a label read as a panel heading rather than shrunken text. */
+  --spor:.14em;
   --on-accent:#cfe0ff; --line-soft:#12161b; --sunken:#0a0c0f;
   --err-fg:#ffb4a8; --accent-edge:#2d5490; --accent-press:#24487a;
   /* Text scale verified against the #0b0d10 background:
@@ -159,7 +168,7 @@
    Everything moves on transform and opacity, and the whole thing is one
    button 52px wide - it costs nothing to have it be nice. */
 .theme-tgl{
-  position:relative;flex:0 0 auto;width:52px;height:24px;border-radius:12px;
+  position:relative;flex:0 0 auto;width:52px;height:24px;border-radius:var(--r-pill);
   background:linear-gradient(90deg,#101a33,#1b2a4d);
   border:1px solid rgba(255,255,255,.22);
   cursor:pointer;padding:0;overflow:hidden;
@@ -219,7 +228,7 @@ body{
 button,input,select{font:inherit;color:inherit}
 button{background:none;border:none;cursor:pointer}
 ::-webkit-scrollbar{width:10px;height:10px}
-::-webkit-scrollbar-thumb{background:#232a33;border-radius:5px;border:2px solid var(--bg)}
+::-webkit-scrollbar-thumb{background:#232a33;border-radius:var(--radius);border:2px solid var(--bg)}
 ::-webkit-scrollbar-thumb:hover{background:#323b47}
 ::-webkit-scrollbar-track{background:transparent}
 
@@ -307,7 +316,7 @@ button{background:none;border:none;cursor:pointer}
 .brand{
   display:flex;align-items:center;gap:9px;flex:0 0 auto;
   text-decoration:none;color:inherit;cursor:default;
-  padding:3px 7px;margin-left:-7px;border-radius:6px;transition:background .14s;
+  padding:3px 7px;margin-left:-7px;border-radius:var(--r-lg);transition:background .14s;
 }
 /* Only clickable when the Portal actually lives on this host — the local
    version runs on 127.0.0.1 where there is no Portal to go back to. */
@@ -321,7 +330,7 @@ button{background:none;border:none;cursor:pointer}
 .brand-logo{height:26px;width:auto;display:block;flex:0 0 auto}
 .brand-mark{
   display:flex;align-items:center;justify-content:center;
-  width:24px;height:24px;border-radius:5px;flex:0 0 24px;
+  width:24px;height:24px;border-radius:var(--radius);flex:0 0 24px;
   background:linear-gradient(135deg,var(--merke-aksent),var(--merke-aksent-2));
   color:#fff;
 }
@@ -349,7 +358,7 @@ button{background:none;border:none;cursor:pointer}
 .topbar .conn code{color:var(--tb-fg-2)}
 .tb-sep{width:1px;height:20px;background:var(--tb-sep)}
 .tb-group{display:flex;align-items:center;gap:6px}
-.tb-label{color:var(--tb-fg-2);font-size:10px;text-transform:uppercase;letter-spacing:.06em}
+.tb-label{color:var(--tb-fg-2);font-size:10px;text-transform:uppercase;letter-spacing:var(--spor)}
 .spacer{flex:1}
 
 .field{
@@ -382,7 +391,7 @@ select.field{font-family:var(--sans);cursor:pointer}
 .menu{position:relative;display:inline-flex}
 .menu-pop{
   position:absolute;top:calc(100% + 5px);left:0;z-index:90;min-width:210px;
-  background:var(--panel);border:1px solid var(--line-2);border-radius:5px;
+  background:var(--panel);border:1px solid var(--line-2);border-radius:var(--radius);
   padding:4px;box-shadow:0 10px 30px rgba(0,0,0,.55);
 }
 .menu-pop.menu-right{left:auto;right:0}
@@ -449,17 +458,17 @@ select.field{font-family:var(--sans);cursor:pointer}
 .cmp-bare{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--fg-2);cursor:pointer}
 .cmp-rad{
   display:grid;grid-template-columns:1fr 110px 110px 74px;gap:8px;
-  align-items:center;padding:4px 12px;font-size:11.5px;
+  align-items:center;padding:4px 12px;font-size:11px;
   border-bottom:1px solid var(--line-soft,rgba(255,255,255,.04));
 }
 .cmp-hode{
   position:sticky;top:0;z-index:2;background:var(--panel);
-  color:var(--fg-3);text-transform:uppercase;font-size:9.5px;letter-spacing:.05em;
+  color:var(--fg-3);text-transform:uppercase;font-size:9px;letter-spacing:var(--spor);
   font-weight:600;
 }
 .cmp-navn{font-family:var(--mono);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .cmp-v{font-family:var(--mono);text-align:right}
-.cmp-merke{font-size:9.5px;text-transform:uppercase;letter-spacing:.04em;text-align:right}
+.cmp-merke{font-size:9px;text-transform:uppercase;letter-spacing:var(--spor);text-align:right}
 .cmp-rad.ulik{background:color-mix(in srgb,var(--warn) 9%,transparent)}
 .cmp-rad.ulik .cmp-merke{color:var(--warn)}
 .cmp-rad.bare-a,.cmp-rad.bare-b{background:color-mix(in srgb,var(--err) 8%,transparent)}
@@ -471,7 +480,7 @@ select.field{font-family:var(--sans);cursor:pointer}
 .rapport{padding:12px 16px;font-size:12px;line-height:1.65}
 .rap-bolk{margin:0 0 16px}
 .rap-h{
-  font-size:10px;text-transform:uppercase;letter-spacing:.06em;
+  font-size:10px;text-transform:uppercase;letter-spacing:var(--spor);
   color:var(--fg-3);font-weight:600;margin-bottom:5px;
 }
 .rap-linje{display:flex;gap:8px;padding:1px 0}
@@ -503,7 +512,7 @@ select.field{font-family:var(--sans);cursor:pointer}
 }
 .cmd-segk{
   border:0;background:transparent;color:var(--fg-3);cursor:pointer;
-  font-size:11px;padding:4px 9px;border-radius:5px 5px 0 0;
+  font-size:11px;padding:4px 9px;border-radius:var(--r-lg) var(--r-lg) 0 0;
   border-bottom:2px solid transparent;
   transition:color 120ms ease,border-color 120ms ease;
 }
@@ -515,12 +524,12 @@ select.field{font-family:var(--sans);cursor:pointer}
    det rette. */
 .cmd-merke{
   font-family:var(--mono);font-size:9px;font-weight:600;
-  padding:1px 4px;border-radius:3px;margin-right:6px;
+  padding:1px 4px;border-radius:var(--r-sm);margin-right:6px;
   background:var(--sunken,rgba(255,255,255,.06));color:var(--fg-3);
   flex:0 0 auto;
 }
 .cmd-verdi{
-  font-family:var(--mono);font-size:10.5px;color:var(--fg-2);
+  font-family:var(--mono);font-size:10px;color:var(--fg-2);
   margin-left:auto;padding-left:10px;flex:0 0 auto;
 }
 
@@ -528,10 +537,10 @@ select.field{font-family:var(--sans);cursor:pointer}
    hopper naar det aapnes. */
 .inline-skriv{
   width:100%;box-sizing:border-box;
-  font-family:var(--mono);font-size:11.5px;text-align:right;
+  font-family:var(--mono);font-size:11px;text-align:right;
   padding:0 2px;height:18px;line-height:18px;
   background:var(--sunken,rgba(255,255,255,.06));
-  border:1px solid var(--accent);border-radius:3px;
+  border:1px solid var(--accent);border-radius:var(--r-sm);
   color:var(--fg);outline:none;
 }
 
@@ -547,7 +556,7 @@ select.field{font-family:var(--sans);cursor:pointer}
 .sa-tekst{font-size:11px;line-height:1.5;color:var(--fg-2)}
 .sa-tekst b{color:var(--fg);font-family:var(--mono)}
 .sa-knapper{display:flex;gap:5px;margin-top:7px;flex-wrap:wrap}
-.sa-knapper .btn{font-size:10.5px;padding:3px 8px}
+.sa-knapper .btn{font-size:10px;padding:3px 8px}
 
 /* Ping-svaret. Adressene settes i monospace fordi de leses som tall - man
    sammenlikner dem med det man har i hodet. */
@@ -555,28 +564,28 @@ select.field{font-family:var(--sans);cursor:pointer}
 .ping-svar{font-size:11px;line-height:1.55;color:var(--fg-2);margin-top:7px}
 .ping-svar b{color:var(--fg)}
 .ping-svar code{
-  font-family:var(--mono);font-size:10.5px;
-  background:var(--sunken,rgba(255,255,255,.06));padding:1px 4px;border-radius:3px;
+  font-family:var(--mono);font-size:10px;
+  background:var(--sunken,rgba(255,255,255,.06));padding:1px 4px;border-radius:var(--r-sm);
 }
 .wr-ok{color:var(--ok)!important}
 .wr-nei{color:var(--fg-3)!important}
-.ping-nb{display:block;margin-top:5px;color:var(--fg-3);font-size:10.5px}
+.ping-nb{display:block;margin-top:5px;color:var(--fg-3);font-size:10px}
 .ping-liste{
-  font-family:var(--mono);font-size:10.5px;color:var(--ok);
+  font-family:var(--mono);font-size:10px;color:var(--ok);
   margin-top:6px;line-height:1.7;word-spacing:6px;
 }
 
 /* Ruta som forklarer et tomt skann. Den staar i enhetslista, der man ser
    etter enhetene - ikke som en toast som er borte for man rakk aa lese den. */
-.tomt-skann{padding:16px 14px;font-size:11.5px;line-height:1.6}
+.tomt-skann{padding:16px 14px;font-size:11px;line-height:1.6}
 .tomt-tittel{font-size:13px;font-weight:600;color:var(--warn);margin-bottom:2px}
-.tomt-omr{font-family:var(--mono);font-size:10.5px;color:var(--fg-3);margin-bottom:10px}
+.tomt-omr{font-family:var(--mono);font-size:10px;color:var(--fg-3);margin-bottom:10px}
 .tomt-grunner{margin:0;padding-left:16px;color:var(--fg-2)}
 .tomt-grunner li{margin-bottom:7px}
 .tomt-grunner b{color:var(--fg)}
 .tomt-grunner code{
-  font-family:var(--mono);font-size:10.5px;
-  background:var(--sunken,rgba(255,255,255,.06));padding:1px 4px;border-radius:3px;
+  font-family:var(--mono);font-size:10px;
+  background:var(--sunken,rgba(255,255,255,.06));padding:1px 4px;border-radius:var(--r-sm);
 }
 .tomt-knapper{margin-top:12px}
 
@@ -589,12 +598,12 @@ select.field{font-family:var(--sans);cursor:pointer}
 }
 .feilrute{display:flex;flex-direction:column;align-items:center;gap:6px;padding:34px 18px}
 .feil-tittel{font-size:13px;font-weight:600;color:var(--err)}
-.feil-detalj{font-size:11.5px;color:var(--fg-2);max-width:46ch;text-align:center;line-height:1.5}
-.feil-adr{font-family:var(--mono);font-size:10.5px;color:var(--fg-3)}
+.feil-detalj{font-size:11px;color:var(--fg-2);max-width:46ch;text-align:center;line-height:1.5}
+.feil-adr{font-family:var(--mono);font-size:10px;color:var(--fg-3)}
 .feil-knapper{display:flex;gap:8px;margin-top:10px}
 .vis-slett{
   margin-left:8px;opacity:0;color:var(--fg-3);font-size:10px;
-  padding:0 3px;border-radius:3px;transition:opacity 120ms ease,color 120ms ease;
+  padding:0 3px;border-radius:var(--r-sm);transition:opacity 120ms ease,color 120ms ease;
 }
 .menu-item:hover .vis-slett{opacity:1}
 .vis-slett:hover{color:var(--err)}
@@ -628,11 +637,11 @@ body.resizing iframe{pointer-events:none}
 .pane-head{
   display:flex;align-items:center;gap:8px;height:30px;flex:0 0 30px;padding:0 10px;
   border-bottom:1px solid var(--line);
-  font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--fg-3);font-weight:600;
+  font-size:11px;text-transform:uppercase;letter-spacing:var(--spor);color:var(--fg-3);font-weight:600;
 }
 .pane-head .count{
   font-family:var(--mono);font-size:10px;color:var(--fg-3);background:var(--raised);
-  padding:1px 5px;border-radius:2px;letter-spacing:0;text-transform:none;
+  padding:1px 5px;border-radius:var(--r-sm);letter-spacing:0;text-transform:none;
 }
 .pane-body{flex:1;overflow:auto;min-height:0}
 
@@ -676,7 +685,7 @@ body.resizing iframe{pointer-events:none}
 /* A device carrying a note says so - the note itself is one hover away. */
 .dev-note{
   margin-left:6px;font-size:9px;font-family:var(--mono);color:var(--accent);
-  border:1px solid var(--accent-dim);border-radius:2px;padding:0 4px;
+  border:1px solid var(--accent-dim);border-radius:var(--r-sm);padding:0 4px;
   vertical-align:1px;cursor:help;
 }
 .note-field{
@@ -707,11 +716,11 @@ body.resizing iframe{pointer-events:none}
   position:sticky;top:0;z-index:2;background:var(--panel);
 }
 .vgroup-head:hover{background:var(--hover)}
-.vgroup-bar{flex:0 0 3px;align-self:stretch;background:var(--vc,var(--line-2));border-radius:0 2px 2px 0}
+.vgroup-bar{flex:0 0 3px;align-self:stretch;background:var(--vc,var(--line-2));border-radius:0 var(--r-sm) var(--r-sm) 0}
 .vgroup-name{flex:1 1 auto;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .vgroup-n{
   flex:0 0 auto;font-family:var(--mono);font-size:10px;font-weight:400;
-  color:var(--fg-2);background:var(--raised);border-radius:2px;padding:0 5px;line-height:15px;
+  color:var(--fg-2);background:var(--raised);border-radius:var(--r-sm);padding:0 5px;line-height:15px;
 }
 /* Sjevronen snur seg, den byttes ikke ut. */
 .vgroup-chev{
@@ -749,8 +758,8 @@ body.resizing iframe{pointer-events:none}
 /* Counts of what is wrong inside a device, shown on the device itself.
    Deliberately quiet: a number in a tinted chip, no icon, nothing round. */
 .dev-flag{
-  flex:0 0 auto;font-style:normal;font-size:9.5px;font-family:var(--mono);
-  padding:0 4px;border-radius:2px;line-height:15px;
+  flex:0 0 auto;font-style:normal;font-size:9px;font-family:var(--mono);
+  padding:0 4px;border-radius:var(--r-sm);line-height:15px;
 }
 /* Opaque, not a tint: on the selected row the tinted version sat on the blue
    selection fill and dropped to 4.29:1. A chip that means the same thing
@@ -790,7 +799,7 @@ body.resizing iframe{pointer-events:none}
    eye lands on what is wrong instead of on the whole block. */
 .warn-row{
   display:flex;align-items:baseline;gap:7px;width:100%;text-align:left;
-  padding:2px 4px;border-radius:var(--radius);font-size:10.5px;font-family:var(--mono);
+  padding:2px 4px;border-radius:var(--radius);font-size:10px;font-family:var(--mono);
 }
 .warn-row:hover{background:rgba(255,255,255,.06)}
 .wr-id{flex:0 0 auto;color:var(--fg-2);min-width:46px}
@@ -825,13 +834,13 @@ body.resizing iframe{pointer-events:none}
 /* The part of every point name that is the same on every row, shown once so
    that trimming it from the table hides nothing. */
 .ctx-prefix{
-  font-family:var(--mono);font-size:10.5px;color:var(--fg-3);flex:0 1 auto;
+  font-family:var(--mono);font-size:10px;color:var(--fg-3);flex:0 1 auto;
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:help;
   padding:1px 6px;border:1px dashed var(--line-2);border-radius:var(--radius);
 }
 @media (max-width:1250px){ .ctx-prefix{display:none} }
 .ctx-ident{
-  font-family:var(--mono);font-size:10.5px;color:var(--fg-3);flex:0 1 auto;
+  font-family:var(--mono);font-size:10px;color:var(--fg-3);flex:0 1 auto;
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:help;
   padding-left:9px;border-left:1px solid var(--line-2);
 }
@@ -881,7 +890,7 @@ table{width:100%;border-collapse:collapse;font-size:12px;table-layout:fixed}
 thead th{
   position:sticky;top:0;z-index:2;background:var(--panel);
   text-align:left;padding:5px 8px;font-size:10px;font-weight:600;
-  text-transform:uppercase;letter-spacing:.05em;color:var(--fg-3);
+  text-transform:uppercase;letter-spacing:var(--spor);color:var(--fg-3);
   border-bottom:1px solid var(--line);cursor:pointer;user-select:none;white-space:nowrap;
 }
 thead th:hover{color:var(--fg-2)}
@@ -890,7 +899,7 @@ thead th:hover{color:var(--fg-2)}
    state indicator, so it gets the accent rather than a dimmer grey. */
 thead th .arr{font-size:9px;color:var(--accent);margin-left:3px}
 .arr-nr{
-  font-size:8px;font-weight:700;vertical-align:super;margin-left:1px;
+  font-size:9px;font-weight:700;vertical-align:super;margin-left:1px;
   color:var(--accent);
 }
 tbody tr{height:var(--row);border-bottom:1px solid #151a20;cursor:pointer}
@@ -995,7 +1004,7 @@ tbody tr.tvang td.c-name,
 tbody tr.over:not(.alarm) td.c-act{position:relative}
 tbody tr.over:not(.alarm) td.c-act::before{
   content:'';position:absolute;left:0;top:2px;bottom:2px;width:3px;
-  border-radius:0 2px 2px 0;background:var(--warn);opacity:.85;
+  border-radius:0 var(--r-sm) var(--r-sm) 0;background:var(--warn);opacity:.85;
 }
 
 /* En verdi som har gaatt fra det du tok snapshot av.
@@ -1048,7 +1057,7 @@ tbody tr.drift td.c-val{animation:drift-ut 900ms ease-out}
 tbody tr.alarm td.c-act{position:relative}
 tbody tr.alarm td.c-act::before{
   content:'';position:absolute;left:0;top:2px;bottom:2px;width:3px;
-  border-radius:0 2px 2px 0;background:var(--err);
+  border-radius:0 var(--r-sm) var(--r-sm) 0;background:var(--err);
 }
 /* Sammendragskortet er ETT element, og det slaar tre ganger naar tallet har
    endret seg - ikke for alltid. */
@@ -1099,7 +1108,7 @@ td.c-act{text-align:center}
 /* Author display rules beat the UA stylesheet's [hidden]{display:none}. */
 .selbar[hidden]{display:none}
 .selbar-count{font-family:var(--mono);font-size:11px;font-weight:600;color:var(--on-accent)}
-.selbar-hint{font-size:10.5px;color:var(--fg-3)}
+.selbar-hint{font-size:10px;color:var(--fg-3)}
 .selbar .btn{padding:2px 8px;font-size:11px}
 /* Same trap as .selbar itself: any author display rule would beat the UA
    stylesheet's [hidden]{display:none}, so say it explicitly for the release
@@ -1200,7 +1209,7 @@ tr.alarm.over td.c-name{color:var(--err)}
 .pin:hover{color:var(--accent)}
 .pin.on{color:var(--accent)}
 .type-tag{
-  font-family:var(--mono);font-size:9px;padding:1px 4px;border-radius:2px;
+  font-family:var(--mono);font-size:9px;padding:1px 4px;border-radius:var(--r-sm);
   background:var(--raised);color:var(--fg-3);border:1px solid var(--line);
 }
 
@@ -1208,7 +1217,7 @@ tr.alarm.over td.c-name{color:var(--err)}
 .sect{border-bottom:1px solid var(--line)}
 .sect-head{
   display:flex;align-items:center;gap:8px;padding:7px 10px;
-  font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--fg-3);font-weight:600;
+  font-size:11px;text-transform:uppercase;letter-spacing:var(--spor);color:var(--fg-3);font-weight:600;
 }
 .sect-body{padding:0 10px 10px}
 .kv{
@@ -1245,7 +1254,7 @@ tr.alarm.over td.c-name{color:var(--err)}
 .tl-tab tr:nth-child(even){background:var(--raised)}
 .tl-tab td{padding:2px 6px;white-space:nowrap}
 .tl-tab th{position:sticky;top:0;background:var(--panel);padding:3px 6px;text-align:left;
-  font-weight:600;font-size:9px;letter-spacing:.04em;text-transform:uppercase;
+  font-weight:600;font-size:9px;letter-spacing:var(--spor);text-transform:uppercase;
   color:var(--fg-3);border-bottom:1px solid var(--line)}
 .tl-tab th.tl-v{text-align:right}
 .tl-t{color:var(--fg-3)}
@@ -1261,7 +1270,7 @@ tr.alarm.over td.c-name{color:var(--err)}
 /* Kept, but quiet: 2x10 px of vendor tint is a useful glance and costs almost
    no salience next to a full-height state rail. */
 .vendor i{
-  width:2px;height:10px;border-radius:1px;flex:0 0 2px;
+  width:2px;height:10px;border-radius:var(--r-pill);flex:0 0 2px;
   background:var(--vc,var(--accent));opacity:.55;
 }
 .vendor span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -1282,7 +1291,7 @@ tr.alarm.over td.c-name{color:var(--err)}
   font-family:var(--mono);font-size:26px;font-weight:600;color:var(--live);
   padding:2px 10px 0;letter-spacing:-.02em;
 }
-.insp-val small{font-size:14px;color:var(--fg-3);margin-left:4px;font-weight:400}
+.insp-val small{font-size:13px;color:var(--fg-3);margin-left:4px;font-weight:400}
 
 /* Rullende sifre.
 
@@ -1335,14 +1344,14 @@ tr.alarm.over td.c-name{color:var(--err)}
 .watch-ip{font-family:var(--mono);font-size:9px;color:var(--fg-3);flex:0 0 auto}
 .watch-val{font-family:var(--mono);font-weight:600;color:var(--live);text-align:right;margin-left:auto}
 .spark{flex:1 1 auto;min-width:0;height:18px}
-.x{color:var(--fg-3);font-size:14px;line-height:1;padding:0 2px}
+.x{color:var(--fg-3);font-size:13px;line-height:1;padding:0 2px}
 .x:hover{color:var(--err)}
 
 /* Progress + cancel while a controller loads */
 .loadbox{padding:22px 18px;max-width:420px;margin:0 auto}
 .loadbox-top{display:flex;align-items:center;gap:9px;font-size:12px;color:var(--fg-2)}
 .loadbox-top .btn{margin-left:auto;padding:2px 9px;font-size:11px}
-.prog{height:4px;background:var(--raised);border-radius:2px;overflow:hidden;margin-top:12px}
+.prog{height:4px;background:var(--raised);border-radius:var(--r-sm);overflow:hidden;margin-top:12px}
 /* The same two passes as the device card, in the same two colours. The box in
    the middle of the screen and the card in the list are reporting on one job,
    and until now they said it in different languages - one bar here, two there.
@@ -1354,7 +1363,7 @@ tr.alarm.over td.c-name{color:var(--err)}
   position:absolute;left:0;top:0;height:100%;
   background:var(--live);transition:width .2s ease;
 }
-.loadbox-meta{font-family:var(--mono);font-size:10.5px;color:var(--fg-3);margin-top:6px}
+.loadbox-meta{font-family:var(--mono);font-size:10px;color:var(--fg-3);margin-top:6px}
 /* What the device has already told us, shown while the rest is still being
    read. Facts, not filler — it is the same information you would otherwise
    go looking for once the table finally appeared. */
@@ -1366,7 +1375,7 @@ tr.alarm.over td.c-name{color:var(--err)}
 .load-ident b{color:var(--fg-3);font-weight:500;margin-right:5px}
 .load-types{display:flex;flex-wrap:wrap;align-items:center;gap:5px 9px;margin-top:11px}
 .load-types-sum{
-  font-family:var(--mono);font-size:10.5px;color:var(--fg-3);
+  font-family:var(--mono);font-size:10px;color:var(--fg-3);
   width:100%;margin-bottom:1px;
 }
 .load-types .lt{display:inline-flex;align-items:center;gap:5px;font-size:11px;color:var(--fg-2)}
@@ -1403,13 +1412,13 @@ tbody tr.cursor{box-shadow:inset 0 0 0 1px var(--accent)}
 /* Comfortable / compact row density */
 body.dense{--row:22px}
 body.dense tbody td{padding:0 6px}
-body.dense table{font-size:11.5px}
+body.dense table{font-size:11px}
 
 /* Device summary shown in the inspector while no point is selected */
 .sum-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:6px;padding:0 10px 10px}
 .sum-card{background:var(--raised);border:1px solid var(--line);border-radius:var(--radius);padding:7px 8px}
 .sum-card b{display:block;font-family:var(--mono);font-size:16px;font-weight:600;color:var(--fg)}
-.sum-card span{font-size:10px;color:var(--fg-3);text-transform:uppercase;letter-spacing:.04em}
+.sum-card span{font-size:10px;color:var(--fg-3);text-transform:uppercase;letter-spacing:var(--spor)}
 .sum-card.alarm b{color:var(--err)}
 .sum-card.over b{color:var(--warn)}
 
@@ -1436,8 +1445,8 @@ body.dense table{font-size:11.5px}
 #sbRescan.stale b{color:var(--warn)}
 /* How reliably a device answers, shown only when it has missed something. */
 .dev-seen{
-  flex:0 0 auto;font-style:normal;font-size:9.5px;font-family:var(--mono);
-  padding:0 4px;border-radius:2px;line-height:15px;
+  flex:0 0 auto;font-style:normal;font-size:9px;font-family:var(--mono);
+  padding:0 4px;border-radius:var(--r-sm);line-height:15px;
   color:var(--fg-3);background:var(--raised);
 }
 .dev-seen.borte{color:var(--warn);background:rgba(255,201,0,.14)}
@@ -1458,13 +1467,13 @@ body.dense table{font-size:11.5px}
 .gs-overlay[hidden]{display:none}
 .gs-modal{
   width:min(860px,calc(100vw - 40px));max-height:76vh;display:flex;flex-direction:column;
-  background:var(--panel);border:1px solid var(--line-2);border-radius:8px;
+  background:var(--panel);border:1px solid var(--line-2);border-radius:var(--r-lg);
   box-shadow:0 18px 60px rgba(0,0,0,.6);overflow:hidden;
 }
 .gs-head{display:flex;align-items:center;gap:8px;padding:10px 12px;border-bottom:1px solid var(--line)}
 .gs-input{
   flex:1;background:transparent;border:none;outline:none;color:var(--fg);
-  font-family:var(--mono);font-size:15px;
+  font-family:var(--mono);font-size:16px;
 }
 .gs-input::placeholder{color:var(--fg-3)}
 /* The close button was a 12x22 hit target - under the 24px WCAG minimum and
@@ -1473,13 +1482,13 @@ body.dense table{font-size:11.5px}
 .gs-close{
   display:inline-flex;align-items:center;gap:5px;
   min-width:34px;min-height:34px;padding:0 10px;
-  border:1px solid var(--line-2);border-radius:6px;background:var(--raised);
+  border:1px solid var(--line-2);border-radius:var(--r-lg);background:var(--raised);
   color:var(--fg-2);font-size:13px;line-height:1;cursor:pointer;
 }
 .gs-close:hover{color:var(--fg);background:var(--line);border-color:var(--fg-3)}
 .gs-close:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .gs-close .lbl{font-size:11px}
-.gs-meta{padding:6px 12px;font-size:10.5px;color:var(--fg-3);border-bottom:1px solid var(--line)}
+.gs-meta{padding:6px 12px;font-size:10px;color:var(--fg-3);border-bottom:1px solid var(--line)}
 
 /* ---------- background picture ---------- */
 #bgLag,#bgScrim{position:fixed;inset:0;z-index:0;pointer-events:none}
@@ -2061,7 +2070,7 @@ body.uten-bevegelse #himmel{display:none}
 #flylag{position:fixed;inset:0;z-index:9997;pointer-events:none;overflow:hidden}
 #flylag[hidden]{display:none}
 #flylag .dev{
-  position:fixed;margin:0;border-radius:var(--radius,4px);
+  position:fixed;margin:0;border-radius:var(--radius);
   background:var(--panel);border:1px solid var(--line-2);
   box-shadow:0 10px 24px rgba(0,0,0,.45);
   animation:fly-inn var(--varighet,640ms) linear both;
@@ -2119,7 +2128,7 @@ tbody tr{position:relative}
 #radVerktoy.paa{opacity:1;transform:none;pointer-events:auto}
 #radVerktoy [hidden]{display:none}
 .rv-knapp{
-  width:22px;height:22px;padding:0;border:0;border-radius:4px;
+  width:22px;height:22px;padding:0;border:0;border-radius:var(--radius);
   background:var(--raised);color:var(--fg-2);cursor:pointer;
   font-size:11px;line-height:1;
   display:inline-flex;align-items:center;justify-content:center;
@@ -2150,8 +2159,8 @@ tbody tr{position:relative}
 .filter-chips[hidden]{display:none}
 .fchip{
   display:inline-flex;align-items:center;gap:5px;
-  padding:2px 4px 2px 8px;border-radius:999px;
-  font-size:10.5px;line-height:1.7;
+  padding:2px 4px 2px 8px;border-radius:var(--r-pill);
+  font-size:10px;line-height:1.7;
   background:color-mix(in srgb,var(--accent) 15%,transparent);
   border:1px solid color-mix(in srgb,var(--accent) 34%,transparent);
   color:var(--fg);
@@ -2172,7 +2181,7 @@ tbody tr{position:relative}
 .fchip-x:hover{background:color-mix(in srgb,var(--accent) 40%,transparent);color:var(--fg)}
 .fchip-alle{
   background:transparent;border:1px solid var(--line-2);color:var(--fg-3);
-  padding:2px 9px;cursor:pointer;border-radius:999px;font-size:10.5px;
+  padding:2px 9px;cursor:pointer;border-radius:var(--r-pill);font-size:10px;
   transition:color 120ms ease,border-color 120ms ease;
 }
 .fchip-alle:hover{color:var(--fg);border-color:var(--fg-3)}
@@ -2346,7 +2355,7 @@ body.skanner .pane-devices .pane-head::after{
   height:var(--row,26px);border-bottom:1px solid var(--line-soft,rgba(255,255,255,.04));
 }
 .skjelett-felt{
-  height:8px;border-radius:3px;
+  height:8px;border-radius:var(--r-sm);
   background:linear-gradient(90deg,
     var(--sunken,rgba(255,255,255,.05)) 0%,
     color-mix(in srgb,var(--accent) 16%,var(--sunken,rgba(255,255,255,.05))) 45%,
@@ -2378,7 +2387,7 @@ body.skanner .pane-devices .pane-head::after{
    Bare ved tastatur. Bruker du musa vet du selv hvor du klikket, og da er
    streken bare enda et element som beveger seg. */
 #radmarkor{
-  position:absolute;left:0;width:3px;border-radius:0 3px 3px 0;
+  position:absolute;left:0;width:3px;border-radius:0 var(--r-sm) var(--r-sm) 0;
   background:var(--accent);pointer-events:none;z-index:4;
   opacity:0;transform:scaleY(.4);
   transition:top 240ms var(--mot-kurve), height 240ms var(--mot-kurve),
@@ -2696,7 +2705,7 @@ body:not(.frakoblet) .pane-points,body:not(.frakoblet) .pane-inspect{
 .fest-fly{
   position:fixed;font-family:var(--mono);font-size:11px;font-weight:600;
   color:var(--accent);background:var(--panel);
-  border:1px solid var(--accent-edge,var(--accent));border-radius:5px;
+  border:1px solid var(--accent-edge,var(--accent));border-radius:var(--radius);
   padding:2px 7px;white-space:nowrap;
   animation:fest-flyr var(--flytid,560ms) cubic-bezier(.4,0,.2,1) forwards;
 }
@@ -2870,11 +2879,11 @@ tbody tr.picked > td:first-child::before{
 /* ---------- tagging ---------- */
 .tg-gruppe{margin-bottom:18px}
 .tg-rad{display:grid;grid-template-columns:170px 1fr;align-items:center;gap:8px 12px;padding:5px 0}
-.tg-rad > label{font-size:11.5px;color:var(--fg-2)}
+.tg-rad > label{font-size:11px;color:var(--fg-2)}
 .tg-rad > label small{display:block;font-size:10px;color:var(--fg-3);margin-top:1px;line-height:1.4}
 .tg-rad input[type=text],.tg-rad select{
   padding:6px 8px;font-size:12px;background:var(--sunken);
-  border:1px solid var(--line-2);border-radius:var(--radius,4px);color:var(--fg);
+  border:1px solid var(--line-2);border-radius:var(--radius);color:var(--fg);
   font-family:var(--mono);min-height:30px;
 }
 .tg-rad input[type=text]:focus-visible,.tg-rad select:focus-visible{
@@ -2883,17 +2892,17 @@ tbody tr.picked > td:first-child::before{
 .tg-rad.avkryss{grid-template-columns:auto 1fr}
 .tg-rad.avkryss input{accent-color:var(--accent);width:16px;height:16px;margin:0}
 .tg-advarsel{
-  font-size:10.5px;color:var(--warn);background:color-mix(in srgb,var(--warn) 10%,transparent);
+  font-size:10px;color:var(--warn);background:color-mix(in srgb,var(--warn) 10%,transparent);
   border:1px solid color-mix(in srgb,var(--warn) 28%,transparent);
-  border-radius:var(--radius,4px);padding:7px 9px;margin-top:6px;
+  border-radius:var(--radius);padding:7px 9px;margin-top:6px;
 }
 .tg-anlegg{
-  font-size:10.5px;color:var(--fg-3);font-family:var(--mono);
+  font-size:10px;color:var(--fg-3);font-family:var(--mono);
   padding-bottom:10px;margin-bottom:12px;border-bottom:1px solid var(--line);
 }
 .tg-forhaandsvis{
   font-family:var(--mono);font-size:12px;color:var(--fg);
-  background:var(--sunken);border:1px solid var(--line-2);border-radius:var(--radius,4px);
+  background:var(--sunken);border:1px solid var(--line-2);border-radius:var(--radius);
   padding:9px 11px;margin-top:8px;word-break:break-all;
 }
 .tg-foot{display:flex;gap:8px;align-items:center;margin-top:14px}
@@ -2902,15 +2911,15 @@ tbody tr.picked > td:first-child::before{
 /* A section label, so seven switches read as three short lists instead of one
    long one. */
 .menu-gruppe{
-  padding:5px 10px 3px;font-size:9.5px;text-transform:uppercase;letter-spacing:.07em;
+  padding:5px 10px 3px;font-size:9px;text-transform:uppercase;letter-spacing:var(--spor);
   color:var(--fg-3);font-weight:600;
 }
-.menu-hint{margin-left:auto;font-size:9.5px;color:var(--fg-3);font-family:var(--mono)}
+.menu-hint{margin-left:auto;font-size:9px;color:var(--fg-3);font-family:var(--mono)}
 .menu-item.menu-tung{font-weight:500}
 
 .sett-faner{display:flex;gap:2px;padding:0 12px;border-bottom:1px solid var(--line)}
 .sett-fane{
-  padding:8px 12px;font-size:11.5px;color:var(--fg-3);border-bottom:2px solid transparent;
+  padding:8px 12px;font-size:11px;color:var(--fg-3);border-bottom:2px solid transparent;
   margin-bottom:-1px;cursor:pointer;
 }
 .sett-fane:hover{color:var(--fg-2)}
@@ -2920,19 +2929,19 @@ tbody tr.picked > td:first-child::before{
 .sett-gruppe{margin-bottom:16px}
 .sett-rad{
   display:grid;grid-template-columns:1fr auto;align-items:center;gap:2px 12px;
-  width:100%;text-align:left;padding:8px 10px;border-radius:var(--radius,4px);
+  width:100%;text-align:left;padding:8px 10px;border-radius:var(--radius);
   color:var(--fg);font-size:12px;cursor:pointer;
 }
 .sett-rad:hover{background:var(--hover)}
 .sett-rad:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
 .sett-rad small{
-  grid-column:1;grid-row:2;font-size:10.5px;color:var(--fg-3);line-height:1.4;
+  grid-column:1;grid-row:2;font-size:10px;color:var(--fg-3);line-height:1.4;
 }
 /* The state word sits in its own column and turns into the accent when on, so
    "på" reads as on without hunting for it. */
 .sett-rad .menu-state{
   grid-column:2;grid-row:1/3;align-self:center;margin:0;
-  padding:3px 9px;border-radius:999px;border:1px solid var(--line-2);
+  padding:3px 9px;border-radius:var(--r-pill);border:1px solid var(--line-2);
   background:var(--raised);color:var(--fg-3);font-size:10px;min-width:52px;text-align:center;
 }
 .sett-rad.on .menu-state{
@@ -2948,7 +2957,7 @@ tbody tr.picked > td:first-child::before{
 .mn-navn{flex:1;min-width:0}
 .mn-tittel{font-size:12px;color:var(--fg);font-weight:500}
 .mn-tittel.uten{color:var(--fg-3);font-weight:400;font-style:italic}
-.mn-omrade{font-family:var(--mono);font-size:10.5px;color:var(--fg-2);margin-top:1px}
+.mn-omrade{font-family:var(--mono);font-size:10px;color:var(--fg-2);margin-top:1px}
 .mn-under{font-size:10px;color:var(--fg-3);margin-top:2px}
 .mn-tall{
   font-family:var(--mono);font-size:11px;color:var(--fg-2);text-align:right;
@@ -2957,30 +2966,30 @@ tbody tr.picked > td:first-child::before{
 .mn-knapper{display:flex;gap:5px;flex:none}
 .mn-knapper .btn{font-size:10px;padding:3px 8px}
 .mn-vendor{
-  display:inline-block;margin-right:5px;padding:1px 5px;border-radius:3px;
-  background:var(--raised);color:var(--fg-3);font-size:9.5px;
+  display:inline-block;margin-right:5px;padding:1px 5px;border-radius:var(--r-sm);
+  background:var(--raised);color:var(--fg-3);font-size:9px;
 }
 
 /* ---------- appearance editor ---------- */
 .tema-gruppe{margin-bottom:16px}
 .tema-tittel{
-  font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--fg-3);
+  font-size:10px;text-transform:uppercase;letter-spacing:var(--spor);color:var(--fg-3);
   margin-bottom:7px;font-weight:600;
 }
 .tema-rad{display:flex;align-items:center;gap:10px;padding:3px 0}
 .tema-rad.endret .tema-navn{color:var(--fg);font-weight:500}
-.tema-navn{flex:1;font-size:11.5px;color:var(--fg-2)}
+.tema-navn{flex:1;font-size:11px;color:var(--fg-2)}
 .tema-farge{
-  width:34px;height:26px;padding:0;border:1px solid var(--line-2);border-radius:5px;
+  width:34px;height:26px;padding:0;border:1px solid var(--line-2);border-radius:var(--radius);
   background:none;cursor:pointer;flex:none;
 }
 .tema-hex{
   width:88px;padding:4px 6px;font-family:var(--mono);font-size:11px;text-align:center;
-  background:var(--sunken);border:1px solid var(--line-2);border-radius:5px;color:var(--fg);
+  background:var(--sunken);border:1px solid var(--line-2);border-radius:var(--radius);color:var(--fg);
 }
 .tema-hex:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
 .tema-null{
-  width:26px;height:26px;flex:none;border:1px solid var(--line-2);border-radius:5px;
+  width:26px;height:26px;flex:none;border:1px solid var(--line-2);border-radius:var(--radius);
   background:var(--raised);color:var(--fg-3);cursor:pointer;font-size:12px;line-height:1;
 }
 .tema-null:hover:not(:disabled){color:var(--fg);border-color:var(--fg-3)}
@@ -2991,26 +3000,26 @@ tbody tr.picked > td:first-child::before{
   width:52px;text-align:right;font-family:var(--mono);font-size:11px;color:var(--fg-3);flex:none;
 }
 .tema-rad input[type=range]{flex:1;accent-color:var(--accent);max-width:260px}
-.tema-navn small{display:block;font-size:9.5px;color:var(--fg-3);font-weight:400}
+.tema-navn small{display:block;font-size:9px;color:var(--fg-3);font-weight:400}
 .tema-tekst{
-  flex:1;max-width:260px;padding:5px 8px;font-size:11.5px;
-  background:var(--sunken);border:1px solid var(--line-2);border-radius:5px;color:var(--fg);
+  flex:1;max-width:260px;padding:5px 8px;font-size:11px;
+  background:var(--sunken);border:1px solid var(--line-2);border-radius:var(--radius);color:var(--fg);
 }
 .tema-tekst:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
-.bilde-rad{border-radius:var(--radius,4px);transition:background .12s,box-shadow .12s}
+.bilde-rad{border-radius:var(--radius);transition:background .12s,box-shadow .12s}
 .bilde-rad:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .bilde-rad.slipp-her{
   background:var(--accent-dim);box-shadow:inset 0 0 0 2px var(--accent);
 }
-.tema-hjelp{font-size:10.5px;color:var(--fg-3);padding:2px 0 6px}
+.tema-hjelp{font-size:10px;color:var(--fg-3);padding:2px 0 6px}
 .tema-advarsel{
-  font-size:10.5px;color:var(--warn);background:rgba(255,201,0,.08);
+  font-size:10px;color:var(--warn);background:rgba(255,201,0,.08);
   border:1px solid rgba(255,201,0,.25);border-radius:var(--radius);
   padding:6px 9px;margin:4px 0 8px;line-height:1.45;
 }
 .bilde-rad{gap:10px}
 .bilde-visning{
-  width:46px;height:30px;flex:none;border:1px solid var(--line-2);border-radius:5px;
+  width:46px;height:30px;flex:none;border:1px solid var(--line-2);border-radius:var(--radius);
   overflow:hidden;background:var(--sunken);display:flex;align-items:center;
   justify-content:center;
 }
@@ -3033,7 +3042,7 @@ body.drar,body.drar .wk-blk.redigerbar{cursor:grabbing;user-select:none}
 .wk-grep.bunn{bottom:-2px}
 .wk-blk.redigerbar:hover .wk-grep::after{
   content:'';position:absolute;left:50%;transform:translateX(-50%);
-  width:26px;height:2px;border-radius:2px;background:rgba(255,255,255,.55);
+  width:26px;height:2px;border-radius:var(--r-sm);background:rgba(255,255,255,.55);
 }
 .wk-grep.topp::after{top:3px}
 .wk-grep.bunn::after{bottom:3px}
@@ -3041,7 +3050,7 @@ body.drar,body.drar .wk-blk.redigerbar{cursor:grabbing;user-select:none}
   display:flex;align-items:center;justify-content:space-between;gap:10px;
   margin-top:12px;padding-top:10px;border-top:1px solid var(--line);flex-wrap:wrap;
 }
-.wk-hint{font-size:10.5px;color:var(--fg-3);max-width:62ch;line-height:1.5}
+.wk-hint{font-size:10px;color:var(--fg-3);max-width:62ch;line-height:1.5}
 .wk-foot .btn{margin-left:6px}
 .btn:disabled{opacity:.45;cursor:not-allowed}
 .gs-results{overflow:auto;min-height:0}
@@ -3051,7 +3060,7 @@ body.drar,body.drar .wk-blk.redigerbar{cursor:grabbing;user-select:none}
 .gs-chips{display:flex;flex-wrap:wrap;gap:6px;padding:0 14px 2px}
 .gs-chips:empty{display:none}
 .gs-chip{
-  border:1px solid var(--line-2);border-radius:11px;padding:2px 10px;
+  border:1px solid var(--line-2);border-radius:var(--r-pill);padding:2px 10px;
   font-size:11px;color:var(--fg-2);background:var(--raised);white-space:nowrap;
 }
 .gs-chip:hover{background:var(--hover)}
@@ -3065,12 +3074,12 @@ body.drar,body.drar .wk-blk.redigerbar{cursor:grabbing;user-select:none}
    otherwise — this is the path for people who do not use the tool daily. */
 .cmd-list{max-height:52vh;overflow-y:auto;padding:4px 6px 6px}
 .cmd-group{
-  font-size:9.5px;text-transform:uppercase;letter-spacing:.08em;color:var(--fg-3);
+  font-size:9px;text-transform:uppercase;letter-spacing:var(--spor);color:var(--fg-3);
   padding:9px 8px 4px;
 }
 .cmd-item{
   display:flex;align-items:center;gap:10px;width:100%;text-align:left;
-  padding:7px 9px;border-radius:var(--radius);font-size:12.5px;color:var(--fg);
+  padding:7px 9px;border-radius:var(--radius);font-size:var(--t-4);color:var(--fg);
 }
 .cmd-item[aria-selected="true"]{background:var(--accent-dim);color:var(--on-accent)}
 .cmd-item:hover{background:var(--hover)}
@@ -3081,10 +3090,10 @@ body.drar,body.drar .wk-blk.redigerbar{cursor:grabbing;user-select:none}
 .cmd-state{flex:0 0 auto;font-size:10px;color:var(--accent);font-family:var(--mono)}
 .cmd-foot{
   display:flex;gap:16px;padding:8px 14px 12px;border-top:1px solid var(--line);
-  font-size:10.5px;color:var(--fg-3);
+  font-size:10px;color:var(--fg-3);
 }
 .cmd-foot kbd{
-  font-family:var(--mono);font-size:9.5px;background:var(--raised);
+  font-family:var(--mono);font-size:9px;background:var(--raised);
   border:1px solid var(--line-2);border-radius:var(--radius);padding:1px 4px;margin-right:3px;
 }
 .cols-list{padding:6px 10px 2px}
@@ -3100,7 +3109,7 @@ body.drar,body.drar .wk-blk.redigerbar{cursor:grabbing;user-select:none}
 .cols-name{flex:1 1 auto}
 .cols-row input{accent-color:var(--accent)}
 .cols-foot{display:flex;align-items:center;gap:12px;padding:8px 12px 14px;border-top:1px solid var(--line);margin-top:6px}
-.cols-hint{flex:1 1 auto;font-size:10.5px;color:var(--fg-3);line-height:1.5}
+.cols-hint{flex:1 1 auto;font-size:10px;color:var(--fg-3);line-height:1.5}
 .gs-empty{padding:26px;text-align:center;color:var(--fg-3);font-size:12px}
 .gs-row{
   display:grid;grid-template-columns:52px minmax(0,1.1fr) minmax(0,1.4fr) 96px 104px;
@@ -3120,27 +3129,27 @@ body.drar,body.drar .wk-blk.redigerbar{cursor:grabbing;user-select:none}
 }
 .prj-open:hover{background:var(--hover)}
 .prj-name{font-family:var(--mono);font-size:13px;font-weight:600}
-.prj-meta{grid-column:1;font-size:10.5px;color:var(--fg-3)}
+.prj-meta{grid-column:1;font-size:10px;color:var(--fg-3)}
 .prj-date{grid-row:1;grid-column:2;font-family:var(--mono);font-size:10px;color:var(--fg-3)}
 .prj-del{padding:0 12px;color:var(--fg-3)}
 .prj-del:hover{color:var(--err);background:var(--hover)}
 .ede-sec{border-bottom:1px solid var(--line)}
 .ede-h{
   display:flex;align-items:center;gap:8px;padding:7px 12px;
-  font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;
+  font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:var(--spor);
   background:var(--raised);color:var(--fg-2);
 }
 .ede-h span{font-family:var(--mono);font-size:10px;color:var(--fg-3)}
 .ede-h.bad{color:var(--err-fg)} .ede-h.warn{color:var(--warn)} .ede-h.info{color:var(--fg-2)}
 .ede-row{
   display:grid;grid-template-columns:150px minmax(0,1fr) minmax(0,1fr);gap:10px;
-  padding:5px 12px;font-size:11.5px;border-bottom:1px solid var(--line-soft);
+  padding:5px 12px;font-size:11px;border-bottom:1px solid var(--line-soft);
 }
-.ede-row code{font-family:var(--mono);font-size:10.5px;color:var(--fg-3)}
+.ede-row code{font-family:var(--mono);font-size:10px;color:var(--fg-3)}
 .ede-row span{font-family:var(--mono);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .ede-row s{color:var(--fg-3)}
-.ede-row em{color:var(--fg-3);font-style:normal;font-size:10.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.ede-more{padding:6px 12px;font-size:10.5px;color:var(--fg-3)}
+.ede-row em{color:var(--fg-3);font-style:normal;font-size:10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ede-more{padding:6px 12px;font-size:10px;color:var(--fg-3)}
 /* ---------- weekly schedule ---------- */
 /* A flat row of tabs works for six schedules and hides the rest behind the
    edge of the dialog head - on a central with thirty of them there was no way
@@ -3168,7 +3177,7 @@ body.drar,body.drar .wk-blk.redigerbar{cursor:grabbing;user-select:none}
 
 /* Which day, said once, so the fields do not have to repeat it. */
 .wk-dag{
-  flex:none;padding:4px 9px;border-radius:5px;background:var(--accent-dim);
+  flex:none;padding:4px 9px;border-radius:var(--radius);background:var(--accent-dim);
   color:var(--fg);font-weight:600;font-size:11px;letter-spacing:.03em;
 }
 
@@ -3181,7 +3190,7 @@ body.drar,body.drar .wk-blk.redigerbar{cursor:grabbing;user-select:none}
    arrow keys instead. */
 .tid-boks{
   display:inline-flex;align-items:center;gap:1px;
-  background:var(--panel);border:1px solid var(--line-2);border-radius:6px;
+  background:var(--panel);border:1px solid var(--line-2);border-radius:var(--r-lg);
   padding:2px 4px;
 }
 .tid-boks:focus-within{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-dim)}
@@ -3197,7 +3206,7 @@ body.drar,body.drar .wk-blk.redigerbar{cursor:grabbing;user-select:none}
 .sel-boks select{
   appearance:none;-webkit-appearance:none;
   min-width:118px;min-height:30px;padding:4px 26px 4px 26px;
-  background:var(--panel);border:1px solid var(--line-2);border-radius:6px;
+  background:var(--panel);border:1px solid var(--line-2);border-radius:var(--r-lg);
   color:var(--fg);font-size:12px;cursor:pointer;
 }
 .sel-boks select:hover{border-color:var(--fg-3)}
@@ -3224,7 +3233,7 @@ body.drar,body.drar .wk-blk.redigerbar{cursor:grabbing;user-select:none}
 .wk-edit .fare:hover:not(:disabled){border-color:var(--err);color:var(--err)}
 
 @media (max-width:900px){
-  .wk-edit{gap:10px;font-size:10.5px}
+  .wk-edit{gap:10px;font-size:10px}
   .wk-handling{margin-left:0;width:100%;justify-content:flex-end}
 }
 
@@ -3245,10 +3254,10 @@ body.drar,body.drar .wk-blk.redigerbar{cursor:grabbing;user-select:none}
   display:block;width:100%;text-align:left;margin-bottom:3px;white-space:normal;
   line-height:1.35;
 }
-.sch-list .sch-tab .st-sub{display:block;font-size:9.5px;color:var(--fg-3);font-family:var(--mono)}
+.sch-list .sch-tab .st-sub{display:block;font-size:9px;color:var(--fg-3);font-family:var(--mono)}
 .sch-list .sch-tab.sel .st-sub{color:var(--fg-2)}
 .sch-tab{
-  padding:3px 10px;border-radius:var(--radius);font-size:11.5px;color:var(--fg-2);
+  padding:3px 10px;border-radius:var(--radius);font-size:11px;color:var(--fg-2);
   border:1px solid transparent;
 }
 .sch-tab:hover{background:var(--hover)}
@@ -3264,7 +3273,7 @@ body.drar,body.drar .wk-blk.redigerbar{cursor:grabbing;user-select:none}
 .wk-day{
   text-align:center;font-size:11px;color:var(--fg-2);padding-bottom:5px;
 }
-.wk-body{position:relative;background:var(--sunken);border:1px solid var(--line);border-radius:2px;overflow:hidden}
+.wk-body{position:relative;background:var(--sunken);border:1px solid var(--line);border-radius:var(--r-sm);overflow:hidden}
 .wk-blk{
   position:absolute;left:0;right:0;padding:3px 5px;overflow:hidden;
   border-bottom:1px solid rgba(0,0,0,.35);color:#fff;
@@ -3275,7 +3284,7 @@ body.drar,body.drar .wk-blk.redigerbar{cursor:grabbing;user-select:none}
    rather than as something the controller states for this day. */
 .wk-blk.carried{opacity:.55}
 .wk-blk.carried b::after{content:" ·";opacity:.7}
-.wk-empty{padding:8px;font-size:10.5px;color:var(--fg-3);text-align:center}
+.wk-empty{padding:8px;font-size:10px;color:var(--fg-3);text-align:center}
 .wk-note{
   font-size:11px;color:var(--warn);background:rgba(255,201,0,.08);
   border:1px solid rgba(255,201,0,.25);border-radius:var(--radius);padding:7px 10px;margin-bottom:12px;
@@ -3310,15 +3319,15 @@ body.drar,body.drar .wk-blk.redigerbar{cursor:grabbing;user-select:none}
 /* ---------- help popover ---------- */
 .help-pop{
   position:absolute;top:46px;right:12px;z-index:60;width:290px;
-  background:var(--panel);border:1px solid var(--line-2);border-radius:5px;
+  background:var(--panel);border:1px solid var(--line-2);border-radius:var(--radius);
   padding:12px 14px;box-shadow:0 10px 32px rgba(0,0,0,.55);
 }
-.help-title{font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--fg-3);font-weight:600;margin-bottom:6px}
+.help-title{font-size:10px;text-transform:uppercase;letter-spacing:var(--spor);color:var(--fg-3);font-weight:600;margin-bottom:6px}
 .help-list{display:grid;grid-template-columns:82px 1fr;gap:3px 8px;font-size:11px}
 .help-list dt{font-family:var(--mono);color:var(--accent);font-size:10px}
 .help-list dd{color:var(--fg-2)}
 .help-steps{margin:0;padding-left:16px;font-size:11px;color:var(--fg-2);line-height:1.6}
-.help-steps code{font-family:var(--mono);color:var(--fg);background:var(--raised);padding:0 3px;border-radius:2px}
+.help-steps code{font-family:var(--mono);color:var(--fg);background:var(--raised);padding:0 3px;border-radius:var(--r-sm)}
 
 /* ---------- first-run guidance ---------- */
 .guide{padding:22px 16px;color:var(--fg-3);font-size:12px}
