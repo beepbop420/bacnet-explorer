@@ -5846,7 +5846,7 @@ function renderInspector() {
       <button class="cp" data-cp="${esc(p.name || p.objid)}" title="Kopier navn">⧉</button>
     </div>
     <div class="insp-sub">${esc(p.description || '')}</div>
-    <div class="insp-val${p.writable ? ' adjustable' : ''}"${
+    <div class="insp-val${p.writable ? ' adjustable' : ''}" aria-live="off"${
       p.writable ? ' title="Kommanderbart punkt — kan skrives"' : ''
       } data-rull="${kanRulle(shown) ? '1' : ''}">${
       esc(shown)}<small>${esc(p.unit_symbol || '')}</small></div>

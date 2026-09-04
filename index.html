@@ -292,7 +292,7 @@ button{background:none;border:none;cursor:pointer}
 /* ---------- top bar ---------- */
 .topbar{
   display:flex;align-items:center;gap:10px;height:46px;flex:0 0 46px;
-  padding:0 12px;background:var(--merke);
+  padding:0 clamp(8px,1.1vw,16px);background:var(--merke);
   border-bottom:1px solid var(--tb-line);
   /* Without this the scan controls push the right-hand buttons off the
      window on a narrow screen - and a menu anchored to a button that is
@@ -627,6 +627,9 @@ select.field{font-family:var(--sans);cursor:pointer}
    so it is actually grabbable without hunting for a 1px target. */
 .splitter{
   flex:0 0 5px;cursor:col-resize;position:relative;background:var(--line);
+  /* Without this a drag on a trackpad or a touch screen scrolls the
+     page instead of moving the divider. */
+  touch-action:none;
   transition:background .12s;
 }
 .splitter::after{content:"";position:absolute;inset:0 -3px;}
@@ -1944,6 +1947,24 @@ body.uten-bevegelse #himmel{display:none}
   background:linear-gradient(90deg,transparent,
     color-mix(in srgb,var(--ok) 45%,transparent),transparent);
   animation:ferdig-blink 620ms ease-out both;
+}
+
+/* ---------- bevegelsesnett
+   There are 67 keyframes in this file and the rules that turn them off for
+   reduced motion were written one at a time. Covering 67 things by
+   enumeration is a promise that breaks the next time one is added, so this
+   catches whatever the specific rules missed.
+
+   It shortens rather than removes. Several animations carry `both`, which
+   means they hold the final frame - killing them outright would leave the
+   element stuck at frame zero, sometimes invisible. One millisecond runs the
+   animation, lands on the end state, and shows nobody the motion. */
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{
+    animation-duration:1ms !important;
+    animation-iteration-count:1 !important;
+    transition-duration:1ms !important;
+  }
 }
 
 /* ---------- motion, the parts with something to say ----------
