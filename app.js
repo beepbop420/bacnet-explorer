@@ -9053,6 +9053,36 @@ const ORDBOK = {
   'Skrivelogg': 'Write log',
   'Visning': 'Display',
   'pa': 'on',
+
+  /* --- found by rendering the device screens with data --- */
+  'Beskrivelse': 'Description',
+  'Objekt': 'Object',
+  'Objekt-ID': 'Object ID',
+  'Kolonner': 'Columns',
+  'Lagrede anlegg': 'Saved sites',
+  'Rapport': 'Report',
+  'Skriv minst to tegn': 'Type at least two characters',
+  'Ta snapshot': 'Take a snapshot',
+  'Tilbakestill': 'Reset',
+  'Ukeprogram…': 'Schedule…',
+  'Ukeprogram...': 'Schedule...',
+  'leser anlegget:': 'reading the site:',
+  'leser…': 'reading…',
+  '⏏ Frigi': '⏏ Release',
+  '☆ Fest': '☆ Pin',
+  'Frigi': 'Release',
+  'Fest': 'Pin',
+  'Prioritet': 'Priority',
+  'Enheter lest': 'Devices read',
+  'Trend': 'Trend',
+  'Status': 'Status',
+  'Type': 'Type',
+  'ingen': 'none',
+  'Ingen': 'None',
+  'Les punktene pa nytt': 'Read the points again',
+  'Start/stopp live-oppdatering': 'Start/stop live updating',
+  'leverandorer': 'vendors',
+  'leverandorer / IP-omrader': 'vendors / IP ranges',
   /* The command palette carries ASCII variants of the same labels - three
      dots rather than an ellipsis, and no diacritics - so they are their own
      entries rather than being folded into the ones above. */
@@ -9106,6 +9136,95 @@ const MONSTER = [
    /^(\d+) points filtered out$/, (m) => `${m[1]} punkter er filtrert bort`],
 ];
 
+
+/* Sentences the tool builds around a value never match a dictionary entry:
+   "0 treff · søker i 0 av 2 enheter" is one text node, and the numbers in it
+   change. Rather than writing a pattern for every shape, the words inside
+   such a node are swapped one at a time.
+
+   This is only safe because it runs nowhere near plant data - every field a
+   controller writes into is excluded before the walk reaches it. Inside the
+   tool's own sentences the vocabulary is small and fixed, so a whole-word
+   swap cannot turn one term into another.
+
+   Order matters: longer phrases first, so "søker i" is taken before "søker",
+   and each side is applied to text the other side has not touched. */
+const FRASER = [
+  ['åpne en enhet for å ta den med', 'open a device to include it'],
+  ['er ikke lest ennå', 'has not been read yet'],
+  ['punkter overstyrt eller ute av drift', 'points overridden or out of service'],
+  ['punkter i alarm eller med feil', 'points in alarm or with a fault'],
+  ['enheter med overstyringer', 'devices with overrides'],
+  ['punkter er filtrert bort', 'points filtered out'],
+  ['punkter frigitt på prioritet', 'points released at priority'],
+  ['rader kopiert', 'rows copied'],
+  ['enheter med feil', 'devices with a fault'],
+  ['punkter fra hurtiglager', 'points from the cache'],
+  ['enheter lest', 'devices read'],
+  ['punkter frigitt', 'points released'],
+  ['punkt(er) festet', 'point(s) pinned'],
+  ['enhet(er)', 'device(s)'],
+  ['ulike verdier', 'differing values'],
+  ['verdier lagret', 'values stored'],
+  ['med feil', 'with a fault'],
+  ['søker i', 'searching in'],
+  ['bare i A', 'only in A'],
+  ['bare i B', 'only in B'],
+  ['døgn siden', 'days ago'],
+  ['min siden', 'min ago'],
+  ['t siden', 'h ago'],
+  ['leverandorer', 'vendors'],
+  ['leverandører', 'vendors'],
+  ['leverandør', 'vendor'],
+  ['skrivbare', 'writable'],
+  ['overstyrte', 'overridden'],
+  ['områder', 'ranges'],
+  ['område', 'range'],
+  ['enheter', 'devices'],
+  ['enhet', 'device'],
+  ['punkter', 'points'],
+  ['punkt', 'point'],
+  ['verdier', 'values'],
+  ['verdi', 'value'],
+  ['treff', 'matches'],
+  ['valgt', 'selected'],
+  ['festet', 'pinned'],
+  ['lest', 'read'],
+  ['søkene', 'the searches'],
+  ['søker', 'searching'],
+  ['leser', 'reading'],
+  ['skjult', 'hidden'],
+  ['vist', 'shown'],
+  ['av', 'of'],
+];
+
+/* \b is ASCII-only in JavaScript, so it puts a boundary in the middle of
+   "påske". These classes spell the alphabet out instead. */
+const ORD = '[A-Za-zÆØÅæøå0-9]';
+let FRASE_RE = null;
+function fraseRe() {
+  if (!FRASE_RE) {
+    const lag = (t) => new RegExp(
+      '(?<!' + ORD + ')' + t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+      + '(?!' + ORD + ')', 'g');
+    FRASE_RE = FRASER.map(([nb, en]) => [lag(nb), en, lag(en), nb]);
+  }
+  return FRASE_RE;
+}
+
+/* Only sentences the tool built are worth running through this: a node with
+   no digit and no separator is a label, and labels are handled exactly. */
+const SAMMENSATT = /\d|·|—|\(/;
+
+function fraseBytt(s, tilEn) {
+  if (!SAMMENSATT.test(s)) return s;
+  let ut = s;
+  for (const [nbRe, enUt, enRe, nbUt] of fraseRe()) {
+    ut = tilEn ? ut.replace(nbRe, enUt) : ut.replace(enRe, nbUt);
+  }
+  return ut;
+}
+
 let ORDBOK_REV = null;
 function revOrdbok() {
   if (!ORDBOK_REV) {
@@ -9136,6 +9255,7 @@ function oversettTekst(s, tilEn) {
       if (m) { ny = (tilEn ? nbUt : enUt)(m); break; }
     }
   }
+  if (ny === undefined) ny = fraseBytt(kjerne, tilEn);
   if (ny === undefined || ny === kjerne) return s;
   return s.replace(kjerne, ny);
 }
