@@ -241,6 +241,20 @@ button{background:none;border:none;cursor:pointer}
   display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;
 }
 .backend-warn[hidden]{display:none}
+/* A warning, not an outage: the tool is running, it may simply be deaf. The
+   backend banner is red because nothing works when it shows; this one is
+   yellow because everything looks fine and that is the problem. */
+.backend-warn.port-warn{
+  background:color-mix(in srgb,var(--warn) 14%,var(--panel));
+  border-bottom-color:color-mix(in srgb,var(--warn) 45%,transparent);
+  color:var(--fg);
+}
+.port-warn .bw-lukk{
+  margin-left:auto;background:none;border:0;color:var(--fg-3);
+  cursor:pointer;font-size:var(--t-4);padding:2px 6px;border-radius:var(--r-sm);
+}
+.port-warn .bw-lukk:hover{background:var(--hover);color:var(--fg)}
+
 
 /* Banneret faller ned, det dukker ikke opp.
 
@@ -3680,6 +3694,7 @@ body.drar,body.drar .wk-blk.redigerbar{cursor:grabbing;user-select:none}
   </div>
 
   <div id="backendWarn" class="backend-warn" hidden></div>
+  <div id="portWarn" class="backend-warn port-warn" hidden></div>
 
   <div class="workspace">
 

@@ -23,6 +23,7 @@ Endpoints:
   GET  /                                                     -> serves the web UI (index.html)
 """
 import asyncio
+import errno
 import datetime
 import ipaddress
 import subprocess
@@ -306,6 +307,7 @@ def status():
     return {
         "running": state["app"] is not None,
         "local_address": state["local_address"],
+        "port_advarsel": port_advarsel(port_naboer()) if state["app"] else None,
     }
 
 
@@ -315,6 +317,99 @@ def interfaces():
         return {"status": "done", "interfaces": list_interfaces()}
     except Exception as e:
         return {"status": "error", "error": str(e), "interfaces": []}
+
+
+
+# --------------------------------------------------------------- port sharing
+# The failure this catches took a site visit to understand.
+#
+# BACnet/IP is a fixed port, so every BACnet tool on the machine wants UDP
+# 47808. On Windows a second bind to it does not fail - it is accepted, and
+# then one of the two processes quietly stops receiving. bacpypes3 builds its
+# transports in a background task, so even a bind that does fail never reaches
+# the try/except around the call; /api/start answers "done" either way.
+#
+# The result is a tool that says it is connected, shows the right adapter, and
+# finds nothing. Which is exactly what it looks like when the cable is in the
+# wrong port, so that is where you go looking.
+#
+# Our own colleagues hit the same shape of problem with YABE, where the fix is
+# Udp_ExclusiveUseOfSocket=False. Same root: two programs, one socket.
+def port_naboer(port: int = None) -> List[Dict[str, Any]]:
+    """Other processes holding the BACnet port on the interface we are using.
+
+    The interface matters. Two programs bound to 47808 on different adapters
+    do not collide - the server copy on one NIC and this one on the VPN is a
+    normal arrangement, and warning about it would teach people to ignore the
+    warning that matters. Only the same address collides, or 0.0.0.0, which
+    takes every adapter including ours.
+    """
+    port = port or BACNET_PORT
+    meg = os.getpid()
+    ut: List[Dict[str, Any]] = []
+    try:
+        import psutil
+    except Exception:
+        return ut
+    min_ip = (state.get("local_address") or "").split("/")[0].split(":")[0]
+    try:
+        for c in psutil.net_connections(kind="udp4"):
+            if not c.laddr or c.laddr.port != port:
+                continue
+            if not c.pid or c.pid == meg:
+                continue
+            deres = c.laddr.ip
+            if min_ip and deres not in (min_ip, "0.0.0.0") and min_ip != "0.0.0.0":
+                continue
+            try:
+                navn = psutil.Process(c.pid).name()
+            except Exception:
+                navn = "ukjent program"
+            if not any(x["pid"] == c.pid for x in ut):
+                ut.append({"pid": c.pid, "name": navn, "ip": c.laddr.ip})
+    except Exception:
+        # psutil trenger rettigheter for enkelte prosesser; da er delvis svar
+        # bedre enn ingen, og ingen svar bedre enn en feilmelding.
+        pass
+    return ut
+
+
+def port_advarsel(naboer: List[Dict[str, Any]]) -> Optional[str]:
+    if not naboer:
+        return None
+    hvem = ", ".join(f"{n['name']} (PID {n['pid']})" for n in naboer[:3])
+    return (
+        f"Et annet program lytter også på UDP {BACNET_PORT}: {hvem}. "
+        "Windows tillater det, men da er det tilfeldig hvem av dere som får "
+        "svarene fra anlegget - og den andre finner ingenting uten å si fra. "
+        "Lukk det andre BACnet-verktøyet og trykk «Koble til på nytt», eller "
+        f"gi denne en egen port med NM_BACNET_PORT=47809 i start.bat."
+    )
+
+
+def device_address(spec) -> Address:
+    """Turn whatever a device reported about itself back into an Address.
+
+    This used to be `device_address(spec)` in eleven places, which looks
+    harmless because 47808 is the default anyway. It is not harmless: it is
+    string concatenation onto something that is not always a bare IP, and
+    Address then refuses the result outright.
+
+      10.121.42.84          -> fine either way, 47808 is the default
+      10.121.42.84:47809    -> ValueError, a plant on a non-standard port
+      50:2                  -> ValueError, a device behind a gateway
+
+    The last one is the one that cost us a site visit. A router or a protocol
+    gateway - a FieldServer ProtoNode, say - presents the equipment behind it
+    as devices on its own BACnet network, and an I-Am from one of those has a
+    remote station as its source, printed "network:mac", not an IP. Who-Is
+    found them, they appeared in the list, and every read failed, because the
+    address they came back on was never a valid address again.
+
+    Address already understands all three forms. Handing it the string
+    unchanged is both shorter and correct.
+    """
+    return Address(str(spec).strip())
 
 
 @app.post("/api/start")
@@ -332,7 +427,36 @@ async def start_proxy(body: StartBody):
         rcvbuf = _enlarge_socket_buffers(bacnet_app)
         state["app"] = bacnet_app
         state["local_address"] = local_address
-        return {"status": "done", "local_address": local_address, "rcvbuf": rcvbuf}
+        naboer = port_naboer()
+        return {"status": "done", "local_address": local_address,
+                "rcvbuf": rcvbuf, "port_naboer": naboer,
+                "port_advarsel": port_advarsel(naboer)}
+    except OSError as e:
+        # The one failure worth explaining rather than reporting. BACnet/IP is
+        # a fixed port, so any other BACnet program on this PC - YABE, a vendor
+        # tool, a second copy of this one - holds it and this bind fails. The
+        # raw text is "[Errno 10048] Only one usage of each socket address...",
+        # which tells a technician standing in a plant room nothing at all.
+        opptatt = getattr(e, "winerror", None) == 10048 or e.errno in (
+            errno.EADDRINUSE, errno.EACCES)
+        if not opptatt:
+            return {"status": "error", "error": str(e)}
+        return {
+            "status": "error",
+            "error": (
+                f"UDP-port {BACNET_PORT} er opptatt av et annet program.\n\n"
+                "BACnet/IP har fast port, så bare ett program om gangen kan "
+                "lytte på den. Lukk andre BACnet-verktøy - YABE, "
+                "leverandørverktøy, eller en annen kopi av denne - og prøv igjen.\n\n"
+                "Hvem som har den: åpne ledetekst og kjør\n"
+                f"    netstat -ano | findstr {BACNET_PORT}\n"
+                "    tasklist /FI \"PID eq <tallet>\"\n\n"
+                "Må de kjøre samtidig, kan denne bruke en annen port: sett "
+                "NM_BACNET_PORT=47809 i start.bat. Da lytter den på 47809, "
+                "mens den fortsatt snakker med anlegget på 47808."
+            ),
+            "port_opptatt": True,
+        }
     except Exception as e:
         return {"status": "error", "error": str(e)}
 
@@ -361,7 +485,7 @@ async def scan_broadcast(bacnet_app, net: ipaddress.IPv4Network, timeout: float)
     # since devices reply from their own unicast IP, never from the
     # broadcast address itself. Building the WhoIsFuture with address=None
     # collects all I-Am replies while still targeting the chosen subnet.
-    destination = Address(f"{broadcast_ip}:47808")
+    destination = device_address(broadcast_ip)
     who_is = WhoIsRequest(destination=destination)
 
     if not hasattr(bacnet_app, "_who_is_futures"):
@@ -422,7 +546,7 @@ async def probe_host_unicast(bacnet_app, ip: str, per_host_timeout: float,
     async with sem:
         if pacer is not None:
             await pacer.wait()
-        addr = Address(f"{ip}:47808")
+        addr = device_address(ip)
         try:
             # 4194303 is the BACnet "instance unknown" wildcard: a device
             # receiving a request addressed to device,4194303 is expected
@@ -907,7 +1031,7 @@ PARTIAL_PUBLISH_EAGER = 2
 
 
 async def _load_points(job, bacnet_app, body: "LoadPointsBody"):
-    addr = Address(f"{body.address}:47808")
+    addr = device_address(body.address)
     device_objid = f"device,{body.device_instance}"
 
     def list_progress(done, total):
@@ -1188,7 +1312,7 @@ async def poll(body: PollBody):
     out: Dict[str, Dict[str, Any]] = {}
 
     async def one_device(ip: str, objids: List[str]):
-        addr = Address(f"{ip}:47808")
+        addr = device_address(ip)
         try:
             out[ip] = await bc.poll_values(bacnet_app, addr, objids)
         except COMM_ERRORS:
@@ -1203,7 +1327,7 @@ async def object_detail(body: DetailBody):
     bacnet_app = _require_app()
     if bacnet_app is None:
         return {"status": "error", "error": "Proxy er ikke startet."}
-    addr = Address(f"{body.address}:47808")
+    addr = device_address(body.address)
     try:
         props = await bc.read_object_detail(bacnet_app, addr, body.objid)
     except COMM_ERRORS as e:
@@ -1281,7 +1405,7 @@ async def _restore_pending_releases() -> None:
     for key, e in list(d.items()):
         try:
             igjen = max(0.0, float(e["due_ts"]) - naa)
-            addr = Address(f"{e['address']}:47808")
+            addr = device_address(e['address'])
             _release_tasks[key] = asyncio.create_task(
                 _auto_release(addr, e["objid"], e.get("prop", "present-value"),
                               int(e["priority"]), igjen, e["address"], key)
@@ -1326,7 +1450,7 @@ async def device_schedules(body: SchedBody):
     bacnet_app = _require_app()
     if bacnet_app is None:
         return {"status": "error", "error": "Proxy er ikke startet."}
-    addr = Address(f"{body.address}:47808")
+    addr = device_address(body.address)
     try:
         objids = await bc.read_object_list(
             bacnet_app, addr, f"device,{body.device_instance}")
@@ -1346,7 +1470,7 @@ async def object_trendlog(body: TrendBody):
     bacnet_app = _require_app()
     if bacnet_app is None:
         return {"status": "error", "error": "Proxy er ikke startet."}
-    addr = Address(f"{body.address}:47808")
+    addr = device_address(body.address)
     try:
         data = await bc.read_trend_log(bacnet_app, addr, body.objid, limit=body.limit)
     except COMM_ERRORS as e:
@@ -1368,7 +1492,7 @@ async def schedule_write(body: SchedWriteBody):
     bacnet_app = _require_app()
     if bacnet_app is None:
         return {"status": "error", "error": "Proxy er ikke startet."}
-    addr = Address(f"{body.address}:47808")
+    addr = device_address(body.address)
     try:
         res = await bc.write_weekly_schedule(bacnet_app, addr, body.objid, body.dager)
     except COMM_ERRORS as e:
@@ -1411,7 +1535,7 @@ async def points_forced(body: ForcedBody):
         return {"status": "error", "error": "Proxy er ikke startet."}
     if not body.objids:
         return {"status": "done", "forced": {}}
-    addr = Address(f"{body.address}:47808")
+    addr = device_address(body.address)
     try:
         vals = await bc.read_objects_bulk(
             bacnet_app, addr, body.objids[:400], props=("priority-array",))
@@ -1453,7 +1577,7 @@ async def device_clock(body: ClockBody):
     bacnet_app = _require_app()
     if bacnet_app is None:
         return {"status": "error", "error": "Proxy er ikke startet."}
-    addr = Address(f"{body.address}:47808")
+    addr = device_address(body.address)
     try:
         res = await bc.sync_clock(bacnet_app, addr)
     except COMM_ERRORS as e:
@@ -1479,7 +1603,7 @@ async def write(body: WriteBody):
     if state["read_only"]:
         return {"status": "error", "error": "Lesemodus er på - skriving er blokkert."}
 
-    addr = Address(f"{body.address}:47808")
+    addr = device_address(body.address)
     value = None if body.release else body.value
     if not body.release and value is None:
         return {"status": "error", "error": "Ingen verdi angitt."}

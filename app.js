@@ -491,12 +491,40 @@ async function connectTo(cidr, {quiet = false} = {}) {
   await refreshStatus();
 }
 
+
+/* ------------------------------------------------- another program on 47808
+   BACnet/IP is a fixed port. When a second program takes it, Windows does not
+   always refuse the bind, and bacpypes3 builds its transports in a background
+   task, so a bind that does fail never reaches the caller either. Between
+   them, /api/start answers "done" and the tool sits there deaf: right adapter,
+   connected indicator lit, no devices.
+
+   That is indistinguishable from a cable in the wrong port, which is where a
+   technician goes looking first. The server checks who else holds the port and
+   this puts the answer on screen, since nothing else will. */
+let PORT_VARSEL_SETT = null;
+
+function meldPort(tekst) {
+  const el = $('portWarn');
+  if (!el) return;
+  if (!tekst) { el.hidden = true; PORT_VARSEL_SETT = null; return; }
+  if (tekst === PORT_VARSEL_SETT) return;      // allerede vist, eller avvist
+  el.hidden = false;
+  el.innerHTML = '<span>' + esc(tekst) + '</span>'
+    + '<button class="bw-lukk" title="Skjul">Skjul</button>';
+  el.querySelector('.bw-lukk').onclick = () => {
+    el.hidden = true;
+    PORT_VARSEL_SETT = tekst;   // hold den skjult til teksten endrer seg
+  };
+}
+
 /* ------------------------------------------------------- connect / status */
 async function refreshStatus() {
   try {
     const d = await (await fetch('/api/status')).json();
     S.connected = !!d.running;
     S.localAddr = d.local_address;
+    meldPort(d.port_advarsel);
   } catch { S.connected = false; }
   const c = $('conn');
   // Nothing to announce while it works; only speak up when it does not.
