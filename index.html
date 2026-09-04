@@ -1981,6 +1981,44 @@ body.uten-bevegelse #himmel{display:none}
   }
 }
 
+
+/* ---------- diagnose
+   Four checks in the order they stop being guesses. The last two are the pair
+   that matters: ping answering while BACnet does not is a different fault from
+   neither answering, and knowing which one you have is the difference between
+   suspecting the cable and suspecting the discovery. */
+.diag-modal{width:min(560px,94vw)}
+.diag-topp{display:flex;gap:8px;padding:12px 14px;border-bottom:1px solid var(--line)}
+.diag-topp .field{flex:1;font-family:var(--mono)}
+.diag-steg{padding:6px 0 10px}
+.diag-rad{
+  display:grid;grid-template-columns:22px 1fr;gap:0 10px;
+  padding:9px 14px;align-items:start;
+}
+.diag-rad + .diag-rad{border-top:1px solid var(--line-soft)}
+.diag-ikon{
+  width:16px;height:16px;border-radius:var(--r-pill);margin-top:1px;
+  display:flex;align-items:center;justify-content:center;
+  font-size:var(--t-1);font-weight:700;color:#fff;
+  background:var(--line-2);
+}
+.diag-rad.ok    .diag-ikon{background:var(--ok)}
+.diag-rad.advarsel .diag-ikon{background:var(--warn);color:#241c00}
+.diag-rad.feil  .diag-ikon{background:var(--err);color:#2a0700}
+.diag-rad.gaar  .diag-ikon{background:none;border:2px solid var(--line-2);
+  border-top-color:var(--accent);animation:sp .7s linear infinite}
+.diag-navn{font-weight:600;font-size:var(--t-3)}
+.diag-detalj{font-family:var(--mono);font-size:var(--t-2);color:var(--fg-2);margin-top:2px}
+.diag-forklaring{font-size:var(--t-2);color:var(--fg-3);margin-top:3px;line-height:1.45}
+.diag-svar{
+  margin:0 14px 14px;padding:10px 12px;border-radius:var(--radius);
+  border:1px solid var(--line-2);background:var(--raised);
+  font-size:var(--t-3);line-height:1.5;
+}
+.diag-svar[hidden]{display:none}
+.diag-svar b{display:block;margin-bottom:3px}
+.diag-svar .btn{margin-top:8px}
+
 /* ---------- motion, the parts with something to say ----------
 
    The first pass was polite: things faded, things lifted. Correct, and
@@ -3439,6 +3477,7 @@ body.drar,body.drar .wk-blk.redigerbar{cursor:grabbing;user-select:none}
         <div class="menu-sep"></div>
         <div class="menu-gruppe">Nettverk</div>
         <button id="rescanNow" class="menu-item">Søk etter enheter nå</button>
+        <button id="diagBtn" class="menu-item">Sjekk en adresse…</button>
         <button id="reconnBtn" class="menu-item">Koble til på nytt</button>
         <div class="menu-sep"></div>
         <div class="menu-gruppe">Vis</div>
@@ -3651,6 +3690,24 @@ body.drar,body.drar .wk-blk.redigerbar{cursor:grabbing;user-select:none}
         </span>
         <button class="btn" id="temaNullstill">Tilbakestill alt</button>
       </div>
+    </div>
+  </div>
+
+
+  <div id="diagOverlay" class="gs-overlay" role="dialog" aria-modal="true" aria-label="Sjekk en adresse" hidden>
+    <div class="gs-modal diag-modal">
+      <div class="gs-head">
+        <b>Sjekk en adresse</b>
+        <button id="diagClose" class="gs-close" title="Lukk (Esc)">✕</button>
+      </div>
+      <div class="diag-topp">
+        <input id="diagIp" class="field" placeholder="192.168.40.213"
+               autocomplete="off" spellcheck="false"
+               title="IP-adressen til enheten du står ved">
+        <button id="diagKjor" class="btn primary">Sjekk</button>
+      </div>
+      <div id="diagSteg" class="diag-steg"></div>
+      <div id="diagSvar" class="diag-svar" hidden></div>
     </div>
   </div>
 

@@ -2154,6 +2154,100 @@ async def _ping_one(ip: str, timeout_ms: int, sem: asyncio.Semaphore) -> bool:
             return False
 
 
+
+class DiagnoseBody(BaseModel):
+    address: str
+    step: str
+    timeout_ms: int = 1500
+
+
+# --------------------------------------------------------------- diagnostics
+# One step per call rather than one call that does everything. The steps take
+# very different amounts of time - the port check is instant, a BACnet read
+# against a silent address takes the full timeout - and a technician standing
+# in a plant room wants to see the fast answers immediately, not stare at a
+# spinner until the slowest one finishes.
+#
+# The order is deliberate. Each step only means something once the one before
+# it passed, and the last two are the pair that actually tells you where the
+# problem is: ping answers but BACnet does not is a different fault entirely
+# from neither answering.
+@app.post("/api/diagnose")
+async def diagnose(body: DiagnoseBody):
+    ip = (body.address or "").strip()
+    steg = body.step
+
+    if steg == "port":
+        naboer = port_naboer()
+        if not naboer:
+            return {"status": "ok",
+                    "detalj": f"UDP {BACNET_PORT} er vår alene",
+                    "forklaring": "Ingen andre programmer kjemper om porten."}
+        hvem = ", ".join(f"{n['name']} (PID {n['pid']})" for n in naboer[:3])
+        return {"status": "feil", "detalj": f"{hvem} har også UDP {BACNET_PORT}",
+                "forklaring": port_advarsel(naboer)}
+
+    if steg == "kort":
+        lokal = state.get("local_address")
+        if not lokal:
+            return {"status": "feil", "detalj": "Ingen forbindelse startet",
+                    "forklaring": "Velg nettverkskort øverst til venstre og koble til."}
+        try:
+            nett = ipaddress.ip_interface(lokal).network
+            mal = ipaddress.ip_address(ip)
+        except ValueError:
+            return {"status": "ok", "detalj": f"Sender fra {lokal}",
+                    "forklaring": "Adressen er ikke en vanlig IP - trolig en enhet "
+                                  "bak en gateway. Da går trafikken via ruteren, "
+                                  "og samme subnett gjelder ikke."}
+        if mal in nett:
+            return {"status": "ok", "detalj": f"{ip} er i samme subnett som {lokal}",
+                    "forklaring": "Trafikken går direkte, uten ruter."}
+        return {"status": "advarsel",
+                "detalj": f"{ip} er utenfor {nett}",
+                "forklaring": "Den må rutes. Det kan gå helt fint, men da må "
+                              "ruteren slippe BACnet gjennom - og kringkasting "
+                              "(Who-Is) stopper som regel her. Bruk sweep."}
+
+    if steg == "ping":
+        sem = asyncio.Semaphore(1)
+        svar = await _ping_one(ip, body.timeout_ms, sem)
+        if svar:
+            return {"status": "ok", "detalj": f"{ip} svarer på ping",
+                    "forklaring": "Adressen er i live og nås herfra."}
+        return {"status": "advarsel", "detalj": f"{ip} svarer ikke på ping",
+                "forklaring": "Det er ikke fasit. Mange regulatorer og brannmurer "
+                              "slipper ikke ICMP, og svarer likevel på BACnet. "
+                              "Se hva neste steg sier før du konkluderer."}
+
+    if steg == "bacnet":
+        bacnet_app = state["app"]
+        if bacnet_app is None:
+            return {"status": "feil", "detalj": "Ikke tilkoblet",
+                    "forklaring": "Start forbindelsen først."}
+        sem = asyncio.Semaphore(1)
+        try:
+            funn = await probe_host_unicast(
+                bacnet_app, ip, max(1.0, body.timeout_ms / 1000.0), sem)
+        except Exception as e:
+            return {"status": "feil", "detalj": "Oppslaget feilet",
+                    "forklaring": str(e)}
+        if funn:
+            navn = funn.get("object_name") or "uten navn"
+            lev = funn.get("vendor_name") or "ukjent leverandør"
+            return {"status": "ok",
+                    "detalj": f"Enhet {funn.get('device_instance')} - {navn}",
+                    "forklaring": f"{lev}. Den svarer på BACnet og kan leses.",
+                    "enhet": funn}
+        return {"status": "feil", "detalj": f"Ingen BACnet-svar fra {ip}",
+                "forklaring": "Adressen svarer ikke på UDP 47808. Er det riktig "
+                              "IP? Bruker anlegget en annen BACnet-port? Sitter "
+                              "enheten bak en gateway, er det gatewayens IP du "
+                              "skal spørre, ikke enhetens."}
+
+    return {"status": "feil", "detalj": "Ukjent steg", "forklaring": steg}
+
+
 @app.post("/api/ping")
 async def ping_range(body: PingBody):
     """

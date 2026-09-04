@@ -3718,6 +3718,8 @@ function commands() {
   }, {when: harEnhet});
   add('Handling', 'Start/stopp live-oppdatering', () => { S.live ? stopPolling() : startPolling(); },
       {hint: 'L', when: harPunkter, tilstand: () => S.live ? 'pa' : ''});
+  add('Handling', 'Sjekk en adresse', () => { closeCmd(); diagApne(); },
+      {hint: 'Ctrl+D', undertekst: () => 'naar du vet IP-en og den ikke svarer'});
   add('Handling', 'Sok etter enheter na', () => { closeCmd(); rescanOnce(true); },
       {when: () => S.connected && !!$('rangeInput').value.trim(),
        undertekst: () => S.devices.length + ' kjent'});
@@ -8488,8 +8490,14 @@ document.addEventListener('keydown', e => {
   }
   if (e.key === '/' && !typing) { e.preventDefault(); $('q').focus(); return; }
   if (e.key === '?' && !typing) { e.preventDefault(); openGlobal(); return; }
+  /* Ctrl+D is the browser's bookmark key, which is worth taking here: the
+     tool fills the window, and a bookmark to 127.0.0.1 helps nobody. */
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'd') {
+    e.preventDefault(); diagApne(); return;
+  }
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'f') { e.preventDefault(); openGlobal(); return; }
   if (e.key === 'Escape') {
+    if (!$('diagOverlay').hidden) { diagLukk(); return; }
     if (!$('minneOverlay').hidden) { closeMinne(); return; }
     if (!$('temaOverlay').hidden) { closeTema(); return; }
     if (!$('schOverlay').hidden) { closeSchedules(); return; }
@@ -8553,6 +8561,137 @@ renderDevices();
   await refreshStatus();
   if (!S.connected) await connectTo($('localAddr').value, {quiet: true});
   if (!S.connected) status('Velg nettverkskort øverst til venstre');
+})();
+
+
+/* ------------------------------------------------------------- diagnose
+   The scan answers "what is out there". This answers "why is that one not",
+   which is the question you actually have standing next to a controller with
+   its IP on a label in front of you.
+
+   Each step is its own request. They take very different times - the port
+   check is instant, a BACnet read against a silent address takes the whole
+   timeout - and waiting for the slowest before showing any of them would
+   throw away the part that is most useful, which is watching where it stops. */
+const DIAG_STEG = [
+  ['port',   'UDP-porten',   'Har et annet program tatt 47808?'],
+  ['kort',   'Nettverkskortet', 'Når vi adressen herfra?'],
+  ['ping',   'Ping',         'Er adressen i live?'],
+  ['bacnet', 'BACnet',       'Svarer den på UDP 47808?'],
+];
+
+function diagTegn(i, tilstand, detalj, forklaring) {
+  const [, navn, sporsmaal] = DIAG_STEG[i];
+  const el = $('diagSteg').children[i];
+  if (!el) return;
+  el.className = 'diag-rad ' + tilstand;
+  const merke = {ok: '✓', advarsel: '!', feil: '✕', gaar: '', venter: ''}[tilstand] ?? '';
+  el.innerHTML = '<div class="diag-ikon">' + merke + '</div><div>'
+    + '<div class="diag-navn">' + esc(navn) + '</div>'
+    + '<div class="diag-detalj">' + esc(detalj || sporsmaal) + '</div>'
+    + (forklaring ? '<div class="diag-forklaring">' + esc(forklaring) + '</div>' : '')
+    + '</div>';
+}
+
+let DIAG_GEN = 0;
+
+async function diagKjor() {
+  const ip = $('diagIp').value.trim();
+  if (!ip) { $('diagIp').focus(); return; }
+  const min = ++DIAG_GEN;
+  const knapp = $('diagKjor');
+  knapp.disabled = true;
+  $('diagSvar').hidden = true;
+
+  $('diagSteg').innerHTML = DIAG_STEG.map(() => '<div class="diag-rad"></div>').join('');
+  DIAG_STEG.forEach((s, i) => diagTegn(i, 'venter', s[2], ''));
+
+  const svar = [];
+  for (let i = 0; i < DIAG_STEG.length; i++) {
+    if (min !== DIAG_GEN) return;              // brukeren startet en ny sjekk
+    diagTegn(i, 'gaar', 'sjekker…', '');
+    let d;
+    try {
+      d = await api('/api/diagnose', {address: ip, step: DIAG_STEG[i][0]});
+    } catch (e) {
+      d = {status: 'feil', detalj: 'Kunne ikke spørre serveren', forklaring: e.message};
+    }
+    if (min !== DIAG_GEN) return;
+    svar.push(d);
+    diagTegn(i, d.status || 'feil', d.detalj, d.forklaring);
+  }
+
+  knapp.disabled = false;
+  diagOppsummer(ip, svar);
+}
+
+/* The conclusion, in the words you would use to the next person: not four
+   ticks to interpret, but the one sentence they add up to. */
+function diagOppsummer(ip, s) {
+  const [port, kort, ping, bac] = s.map(x => x.status);
+  const boks = $('diagSvar');
+  let tekst, knapp = '';
+
+  if (bac === 'ok') {
+    tekst = '<b>Enheten svarer.</b> Den er lest herfra nå, så det som ikke '
+          + 'virker ligger et annet sted enn i forbindelsen.';
+    knapp = '<button class="btn primary" id="diagLegg">Legg den i lista</button>';
+  } else if (port === 'feil') {
+    tekst = '<b>Start her: et annet program har porten.</b> Så lenge det holder '
+          + 'UDP 47808 er det tilfeldig hvem som får svarene, og du kan lete '
+          + 'etter alt annet forgjeves.';
+  } else if (ping === 'ok') {
+    tekst = '<b>Adressen lever, men BACnet svarer ikke.</b> Da er det ikke '
+          + 'nettveien. Sjekk at enheten faktisk snakker BACnet/IP på 47808, '
+          + 'og prøv «Sweep — grundig» — stille adresser svarer ofte på '
+          + 'andre forsøk.';
+  } else if (kort === 'advarsel') {
+    tekst = '<b>Ingenting svarer, og adressen ligger utenfor ditt subnett.</b> '
+          + 'Den må rutes. Sjekk at du står på riktig nettverkskort, og at '
+          + 'ruteren slipper BACnet gjennom.';
+  } else {
+    tekst = '<b>Ingenting svarer.</b> Verken ping eller BACnet. Sjekk kabel, '
+          + 'VLAN, brannmur, og at IP-en er riktig. Merk at en del regulatorer '
+          + 'ikke svarer på ping i det hele tatt — prøv «Sweep — grundig» på '
+          + 'området før du konkluderer.';
+  }
+
+  boks.innerHTML = tekst + knapp;
+  boks.hidden = false;
+  const l = $('diagLegg');
+  if (l) l.onclick = () => {
+    const e = s[3] && s[3].enhet;
+    if (!e) return;
+    if (!S.devices.some(d => d.address === e.address)) {
+      S.devices.push(e);
+      renderDevices();
+    }
+    diagLukk();
+    selectDevice(e.address);
+  };
+}
+
+function diagApne(ip) {
+  const o = $('diagOverlay');
+  if (!o) return;
+  o.hidden = false;
+  $('diagSteg').innerHTML = '';
+  $('diagSvar').hidden = true;
+  const f = $('diagIp');
+  f.value = ip || f.value || '';
+  f.focus();
+  f.select();
+}
+function diagLukk() { const o = $('diagOverlay'); if (o) { o.hidden = true; DIAG_GEN++; } }
+
+(function diagKoble() {
+  const mb = $('diagBtn'); if (mb) mb.onclick = () => { closeMenus(); diagApne(); };
+  const k = $('diagKjor'); if (k) k.onclick = diagKjor;
+  const l = $('diagClose'); if (l) l.onclick = diagLukk;
+  const f = $('diagIp');
+  if (f) f.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); diagKjor(); } };
+  const o = $('diagOverlay');
+  if (o) o.onclick = (e) => { if (e.target === o) diagLukk(); };
 })();
 
 /* ==========================================================================
@@ -9210,6 +9349,65 @@ const ORDBOK = {
   'Start/stopp live-oppdatering': 'Start/stop live updating',
   'leverandorer': 'vendors',
   'leverandorer / IP-omrader': 'vendors / IP ranges',
+  /* --- check an address --- */
+  'Sjekk en adresse': 'Check an address',
+  'Sjekk en adresse…': 'Check an address…',
+  'Sjekk': 'Check',
+  'IP-adressen til enheten du står ved': 'The IP of the device you are standing at',
+  'UDP-porten': 'The UDP port',
+  'Nettverkskortet': 'The adapter',
+  'Ping': 'Ping',
+  'BACnet': 'BACnet',
+  'Har et annet program tatt 47808?': 'Has another program taken 47808?',
+  'Når vi adressen herfra?': 'Can we reach the address from here?',
+  'Er adressen i live?': 'Is the address alive?',
+  'Svarer den på UDP 47808?': 'Does it answer on UDP 47808?',
+  'sjekker…': 'checking…',
+  'Legg den i lista': 'Add it to the list',
+  'Kunne ikke spørre serveren': 'Could not ask the server',
+  'naar du vet IP-en og den ikke svarer': 'when you know the IP and it does not answer',
+  /* Sentences the diagnose endpoint returns as free text. They are long and
+     specific, so they live here rather than being rebuilt client-side from a
+     key - the server stays the one place that decides what a step means. */
+  'Ingen andre programmer kjemper om porten.':
+    'No other program is competing for the port.',
+  'Trafikken går direkte, uten ruter.': 'The traffic goes direct, without a router.',
+  'Ingen forbindelse startet': 'No connection started',
+  'Velg nettverkskort øverst til venstre og koble til.':
+    'Pick an adapter at the top left and connect.',
+  'Adressen er ikke en vanlig IP - trolig en enhet bak en gateway. Da går trafikken via ruteren, og samme subnett gjelder ikke.':
+    'The address is not a plain IP - most likely a device behind a gateway. The traffic then goes via the router, and being on the same subnet does not apply.',
+  'Den må rutes. Det kan gå helt fint, men da må ruteren slippe BACnet gjennom - og kringkasting (Who-Is) stopper som regel her. Bruk sweep.':
+    'It has to be routed. That can work fine, but the router has to let BACnet through - and broadcast (Who-Is) usually stops here. Use sweep.',
+  'Adressen er i live og nås herfra.': 'The address is alive and reachable from here.',
+  'Det er ikke fasit. Mange regulatorer og brannmurer slipper ikke ICMP, og svarer likevel på BACnet. Se hva neste steg sier før du konkluderer.':
+    'That is not the last word. Plenty of controllers and firewalls drop ICMP and still answer BACnet. See what the next step says before you conclude.',
+  'Ikke tilkoblet': 'Not connected',
+  'Start forbindelsen først.': 'Start the connection first.',
+  'Oppslaget feilet': 'The lookup failed',
+  'Adressen svarer ikke på UDP 47808. Er det riktig IP? Bruker anlegget en annen BACnet-port? Sitter enheten bak en gateway, er det gatewayens IP du skal spørre, ikke enhetens.':
+    'The address does not answer on UDP 47808. Is that the right IP? Does the plant use a different BACnet port? If the device sits behind a gateway, it is the gateway IP you ask, not the device one.',
+  'Ukjent steg': 'Unknown step',
+  /* the conclusions */
+  'Enheten svarer.': 'The device answers.',
+  'Start her: et annet program har porten.': 'Start here: another program has the port.',
+  'Adressen lever, men BACnet svarer ikke.': 'The address is alive, but BACnet does not answer.',
+  'Ingenting svarer, og adressen ligger utenfor ditt subnett.':
+    'Nothing answers, and the address is outside your subnet.',
+  'Ingenting svarer.': 'Nothing answers.',
+  /* The conclusion tails. A <b> splits the sentence, so these are the halves
+     that follow it, and they are here in full: an exact match short-circuits
+     before the phrase pass can touch them. */
+  'Den er lest herfra nå, så det som ikke virker ligger et annet sted enn i forbindelsen.':
+    'It was read from here just now, so whatever is not working is somewhere other than the connection.',
+  'Så lenge det holder UDP 47808 er det tilfeldig hvem som får svarene, og du kan lete etter alt annet forgjeves.':
+    'While it holds UDP 47808 it is chance who gets the replies, and you can hunt for everything else in vain.',
+  'Da er det ikke nettveien. Sjekk at enheten faktisk snakker BACnet/IP på 47808, og prøv «Sweep — grundig» — stille adresser svarer ofte på andre forsøk.':
+    'So it is not the network path. Check that the device really speaks BACnet/IP on 47808, and try “Sweep — thorough” — silent addresses often answer on the second attempt.',
+  'Den må rutes. Sjekk at du står på riktig nettverkskort, og at ruteren slipper BACnet gjennom.':
+    'It has to be routed. Check that you are on the right adapter, and that the router lets BACnet through.',
+  'Verken ping eller BACnet. Sjekk kabel, VLAN, brannmur, og at IP-en er riktig. Merk at en del regulatorer ikke svarer på ping i det hele tatt — prøv «Sweep — grundig» på området før du konkluderer.':
+    'Neither ping nor BACnet. Check the cable, the VLAN, the firewall, and that the IP is right. Note that some controllers do not answer a ping at all — try “Sweep — thorough” on the range before you conclude.',
   /* The command palette carries ASCII variants of the same labels - three
      dots rather than an ellipsis, and no diacritics - so they are their own
      entries rather than being folded into the ones above. */
@@ -9300,6 +9498,15 @@ const FRASER = [
   ['døgn siden', 'days ago'],
   ['min siden', 'min ago'],
   ['t siden', 'h ago'],
+  ['er vår alene', 'is ours alone'],
+  ['er i samme subnett som', 'is on the same subnet as'],
+  ['svarer ikke på ping', 'does not answer a ping'],
+  ['svarer på ping', 'answers a ping'],
+  ['Ingen BACnet-svar fra', 'No BACnet answer from'],
+  ['er utenfor', 'is outside'],
+  ['har også UDP', 'also has UDP'],
+  ['uten navn', 'no name'],
+  ['ukjent leverandør', 'unknown vendor'],
   ['leverandorer', 'vendors'],
   ['leverandører', 'vendors'],
   ['leverandør', 'vendor'],
@@ -9341,7 +9548,11 @@ function fraseRe() {
 
 /* Only sentences the tool built are worth running through this: a node with
    no digit and no separator is a label, and labels are handled exactly. */
-const SAMMENSATT = /\d|·|—|\(/;
+/* A digit is the only reliable sign that a sentence was built around a
+   value. The guard used to accept a separator too, and separators turn up in
+   ordinary prose - which is how an untranslated conclusion came out as "ikke
+   answers a ping i det hele tatt". Half-translated is worse than Norwegian. */
+const SAMMENSATT = /\d/;
 
 function fraseBytt(s, tilEn) {
   if (!SAMMENSATT.test(s)) return s;
