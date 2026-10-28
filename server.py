@@ -49,6 +49,7 @@ from bacpypes3.service.device import WhoIsFuture
 
 import bacnet_core as bc
 from bacnet_core import COMM_ERRORS
+from bacpypes3.apdu import ErrorRejectAbortNack
 
 app = FastAPI(title="BACnet IP Range Scanner")
 
@@ -745,6 +746,19 @@ async def probe_host_unicast(bacnet_app, ip: str, per_host_timeout: float,
                 timeout=per_host_timeout,
             )
             device_instance = oid[1] if oid is not None else None
+        except ErrorRejectAbortNack:
+            # Something answered - it just refused the wildcard. Some
+            # controllers (and every bacpypes3 simulator) do. A Who-Is sent
+            # straight to the address gets its real instance instead.
+            try:
+                i_ams = await asyncio.wait_for(
+                    bacnet_app.who_is(address=addr, timeout=max(1, int(per_host_timeout + 0.5))),
+                    timeout=per_host_timeout + 1.5)
+            except COMM_ERRORS:
+                return None
+            if not i_ams:
+                return None
+            device_instance = i_ams[0].iAmDeviceIdentifier[1]
         except COMM_ERRORS:
             return None
 
@@ -2569,7 +2583,7 @@ async def device_alarms(body: AlarmBody):
                 break
     except asyncio.TimeoutError:
         return {"status": "error", "error": "Ingen svar på alarmspørringen."}
-    except Exception as e:
+    except COMM_ERRORS as e:
         tekst = f"{type(e).__name__}: {e}"
         if "unrecognized" in tekst.lower() or "service" in tekst.lower() or "reject" in tekst.lower():
             return {"status": "unsupported", "error": "Enheten støtter ikke alarmlister."}
