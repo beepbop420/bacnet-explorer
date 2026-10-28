@@ -1,4 +1,8 @@
 'use strict';
+/* One collator, made once. localeCompare with a locale argument builds a new
+   one for every comparison - measured at 22 ms to sort 528 points, most of the
+   time it took to redraw the table. */
+const NORSK = new Intl.Collator('no', {numeric: true});
 
 /* ------------------------------------------------------------------ state */
 const S = {
@@ -1162,7 +1166,7 @@ function renderDevices() {
     const skjulte = new Set(loadPrefs().vendorCollapsed || []);
     el.innerHTML = [...grupper.values()]
       .sort((a, b) => verst(b) - verst(a) || b.enheter.length - a.enheter.length
-                      || a.v.label.localeCompare(b.v.label, 'no'))
+                      || NORSK.compare(a.v.label, b.v.label))
       .map(g => {
         const av = skjulte.has(g.v.label);
         const feil = g.enheter.filter(d => devState(d.address) === 'bad').length;
@@ -4573,7 +4577,19 @@ function sokTreff(hay, ord) {
 }
 
 /* ---------------------------------------------------------------- filtering */
+
+/* The table and the selection bar both ask for the visible points in the same
+   redraw. The answer cannot change within one task, so the second asker gets
+   the first one's list. */
+let VIS_MEMO = null;
 function visiblePoints() {
+  if (VIS_MEMO) return VIS_MEMO;
+  VIS_MEMO = beregnSynlige();
+  queueMicrotask(() => { VIS_MEMO = null; });
+  return VIS_MEMO;
+}
+
+function beregnSynlige() {
   const {q, type, flag, writable, diff} = S.filters;
   const ord = sokeOrd(q.trim().toLowerCase());
   let out = S.points.filter(p => {
@@ -4598,13 +4614,15 @@ function visiblePoints() {
     const v = p[key];
     return (v === null || v === undefined) ? '' : v;
   };
+  // Keys worked out once per point, not once per comparison.
+  const nokkel = new Map(out.map(p => [p, noekler.map(({key}) => felt(p, key))]));
   out.sort((a, b) => {
-    for (const {key, dir} of noekler) {
-      const x = felt(a, key), y = felt(b, key);
-      let c;
-      if (typeof x === 'number' && typeof y === 'number') c = x - y;
-      else c = String(x).localeCompare(String(y), 'no', {numeric: true});
-      if (c) return c * dir;
+    const ka = nokkel.get(a), kb = nokkel.get(b);
+    for (let i = 0; i < noekler.length; i++) {
+      const x = ka[i], y = kb[i];
+      const c = (typeof x === 'number' && typeof y === 'number') ? x - y
+              : NORSK.compare(String(x), String(y));
+      if (c) return c * noekler[i].dir;
     }
     return 0;
   });
@@ -7244,7 +7262,11 @@ function visRullefelt() {
   const bar = document.getElementById('punktrull');
   const wrap = document.getElementById('pointsWrap');
   if (!bar || !wrap) return;
-  bar.classList.toggle('aktiv', wrap.scrollHeight > wrap.clientHeight + 1);
+  // Read on the next frame, after the browser's own layout, rather than
+  // forcing a second one straight after the table was rebuilt.
+  cancelAnimationFrame(visRullefelt._raf);
+  visRullefelt._raf = requestAnimationFrame(() =>
+    bar.classList.toggle('aktiv', wrap.scrollHeight > wrap.clientHeight + 1));
 }
 // Ruta kan bli hoyere eller lavere uten at tabellen tegnes om - da endrer
 // svaret seg ogsaa.
@@ -10777,3 +10799,70 @@ nabeEtterSkann = function (n) {
   }
   _tomFoer(n);
 };
+
+
+/* --------------------------------------------------------- tunnel guard
+   Connecting or dropping WireGuard or FortiClient used to need a restart of
+   NABE, sometimes of the PC. The stack was bound to the address the adapter
+   had at start; when the tunnel went away the socket went with it, and when
+   it came back - often with the very same address - the old socket stayed
+   deaf.
+
+   Every three seconds the adapter list is compared with the last one. When
+   something changed, the dropdown is refreshed, and NABE rebinds if the
+   adapter it was using vanished or came back, or if the range you are
+   working on is now routed through a new one. It waits while a scan runs,
+   and it says what it did. */
+const KORTVAKT = {sig: '', liste: []};
+
+async function kortvakt() {
+  if (S.scanJob || document.hidden) return;
+  let d;
+  try { d = await (await fetch('/api/interfaces', {cache: 'no-store'})).json(); } catch { return; }
+  const liste = (d && d.interfaces) || [];
+  const sig = liste.map(i => i.cidr).sort().join(',');
+  if (!KORTVAKT.sig) { KORTVAKT.sig = sig; KORTVAKT.liste = liste; return; }
+  if (sig === KORTVAKT.sig) return;
+
+  const gamle = KORTVAKT.liste;
+  KORTVAKT.sig = sig; KORTVAKT.liste = liste;
+  const nye = liste.filter(i => !gamle.some(g => g.cidr === i.cidr));
+  const borte = gamle.filter(g => !liste.some(i => i.cidr === g.cidr));
+  await loadInterfaces();
+
+  const bundetIp = String(S.localAddr || '').split(/[/:]/)[0];
+  const bundetBorte = borte.some(g => g.ip === bundetIp);
+  const bundetTilbake = nye.some(i => i.ip === bundetIp);
+  const omr = parseRanges($('rangeInput').value)[0];
+
+  if (bundetBorte || bundetTilbake) {
+    // The socket on that address is dead either way: rebind, preferably to
+    // whatever now carries the range in the field.
+    let maal = null;
+    if (omr) {
+      try {
+        const r = await (await fetch('/api/route?target=' + encodeURIComponent(omr))).json();
+        if (r && r.status === 'done') maal = r.cidr;
+      } catch {}
+    }
+    if (!maal) maal = (liste[0] || {}).cidr;
+    if (maal) {
+      await connectTo(maal, {quiet: true});
+      const navn = (liste.find(i => maal.startsWith(i.ip)) || {}).interface || maal;
+      nabeSier(bundetBorte
+        ? T(`Tunnelen forsvant. Byttet til ${navn}.`, `The tunnel went away. Switched to ${navn}.`)
+        : T(`${navn} er tilbake. Koblet til på nytt.`, `${navn} is back. Reconnected.`), 'skvatt');
+    }
+    return;
+  }
+  if (nye.length) {
+    const navn = nye.map(i => i.interface).join(', ');
+    // A new adapter: take it if the range is routed through it now.
+    const foer = S.localAddr;
+    if (omr) await kortForMaal(omr);
+    nabeSier(S.localAddr !== foer
+      ? T(`Ny forbindelse: ${navn}. Jeg bruker den.`, `New connection: ${navn}. Using it.`)
+      : T(`Ny forbindelse: ${navn}.`, `New connection: ${navn}.`), 'skvatt');
+  }
+}
+setInterval(kortvakt, 3000);

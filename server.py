@@ -37,6 +37,7 @@ from typing import Any, Dict, List, Optional
 
 from fastapi import FastAPI, Form
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel
@@ -51,7 +52,11 @@ import bacnet_core as bc
 from bacnet_core import COMM_ERRORS
 from bacpypes3.apdu import ErrorRejectAbortNack
 
-app = FastAPI(title="BACnet IP Range Scanner")
+app = FastAPI(title="NABE")
+# app.js and the page are 700 kB of text and compress to about a fifth. On
+# 127.0.0.1 that is nothing; through a remote desktop or the shared server it
+# is the difference between a page that is there and one that arrives.
+app.add_middleware(GZipMiddleware, minimum_size=2048)
 
 # ---------------------------------------------------------------- security
 # This service commands building plant: a POST to /api/write moves a setpoint

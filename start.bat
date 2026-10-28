@@ -42,5 +42,7 @@ echo   NABE kjoerer paa http://127.0.0.1:8092
 echo   Lukk dette vinduet for aa stoppe.
 echo.
 
-start "" http://127.0.0.1:8092
+REM The browser waits until NABE answers. Opening it straight away raced the
+REM server, and the page came up broken until it was refreshed.
+start "" /b powershell -NoProfile -WindowStyle Hidden -Command "for ($i = 0; $i -lt 100; $i++) { try { Invoke-WebRequest -UseBasicParsing 'http://127.0.0.1:8092/api/status' -TimeoutSec 1 | Out-Null; Start-Process 'http://127.0.0.1:8092'; break } catch { Start-Sleep -Milliseconds 300 } }"
 "venv\Scripts\python.exe" -m uvicorn server:app --host 127.0.0.1 --port 8092
