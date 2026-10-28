@@ -17,11 +17,18 @@ if not exist "venv\Scripts\python.exe" (
     pause
     exit /b 1
   )
-  "venv\Scripts\python.exe" -m pip install --quiet --upgrade pip
-  "venv\Scripts\python.exe" -m pip install --quiet fastapi uvicorn pydantic bacpypes3 psutil
+  REM The packages travel in the folder, so a first start works on a site
+  REM with no internet. The versions are the ones NABE was tested with.
+  if exist "pakker\" (
+    "venv\Scripts\python.exe" -m pip install --quiet --no-index --find-links pakker -r requirements.txt
+  ) else (
+    "venv\Scripts\python.exe" -m pip install --quiet -r requirements.txt
+  )
   if errorlevel 1 (
     echo.
     echo   FEIL: Klarte ikke installere avhengigheter.
+    echo   Pakkene i mappen "pakker" er laget for Python 3.14. Har PC-en
+    echo   en annen versjon, trengs nett foerste gang.
     echo.
     pause
     exit /b 1

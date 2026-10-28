@@ -856,6 +856,43 @@ async def scan_unicast_sweep(bacnet_app, hosts: List[str],
     return list(found.values()), len(hosts)
 
 
+def _les_bdt(bbmd: str, timeout: float = 2.0) -> Optional[List[str]]:
+    """
+    Read-Broadcast-Distribution-Table, sent straight as BVLC.
+
+    The table lists every BBMD the building's BBMDs forward broadcasts to - in
+    practice, where the rest of the plant is. bacpypes3 has the service but
+    does not wire it into an application, and the request is four bytes, so it
+    goes out on its own short-lived socket instead.
+
+    Returns the peers as "ip" or "ip:port", [] for a BBMD with an empty table,
+    or None when the address does not act as a BBMD at all.
+    """
+    host, _, port = bbmd.partition(":")
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    s.settimeout(timeout)
+    try:
+        s.sendto(bytes([0x81, 0x02, 0x00, 0x04]), (host, int(port or 47808)))
+        while True:
+            data, _ = s.recvfrom(1500)
+            if len(data) < 4 or data[0] != 0x81:
+                continue
+            if data[1] == 0x00:          # BVLC-Result: a NAK, so not a BBMD
+                return None
+            if data[1] != 0x03:
+                continue
+            peers = []
+            for i in range(4, len(data) - 9, 10):
+                ip = ".".join(str(b) for b in data[i:i + 4])
+                p = int.from_bytes(data[i + 4:i + 6], "big")
+                peers.append(ip if p == 47808 else f"{ip}:{p}")
+            return peers
+    except OSError:
+        return None
+    finally:
+        s.close()
+
+
 async def _scan_via_bbmd(job, body: "ScanBody", hosts: List[str]):
     """
     Register with the BBMD at the one address given and Who-Is through it.
@@ -866,6 +903,10 @@ async def _scan_via_bbmd(job, body: "ScanBody", hosts: List[str]):
     typing one IP never comes back with nothing to show for it.
     """
     bbmd = hosts[0]
+    job["phase"] = f"leser BBMD-tabellen hos {bbmd}"
+    loop = asyncio.get_event_loop()
+    bdt = await loop.run_in_executor(None, _les_bdt, bbmd)
+    job["bdt"] = bdt
     job["phase"] = f"registrerer hos BBMD {bbmd}"
     bacnet_app = await _switch_bbmd(bbmd)
     status = await _wait_registration(bacnet_app)
@@ -877,7 +918,7 @@ async def _scan_via_bbmd(job, body: "ScanBody", hosts: List[str]):
             r = await probe_host_unicast(bacnet_app, bbmd, 2.0, asyncio.Semaphore(1))
             if r:
                 devices.append(r)
-        return devices, f"Registrert hos BBMD {bbmd}", status
+        return devices, f"Registrert hos BBMD {bbmd}" + _bdt_tekst(bbmd, bdt), status
 
     bacnet_app = await _switch_bbmd(None)
     if status == -1:
@@ -891,7 +932,16 @@ async def _scan_via_bbmd(job, body: "ScanBody", hosts: List[str]):
                 "Leste adressen alene.")
     job["phase"] = f"leser {bbmd}"
     r = await probe_host_unicast(bacnet_app, bbmd, 2.0, asyncio.Semaphore(1))
-    return ([r] if r else []), note, status
+    return ([r] if r else []), note + _bdt_tekst(bbmd, bdt), status
+
+
+def _bdt_tekst(bbmd: str, bdt: Optional[List[str]]) -> str:
+    """One sentence about the other BBMDs, or nothing."""
+    andre = [p for p in (bdt or []) if p.split(":")[0] != bbmd.split(":")[0]]
+    if not andre:
+        return ""
+    return (f". Bygget har {len(andre) + 1} BBMD-er - de andre er "
+            + ", ".join(andre) + ". Skann dem i BBMD-modus for resten av anlegget.")
 
 
 async def _run_scan(job, body: "ScanBody", hosts: List[str], net):
@@ -950,6 +1000,7 @@ async def _run_scan(job, body: "ScanBody", hosts: List[str], net):
         "devices": devices,
         "note": note,
         "bbmd_status": bbmd_status,
+        "bdt": job.get("bdt"),
     }
 
 
@@ -2430,6 +2481,56 @@ async def _ping_one(ip: str, timeout_ms: int, sem: asyncio.Semaphore) -> bool:
 
 
 
+def _brannmur_sjekk() -> Dict[str, Any]:
+    """
+    Will Windows let the plant's answers in?
+
+    Replies to what we sent get in on any profile - the firewall keeps state.
+    What does not get in is an I-Am a controller sends as a broadcast, which is
+    how many answer Who-Is, unless an inbound rule allows it. Windows files an
+    unknown plant network as Public, and the rule it offers on first start is
+    often ticked for Private only. So the question is: which profile is the
+    adapter on, and is there an allow rule for this Python on that profile?
+    """
+    if os.name != "nt":
+        return {"status": "ok", "detalj": "Ikke Windows", "forklaring": "Ingen Windows-brannmur å sjekke."}
+    import sys
+    lokal = (state.get("local_address") or "").split("/")[0].split(":")[0]
+    alias = next((e["interface"] for e in list_interfaces() if e["ip"] == lokal), None)
+    exe = getattr(sys, "_base_executable", None) or sys.executable
+    ps = (
+        "$ErrorActionPreference='SilentlyContinue';"
+        f"$kat = if ('{alias or ''}') {{ (Get-NetConnectionProfile -InterfaceAlias '{alias or ''}').NetworkCategory }} else {{ '' }};"
+        f"$r = @(Get-NetFirewallApplicationFilter -Program '{exe}' | Get-NetFirewallRule | "
+        "Where-Object { $_.Enabled -eq 'True' -and $_.Direction -eq 'Inbound' -and $_.Action -eq 'Allow' } | "
+        "ForEach-Object { [string]$_.Profile });"
+        "@{kat=[string]$kat; profiler=$r} | ConvertTo-Json -Compress"
+    )
+    try:
+        ut = subprocess.run(["powershell", "-NoProfile", "-Command", ps], capture_output=True,
+                            text=True, timeout=20,
+                            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+        data = json.loads(ut.stdout.strip() or "{}")
+    except Exception as e:
+        return {"status": "advarsel", "detalj": "Kunne ikke lese brannmuren", "forklaring": str(e)}
+    kat = (data.get("kat") or "").strip()
+    profiler = data.get("profiler") or []
+    if isinstance(profiler, str):
+        profiler = [profiler]
+    dekket = any(p == "Any" or (kat and kat in p) for p in profiler)
+    kommando = (f'New-NetFirewallRule -DisplayName "NABE BACnet" -Direction Inbound '
+                f'-Program "{exe}" -Protocol UDP -LocalPort {BACNET_PORT} -Action Allow -Profile Any')
+    if dekket:
+        return {"status": "ok", "detalj": f"Tillatt på {kat or 'nettet'}",
+                "forklaring": "Svar som kommer som kringkasting slipper inn."}
+    return {"status": "advarsel",
+            "detalj": f"{alias or 'Kortet'} er {kat or 'ukjent'}, og Python har ingen regel der",
+            "forklaring": "Direkte svar slipper inn, men I-Am som kringkastes stoppes - "
+                          "Who-Is kan da gå glipp av enheter, mens sweep virker. "
+                          "Kjør dette i PowerShell som administrator for å åpne: " + kommando,
+            "kommando": kommando}
+
+
 class DiagnoseBody(BaseModel):
     address: str
     step: str
@@ -2495,6 +2596,9 @@ async def diagnose(body: DiagnoseBody):
                 "forklaring": "Den må rutes. Det kan gå helt fint, men da må "
                               "ruteren slippe BACnet gjennom - og kringkasting "
                               "(Who-Is) stopper som regel her. Bruk sweep."}
+
+    if steg == "brannmur":
+        return await asyncio.get_event_loop().run_in_executor(None, _brannmur_sjekk)
 
     if steg == "ping":
         sem = asyncio.Semaphore(1)

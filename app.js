@@ -654,7 +654,6 @@ async function runScan() {
     toast('BBMD-modus tar én IP: adressen til byggets BBMD (som oftest JACE-en).', true);
     return;
   }
-  await kortForMaal(omraader[0]);
   b.disabled = true;
   // Vent til ladningen er sett foer etiketten blir en spinner. Nettverket
   // jobber allerede; dette flytter bare rekkefolgen paa det oyet faar.
@@ -693,6 +692,9 @@ async function runScan() {
   try {
     for (let n = 0; n < omraader.length; n++) {
       const subnet = omraader[n];
+      // Each range goes out of the adapter it is routed through - a cable
+      // range and a VPN range in one scan each get their own.
+      await kortForMaal(subnet);
       const forrige = S.devices.length;
       const merke = omraader.length > 1 ? `[${n + 1}/${omraader.length}] ${subnet} · ` : '';
 
@@ -9089,7 +9091,18 @@ document.addEventListener('keydown', e => {
   if (p.pollInt) $('pollInt').value = p.pollInt;
   if (p.dense) document.body.classList.add('dense');
 })();
-$('rangeInput').addEventListener('change', e => savePrefs({range: e.target.value.trim()}));
+$('rangeInput').addEventListener('change', e => {
+  savePrefs({range: e.target.value.trim()});
+  // A site scanned before remembers how: a building behind a BBMD is scanned
+  // through it again, a hotel VPN gets the thorough sweep it needed.
+  const nokkel = parseRanges(e.target.value).sort().join(' ');
+  const modus = (MINNE[nokkel] || {}).modus;
+  if (modus && [...$('modeSel').options].some(o => o.value === modus) && $('modeSel').value !== modus) {
+    $('modeSel').value = modus;
+    savePrefs({mode: modus});
+    toast(`Bruker ${$('modeSel').selectedOptions[0].textContent} som sist på dette anlegget`);
+  }
+});
 $('modeSel').addEventListener('change', e => savePrefs({mode: e.target.value}));
 $('pollInt').addEventListener('change', e => savePrefs({pollInt: e.target.value}));
 
@@ -9136,6 +9149,7 @@ renderDevices();
 const DIAG_STEG = [
   ['port',   'UDP-porten',   'Har et annet program tatt 47808?'],
   ['kort',   'Nettverkskortet', 'Når vi adressen herfra?'],
+  ['brannmur', 'Brannmuren',    'Slipper Windows inn svarene?'],
   ['ping',   'Ping',         'Er adressen i live?'],
   ['bacnet', 'BACnet',       'Svarer den på UDP 47808?'],
 ];
@@ -9455,6 +9469,10 @@ const ORDBOK = {
      these are the fragments as they actually reach the DOM, not the
      sentences as they read in the source. */
   'Kom i gang': 'Getting started',
+  'Brannmuren': 'Firewall',
+  'Slipper Windows inn svarene?': 'Does Windows let the answers in?',
+  'Kunne ikke lese brannmuren': 'Could not read the firewall',
+  'Svar som kommer som kringkasting slipper inn.': 'Answers sent as broadcasts get in.',
   'Fredag etter to. Ingen nye overstyringer nå, ok?': 'Friday after two. No new overrides now, ok?',
   'Sent igangkjøringskvelds? Jeg holder deg med selskap.': 'Late commissioning night? I will keep you company.',
   'Tidlig ute. Kaffen er ikke ferdig ennå.': 'Early start. The coffee is not ready yet.',
@@ -10090,6 +10108,9 @@ const ORDBOK = {
    English shape, and the group order that maps one to the other. Anything
    not listed here stays Norwegian rather than coming out half-translated. */
 const MONSTER = [
+  [/^Bruker (.+) som sist på dette anlegget$/, (m) => `Using ${m[1]}, as last time on this site`,
+   /^Using (.+), as last time on this site$/, (m) => `Bruker ${m[1]} som sist på dette anlegget`],
+  [/^Tillatt på (.+)$/, (m) => `Allowed on ${m[1]}`, /^Allowed on (.+)$/, (m) => `Tillatt på ${m[1]}`],
   [/^(\d+) enheter\. Det var mange\.$/, (m) => `${m[1]} devices. That is a lot.`,
    /^(\d+) devices\. That is a lot\.$/, (m) => `${m[1]} enheter. Det var mange.`],
   [/^(\d+) punkter av (\d+) objekter · (.+)$/, (m) => `${m[1]} points of ${m[2]} objects · ${m[3]}`,
