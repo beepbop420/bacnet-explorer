@@ -11,3 +11,4 @@ pending-releases.json
 projects/
 logo.*
 *.log
+dist/
