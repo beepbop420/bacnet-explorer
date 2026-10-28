@@ -1,0 +1,13 @@
+# Only the program itself is versioned. Everything a plant visit leaves
+# behind - site memory, notes, the write log, saved projects - stays out.
+venv/
+__pycache__/
+backup-*/
+sites.json
+notes.json
+notes-queue.json
+writelog.jsonl
+pending-releases.json
+projects/
+logo.*
+*.log
