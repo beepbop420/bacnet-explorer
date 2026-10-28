@@ -1127,7 +1127,8 @@ function renderDevices() {
       ? (BORTE_FOER.has(d.address) ? ' borte' : ' borte nyborte')
       : (BORTE_FOER.has(d.address) ? ' tilbake' : '');
     if (erBorte) BORTE_NAA.add(d.address);
-    return `<button class="dev${sel}${ny}${laster}${borte}${st ? ' st-' + st : ''}" data-ip="${esc(d.address)}" style="--vc:${v.color}${frem}">
+    const lest = S.cache[d.address] ? ' lest' : '';
+    return `<button class="dev${sel}${ny}${laster}${borte}${lest}${st ? ' st-' + st : ''}" data-ip="${esc(d.address)}" style="--vc:${v.color}${frem}">
       <span class="dev-l1">
         <span class="dev-name">${esc(d.object_name || '—')}</span>
         ${devStatus(d)}
@@ -2001,6 +2002,7 @@ function renderCtx() {
   const v = vendorOf(d.vendor_name, d.vendor_id);
   const flagg = flagCounts(S.points);
   const writable = S.points.filter(p => p.writable).length;
+  huskBesok();
   el.style.setProperty('--vc', v.color);
   if (S.points.length && typeof nabeRentAnlegg === 'function') nabeRentAnlegg(d, S.points);
   el.innerHTML = `
@@ -6307,14 +6309,6 @@ function renderDeviceSummary() {
       <span class="vendor" style="--vc:${v.color}"><i></i><span>${esc(v.label)}</span></span>
       · <code style="font-family:var(--mono);font-size:10px">#${d.device_instance} · ${esc(d.address)}</code>
     </div>
-    <div class="sect"><div class="sect-head">Sammendrag</div>
-      <div class="sum-grid">
-        <div class="sum-card"><b>${S.totalObjects || 0}</b><span>objekter</span></div>
-        <div class="sum-card"><b>${S.points.length}</b><span>punkter</span></div>
-        ${Object.entries(FLAGS).filter(([f]) => flagg[f]).map(([f, m]) =>
-          `<div class="sum-card ${m.cls === 'bad' ? 'alarm' : 'over'}"><b>${flagg[f]}</b><span>${esc(m.label)}</span></div>`).join('')}
-      </div>
-    </div>
     <div class="sect" id="alarmSect" hidden></div>
     <div class="sect"><div class="sect-head">Notat</div>
       <div class="sect-body">
@@ -6322,6 +6316,14 @@ function renderDeviceSummary() {
           placeholder="Hva du fant, hva som gjenstår, hva neste mann bør vite…"></textarea>
         <div class="note-foot"><span id="noteState"></span>
           <button id="noteSave" class="btn">Lagre notat</button></div>
+      </div>
+    </div>
+    <div class="sect"><div class="sect-head">Sammendrag</div>
+      <div class="sum-grid">
+        <div class="sum-card"><b>${S.totalObjects || 0}</b><span>objekter</span></div>
+        <div class="sum-card"><b>${S.points.length}</b><span>punkter</span></div>
+        ${Object.entries(FLAGS).filter(([f]) => flagg[f]).map(([f, m]) =>
+          `<div class="sum-card ${m.cls === 'bad' ? 'alarm' : 'over'}"><b>${flagg[f]}</b><span>${esc(m.label)}</span></div>`).join('')}
       </div>
     </div>
     <div class="sect"><div class="sect-head">Objekttyper</div>
@@ -10732,7 +10734,10 @@ async function visStartskjerm() {
     liste.innerHTML = rader.map(([key, s]) => `
       <button class="ss-rad" data-k="${esc(key)}">
         <span class="ss-rad-navn">${esc(s.navn || key)}</span>
-        <span class="ss-rad-meta">${s.navn ? esc(key) + ' · ' : ''}${(s.enheter || []).length} ${(s.enheter || []).length === 1 ? T('enhet', 'device') : T('enheter', 'devices')}${s.modus === 'bbmd' ? ' · BBMD' : ''}</span>
+        <span class="ss-rad-meta">${s.navn ? esc(key) + ' · ' : ''}${(s.enheter || []).length} ${(s.enheter || []).length === 1 ? T('enhet', 'device') : T('enheter', 'devices')}${s.modus === 'bbmd' ? ' · BBMD' : ''}${(() => {
+          const b = sisteBesok(key);
+          return b && b.over ? ` · <span class="ss-over">${b.over} ${T('overstyrt da du gikk', 'overridden when you left')}</span>` : '';
+        })()}</span>
       </button>`).join('');
     liste.querySelectorAll('.ss-rad').forEach(b => b.onclick = () =>
       skann(b.dataset.k.split(' ').join(', '), (MINNE[b.dataset.k] || {}).modus));
@@ -10984,3 +10989,30 @@ function lagBtgFil() {
   nabeSier(T('BTG-fil laget. BTG selv er litt fornærmet.', 'BTG file made. BTG itself is a little offended.'), 'fornoyd', 'btg');
 }
 document.addEventListener('click', (e) => { if (e.target.closest?.('#tgBtg')) lagBtgFil(); });
+
+
+/* ------------------------------------------------------- the last visit
+   The start screen tells you how you left each plant: overridden and faulty
+   points across every device read, kept per site in this browser. "3
+   overridden when you left" is the thing worth knowing before you go back. */
+function huskBesok() {
+  const k = tagNokkel();
+  if (!k) return;
+  let over = 0, feil = 0, enheter = 0;
+  for (const d of S.devices) {
+    const pts = S.cache[d.address];
+    if (!pts) continue;
+    enheter++;
+    const c = flagCounts(pts);
+    over += (c['overridden'] || 0) + (c['out-of-service'] || 0);
+    feil += (c['in-alarm'] || 0) + (c['fault'] || 0);
+  }
+  try {
+    const alle = JSON.parse(localStorage.getItem('nabe_besok') || '{}');
+    alle[k] = {over, feil, enheter, t: Date.now()};
+    localStorage.setItem('nabe_besok', JSON.stringify(alle));
+  } catch {}
+}
+function sisteBesok(k) {
+  try { return (JSON.parse(localStorage.getItem('nabe_besok') || '{}'))[k] || null; } catch { return null; }
+}

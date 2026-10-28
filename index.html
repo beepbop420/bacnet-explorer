@@ -3883,6 +3883,37 @@ body.gjennomsiktig .menu-pop{backdrop-filter:none}
 .dev.mottok{animation:stille-tint 600ms var(--mot-kurve) both}
 .dev.tilbake{animation:stille-ok 800ms var(--mot-kurve)}
 .note-field.lagret{animation:stille-ok 900ms ease-out}
+
+/* ---- design pass 2 ---- */
+/* 1. The interval only matters while Live is on, so it only shows then. */
+.filterbar #pollInt{display:none}
+.filterbar:has(#pollBtn.on) #pollInt{display:inline-block}
+
+/* 3. Read and unread: a device that has not been read yet is a step quieter. */
+.dev:not(.lest):not(.sel) .dev-name{color:var(--fg-2);font-weight:400}
+
+/* 4. Light mode: more space between the greys, so muted text still reads. */
+:root[data-theme="light"]{--fg-2:#4a4a51;--fg-3:#5c5c63;--line:#dcdcd7;--line-2:#c6c6c0}
+
+/* 5. Values in the interface's own face, with fixed-width digits so the
+   decimal points still line up. */
+td.c-val,td.c-obj .inst,.dev-pkt,.sum-card b,.ctx-stat{font-family:var(--sans);font-variant-numeric:tabular-nums}
+
+/* 6. Labels everywhere in sentence case - dialogs, menus, palettes and tables
+   had small shouting capitals left over from the first look. */
+.tb-label,.cmp-hode,.cmp-merke,.rap-h,.pane-head,thead th,.sect-head,.tl-tab th,
+.sum-card span,.menu-gruppe,.tema-tittel,.cmd-group,.ede-h,.help-title{
+  text-transform:none!important;letter-spacing:0!important}
+.tema-tittel,.cmd-group,.ede-h,.help-title,.rap-h,.cmp-hode{font-size:12px;font-weight:500;color:var(--fg-2)}
+.gs-head{border-bottom:1px solid var(--line)}
+.gs-modal .btn{border-radius:var(--radius)}
+
+/* 7. Four type sizes: 11 for metadata, 12 for controls and labels, 13 for
+   body text, and the large ones for titles. */
+:root{--t-1:11px;--t-2:11px;--t-3:12px;--t-4:12px;--t-5:13px}
+
+/* 8. How the plant was left, on the start screen. */
+.ss-over{color:var(--warn)}
 </style>
 </head>
 <body>
