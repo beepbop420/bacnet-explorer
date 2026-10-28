@@ -44,7 +44,7 @@ from pydantic import BaseModel
 from bacpypes3.pdu import Address, IPv4Address
 from bacpypes3.object import DeviceObject
 from bacpypes3.ipv4.app import NormalApplication, ForeignApplication
-from bacpypes3.apdu import WhoIsRequest
+from bacpypes3.apdu import WhoIsRequest, GetEventInformationRequest
 from bacpypes3.service.device import WhoIsFuture
 
 import bacnet_core as bc
@@ -154,6 +154,8 @@ async def guard_and_cors(request, call_next):
         response.headers["Access-Control-Allow-Origin"] = origin
         response.headers["Vary"] = "Origin"
     return response
+
+VERSJON = "1.1"
 
 state = {"app": None, "local_address": None, "read_only": False, "bbmd": None}
 
@@ -319,6 +321,7 @@ class ScanBody(BaseModel):
 
 
 MAX_SWEEP_HOSTS = 4096
+SISTE_ENHETER: List[str] = []      # addresses found this session, for router discovery
 
 
 def parse_target(spec: str):
@@ -362,6 +365,7 @@ def parse_target(spec: str):
 def status():
     return {
         "running": state["app"] is not None,
+        "versjon": VERSJON,
         "local_address": state["local_address"],
         "bbmd": state.get("bbmd"),
         "port_advarsel": port_advarsel(port_naboer()) if state["app"] else None,
@@ -515,6 +519,7 @@ def _close_app() -> None:
     a = state["app"]
     if a is None:
         return
+    _cov_stopp_alle()
     try:
         if state.get("bbmd"):
             a.unregister()
@@ -989,6 +994,9 @@ async def _run_scan(job, body: "ScanBody", hosts: List[str], net):
             hosts_scanned = net.num_addresses
 
     devices.sort(key=lambda d: (d["device_instance"] is None, d["device_instance"]))
+    for d in devices:
+        if d.get("address") and d["address"] not in SISTE_ENHETER:
+            SISTE_ENHETER.append(d["address"])
     return {
         "status": "done",
         "subnet": body.subnet,
@@ -1634,13 +1642,16 @@ async def poll(body: PollBody):
 
     async def one_device(ip: str, objids: List[str]):
         addr = device_address(ip)
+        fra_cov, les = _cov_del(bacnet_app, ip, objids)
         try:
-            out[ip] = await bc.poll_values(bacnet_app, addr, objids)
+            out[ip] = await bc.poll_values(bacnet_app, addr, les) if les else {}
         except COMM_ERRORS:
             out[ip] = {}
+        out[ip].update(fra_cov)
 
     await asyncio.gather(*[one_device(ip, oids) for ip, oids in body.targets.items() if oids])
-    return {"status": "done", "ts": time.time(), "values": out}
+    return {"status": "done", "ts": time.time(), "values": out,
+            "cov": sum(1 for c in COV.values() if c.get("ok"))}
 
 
 @app.post("/api/object/detail")
@@ -2481,6 +2492,187 @@ async def _ping_one(ip: str, timeout_ms: int, sem: asyncio.Semaphore) -> bool:
 
 
 
+async def _tjenester(ip: str) -> Dict[str, Any]:
+    """
+    Does anything at all answer on this address?
+
+    Separates the two silences that look the same from a BACnet tool: a VPN
+    that lets web and Workbench through but not UDP 47808, and an address
+    that this PC simply cannot reach - the plant that is only reachable from
+    a remote desktop on the other side of the tunnel.
+    """
+    porter = {80: "nettside", 443: "nettside (https)", 4911: "Niagara Fox",
+              3011: "Niagara Fox", 3389: "fjernskrivebord", 22: "SSH"}
+    host = ip.split(":")[0]
+
+    async def prov(p):
+        try:
+            _, w = await asyncio.wait_for(asyncio.open_connection(host, p), timeout=1.2)
+            w.close()
+            return p
+        except Exception:
+            return None
+    apne = [p for p in await asyncio.gather(*[prov(p) for p in porter]) if p]
+    if not apne:
+        return {"status": "feil", "detalj": "Ingenting svarer på denne adressen",
+                "forklaring": "Verken nettside, Workbench, fjernskrivebord eller BACnet svarer. "
+                              "Da slipper ikke VPN-en deg fram hit. Når du anlegget bare via "
+                              "fjernskrivebord til en maskin der ute, må NABE kjøre på den "
+                              "maskinen - bruk den portable utgaven."}
+    navn = ", ".join(sorted({porter[p] for p in apne}))
+    return {"status": "advarsel", "detalj": f"Svarer på {navn}",
+            "forklaring": "Adressen nås, men hvis BACnet over ikke svarte, slipper VPN-en "
+                          "trolig TCP men ikke UDP 47808. Be den som drifter VPN-en åpne "
+                          "UDP 47808 til dette nettet."}
+
+
+# ------------------------------------------------------------------- alarms
+class AlarmBody(BaseModel):
+    address: str
+
+
+@app.post("/api/device/alarms")
+async def device_alarms(body: AlarmBody):
+    """
+    The device's own list of active and unacknowledged events.
+
+    One GetEventInformation request returns every object that is not normal
+    or still waiting for an acknowledgement - which is the list a service
+    visit starts from - instead of reading status flags off every point.
+    Devices that do not implement the service say so, and the page falls back
+    to the flags it already has.
+    """
+    bacnet_app = _require_app()
+    if bacnet_app is None:
+        return {"status": "error", "error": "Ikke tilkoblet."}
+    addr = device_address(body.address)
+    ut: List[Dict[str, Any]] = []
+    siste = None
+    try:
+        for _ in range(20):
+            req = GetEventInformationRequest(destination=addr)
+            if siste is not None:
+                req.lastReceivedObjectIdentifier = siste
+            ack = await asyncio.wait_for(bacnet_app.request(req), timeout=6)
+            for e in ack.listOfEventSummaries or []:
+                siste = e.objectIdentifier
+                kvitt = e.acknowledgedTransitions
+                ukvittert = [n for i, n in enumerate(("til unormal", "til feil", "til normal"))
+                             if kvitt is not None and len(kvitt) > i and not kvitt[i]]
+                ut.append({
+                    "objid": bc.objid_str(e.objectIdentifier),
+                    "tilstand": str(e.eventState),
+                    "ukvittert": ukvittert,
+                    "type": str(e.notifyType),
+                })
+            if not ack.moreEvents:
+                break
+    except asyncio.TimeoutError:
+        return {"status": "error", "error": "Ingen svar på alarmspørringen."}
+    except Exception as e:
+        tekst = f"{type(e).__name__}: {e}"
+        if "unrecognized" in tekst.lower() or "service" in tekst.lower() or "reject" in tekst.lower():
+            return {"status": "unsupported", "error": "Enheten støtter ikke alarmlister."}
+        return {"status": "error", "error": tekst}
+    return {"status": "done", "alarmer": ut}
+
+
+# ------------------------------------------------------------------ routers
+@app.get("/api/routers")
+async def routers():
+    """
+    Which routers are out there, and which BACnet networks sit behind them.
+
+    On our own subnet one broadcast asks everybody. Over a VPN broadcasts do
+    not arrive, so each device already found is asked directly instead -
+    routers answer a unicast too.
+    """
+    bacnet_app = _require_app()
+    if bacnet_app is None:
+        return {"status": "error", "error": "Ikke tilkoblet."}
+    funn: Dict[str, set] = {}
+
+    async def spor(dest):
+        try:
+            svar = await asyncio.wait_for(
+                bacnet_app.nse.who_is_router_to_network(destination=dest), timeout=3)
+        except Exception:
+            return
+        for _adapter, npdu in svar or []:
+            nett = getattr(npdu, "iartnNetworkList", None) or []
+            funn.setdefault(str(npdu.pduSource), set()).update(int(n) for n in nett)
+
+    lokal = _local_network()
+    if lokal is not None and not state.get("bbmd"):
+        await spor(None)
+    else:
+        ips = [d for d in SISTE_ENHETER if _plain_ip(d)][:64]
+        await asyncio.gather(*[spor(Address(ip)) for ip in ips])
+    return {"status": "done",
+            "rutere": [{"ruter": r, "nett": sorted(n)} for r, n in sorted(funn.items()) if n]}
+
+
+# ---------------------------------------------------------------------- COV
+# Live values by subscription where the device allows it. The page keeps
+# asking /api/poll as before; behind it, a point that accepted a COV
+# subscription is answered from what the device last pushed, and only the
+# rest are read over the wire. On a VPN that is most of the traffic gone.
+COV: Dict[tuple, Dict[str, Any]] = {}
+COV_IKKE_FOR = 600.0          # a refusal is not asked again for ten minutes
+COV_STILLE = 90.0             # unpolled this long: the subscription is dropped
+
+
+def _cov_del(bacnet_app, ip: str, objids: List[str]):
+    naa = time.time()
+    fra_cov: Dict[str, Any] = {}
+    les: List[str] = []
+    for oid in objids:
+        k = (ip, oid)
+        c = COV.get(k)
+        if c is None or (not c.get("ok") and naa - c.get("feilet", 0) > COV_IKKE_FOR and not c.get("task")):
+            COV[k] = c = {"ok": False, "verdi": None, "sist_spurt": naa}
+            c["task"] = asyncio.ensure_future(_cov_lytt(bacnet_app, ip, oid, c))
+        c["sist_spurt"] = naa
+        if c.get("ok") and c.get("har"):
+            fra_cov[oid] = c["verdi"]
+        else:
+            les.append(oid)
+    for k, c in list(COV.items()):
+        if naa - c.get("sist_spurt", 0) > COV_STILLE:
+            t = c.get("task")
+            if t:
+                t.cancel()
+            COV.pop(k, None)
+    return fra_cov, les
+
+
+async def _cov_lytt(bacnet_app, ip: str, oid: str, c: Dict[str, Any]):
+    try:
+        async with bacnet_app.change_of_value(
+                device_address(ip), oid, issue_confirmed_notifications=False, lifetime=300) as scm:
+            c["ok"] = True
+            while True:
+                prop, verdi = await scm.get_value()
+                if str(prop) in ("present-value", "presentValue"):
+                    c["verdi"] = bc.serialize(verdi)
+                    c["har"] = True
+    except asyncio.CancelledError:
+        raise
+    except Exception:
+        c["ok"] = False
+        c["feilet"] = time.time()
+    finally:
+        c["task"] = None
+
+
+def _cov_stopp_alle() -> None:
+    for c in COV.values():
+        t = c.get("task")
+        if t:
+            t.cancel()
+    COV.clear()
+
+
 def _brannmur_sjekk() -> Dict[str, Any]:
     """
     Will Windows let the plant's answers in?
@@ -2596,6 +2788,9 @@ async def diagnose(body: DiagnoseBody):
                 "forklaring": "Den må rutes. Det kan gå helt fint, men da må "
                               "ruteren slippe BACnet gjennom - og kringkasting "
                               "(Who-Is) stopper som regel her. Bruk sweep."}
+
+    if steg == "tjenester":
+        return await _tjenester(ip)
 
     if steg == "brannmur":
         return await asyncio.get_event_loop().run_in_executor(None, _brannmur_sjekk)

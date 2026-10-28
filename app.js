@@ -744,6 +744,8 @@ async function runScan() {
     S.tomtSkann = S.devices.length ? null : {mode, omraader};
     if (!S.devices.length) nabeTrist();
     nabeEtterSkann(S.devices.length);
+    tell('skann'); tell('enheter', S.devices.length);
+    if (S.devices.length) visRutere();
     renderDevices();          // varselpanelet skal med en gang
   } catch (e) { toast(e.message, true); status(''); }
   document.body.classList.remove('skanner');
@@ -3320,6 +3322,7 @@ $('q')?.addEventListener('input', (e) => {
 /* -- writing. Read from the form as it is sent; never changes what is sent. */
 document.addEventListener('click', (e) => {
   if (!e.target.closest?.('#wSend')) return;
+  tell('skriv');
   const verdi = ($('wVal')?.value || '').trim().replace(',', '.');
   const pri = parseInt($('wPri')?.value, 10);
   if (pri === 1) nabeSier('Prioritet 1. Livsfarlig modig.', 'nervos', 'p1');
@@ -6270,6 +6273,8 @@ function tellSammendrag(rot) {
 function renderDeviceSummary() {
   const d = S.activeDev;
   if (!d) return '<div class="empty" style="padding:20px 16px">Velg et punkt</div>';
+  // Filled after the markup is in place: alarms come from the device itself.
+  setTimeout(() => { if (typeof fyllAlarmer === 'function') { fyllAlarmer(); tellPunkter(); } }, 0);
   const v = vendorOf(d.vendor_name, d.vendor_id);
   const flagg = flagCounts(S.points);
   const counts = S.typeCounts || {};
@@ -6291,6 +6296,7 @@ function renderDeviceSummary() {
           `<div class="sum-card ${m.cls === 'bad' ? 'alarm' : 'over'}"><b>${flagg[f]}</b><span>${esc(m.label)}</span></div>`).join('')}
       </div>
     </div>
+    <div class="sect" id="alarmSect" hidden></div>
     <div class="sect"><div class="sect-head">Notat</div>
       <div class="sect-body">
         <textarea id="devNote" class="note-field" rows="3"
@@ -9152,6 +9158,7 @@ const DIAG_STEG = [
   ['brannmur', 'Brannmuren',    'Slipper Windows inn svarene?'],
   ['ping',   'Ping',         'Er adressen i live?'],
   ['bacnet', 'BACnet',       'Svarer den på UDP 47808?'],
+  ['tjenester', 'Andre tjenester', 'Svarer adressen på noe i det hele tatt?'],
 ];
 
 function diagTegn(i, tilstand, detalj, forklaring) {
@@ -9469,6 +9476,9 @@ const ORDBOK = {
      these are the fragments as they actually reach the DOM, not the
      sentences as they read in the source. */
   'Kom i gang': 'Getting started',
+  'Andre tjenester': 'Other services',
+  'Svarer adressen på noe i det hele tatt?': 'Does the address answer anything at all?',
+  'Ingenting svarer på denne adressen': 'Nothing answers on this address',
   'Brannmuren': 'Firewall',
   'Slipper Windows inn svarene?': 'Does Windows let the answers in?',
   'Kunne ikke lese brannmuren': 'Could not read the firewall',
@@ -10108,6 +10118,7 @@ const ORDBOK = {
    English shape, and the group order that maps one to the other. Anything
    not listed here stays Norwegian rather than coming out half-translated. */
 const MONSTER = [
+  [/^Svarer på (.+)$/, (m) => `Answers on ${m[1]}`, /^Answers on (.+)$/, (m) => `Svarer på ${m[1]}`],
   [/^Bruker (.+) som sist på dette anlegget$/, (m) => `Using ${m[1]}, as last time on this site`,
    /^Using (.+), as last time on this site$/, (m) => `Bruker ${m[1]} som sist på dette anlegget`],
   [/^Tillatt på (.+)$/, (m) => `Allowed on ${m[1]}`, /^Allowed on (.+)$/, (m) => `Tillatt på ${m[1]}`],
@@ -10317,7 +10328,7 @@ const HOPP_OVER = /^(SCRIPT|STYLE|CODE|SVG|PATH)$/;
    These are the fields that carry the data, not the panes that contain them:
    the device list also holds the getting-started text and the watch pane its
    own empty state, and both of those are the tool talking. */
-const DATA_SONE = 'tbody, .nabe-boble, .dev-name, .dev-ip, .dev-note, '
+const DATA_SONE = 'tbody, .nabe-boble, .startskjerm, #alarmSect, .ruter-info, .dev-name, .dev-ip, .dev-note, '
   + '.watch-name, .watch-ip, .insp-title, .insp-sub, .insp-val, .data-verdier';
 
 function iDataSone(n) {
@@ -10441,3 +10452,328 @@ function settSprak(kode, lagre) {
   // This edition is English unless Norwegian has been chosen.
   if (lagret === 'nb') settSprak('nb', false); else settSprak('en', false);
 })();
+
+/* =============================================================== NABE 1.1
+   Alarms, routers, the start screen, and the small things that happen when
+   the tool has been used a lot. New text is written in both languages here
+   with T(), and the containers are left out of the language sweep, so nothing
+   is translated twice. */
+const T = (nb, en) => (SPRAAK === 'en' ? en : nb);
+let NABE_VERSJON = '';
+fetch('/api/status').then(r => r.json()).then(d => { NABE_VERSJON = d.versjon || ''; }).catch(() => {});
+
+/* ------------------------------------------------------------ alarm list */
+const ALARM_CACHE = {};
+
+async function fyllAlarmer() {
+  const boks = document.getElementById('alarmSect');
+  const d = S.activeDev;
+  if (!boks || !d) return;
+  let data = ALARM_CACHE[d.address];
+  if (!data || Date.now() - data.t > 60000) {
+    try {
+      const r = await api('/api/device/alarms', {address: d.address});
+      data = ALARM_CACHE[d.address] = {t: Date.now(), r};
+    } catch { return; }
+  }
+  // The inspector may have moved on while we waited.
+  if (S.activeDev !== d || !document.body.contains(boks)) return;
+  const r = data.r;
+  if (r.status !== 'done') { boks.hidden = true; return; }
+  const liste = r.alarmer || [];
+  boks.hidden = false;
+  if (!liste.length) {
+    boks.innerHTML = `<div class="sect-head">${T('Aktive alarmer', 'Active alarms')} <span class="count">0</span></div>`
+      + `<div class="alarm-tom">${T('Ingen aktive alarmer.', 'No active alarms.')}</div>`;
+    nabeSier(T('Ingen alarmer. Mistenkelig.', 'No alarms. Suspicious.'), 'skvatt', 'ingen-alarm');
+    return;
+  }
+  const navn = oid => (S.pointIndex && S.pointIndex.get(oid)?.name) || oid;
+  boks.innerHTML = `<div class="sect-head">${T('Aktive alarmer', 'Active alarms')} <span class="count">${liste.length}</span></div>
+    <div class="alarm-liste">${liste.map(a => `
+      <button class="alarm-rad" data-o="${esc(a.objid)}">
+        <span class="alarm-navn">${esc(navn(a.objid))}</span>
+        <span class="alarm-til ${/fault/.test(a.tilstand) ? 'bad' : 'warn'}">${esc(a.tilstand)}</span>
+        ${a.ukvittert.length ? `<span class="alarm-ukv" title="${esc(a.ukvittert.join(', '))}">${T('ukvittert', 'unacked')}</span>` : ''}
+      </button>`).join('')}</div>`;
+  boks.querySelectorAll('.alarm-rad').forEach(b => b.onclick = () =>
+    document.querySelector(`#pointsWrap tr[data-o="${CSS.escape(b.dataset.o)}"]`)?.click());
+}
+
+/* ------------------------------------------------------- routers on site */
+async function visRutere() {
+  let r;
+  try { r = await (await fetch('/api/routers')).json(); } catch { return; }
+  const liste = (r && r.rutere) || [];
+  let el = document.getElementById('ruterInfo');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'ruterInfo';
+    el.className = 'ruter-info';
+    $('dupWarn')?.after(el);
+  }
+  if (!liste.length) { el.hidden = true; return; }
+  el.hidden = false;
+  el.innerHTML = liste.map(x =>
+    `<div title="${esc(T('BACnet-nett bak denne ruteren - typisk MS/TP', 'BACnet networks behind this router - usually MS/TP'))}">`
+    + `<span class="ruter-ip">${esc(x.ruter)}</span> → ${T('nett', 'network')} ${x.nett.map(n => esc(String(n))).join(', ')}</div>`).join('');
+}
+
+/* ------------------------------------------------------- usage, and jokes */
+const TELLER_NOKKEL = 'nabe_teller';
+function teller() {
+  try { return JSON.parse(localStorage.getItem(TELLER_NOKKEL)) || {}; } catch { return {}; }
+}
+function tell(hva, n = 1) {
+  const t = teller();
+  t[hva] = (t[hva] || 0) + n;
+  t.sett = t.sett || [];
+  try { localStorage.setItem(TELLER_NOKKEL, JSON.stringify(t)); } catch {}
+  milepaeler(hva, t);
+}
+const MILEPAELER = {
+  aapnet: [[10, 'Tiende gang. Vi begynner å bli venner.', 'Tenth time. We are becoming friends.'],
+           [50, 'Femti åpninger. Du fortjener en NABE-kopp.', 'Fifty opens. You deserve a NABE mug.'],
+           [200, 'To hundre. Jeg tror jeg er favoritten din.', 'Two hundred. I think I am your favourite.']],
+  skann:  [[1, 'Første skann! Jeg skal huske denne dagen.', 'First scan! I will remember this day.'],
+           [25, '25 skann. Du skanner mer enn en flyplass.', '25 scans. You scan more than an airport.'],
+           [100, 'Hundre skann. YABE kunne aldri.', 'A hundred scans. YABE could never.']],
+  enheter:[[100, 'Hundre enheter funnet. Noen var til og med konfigurert riktig.', 'A hundred devices found. Some were even configured properly.'],
+           [1000, 'Tusen enheter. Du har sett ting.', 'A thousand devices. You have seen things.']],
+  skriv:  [[1, 'Første skriving. Husk å frigi.', 'First write. Remember to release.'],
+           [50, 'Femti skrivinger. Driften lurer på hvem du er.', 'Fifty writes. Operations wonders who you are.']],
+  punkter:[[10000, 'Ti tusen punkter lest. Dataene dine er tunge.', 'Ten thousand points read. Your data is heavy.']],
+};
+function milepaeler(hva, t) {
+  for (const [grense, nb, en] of MILEPAELER[hva] || []) {
+    const id = hva + grense;
+    if (t[hva] >= grense && !t.sett.includes(id)) {
+      t.sett.push(id);
+      try { localStorage.setItem(TELLER_NOKKEL, JSON.stringify(t)); } catch {}
+      setTimeout(() => nabeSier(T(nb, en), 'fornoyd'), 800);
+      return;
+    }
+  }
+}
+
+// Points read: counted once per device per visit.
+const LEST_TELT = new Set();
+function tellPunkter() {
+  const d = S.activeDev;
+  if (!d || !S.points.length || LEST_TELT.has(d.address)) return;
+  LEST_TELT.add(d.address);
+  tell('punkter', S.points.length);
+  if (S.points.length > 1500) nabeSier(T('Pratsom regulator, denne.', 'Chatty controller, this one.'), 'skvatt', 'prat');
+}
+
+// Flip-flopping between light and dark.
+let TEMA_KLIKK = [];
+document.addEventListener('click', (e) => {
+  if (!e.target.closest?.('#themeBtn')) return;
+  const naa = Date.now();
+  TEMA_KLIKK = TEMA_KLIKK.filter(t => naa - t < 4000).concat(naa);
+  if (TEMA_KLIKK.length >= 5) { TEMA_KLIKK = []; nabeSier(T('Bestem deg.', 'Make up your mind.'), 'svimmel'); }
+}, true);
+
+// A long session.
+const NABE_OKT_START = Date.now();
+setInterval(() => {
+  if (Date.now() - NABE_OKT_START > 3 * 3600e3)
+    nabeSier(T('Tre timer i strekk. Drikk litt vann.', 'Three hours straight. Drink some water.'), null, 'lang-okt');
+}, 60000);
+
+// Copying rows for Excel.
+document.addEventListener('copy', () => {
+  if (document.activeElement?.closest?.('#pointsWrap'))
+    nabeSier(T('Kopiert. Ikke si det til YABE.', 'Copied. Do not tell YABE.'), 'fornoyd', 'kopi');
+});
+
+/* ------------------------------------------------------------ start screen
+   One screen between opening the tool and using it: who it is, which plants
+   you were on last, and what is new. It never stands in the way - any key,
+   a click on a plant, or Esc goes straight through - and a plant clicked
+   here is scanned the way it was scanned last time. */
+const FAKTA = [
+  ['Instans 4194303 betyr «hvem du enn er». NABE bruker den til å finne deg.', 'Instance 4194303 means "whoever you are". NABE uses it to find you.'],
+  ['47808 er 0xBAC0 i heks. Noen hadde det gøy i 1995.', '47808 is 0xBAC0 in hex. Somebody had fun in 1995.'],
+  ['Prioritet 1 er for livssikkerhet. Prioritet 8 er for deg.', 'Priority 1 is for life safety. Priority 8 is for you.'],
+  ['MS/TP sender en stafettpinne rundt bussen. Den som har den, får snakke.', 'MS/TP passes a token round the bus. Whoever holds it gets to talk.'],
+  ['En BBMD gjentar kringkastinger mellom nett. Uten den hører ingen deg over VPN.', 'A BBMD repeats broadcasts between networks. Without one nobody hears you over VPN.'],
+  ['BACnet ble standard i 1995. Noen av regulatorene du finner, er nesten like gamle.', 'BACnet became a standard in 1995. Some controllers you find are nearly as old.'],
+  ['Relinquish default er verdien som gjelder når ingen prioritet er satt.', 'Relinquish default is the value that applies when no priority is set.'],
+  ['COV betyr at regulatoren sier fra selv. Mindre spørring, mer ro.', 'COV means the controller speaks up itself. Less asking, more peace.'],
+];
+const NYTT = {
+  '1.1': [
+    ['Aktive alarmer per enhet i inspektøren', 'Active alarms per device in the inspector'],
+    ['Live og overvåking bruker COV der regulatoren kan', 'Live and watch use COV where the controller allows'],
+    ['Rutere og nettene bak dem vises etter skann', 'Routers and the networks behind them appear after a scan'],
+    ['Diagnosen sier fra når et anlegg bare nås via fjernskrivebord', 'Diagnostics tell you when a plant is only reachable by remote desktop'],
+    ['Denne skjermen', 'This screen'],
+  ],
+};
+
+function hilsen() {
+  const t = new Date().getHours();
+  const n = teller().aapnet || 0;
+  if (n > 100) return T('Du igjen. Selvfølgelig.', 'You again. Of course.');
+  if (t < 6) return T('Hvorfor er vi våkne?', 'Why are we awake?');
+  if (t < 10) return T('God morgen. Kaffen først.', 'Good morning. Coffee first.');
+  if (t < 17) return T('Klar for enda en BACnet-explorer?', 'Ready for another BACnet explorer?');
+  return T('God kveld. Sen igangkjøring?', 'Good evening. Late commissioning?');
+}
+
+async function visStartskjerm() {
+  tell('aapnet');
+  const lag = document.createElement('div');
+  lag.id = 'startskjerm';
+  lag.className = 'startskjerm';
+  lag.setAttribute('role', 'dialog');
+  lag.setAttribute('aria-label', 'NABE');
+  const fakta = FAKTA[Math.floor(Math.random() * FAKTA.length)];
+  const sistSett = (() => { try { return localStorage.getItem('nabe_sett_versjon'); } catch { return null; } })();
+  lag.innerHTML = `
+    <div class="ss-kort">
+      <div class="ss-logo">${NABE_SVG.replace('width="26" height="26"', 'width="96" height="96"')}</div>
+      <h1 class="ss-navn">NABE</h1>
+      <div class="ss-under">Not Another BACnet Explorer<span class="ss-ver"></span></div>
+      <div class="ss-hilsen">${esc(hilsen())}</div>
+      <div class="ss-anlegg" hidden>
+        <div class="ss-tittel">${T('Fortsett der du slapp', 'Pick up where you left off')}</div>
+        <div class="ss-liste"></div>
+      </div>
+      <form class="ss-nytt">
+        <input class="field" id="ssOmr" placeholder="${T('Nytt område, f.eks. 10.75.1.0/24', 'New range, e.g. 10.75.1.0/24')}" autocomplete="off">
+        <button class="btn primary" type="submit">${T('Skann', 'Scan')}</button>
+      </form>
+      <button class="ss-videre" type="button">${T('Bare åpne', 'Just open it')} <kbd>Esc</kbd></button>
+      <div class="ss-nytt-i" hidden></div>
+      <div class="ss-fakta">${esc(T(fakta[0], fakta[1]))}</div>
+    </div>`;
+  document.body.appendChild(lag);
+
+  const lukk = () => {
+    lag.classList.add('ut');
+    setTimeout(() => lag.remove(), 260);
+    document.removeEventListener('keydown', tast, true);
+    try { localStorage.setItem('nabe_sett_versjon', NABE_VERSJON); } catch {}
+  };
+  const skann = (omr, modus) => {
+    $('rangeInput').value = omr;
+    if (modus && [...$('modeSel').options].some(o => o.value === modus)) $('modeSel').value = modus;
+    savePrefs({range: omr, mode: $('modeSel').value});
+    lukk();
+    setTimeout(() => { if (S.connected) runScan(); }, 300);
+  };
+  const tast = (e) => {
+    if (e.key === 'Escape') { e.preventDefault(); lukk(); }
+  };
+  document.addEventListener('keydown', tast, true);
+  lag.querySelector('.ss-videre').onclick = lukk;
+  lag.addEventListener('click', (e) => { if (e.target === lag) lukk(); });
+  lag.querySelector('.ss-nytt').onsubmit = (e) => {
+    e.preventDefault();
+    const v = $('ssOmr').value.trim();
+    if (v) skann(v); else lukk();
+  };
+  setTimeout(() => $('ssOmr')?.focus(), 50);
+
+  // The big NABE watches the pointer too.
+  const g = lag.querySelector('.nabe-pupiller');
+  lag.addEventListener('pointermove', (e) => {
+    const r = lag.querySelector('.ss-logo').getBoundingClientRect();
+    const vx = e.clientX - (r.left + r.width / 2), vy = e.clientY - (r.top + r.height / 2);
+    const len = Math.hypot(vx, vy) || 1, mag = Math.min(2.2, len / 60);
+    if (g) g.style.transform = `translate(${(vx / len * mag).toFixed(2)}px, ${(vy / len * mag).toFixed(2)}px)`;
+  });
+
+  // Version and what is new - filled once the server has answered.
+  setTimeout(() => {
+    if (NABE_VERSJON) lag.querySelector('.ss-ver').textContent = ' · v' + NABE_VERSJON;
+    const nytt = NYTT[NABE_VERSJON];
+    if (nytt && sistSett !== NABE_VERSJON) {
+      const boks = lag.querySelector('.ss-nytt-i');
+      boks.hidden = false;
+      boks.innerHTML = `<div class="ss-tittel">${T('Nytt i', 'New in')} ${esc(NABE_VERSJON)}</div><ul>`
+        + nytt.map(x => `<li>${esc(T(x[0], x[1]))}</li>`).join('') + '</ul>';
+    }
+  }, 400);
+
+  // The last plants, newest first.
+  try { if (typeof hentMinne === 'function') await hentMinne(); } catch {}
+  const rader = Object.entries(MINNE || {}).sort((a, b) => (b[1].sist || 0) - (a[1].sist || 0)).slice(0, 5);
+  if (rader.length && document.body.contains(lag)) {
+    lag.querySelector('.ss-anlegg').hidden = false;
+    const liste = lag.querySelector('.ss-liste');
+    liste.innerHTML = rader.map(([key, s]) => `
+      <button class="ss-rad" data-k="${esc(key)}">
+        <span class="ss-rad-navn">${esc(s.navn || key)}</span>
+        <span class="ss-rad-meta">${s.navn ? esc(key) + ' · ' : ''}${(s.enheter || []).length} ${(s.enheter || []).length === 1 ? T('enhet', 'device') : T('enheter', 'devices')}${s.modus === 'bbmd' ? ' · BBMD' : ''}</span>
+      </button>`).join('');
+    liste.querySelectorAll('.ss-rad').forEach(b => b.onclick = () =>
+      skann(b.dataset.k.split(' ').join(', '), (MINNE[b.dataset.k] || {}).modus));
+  }
+}
+setTimeout(visStartskjerm, 0);
+
+/* ---------------------------------------------------------- gallows humour
+   Requested darker. Aimed at the trade, the plant and the situation - never
+   at a person who is not in the room. */
+const NABE_MORKE = [
+  ['Prioritet 1. Hvis noe brenner, var det ikke meg.', 'Priority 1. If something catches fire, it was not me.'],
+  ['Denne regulatoren ble sist rørt av noen som har sluttet.', 'This controller was last touched by someone who has since left.'],
+  ['Overstyrt i tre år. Midlertidig.', 'Overridden for three years. Temporarily.'],
+  ['Igangkjøring er feilsøking med kaffe og dårlig samvittighet.', 'Commissioning is debugging with coffee and a guilty conscience.'],
+  ['Garantien gikk ut i går. Selvfølgelig gjorde den det.', 'The warranty expired yesterday. Of course it did.'],
+  ['Hvis det ikke står i TFM-lista, finnes det ikke. Som lønnsøkningen din.', 'If it is not in the tag list it does not exist. Like your pay rise.'],
+  ['Dokumentasjon? Vi har mot.', 'Documentation? We have courage.'],
+  ['Jeg er bare en nettside, men selv jeg vet at P1 er en dårlig idé.', 'I am just a web page, and even I know P1 is a bad idea.'],
+  ['Sweep pågår. Skrikene du hører er bare UDP-pakker som ikke kom fram.', 'Sweep running. The screams are just UDP packets that did not make it.'],
+  ['Alarmer forsvinner ikke av at du ser en annen vei. Jeg har prøvd.', 'Alarms do not go away if you look the other way. I have tried.'],
+  ['Denne WAGO-en har sett ting ingen PLS burde se.', 'This WAGO has seen things no PLC should see.'],
+  ['Fredag 15:59. Perfekt tidspunkt å endre settpunkt og forsvinne.', 'Friday 15:59. Perfect time to change a setpoint and vanish.'],
+  ['Kunden sa det «bare var en liten endring». Det er tre måneder siden.', 'The customer said it was "just a small change". That was three months ago.'],
+  ['Vi støtter BACnet. BACnet støtter ikke oss.', 'We support BACnet. BACnet does not support us.'],
+  ['Hver gang noen skriver Null til prioritet 16, dør en regulator litt.', 'Every time someone writes Null to priority 16, a controller dies a little.'],
+  ['Jeg har sett regulatorer gå offline av ren skam.', 'I have seen controllers go offline out of pure shame.'],
+];
+(function blandInnMorkt() {
+  const m = nabeMerke();
+  if (!m) return;
+  // Every other click-line is a dark one, on top of the original set.
+  m.addEventListener('click', () => {
+    if (NABE.klikk !== 3 || Math.random() < 0.5) return;
+    if (document.body.classList.contains('skanner')) return;
+    const [nb, en] = NABE_MORKE[Math.floor(Math.random() * NABE_MORKE.length)];
+    setTimeout(() => nabeSnakk(T(nb, en)), 30);
+  });
+})();
+
+/* What NABE says about the device you just opened. One line, once per
+   device per session, and only when there is something worth saying. */
+const _rentFoer = nabeRentAnlegg;
+nabeRentAnlegg = function (d, pts) {
+  if (!d || !pts || pts.length < 20) return;
+  const c = flagCounts(pts);
+  const feil = (c['in-alarm'] || 0) + (c['fault'] || 0);
+  const over = (c['overridden'] || 0) + (c['out-of-service'] || 0);
+  if (feil >= 20) nabeSier(T(`${feil} feil. Den er ikke ødelagt, den er bare ærlig.`, `${feil} faults. It is not broken, it is just honest.`), 'skvatt', 'feil:' + d.address);
+  else if (over >= 10) nabeSier(T(`${over} overstyrte punkter. Vaktmesteren kommer til å hate noen.`, `${over} overridden points. The caretaker is going to hate someone.`), 'nervos', 'over:' + d.address);
+  else _rentFoer(d, pts);
+};
+
+// The empty scan, said darker.
+const _tomFoer = nabeEtterSkann;
+nabeEtterSkann = function (n) {
+  if (n === 0) {
+    const linjer = [
+      ['Ingen svarte. Som på julebordet.', 'Nobody answered. Like the office party.'],
+      ['Ingen enheter. Enten er nettet tomt, eller så har noen trukket ut kabelen og gått hjem.', 'No devices. Either the network is empty or someone pulled the cable and went home.'],
+      ['Stille. For stille.', 'Quiet. Too quiet.'],
+    ];
+    const [nb, en] = linjer[Math.floor(Math.random() * linjer.length)];
+    setTimeout(() => nabeSnakk(T(nb, en)), 600);
+    return;
+  }
+  _tomFoer(n);
+};

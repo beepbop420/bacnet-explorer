@@ -3810,6 +3810,60 @@ td.c-val.ned{animation:verdi-lb-ned 700ms var(--mot-kurve)}
 :root.levfarge .insp-sub .vendor{color:color-mix(in srgb,var(--vc) 55%,var(--fg))}
 :root[data-theme="light"].levfarge .ctx-under .vendor,
 :root[data-theme="light"].levfarge .insp-sub .vendor{color:color-mix(in srgb,var(--vc) 70%,#000)}
+
+/* ---- NABE 1.1: start screen ----
+   Plain and quick: the mascot, the name, the plants you were on, a field for
+   a new one. A card on a dimmed window, gone with any of the obvious keys. */
+.startskjerm{position:fixed;inset:0;z-index:9980;display:flex;align-items:center;justify-content:center;
+  background:color-mix(in srgb,var(--bg) 82%,transparent);backdrop-filter:blur(3px);
+  animation:ss-inn .28s cubic-bezier(.2,.8,.2,1) both}
+.startskjerm.ut{animation:ss-ut .24s ease-in forwards}
+@keyframes ss-inn{from{opacity:0}to{opacity:1}}
+@keyframes ss-ut{to{opacity:0}}
+.ss-kort{width:min(440px,calc(100vw - 32px));max-height:calc(100vh - 32px);overflow:auto;
+  background:var(--panel);border:1px solid var(--line-2);border-radius:14px;
+  box-shadow:0 30px 80px rgba(0,0,0,.45);padding:28px 28px 20px;text-align:center;
+  animation:ss-kort .4s cubic-bezier(.2,.8,.2,1) both}
+@keyframes ss-kort{from{transform:translateY(10px) scale(.98);opacity:0}to{transform:none;opacity:1}}
+.ss-logo{display:flex;justify-content:center;margin-bottom:6px}
+.ss-logo .nabe{width:96px;height:96px}
+.ss-navn{margin:0;font-size:34px;font-weight:700;letter-spacing:.08em;color:var(--fg)}
+.ss-under{font-size:12px;color:var(--fg-3);margin-top:2px}
+.ss-hilsen{margin:14px 0 18px;font-size:14px;color:var(--fg-2)}
+.ss-tittel{font-size:12px;color:var(--fg-3);text-align:left;margin:0 0 6px}
+.ss-liste{display:flex;flex-direction:column;gap:2px;margin-bottom:14px}
+.ss-rad{display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding:8px 10px;
+  border-radius:8px;text-align:left;background:transparent;border:0;color:var(--fg);cursor:pointer}
+.ss-rad:hover,.ss-rad:focus-visible{background:var(--hover)}
+.ss-rad-navn{font-size:13px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ss-rad-meta{font-size:11px;color:var(--fg-3);white-space:nowrap;font-family:var(--mono)}
+.ss-nytt{display:flex;gap:6px}
+.ss-nytt .field{flex:1;height:34px;font-size:13px}
+.ss-nytt .btn{height:34px;padding:0 16px}
+.ss-videre{margin-top:10px;background:none;border:0;color:var(--fg-3);font-size:12px;cursor:pointer}
+.ss-videre:hover{color:var(--fg)}
+.ss-videre kbd{font-family:var(--mono);font-size:10px;border:1px solid var(--line-2);border-radius:4px;padding:0 4px;margin-left:4px}
+.ss-nytt-i{text-align:left;margin-top:16px;padding-top:12px;border-top:1px solid var(--line)}
+.ss-nytt-i ul{margin:0;padding-left:18px;font-size:12px;color:var(--fg-2);line-height:1.7}
+.ss-fakta{margin-top:16px;padding-top:12px;border-top:1px solid var(--line);font-size:11px;color:var(--fg-3);line-height:1.5}
+@media (prefers-reduced-motion:reduce){.startskjerm,.ss-kort,.startskjerm.ut{animation:none}}
+
+/* ---- active alarms in the inspector ---- */
+.alarm-liste{display:flex;flex-direction:column;padding:0 6px 8px}
+.alarm-rad{display:flex;align-items:baseline;gap:8px;padding:6px 6px;border:0;border-radius:6px;
+  background:transparent;color:var(--fg);text-align:left;cursor:pointer;font-size:12px}
+.alarm-rad:hover{background:var(--hover)}
+.alarm-navn{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:var(--mono);font-size:11px}
+.alarm-til{font-size:11px}
+.alarm-til.bad{color:var(--err)}
+.alarm-til.warn{color:var(--warn)}
+.alarm-ukv{font-size:10px;color:var(--fg-2);border:1px solid var(--line-2);border-radius:4px;padding:0 4px}
+.alarm-tom{font-size:12px;color:var(--fg-3);padding:0 12px 10px}
+
+/* ---- routers found on site ---- */
+.ruter-info{padding:6px 12px 8px;border-bottom:1px solid var(--line);font-size:11px;color:var(--fg-3);line-height:1.6}
+.ruter-info[hidden]{display:none}
+.ruter-ip{font-family:var(--mono);color:var(--fg-2)}
 </style>
 </head>
 <body>
