@@ -3864,6 +3864,25 @@ td.c-val.ned{animation:verdi-lb-ned 700ms var(--mot-kurve)}
 .ruter-info{padding:6px 12px 8px;border-bottom:1px solid var(--line);font-size:11px;color:var(--fg-3);line-height:1.6}
 .ruter-info[hidden]{display:none}
 .ruter-ip{font-family:var(--mono);color:var(--fg-2)}
+
+/* ---- motion style, final pass ----
+   One rule for everything: things settle on one calm curve, nothing springs
+   past where it is going, nothing glows outward, and nothing is frosted glass.
+   Exceptions are kept on purpose: the row flash for a new alarm or override
+   (it means something), loading indicators while something is loading, and
+   NABE himself, whose sunglasses are allowed to drop with a bounce. */
+:root{--fjaer:cubic-bezier(.2,.8,.2,1)}
+/* No frosted glass: a plain dim behind dialogs, menus and the start screen.
+   Blur is also the single most expensive thing to draw over remote desktop. */
+.gs-overlay,.gs-overlay:not([hidden]){backdrop-filter:none!important}
+body.gjennomsiktig .menu-pop{backdrop-filter:none}
+.startskjerm{backdrop-filter:none;background:color-mix(in srgb,var(--bg) 88%,transparent)}
+/* Arrivals and returns: a short tint that fades, not a ring that spreads. */
+@keyframes stille-tint{0%{background-color:color-mix(in srgb,var(--fg) 9%,transparent)}100%{background-color:transparent}}
+@keyframes stille-ok{0%{background-color:color-mix(in srgb,var(--ok) 12%,transparent)}100%{background-color:transparent}}
+.dev.mottok{animation:stille-tint 600ms var(--mot-kurve) both}
+.dev.tilbake{animation:stille-ok 800ms var(--mot-kurve)}
+.note-field.lagret{animation:stille-ok 900ms ease-out}
 </style>
 </head>
 <body>
