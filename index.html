@@ -3500,7 +3500,11 @@ body.uten-bevegelse .scanbox *,body.uten-bevegelse .nabe-mark.nikk{animation:non
 .nabo-fig{width:40px;height:40px;fill:none;stroke:var(--fg);stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round;overflow:visible}
 .nabo-fig .nabo-hus{fill:var(--raised)}
 .nabo-fig .nabo-tak{stroke:var(--accent)}
-.nabo-fig .nabo-oyne rect{fill:var(--fg);stroke:none}
+.nabo-fig .nabo-oyne circle{fill:var(--fg);stroke:none}
+.nabo-fig .nabo-glimt circle{fill:var(--raised);stroke:none}
+.nabo-fig .nabo-munn{stroke-width:1.3}
+.sover .nabo-fig .nabo-glimt,.nabo-hus-knapp .nabo-fig .nabo-glimt{display:none}
+.nabo-fig .nabo-glimt{transform-box:fill-box;transform-origin:center;animation:nabo-blunk 6.5s infinite}
 .nabo-fig .nabo-pipe{stroke:var(--fg-3)}
 .nabo-ord{font-size:22px;font-weight:700;letter-spacing:.24em;line-height:1;color:var(--fg)}
 .nabo-under{font-size:11px;color:var(--fg-3);margin-top:4px}
@@ -3560,7 +3564,7 @@ body.uten-bevegelse .scanbox *,body.uten-bevegelse .nabe-mark.nikk{animation:non
 .nabo-sys,.nabo-kilde-anlegg,.nabo-kilde-ede{font-size:var(--t-1);text-transform:none;letter-spacing:0}
 .nabo-hus-knapp .nabo-fig{width:19px;height:19px;stroke-width:2.4}
 html[data-theme="light"].nabo-jul .nabo-fig .nabo-sno{stroke:var(--fg-3)}
-html.nabo-halloween .nabo-fig .nabo-oyne rect,.lys .nabo-fig .nabo-oyne rect{fill:var(--warn)}
+html.nabo-halloween .nabo-fig .nabo-oyne circle,.lys .nabo-fig .nabo-oyne circle{fill:var(--warn)}
 .sover .nabo-fig .nabo-z{animation-iteration-count:6}
 body.uten-bevegelse .nabo-fig,body.uten-bevegelse .nabo-fig *,body.uten-bevegelse .nabo-boble,body.uten-bevegelse .nabo-titt svg{transition:none!important;animation:none!important}
 @media (prefers-reduced-motion:reduce){
@@ -3574,7 +3578,7 @@ html.nabo-mai17 .nabo-fig .nabo-flagg{display:block}
 .nabo-fig .nabo-flagg path{stroke:var(--fg-3);stroke-width:.8}
 .nabo-fig .nabo-flagg rect{fill:#ba0c2f;stroke:none}
 .nabo-fig .nabo-flagg .kryss{stroke:#fff;stroke-width:.9}
-html.nabo-halloween .nabo-fig .nabo-oyne rect,.lys .nabo-fig .nabo-oyne rect{fill:#f2b64a}
+html.nabo-halloween .nabo-fig .nabo-oyne circle,.lys .nabo-fig .nabo-oyne circle{fill:#f2b64a}
 .nabo-merke{position:relative}
 #naboHusStor{display:inline-flex;cursor:pointer}
 #naboHusStor.banke .nabo-fig{animation:nabo-banke .35s linear}
@@ -3587,7 +3591,7 @@ html.nabo-halloween .nabo-fig .nabo-oyne rect,.lys .nabo-fig .nabo-oyne rect{fil
 .nabo-konfetti{position:fixed;width:5px;height:5px;border-radius:1px;z-index:9991;pointer-events:none}
 
 /* The neighbour's face: cheeks, a chimney that breathes, and sleep. */
-.nabo-fig .nabo-kinn ellipse{fill:var(--nabo-kinn);stroke:none;opacity:.45}
+.nabo-fig .nabo-kinn ellipse{fill:var(--nabo-kinn);stroke:none;opacity:.6}
 .nabo-fig .nabo-roeyk circle{fill:var(--fg-3);stroke:none;opacity:0}
 .nabo-fig .nabo-z{font:700 6px var(--sans);fill:var(--fg-2);stroke:none;opacity:0}
 .nabo-fig .nabo-oyne{transition:transform .35s ease}
