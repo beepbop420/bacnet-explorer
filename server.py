@@ -170,7 +170,7 @@ async def guard_and_cors(request, call_next):
         response.headers["Vary"] = "Origin"
     return response
 
-VERSJON = "1.6"
+VERSJON = "1.6.1"
 
 state = {"app": None, "local_address": None, "read_only": False, "bbmd": None}
 
@@ -193,6 +193,33 @@ def route_source_ip(target: str) -> str:
         s.close()
 
 
+def kort_for(target: str) -> str:
+    """
+    The local IP to send from to reach `target`: an adapter that sits on the
+    target's own subnet first, Windows' answer only when none does.
+
+    Windows' answer alone was wrong on site. Its destination cache remembers
+    the path it last used per address, so a sweep made while the cable had no
+    link sent the whole subnet out through the 4G modem's default route - and
+    after the cable came up, 192.168.2.1 still went to the modem while .50
+    went down the cable. A subnet the cable is on is never behind the modem.
+    """
+    try:
+        mal = ipaddress.IPv4Address(target)
+        treff = [e for e in list_interfaces()
+                 if e["prefix"] < 32 and mal in ipaddress.IPv4Network(e["cidr"], strict=False)]
+    except Exception:
+        treff = []
+    if treff:
+        via = route_source_ip(target)
+        # Two adapters on the same subnet (cable and office Wi-Fi): Windows'
+        # pick between them stands, otherwise the narrowest network wins.
+        if any(e["ip"] == via for e in treff):
+            return via
+        return max(treff, key=lambda e: e["prefix"])["ip"]
+    return route_source_ip(target)
+
+
 def detect_local_ip() -> str:
     return route_source_ip("8.8.8.8")
 
@@ -209,7 +236,16 @@ def list_interfaces() -> List[Dict[str, Any]]:
     import psutil
 
     out: List[Dict[str, Any]] = []
+    try:
+        stats = psutil.net_if_stats()
+    except Exception:
+        stats = {}
     for name, addrs in psutil.net_if_addrs().items():
+        # Windows keeps a static address on an adapter with no link: Wi-Fi
+        # out of range, FortiClient disconnected. Binding there sends nothing,
+        # and Wi-Fi on the office subnet would compete with the cable.
+        if name in stats and not stats[name].isup:
+            continue
         for a in addrs:
             if a.family != socket.AF_INET:
                 continue
@@ -401,7 +437,7 @@ def route(target: str):
     try:
         hosts, net = parse_target(target)
         first = hosts[0] if hosts else str(net.network_address + 1)
-        ip = route_source_ip(first)
+        ip = kort_for(first)
     except Exception as e:
         return {"status": "error", "error": str(e)}
     for e in list_interfaces():
@@ -2920,7 +2956,7 @@ async def diagnose(body: DiagnoseBody):
                                   "bak en gateway. Da går trafikken via ruteren, "
                                   "og samme subnett gjelder ikke."}
         try:
-            via = route_source_ip(ip)
+            via = kort_for(ip)
         except OSError:
             via = None
         bundet = lokal.split("/")[0]

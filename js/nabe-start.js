@@ -154,6 +154,10 @@ const FAKTA = [
   ['COV betyr at regulatoren sier fra selv. Mindre spørring, mer ro.', 'COV means the controller speaks up itself. Less asking, more peace.'],
 ];
 const NYTT = {
+  '1.6.1': [
+    ['Kortet som sitter på samme nett som anlegget velges alltid - ikke mobilen fordi Windows husket en gammel vei', 'The adapter on the plant’s own subnet is always picked - not the 4G modem because Windows remembered an old path'],
+    ['Kort uten link (Wi-Fi utenfor rekkevidde, frakoblet VPN) står ikke lenger i lista', 'Adapters with no link (Wi-Fi out of range, VPN disconnected) are no longer listed'],
+  ],
   '1.6': [
     ['Velg nettverkskort, så foreslår NABE nettene bak det - fra rutetabellen og anlegg du har skannet derfra', 'Pick an adapter and NABE suggests the networks behind it - from the routing table and sites scanned through it'],
     ['Lim inn tekst med IP-er i, porter og ord rundt - feltet tar bare adressene', 'Paste text with IPs in it, ports and words around them - the field keeps just the addresses'],
