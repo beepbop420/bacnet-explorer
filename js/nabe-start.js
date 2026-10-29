@@ -154,6 +154,11 @@ const FAKTA = [
   ['COV betyr at regulatoren sier fra selv. Mindre spørring, mer ro.', 'COV means the controller speaks up itself. Less asking, more peace.'],
 ];
 const NYTT = {
+  '1.20': [
+    ['Innstillinger med ekte brytere og nedtrekk, samlet i grupper. Indigo er borte fra forhåndsvalgene', 'Settings with real switches and pop-up buttons, in groups. Indigo is gone from the presets'],
+    ['Én stille lukk-knapp i alle dialoger, haker i filtermenyen og blå hovedknapp i begge moduser', 'One quiet close button in every dialog, check marks in the filter menu and a blue default button in both themes'],
+    ['Engelsk overalt der det manglet, oppdatert hjelp, og simulatorer på 127.0.0.x regnes som nåbare', 'English wherever it was missing, updated help, and simulators on 127.0.0.x count as reachable'],
+  ],
   '1.19': [
     ['Ett felt for IP, område eller anleggsnavn. Anleggene står under med grønn prikk når det finnes en vei dit', 'One field for an IP, a range or a site name. Your sites sit below it, with a green dot when there is a way there'],
     ['Kort og modus er én linje. NABE sier fra når Windows ville tatt feil vei, og bruker riktig kort', 'Adapter and mode are one line. NABE tells you when Windows would have taken the wrong way, and uses the right adapter'],

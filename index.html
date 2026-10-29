@@ -4561,6 +4561,50 @@ button:focus:not(:focus-visible){outline:none;box-shadow:none}
 .statusbar .sb-item{flex:0 0 auto}
 #sbMsg{flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis}
 #sbMsg *{white-space:nowrap}
+
+/* ---- macOS pass: the conventions that make a Mac app feel calm ----
+   One close button, quiet, top right, for every dialog. */
+.gs-head .gs-close{margin-left:auto;width:28px;min-width:28px;height:28px;min-height:28px;padding:0;justify-content:center;
+  border-color:transparent;background:none;border-radius:50%;color:var(--fg-3);font-size:12px}
+.gs-head .gs-close:hover{background:var(--hover);border-color:transparent;color:var(--fg)}
+.gs-close .lbl{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+.gs-input{font-family:var(--sans)}
+/* On and off is a switch. The word stays for screen readers and translation,
+   the eye gets the switch. */
+.sett-rad.bryter .menu-state{position:relative;width:32px;min-width:32px;height:19px;padding:0;border-radius:10px;border:0;
+  background:var(--line-2);color:transparent;font-size:0;overflow:hidden;transition:background .18s}
+.sett-rad.bryter .menu-state::after{content:'';position:absolute;left:2px;top:2px;width:15px;height:15px;border-radius:50%;
+  background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.3);transition:transform .18s var(--fjaer)}
+.sett-rad.bryter.on .menu-state,.sett-rad.bryter.paa .menu-state{background:var(--ok);border:0}
+.sett-rad.bryter.on .menu-state::after,.sett-rad.bryter.paa .menu-state::after{transform:translateX(13px)}
+/* A choice between several is a pop-up button: the value and a chevron. */
+.sett-rad:not(.bryter) .menu-state{border:1px solid var(--line-2);background:var(--panel);color:var(--fg);
+  font:12px var(--sans);padding:3px 8px 3px 10px;border-radius:6px;min-width:0;display:inline-flex;align-items:center;gap:8px}
+.sett-rad:not(.bryter) .menu-state::after{content:'';width:5px;height:5px;border-right:1.5px solid var(--fg-3);
+  border-bottom:1.5px solid var(--fg-3);transform:translateY(-2px) rotate(45deg)}
+.sett-rad:not(.bryter).on .menu-state{background:var(--panel);border-color:var(--line-2);color:var(--fg)}
+.sett-rad{font-size:13px}
+.sett-rad small{font-size:11px}
+.sett-gruppe{border:1px solid var(--line);border-radius:8px;background:var(--panel);padding:4px;margin-bottom:14px}
+.sett-gruppe>.tema-tittel{margin:2px 6px 4px}
+.sett-gruppe .sett-rad+.sett-rad{border-top:1px solid var(--line-soft);border-radius:0}
+.sett-fane.sel{border-bottom-color:var(--accent)}
+/* Menus that filter: a check mark in front of what is on, nothing behind. */
+.menu-item[data-flag],#fWrit,#fDiff{position:relative;padding-left:26px}
+.menu-item[data-flag] .menu-state,#fWrit .menu-state,#fDiff .menu-state{display:none}
+.menu-item[data-flag].on::before,#fWrit.on::before,#fDiff.on::before{content:'✓';position:absolute;left:9px;color:var(--accent);font-weight:700}
+/* The selected device: a tint of the accent, as a source list does it. */
+#devList .dev.sel{background:color-mix(in srgb,var(--accent) 16%,transparent);box-shadow:none}
+#devList .dev.sel:hover{background:color-mix(in srgb,var(--accent) 22%,transparent)}
+/* The value is information, not decoration: the text colour, unit in grey. */
+.insp-val{color:var(--fg)}
+/* Toasts: neutral. Colour only when something went wrong. */
+.toast:not(.err)::before{display:none}
+.toast{border-radius:8px}
+/* The default button is the accent, in both themes, as on a Mac. */
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#0b1220}
+.btn.primary:hover:not(:disabled){background:color-mix(in srgb,var(--accent) 86%,var(--fg));border-color:color-mix(in srgb,var(--accent) 86%,var(--fg))}
+:root[data-theme="light"] .btn.primary,:root[data-theme="light"] .btn.primary:not(.topbar .btn){color:#fff}
 </style>
 </head>
 <body>
@@ -4806,13 +4850,13 @@ button:focus:not(:focus-visible){outline:none;box-shadow:none}
            changed is that each one now has room to say what it does. -->
       <div id="settOppsett" class="gs-results" style="padding:14px">
         <div class="sett-gruppe"><div class="tema-tittel">Tabellen</div>
-          <button id="denseBtn" class="sett-rad">Tett visning
+          <button id="denseBtn" class="sett-rad bryter" role="switch">Tett visning
             <small>Flere rader på skjermen, mindre luft</small>
             <span id="denseState" class="menu-state"></span></button>
-          <button id="shortBtn" class="sett-rad">Forkort punktnavn
+          <button id="shortBtn" class="sett-rad bryter" role="switch">Forkort punktnavn
             <small>Skjuler den delen av navnet alle punkter deler</small>
             <span id="shortState" class="menu-state"></span></button>
-          <button id="allTypesBtn" class="sett-rad">Objekttyper i tabellen
+          <button id="allTypesBtn" class="sett-rad bryter" role="switch">Objekttyper i tabellen
             <small>Ta med trendlogger, programmer og enhetsobjektet</small>
             <span id="allTypesState" class="menu-state"></span></button>
         </div>
@@ -4820,21 +4864,21 @@ button:focus:not(:focus-visible){outline:none;box-shadow:none}
           <button id="groupBtn" class="sett-rad">Grupper enheter
             <small>Samle listen etter leverandør eller IP-område</small>
             <span id="groupState" class="menu-state"></span></button>
-          <button id="preBtn" class="sett-rad">Forhåndsles enheter
+          <button id="preBtn" class="sett-rad bryter" role="switch">Forhåndsles enheter
             <small>Leser de andre enhetene i bakgrunnen etter et skann</small>
             <span id="preState" class="menu-state"></span></button>
-          <button id="rescanBtn" class="sett-rad">Overvåk nettet
+          <button id="rescanBtn" class="sett-rad bryter" role="switch">Overvåk nettet
             <small>Søker jevnlig etter enheter som faller inn og ut</small>
             <span id="rescanState" class="menu-state"></span></button>
         </div>
         <div class="sett-gruppe"><div class="tema-tittel">Bevegelse</div>
-          <button id="motionBtn" class="sett-rad">Animasjoner
+          <button id="motionBtn" class="sett-rad bryter" role="switch">Animasjoner
             <small>Menyer, dialoger, temabytte og NABE selv beveger seg. Følger
               Windows til du velger her</small>
             <span id="motionState" class="menu-state"></span></button>
         </div>
         <div class="sett-gruppe"><div class="tema-tittel">Skriving</div>
-          <button id="roBtn" class="sett-rad">Lesemodus
+          <button id="roBtn" class="sett-rad bryter" role="switch">Lesemodus
             <small>Blokkerer all skriving til anlegget</small>
             <span id="roState" class="menu-state"></span></button>
         </div>
@@ -4896,14 +4940,16 @@ button:focus:not(:focus-visible){outline:none;box-shadow:none}
       <dt>g d / g p / g o / g s</dt><dd>Gå til enheter, punkter, overvåking, søk</dd>
       <dt>?</dt><dd>Denne lista</dd>
       <dt>Ctrl+K</dt><dd>Kommandopalett — alt verktøyet kan gjøre, ett søkefelt</dd>
-      <dt>? / Ctrl+F</dt><dd>Søk i alle enheter samtidig</dd>
+      <dt>Ctrl+F</dt><dd>Søk i alle enheter samtidig</dd>
+      <dt>Ctrl+L</dt><dd>Hopp til skannefeltet</dd>
+      <dt>N</dt><dd>Åpne NABO, naboen</dd>
       <dt>Ctrl-klikk</dt><dd>Velg enkeltrad · Shift for område · Ctrl+A alle</dd>
       <dt>Esc</dt><dd>Lukk</dd>
     </dl>
     <div class="help-title" style="margin-top:10px">Slik bruker du den</div>
     <ol class="help-steps">
-      <li>Velg nettverkskortet som når anlegget (øverst til venstre).</li>
-      <li>Skriv IP-området, f.eks. <code>10.75.1.0/24</code>, og trykk Skann.</li>
+      <li>Skriv en IP, et område eller navnet på et anlegg øverst til venstre. NABE velger nettverkskort selv.</li>
+      <li>Trykk Enter eller Skann. Anlegg du har vært på står under feltet.</li>
       <li>Klikk en enhet for å laste punktene.</li>
       <li>Klikk et punkt for detaljer, trend og skriving.</li>
     </ol>

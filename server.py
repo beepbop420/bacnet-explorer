@@ -171,7 +171,7 @@ async def guard_and_cors(request, call_next):
         response.headers["Vary"] = "Origin"
     return response
 
-VERSJON = "1.19"
+VERSJON = "1.20"
 
 state = {"app": None, "local_address": None, "read_only": False, "bbmd": None}
 
@@ -2133,7 +2133,10 @@ def naabar(target: str, kort: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
         mal = ipaddress.IPv4Address(hosts[0] if hosts else str(net.network_address + 1))
     except Exception:
         return None
-    oppe = {e["ip"]: e for e in kort}
+    if mal.is_loopback:
+        # Simulators and a NABE on the same PC: always there.
+        return {"ip": "127.0.0.1", "interface": "Loopback", "cidr": "127.0.0.1/8"}
+    oppe = {e["ip"]: e for e in kort}
     for e in sorted(kort, key=lambda e: -e["prefix"]):
         if e["prefix"] < 32 and mal in ipaddress.IPv4Network(e["cidr"], strict=False):
             return {"ip": e["ip"], "interface": e["interface"], "cidr": e["cidr"]}

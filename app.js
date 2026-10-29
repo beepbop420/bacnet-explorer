@@ -764,7 +764,7 @@ async function runScan() {
   // Not re-enabled when the backend is gone: pressing it again would only
   // produce the same failure.
   b.disabled = BACKEND_NEDE || !S.connected;
-  b.textContent = 'Skann'; b.onclick = runScan;
+  b.textContent = T('Skann', 'Scan'); b.onclick = runScan;
 }
 
 async function cancelScan() {
@@ -1978,7 +1978,7 @@ function copySelected() {
 function identBadge(ip) {
   const id = S.identity[ip];
   if (!id) return '';
-  const kort = [id['model-name'], id['firmware-revision']].filter(Boolean).join(' · ');
+  const kort = [id['model-name'], id['firmware-revision']].filter(v => v && !/^(n\/?a|none|-)$/i.test(String(v).trim())).join(' · ');
   if (!kort) return '';
   const full = Object.entries(IDENT_LABELS)
     .filter(([k]) => id[k])
@@ -3072,6 +3072,8 @@ function avsluttLinje(el) {
 const NABE = {x: 0, y: 0, sist: Date.now(), raf: 0, snu: [], retning: 0, klikk: 0, klikkT: 0};
 
 function nabeMerke() { return document.querySelector('.nabe-mark'); }
+// After start-up: T and the language are not ready this early in the file.
+setTimeout(() => document.querySelectorAll('.gs-close').forEach(b => { if (!b.title) b.title = T('Lukk (Esc)', 'Close (Esc)'); }), 0);
 
 function nabeTegn() {
   NABE.raf = 0;
@@ -3600,7 +3602,7 @@ function tegnMinne() {
     const merker = [...new Set(enh.map(e => e.vendor).filter(Boolean))].slice(0, 4);
     return `<div class="mn-rad">
       <div class="mn-navn">
-        <div class="mn-tittel${s.navn ? '' : ' uten'}">${esc(s.navn || 'uten navn')}</div>
+        <div class="mn-tittel${s.navn ? '' : ' uten'}">${esc(s.navn || T('uten navn', 'no name'))}</div>
         <div class="mn-omrade">${esc(key)}</div>
         <div class="mn-under">${merkerHtml(merker)}${
           s.lokal ? 'fra ' + esc(s.lokal) : ''}${s.modus === 'bbmd' ? ' · via BBMD' : ''}</div>
@@ -3716,7 +3718,7 @@ function tegnTagging() {
 
   el.innerHTML = `
     <div class="tg-anlegg">${k
-      ? `Lagres for ${esc(site && site.navn ? site.navn : k)}`
+      ? T(`Lagres for ${esc(site && site.navn ? site.navn : k)}`, `Saved for ${esc(site && site.navn ? site.navn : k)}`)
       : 'Ingen område skannet ennå — lagres som standard for neste anlegg'}</div>
 
     <div class="tg-gruppe">
@@ -3843,12 +3845,6 @@ const TEMA_ALLE = TEMA_GRUPPER.flatMap(g => g.felt.map(f => f[0]));
    there is no half-applied state to reason about. */
 const TEMA_FORVALG = {
   'Standard': null,
-  'Indigo': {
-    dark: {'--accent': '#4f7bd6', '--accent-dim': '#1b2b4d', '--accent-edge': '#33518f',
-           '--accent-press': '#2a4478', '--on-accent': '#d5e2ff', '--nm-blue': '#282071'},
-    light: {'--accent': '#282071', '--accent-dim': '#dcdcf2', '--accent-edge': '#a9a9d8',
-            '--accent-press': '#c9c9e8', '--on-accent': '#1a1550'},
-  },
   'Høy kontrast': {
     dark: {'--bg': '#000000', '--panel': '#0a0a0a', '--raised': '#141414',
            '--sunken': '#000000', '--line': '#3a3a3a', '--line-2': '#5a5a5a',
@@ -5912,6 +5908,7 @@ function syncMenuStates() {
   const el = $('shortBtn');
   if (el) {
     el.classList.toggle('on', kort && !!S.namePrefix);
+    el.classList.toggle('paa', kort);
     $('shortState').textContent = !kort ? 'av'
       : S.namePrefix ? 'på' : 'ingen felles start';
     el.title = !kort ? 'Punktnavn vises fullt ut'
@@ -9629,8 +9626,12 @@ const ORDBOK = {
   '— enhetene dukker opp her.': '— the devices appear here.',
   'Fest punkter med ☆ (eller mellomrom) — også fra andre enheter':
     'Pin points with ☆ (or space) — from other devices too',
-  'Velg nettverkskortet som når anlegget (øverst til venstre).':
-    'Pick the adapter that reaches the plant (top left).',
+  'Skriv en IP, et område eller navnet på et anlegg øverst til venstre. NABE velger nettverkskort selv.':
+    'Type an IP, a range or a site name at the top left. NABE picks the adapter itself.',
+  'Trykk Enter eller Skann. Anlegg du har vært på står under feltet.':
+    'Press Enter or Scan. Sites you have visited are listed under the field.',
+  'Hopp til skannefeltet': 'Jump to the scan field',
+  'Åpne NABO, naboen': 'Open NABO, the neighbour',
   'Skriv IP-området, f.eks.': 'Enter the IP range, e.g.',
   ', og trykk Skann.': ', then press Scan.',
   'Klikk en enhet for å laste punktene.': 'Click a device to load its points.',
