@@ -104,7 +104,7 @@ ALLOWED_ORIGINS = {
 # the request comes from the tool's own page.
 READ_ONLY_PATHS = {"/api/sites",
                    
-    "/api/status", "/api/interfaces", "/api/readonly",
+    "/api/status", "/api/interfaces", "/api/readonly", "/api/mine", "/api/ny-versjon",
     "/api/writelog", "/api/notes", "/download", "/logo",
 }
 
@@ -169,7 +169,7 @@ async def guard_and_cors(request, call_next):
         response.headers["Vary"] = "Origin"
     return response
 
-VERSJON = "1.1"
+VERSJON = "1.2"
 
 state = {"app": None, "local_address": None, "read_only": False, "bbmd": None}
 
@@ -1793,6 +1793,56 @@ def get_writelog():
     return {"status": "done", "entries": list(reversed(WRITE_LOG))}
 
 
+def mine_overstyringer() -> List[Dict[str, Any]]:
+    """
+    What this NABE has written and not handed back: the last word in the
+    write log for each point and priority, where that word was a write.
+    A release or an auto-release cancels it. This is the list that has to be
+    empty before you leave a plant.
+    """
+    aktive: Dict[tuple, Dict[str, Any]] = {}
+    for e in WRITE_LOG:
+        if e.get("prop", "present-value") != "present-value" or e.get("priority") is None:
+            continue
+        if e.get("status") != "done":
+            continue
+        k = (e.get("address"), e.get("objid"), e.get("priority"))
+        if e.get("action") == "write":
+            aktive[k] = e
+        elif e.get("action") in ("release", "auto-release"):
+            aktive.pop(k, None)
+    return [{"address": k[0], "objid": k[1], "priority": k[2], "value": e.get("value"),
+             "ts": e.get("ts")} for k, e in aktive.items()]
+
+
+@app.get("/api/mine")
+def get_mine():
+    return {"status": "done", "overstyrt": mine_overstyringer()}
+
+
+NY_VERSJON: Dict[str, Any] = {"t": 0.0, "versjon": None}
+
+
+@app.get("/api/ny-versjon")
+async def ny_versjon():
+    """The version on GitHub, checked at most once an hour. Never blocks:
+    without internet the answer is simply that nothing is known."""
+    if time.time() - NY_VERSJON["t"] > 3600:
+        NY_VERSJON["t"] = time.time()
+
+        def hent():
+            import re as _re
+            url = "https://raw.githubusercontent.com/beepbop420/bacnet-explorer/main/server.py"
+            with urllib.request.urlopen(url, timeout=4) as r:
+                m = _re.search(r'VERSJON = "([^"]+)"', r.read(200000).decode("utf-8", "replace"))
+                return m.group(1) if m else None
+        try:
+            NY_VERSJON["versjon"] = await asyncio.get_event_loop().run_in_executor(None, hent)
+        except Exception:
+            NY_VERSJON["versjon"] = None
+    return {"status": "done", "her": VERSJON, "github": NY_VERSJON["versjon"]}
+
+
 class SchedBody(BaseModel):
     address: str
     device_instance: int
@@ -2895,6 +2945,17 @@ async def ping_range(body: PingBody):
 @app.get("/")
 def index():
     return FileResponse(Path(__file__).parent / "index.html", headers=NO_CACHE)
+
+
+@app.get("/js/{navn}.js")
+def nabe_js(navn: str):
+    """The parts of the interface that live beside app.js. Only plain names
+    from the js folder - nothing that walks out of it."""
+    import re as _re
+    fil = Path(__file__).parent / "js" / f"{navn}.js"
+    if not _re.fullmatch(r"[a-z0-9-]+", navn) or not fil.is_file():
+        return JSONResponse({"detail": "Not Found"}, status_code=404)
+    return FileResponse(fil, media_type="application/javascript", headers=NO_CACHE)
 
 
 @app.get("/app.js")

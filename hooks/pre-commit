@@ -1,0 +1,14 @@
+#!/bin/sh
+# Runs the self-test before every commit. Turn on once with:
+#   git config core.hooksPath hooks
+for py in ./venv/Scripts/python.exe ../bacnet-explorer-kilde/venv/Scripts/python.exe ./dist/NABE/python/python.exe; do
+  [ -x "$py" ] && break
+done
+echo "NABE selvtest før commit ..."
+"$py" selvtest.py > .selvtest.log 2>&1
+if ! tail -1 .selvtest.log | grep -q "grønne\.$"; then
+  tail -25 .selvtest.log
+  echo "Selvtesten feilet - commit stoppet. (git commit --no-verify for å hoppe over)"
+  exit 1
+fi
+tail -1 .selvtest.log

@@ -12,3 +12,4 @@ projects/
 logo.*
 *.log
 dist/
+.selvtest.log

@@ -9,6 +9,7 @@ Startes av snarveien installasjonsprogrammet lager:
     python\\pythonw.exe -s nabe_app.py
 """
 import ctypes
+import json
 import os
 import socket
 import sys
@@ -110,9 +111,52 @@ def main():
             break
         time.sleep(0.05)
 
+    # The window comes back where it was left.
+    geo_fil = data / "vindu.json"
+    try:
+        geo = json.loads(geo_fil.read_text(encoding="utf-8"))
+    except Exception:
+        geo = {}
+
+    class Api:
+        """What the page can ask of the window."""
+        tillat_lukking = False
+
+        def lukk(self):
+            Api.tillat_lukking = True
+            vindu.destroy()
+
     vindu = webview.create_window(
-        "NABE", base, width=1440, height=900, min_size=(960, 600),
-        background_color="#111113", text_select=True)
+        "NABE", base, width=geo.get("b", 1440), height=geo.get("h", 900),
+        x=geo.get("x"), y=geo.get("y"), min_size=(960, 600),
+        background_color="#111113", text_select=True, js_api=Api())
+
+    def lukker():
+        """
+        The plug that will not come out. Closing with points still commanded
+        by this NABE is how a plant gets left in manual - so the page is
+        asked to show what is still overridden, and closes itself once you
+        have chosen. With nothing outstanding the window simply closes.
+        """
+        try:
+            json.dump({"b": vindu.width, "h": vindu.height, "x": vindu.x, "y": vindu.y},
+                      geo_fil.open("w", encoding="utf-8"))
+        except Exception:
+            pass
+        if Api.tillat_lukking:
+            return True
+        try:
+            import urllib.request
+            with urllib.request.urlopen(base + "/api/mine", timeout=2) as r:
+                mine = json.loads(r.read()).get("overstyrt", [])
+        except Exception:
+            mine = []
+        if not mine:
+            return True
+        vindu.evaluate_js("typeof visLukkVakt === 'function' ? visLukkVakt() : window.pywebview.api.lukk()")
+        return False
+
+    vindu.events.closing += lukker
     vindu.events.closed += lambda: setattr(server, "should_exit", True)
     vindu.events.shown += lambda: sett_ikon("NABE", HER / "nabe.ico")
     # The page keeps its settings, site memory in the browser and theme

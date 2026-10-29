@@ -1018,11 +1018,7 @@ tbody tr.drift td.c-val{animation:drift-ut 900ms ease-out}
   from{transform:scaleX(1);opacity:.65}
   to  {transform:scaleX(0);opacity:0}
 }
-@keyframes kort-tilbake{
-  0%  {box-shadow:0 0 0 0 color-mix(in srgb,var(--ok) 60%,transparent)}
-  60% {box-shadow:0 0 0 8px color-mix(in srgb,var(--ok) 0%,transparent)}
-  100%{box-shadow:0 0 0 0 transparent}
-}
+
 .dev.tilbake{animation:kort-tilbake 820ms cubic-bezier(.16,1,.3,1)}
 .dev.tilbake::after{
   content:'';position:absolute;left:0;right:0;bottom:5px;height:1px;
@@ -1052,10 +1048,7 @@ tbody tr.alarm td.c-act::before{
 }
 /* Sammendragskortet er ETT element, og det slaar tre ganger naar tallet har
    endret seg - ikke for alltid. */
-@keyframes alarm-slag{
-  0%,100%{box-shadow:0 0 0 0 transparent}
-  50%    {box-shadow:0 0 0 3px color-mix(in srgb,var(--err) 34%,transparent)}
-}
+
 .sum-card.alarm.slaar{animation:alarm-slag 900ms ease-in-out 3}
 @media (prefers-reduced-motion:reduce){
   tbody tr.tenn,.sum-card.alarm.slaar{animation:none}
@@ -1179,11 +1172,7 @@ tbody tr.bekreftet td{animation:skriv-ok 1s ease-out}
 
 /* And the controller that received it answers in the device list, so the two
    panes are visibly part of the same event rather than two separate screens. */
-@keyframes kort-mottok{
-  0%  {box-shadow:0 0 0 0 color-mix(in srgb,var(--accent) 62%,transparent)}
-  55% {box-shadow:0 0 0 7px color-mix(in srgb,var(--accent) 0%,transparent)}
-  100%{box-shadow:0 0 0 0 color-mix(in srgb,var(--accent) 0%,transparent)}
-}
+
 /* Forsinkelsen er poenget. Baandet gaar hoyre mot venstre, altsaa mot
    enhetslista, og ringen slaar ut naar det kommer fram - saa de to rutene
    forteller en hendelse i rekkefolge i stedet for to ting samtidig. */
@@ -2070,80 +2059,7 @@ body.uten-bevegelse #himmel{display:none}
    And the part that sells gravity is the landing. A fall that simply stops is
    an element arriving at a coordinate. This one hits at 68 %, squashes,
    bounces, hits again smaller, and settles. */
-@keyframes fly-inn{
-  /* Landinga eier under halvparten av tida, og hvert steg har sin egen kurve.
 
-     To ting var galt. Nedslaget laa paa 70 %, saa alt etter det - klemme, to
-     sprett og et sett - skulle skje paa de siste tretti prosentene: maalt til
-     45 ms per sprett ved 640 ms varighet, altsaa under tre bilder. Tre bilder
-     er ikke en bevegelse, det er et klipp, og det er derfor det ikke saa jevnt
-     ut.
-
-     Og alt gikk paa linear. Et kort som stiger i konstant fart og stopper
-     braatt paa toppen oppfoerer seg ikke som noe med vekt. Naa bremser hver
-     stigning og hvert fall akselererer, slik tyngdekraften faktisk virker -
-     animation-timing-function inne i et keyframe gjelder strekket som STARTER
-     der, saa hver fase kan ha sin egen.
-
-     Nedslaget er flyttet til 52 %. Da faar sprettet 143 ms opp og 121 ms ned:
-     ni og aatte bilder, nok til aa lese som en bue.
-
-     Selve innflyvinga staar paa linear med vilje. Parabelen ligger allerede i
-     verdiene - 0,74 og 0,50 og 0,24 er ikke jevnt fordelt - saa en ease-in
-     paa toppen teller akselerasjonen to ganger, og det gav et maalbart hakk:
-     farten falt fra 9,6 til 2,0 px per bilde og steg igjen. Bare det siste
-     strekket foer nedslaget akselererer, og det gaar helt inn i veggen
-     (kontrollpunkt i 1,1) - et fall er raskest i det oyeblikket det treffer,
-     ikke litt foer. */
-
-  0%  {opacity:0;animation-timing-function:linear;
-       transform:translate(var(--fra-x,0px),var(--fra-y,0px))
-                 rotate(var(--rot,0deg)) scaleX(.34) scaleY(.34)}
-  7%  {opacity:1;animation-timing-function:linear;
-       transform:translate(calc(var(--fra-x,0px)*.93 + var(--sving,0px)*.22),
-                           calc(var(--fra-y,0px)*.99 - var(--bue,0px)*.3))
-                 rotate(calc(var(--rot,0deg)*.93)) scaleX(.41) scaleY(.41)}
-  20% {animation-timing-function:linear;
-       transform:translate(calc(var(--fra-x,0px)*.74 + var(--sving,0px)*.62),
-                           calc(var(--fra-y,0px)*.93 - var(--bue,0px)*.7))
-                 rotate(calc(var(--rot,0deg)*.74)) scaleX(.55) scaleY(.55)}
-  34% {animation-timing-function:linear;
-       transform:translate(calc(var(--fra-x,0px)*.50 + var(--sving,0px)),
-                           calc(var(--fra-y,0px)*.72 - var(--bue,0px)))
-                 rotate(calc(var(--rot,0deg)*.44)) scaleX(.73) scaleY(.73)}
-  45% {animation-timing-function:cubic-bezier(.45,0,1,1);
-       transform:translate(calc(var(--fra-x,0px)*.24 + var(--sving,0px)*.42),
-                           calc(var(--fra-y,0px)*.38 - var(--bue,0px)*.4))
-                 rotate(calc(var(--rot,0deg)*.15)) scaleX(.90) scaleY(.90)}
-
-  /* Nedslag. Kortet er i ro og i full storrelse i akkurat ett oyeblikk. */
-  52% {opacity:1;animation-timing-function:cubic-bezier(.3,0,.55,1);
-       transform:translate(0,0) rotate(0deg) scaleX(1) scaleY(1)}
-
-  /* Klemmen. Den SKAL vaere rask - et sammenstot er raskt - men den er ikke
-     lenger den eneste fasen som er det. */
-  57% {animation-timing-function:cubic-bezier(.05,.7,.25,1);
-       transform:translate(0,0) rotate(0deg) scaleX(1.045) scaleY(.86)}
-
-  /* Opp, og farten tas av mot toppen. */
-  70% {animation-timing-function:cubic-bezier(.55,0,.85,.45);
-       transform:translate(0,calc(var(--sprett,16px)*-1)) rotate(0deg)
-                 scaleX(.975) scaleY(1.06)}
-
-  /* Ned igjen, akselererende. */
-  81% {animation-timing-function:cubic-bezier(.1,.6,.3,1);
-       transform:translate(0,0) rotate(0deg) scaleX(1.022) scaleY(.94)}
-
-  /* Andre sprett, halve hoyden. */
-  88% {animation-timing-function:cubic-bezier(.55,0,.85,.5);
-       transform:translate(0,calc(var(--sprett,16px)*-.3)) rotate(0deg)
-                 scaleX(.992) scaleY(1.022)}
-  95% {animation-timing-function:cubic-bezier(.2,.7,.4,1);
-       transform:translate(0,0) rotate(0deg) scaleX(1.008) scaleY(.982)}
-
-  /* Og siste rest av spenst, saa kortet ikke stopper mens det er i bevegelse. */
-  100%{opacity:1;transform:translate(0,0) rotate(0deg) scaleX(1) scaleY(1)}
-}
 
 /* The card cannot make this trip itself: it lives inside the device pane, and
    the pane clips anything that leaves it - so a card animating up towards the
@@ -2377,10 +2293,7 @@ tbody.ferske tr:nth-child(n+11){animation-delay:150ms}
    A sheen crosses the device pane header while the sweep is out. It says
    "working" without a spinner competing with the count that is already
    there. */
-@keyframes sveip{
-  from{transform:translateX(-100%)}
-  to  {transform:translateX(100%)}
-}
+
 /* Kortene maa ligge over sveipet, ikke i det. */
 .pane-devices .pane-head,.pane-devices .pane-body,.pane-devices .dup-warn{
   position:relative;z-index:1;
@@ -2483,11 +2396,7 @@ body.skanner .pane-devices .pane-head::after{
    som gaar ut fra punktet under fingeren forteller HVOR - og det er forskjellen
    mellom en flate som reagerer og en flate du tar paa. Posisjonen settes fra
    musepekeren, saa den er aldri i midten med mindre du traff midten. */
-@keyframes klikkbolge{
-  from{transform:translate(-50%,-50%) scale(0);opacity:.5}
-  60% {opacity:.28}
-  to  {transform:translate(-50%,-50%) scale(1);opacity:0}
-}
+
 .bolge{
   position:absolute;border-radius:50%;pointer-events:none;z-index:2;
   left:var(--bx);top:var(--by);
@@ -2527,16 +2436,8 @@ body.skanner .pane-devices .pane-head::after{
    MOTSATT vei av prosenten, saa en stigende verdi drar strøket til venstre -
    som leser som noe som passerer, ikke som noe som lades. Synkende verdi
    fyller knappen forfra. */
-@keyframes skann-lad{
-  from{background-position:150% 0}
-  to  {background-position:-40% 0}
-}
-@keyframes skann-kast{
-  0%  {transform:scale(1)}
-  30% {transform:scale(.93)}
-  55% {transform:scale(1.03)}
-  100%{transform:scale(1)}
-}
+
+
 /* Ladningen ligger paa knappens EGEN bakgrunn.
 
    To utkast feilet foer dette, og begge av samme grunn: alt jeg la inne i eller
@@ -2624,10 +2525,7 @@ body.skanner .pane-devices .pane-head::after{
    Et notat er det eneste i verktoyet som bare finnes fordi noen skrev det, og
    kvitteringa var fire ord i hjornet. Feltet slaar kort gronnt, der du
    allerede ser. */
-@keyframes notat-lagret{
-  0%  {box-shadow:inset 0 0 0 2px color-mix(in srgb,var(--ok) 75%,transparent)}
-  100%{box-shadow:inset 0 0 0 2px transparent}
-}
+
 .note-field.lagret{animation:notat-lagret 1s ease-out}
 
 /* Kolonner som dras: raden under peker aapner en glipe, saa du ser hvor den
@@ -2908,11 +2806,7 @@ tbody tr.picked > td:first-child::before{
 #scanBtn{position:relative;overflow:visible}
 
 /* Rings leaving the button: the request going out. */
-@keyframes ping-ut{
-  0%  {opacity:.8;transform:scale(.5)}
-  60% {opacity:.28}
-  100%{opacity:0;transform:scale(3.4)}
-}
+
 /* Circles, not the button's own shape scaled up. Inheriting the border-radius
    and scaling it 2.5x turned the ring into a long rounded rectangle whose
    straight edges ran out across the panels below - it read as a rendering
@@ -2953,10 +2847,7 @@ tbody tr.picked > td:first-child::before{
 
 /* One answered. A short flare, so twelve controllers arriving read as twelve
    events rather than one long glow. */
-@keyframes svar-blink{
-  0%  {box-shadow:0 0 0 0 rgba(255,255,255,.75)}
-  100%{box-shadow:0 0 0 9px rgba(255,255,255,0)}
-}
+
 #scanBtn.svar{animation:svar-blink 520ms ease-out}
 
 /* ---------- tagging ---------- */
@@ -3914,6 +3805,28 @@ td.c-val,td.c-obj .inst,.dev-pkt,.sum-card b,.ctx-stat{font-family:var(--sans);f
 
 /* 8. How the plant was left, on the start screen. */
 .ss-over{color:var(--warn)}
+
+/* ---- field round ---- */
+/* Grouped by system: a quiet heading row with the count. */
+tbody tr.sys-hode td{position:sticky;top:30px;z-index:1;background:var(--panel);padding:10px 12px 4px;
+  font-size:12px;font-weight:600;color:var(--fg);border-bottom:1px solid var(--line)}
+tbody tr.sys-hode td span{margin-left:8px;font-weight:400;color:var(--fg-3)}
+#sysBtn.on{background:var(--hover);color:var(--fg)}
+/* A value that is possible but rarely right: underlined, with the reason. */
+td.c-val.rar{text-decoration:underline dotted var(--warn);text-underline-offset:3px}
+/* The clock warning is a button now. */
+button.ctx-stat{cursor:pointer;font:inherit}
+button.ctx-stat:hover{text-decoration:underline}
+/* Who holds a priority slot. */
+.pri-hvem{margin-left:6px;font-size:11px;color:var(--fg-3)}
+.pri-hvem.min{color:var(--adjust)}
+/* More costumes. */
+.nabe-orer,.nabe-hatt{display:none}
+.nabe-mark.paaske .nabe-orer{display:inline}
+.nabe-mark.paaske .nabe-ant,.nabe-mark.paaske .nabe-led{display:none}
+.nabe-mark.nyttaar .nabe-hatt{display:inline}
+.nabe-mark.nyttaar .nabe-ant,.nabe-mark.nyttaar .nabe-led{display:none}
+.nabe-mark.fredag13 .nabe-oyne circle:nth-of-type(2){transform:scale(.72);transform-box:fill-box;transform-origin:center}
 </style>
 </head>
 <body>
@@ -3953,6 +3866,8 @@ td.c-val,td.c-obj .inst,.dev-pkt,.sum-card b,.ctx-stat{font-family:var(--sans);f
         <path d="M27.2 9.2 Q28.6 11.4 27.2 12.2 Q25.8 11.4 27.2 9.2 Z" class="nabe-svette"/>
         <path d="M12.6 23.4 Q16 23.4 19.4 23.4" class="nabe-munn"/>
         <text x="25" y="5" class="nabe-z">z</text>
+        <g class="nabe-orer"><ellipse cx="11" cy="2.6" rx="1.9" ry="4.4" fill="var(--fg)"/><ellipse cx="21" cy="2.6" rx="1.9" ry="4.4" fill="var(--fg)"/><ellipse cx="11" cy="2.9" rx=".9" ry="3" fill="#f4a7b9"/><ellipse cx="21" cy="2.9" rx=".9" ry="3" fill="#f4a7b9"/></g>
+        <g class="nabe-hatt"><path d="M10.5 7.2 L16 -2.4 L21.5 7.2 Z" fill="#6aa7ff"/><circle cx="16" cy="-2.6" r="1.4" fill="#ffc900"/><path d="M12.4 4.4 L19.6 4.4" stroke="#ffc900" stroke-width=".9"/></g>
         <g class="nabe-lue"><path d="M6 8.4 Q14 -3 25.6 7.2 Z" fill="#d8262e"/><rect x="5" y="7" width="22" height="2.6" rx="1.3" fill="#f2f2f2"/><circle cx="25.8" cy="6.2" r="1.8" fill="#f2f2f2"/></g>
         <g class="nabe-flagg"><rect x="16" y="0" width="7.6" height="5.2" fill="#ba0c2f"/><rect x="18.1" y="0" width="1.6" height="5.2" fill="#fff"/><rect x="16" y="1.8" width="7.6" height="1.6" fill="#fff"/><rect x="18.5" y="0" width=".8" height="5.2" fill="#00205b"/><rect x="16" y="2.2" width="7.6" height=".8" fill="#00205b"/></g>
         <g class="nabe-hoggtenner"><path d="M13.6 23.6 L14.4 25.6 L15.2 23.6 Z M16.8 23.6 L17.6 25.6 L18.4 23.6 Z" fill="var(--bg)"/></g>
@@ -4313,6 +4228,7 @@ td.c-val,td.c-obj .inst,.dev-pkt,.sum-card b,.ctx-stat{font-family:var(--sans);f
           </div>
         </div>
 
+        <button id="sysBtn" class="btn" type="button" title="Grupper punktene etter system - 360.003, 320.001 ...">System</button>
         <div class="menu">
           <button id="visBtn" class="btn" title="Lagrede visninger — filter, sortering og kolonner under ett navn">Visninger</button>
           <div id="visPop" class="menu-pop" hidden></div>
@@ -4401,5 +4317,9 @@ td.c-val,td.c-obj .inst,.dev-pkt,.sum-card b,.ctx-stat{font-family:var(--sans);f
 </div>
 <input id="edeFile" type="file" accept=".csv,.txt" hidden>
 <script src="/app.js"></script>
+<script src="/js/nabe-start.js"></script>
+<script src="/js/nabe-verktoy.js"></script>
+<script src="/js/nabe-felt.js"></script>
+<script src="/js/nabe-moro.js"></script>
 </body>
 </html>

@@ -91,6 +91,8 @@ starts three simulated BACnet devices on `127.0.0.2-4` and runs what a
 technician does - connect, scan, read, write, release, live, alarms, routers,
 diagnostics - against them. Green means go.
 
+`git config core.hooksPath hooks` makes every commit run it first.
+
 ---
 
 ## Files
@@ -100,6 +102,7 @@ diagnostics - against them. Green means go.
 | `server.py` | FastAPI backend: scanning, reading, writing, COV, diagnostics |
 | `bacnet_core.py` | BACnet helpers on top of bacpypes3 |
 | `index.html`, `app.js` | The interface, one page |
+| `js/` | The rest of it: start screen, tools, field safety, and the jokes |
 | `nabe_app.py` | The desktop window around it |
 | `installasjon/` | The installer, uninstaller, icon and the terms |
 | `lag_installasjon.py`, `lag_portabel.py` | Build scripts |

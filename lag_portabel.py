@@ -88,6 +88,7 @@ def main():
                     "--target", str(MAPPE / "python" / "Lib" / "site-packages")], check=True)
     for f in APPFILER:
         shutil.copy2(HER / f, MAPPE / f)
+    shutil.copytree(HER / "js", MAPPE / "js")
     (MAPPE / "NABE i nettleser.bat").write_text(START.replace("\n", "\r\n"), encoding="ascii")
     (MAPPE / "NABE.bat").write_text(APP_START.replace("\n", "\r\n"), encoding="ascii")
     shutil.copy2(HER / "installasjon" / "nabe.ico", MAPPE / "nabe.ico")

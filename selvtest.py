@@ -94,6 +94,10 @@ def kjor_tester():
     w = kall("/api/write", {"address": "127.0.0.3", "objid": "analog-value,1", "value": 23.5, "priority": 8})
     sjekk("skriver på prioritet 8", w.get("status") == "done", w.get("error", ""))
 
+    mine = kall("/api/mine").get("overstyrt", [])
+    sjekk("husker hva du har overstyrt", any(o["objid"] == "analog-value,1" and o["priority"] == 8 for o in mine),
+          f"{len(mine)} i lista")
+
     p = kall("/api/poll", {"targets": {"127.0.0.3": ["analog-value,1", "analog-input,1"]}})
     verdi = (p.get("values") or {}).get("127.0.0.3", {}).get("analog-value,1")
     sjekk("live leser skrevet verdi", verdi == 23.5, str(verdi))
@@ -115,11 +119,44 @@ def kjor_tester():
     d = kall("/api/diagnose", {"address": "127.0.0.2", "step": "bacnet"})
     sjekk("diagnose finner enheten", d.get("status") == "ok", d.get("detalj", ""))
 
+    p = kall("/api/poll", {"targets": {"127.0.0.2": ["analog-input,1"]}})
+    sjekk("live svarer med COV-telling", isinstance(p.get("cov"), int), f"cov={p.get('cov')}")
+
+    j = vent_jobb(kall("/api/scan", {"subnet": "127.0.0.5:47820", "mode": "bbmd", "timeout": 4})["job_id"])
+    r = j.get("result") or {}
+    sjekk("BBMD-modus registrerer og finner", r.get("bbmd_status") == 0 and r.get("count", 0) >= 1,
+          f"status {r.get('bbmd_status')}, {r.get('count')} enheter, tabell {r.get('bdt')}")
+
+    for fil in ("nabe-start", "nabe-verktoy", "nabe-felt", "nabe-moro"):
+        try:
+            with urllib.request.urlopen(f"{BASE}/js/{fil}.js", timeout=5) as rr:
+                ok = rr.status == 200
+        except Exception:
+            ok = False
+        sjekk(f"serverer js/{fil}.js", ok)
+    v = kall("/api/ny-versjon")
+    sjekk("versjonssjekk svarer (med eller uten nett)", v.get("status") == "done", f"her {v.get('her')}, github {v.get('github')}")
+
 
 async def main():
+    # Windows reports a closed pipe as an error when the test server stops.
+    # It is not one, and it made the output look like a failure.
+    loop = asyncio.get_event_loop()
+    loop.set_exception_handler(lambda l, c: None if isinstance(c.get("exception"), ConnectionResetError)
+                               else l.default_exception_handler(c))
     apps = [lag_enhet(*e) for e in ENHETER]
+    # A BBMD with one peer - itself. More peers that do not exist make the
+    # bacpypes3 BBMD stop answering, which is the simulator, not NABE.
+    from bacpypes3.ipv4.app import BBMDApplication
+    bdev = DeviceObject(objectIdentifier=("device", 9100), objectName="SIM-BBMD", vendorIdentifier=999,
+                        maxApduLengthAccepted=1476, segmentationSupported="noSegmentation")
+    bbmd = BBMDApplication(bdev, IPv4Address("127.0.0.5/8:47820"))
+    bbmd.bbmd.add_peer(IPv4Address("127.0.0.5/8:47820"))
+    apps.append(bbmd)
     await asyncio.sleep(0.5)
-    env = dict(os.environ, NABE_ALLOWED_ORIGINS=BASE)
+    import tempfile
+    data = tempfile.mkdtemp(prefix="nabe-selvtest-")
+    env = dict(os.environ, NABE_ALLOWED_ORIGINS=BASE, NABE_DATA=data)
     server = subprocess.Popen([sys.executable, "-m", "uvicorn", "server:app", "--host", "127.0.0.1",
                                "--port", str(PORT), "--log-level", "warning"], cwd=HER, env=env)
     try:
