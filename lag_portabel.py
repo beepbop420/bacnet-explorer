@@ -21,7 +21,8 @@ DIST = HER / "dist"
 MAPPE = DIST / "NABE"
 PY_KILDE = Path(getattr(sys, "_base_executable", sys.executable)).parent
 
-APPFILER = ["server.py", "bacnet_core.py", "app.js", "index.html", "requirements.txt"]
+APPFILER = ["server.py", "bacnet_core.py", "app.js", "index.html", "requirements.txt",
+            "requirements-app.txt", "nabe_app.py"]
 # Det en kjørende NABE aldri bruker. Uten dette er Python fire ganger så stor.
 HOPP_OVER = {"test", "tests", "idlelib", "tkinter", "turtledemo", "ensurepip", "lib2to3",
              "__pycache__", "site-packages", "venv", "pydoc_data"}
@@ -40,10 +41,16 @@ start "" /b powershell -NoProfile -WindowStyle Hidden -Command "for ($i = 0; $i 
 "python\python.exe" -s -m uvicorn server:app --host 127.0.0.1 --port 8092
 """
 
+APP_START = r"""@echo off
+cd /d "%~dp0"
+start "" "python\pythonw.exe" -s nabe_app.py
+"""
+
 LES_MEG = """NABE - Not Another BACnet Explorer, portabel utgave
 ====================================================
 
-Pakk ut mappa hvor som helst og dobbeltklikk NABE.bat.
+Pakk ut mappa hvor som helst og dobbeltklikk NABE.bat for eget vindu,
+eller «NABE i nettleser.bat» hvis du heller vil ha den i nettleseren.
 Ingen installasjon, ingen administratorrettigheter, ingen nett.
 
 Laget for maskinen som faktisk når anlegget - for eksempel en
@@ -77,11 +84,13 @@ def main():
     subprocess.run([str(MAPPE / "python" / "python.exe"), "-s", "-m", "pip", "--version"],
                    capture_output=True)
     subprocess.run([sys.executable, "-m", "pip", "install", "--quiet", "--no-index",
-                    "--find-links", str(HER / "pakker"), "-r", str(HER / "requirements.txt"),
+                    "--find-links", str(HER / "pakker"), "-r", str(HER / "requirements-app.txt"),
                     "--target", str(MAPPE / "python" / "Lib" / "site-packages")], check=True)
     for f in APPFILER:
         shutil.copy2(HER / f, MAPPE / f)
-    (MAPPE / "NABE.bat").write_text(START.replace("\n", "\r\n"), encoding="ascii")
+    (MAPPE / "NABE i nettleser.bat").write_text(START.replace("\n", "\r\n"), encoding="ascii")
+    (MAPPE / "NABE.bat").write_text(APP_START.replace("\n", "\r\n"), encoding="ascii")
+    shutil.copy2(HER / "installasjon" / "nabe.ico", MAPPE / "nabe.ico")
     (MAPPE / "LES MEG.txt").write_text(LES_MEG.replace("\n", "\r\n"), encoding="utf-8")
 
     zipnavn = DIST / f"NABE-portabel-{versjon}.zip"

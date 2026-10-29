@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="nb">
+<head>
+<meta charset="utf-8">
+<title>Installer NABE</title>
+<style>
+:root{--bg:#111113;--panel:#161618;--raised:#1c1c1f;--hover:#232327;--line:#26262a;--line-2:#35353b;
+  --fg:#ececee;--fg-2:#a9a9b0;--fg-3:#85858d;--ok:#0ac80a;--warn:#ffc900;--err:#ff6b57}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--fg);
+  font:13px/1.5 "Segoe UI Variable Text","Segoe UI",system-ui,sans-serif;user-select:none;overflow:hidden}
+.side{display:none;flex-direction:column;height:100%;padding:28px 32px 22px}
+.side.vis{display:flex;animation:inn .3s cubic-bezier(.2,.8,.2,1)}
+@keyframes inn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+.figur{display:flex;justify-content:center;margin:6px 0 10px}
+h1{margin:0;font-size:32px;letter-spacing:.08em;text-align:center}
+.under{text-align:center;color:var(--fg-3);font-size:12px}
+.tekst{margin:18px 0 0;color:var(--fg-2);text-align:center}
+h2{margin:0 0 4px;font-size:18px;font-weight:600}
+.hjelp{color:var(--fg-3);font-size:12px;margin:0 0 14px}
+.vilkar{flex:1;overflow:auto;background:var(--panel);border:1px solid var(--line-2);border-radius:8px;
+  padding:14px 16px;white-space:pre-wrap;font-size:12.5px;color:var(--fg-2);user-select:text}
+.rad{display:flex;align-items:center;gap:10px;margin:12px 0 0;color:var(--fg-2)}
+.rad input{width:16px;height:16px;accent-color:#ececee}
+.felt{width:100%;height:34px;background:var(--panel);border:1px solid var(--line-2);border-radius:6px;
+  color:var(--fg);padding:0 10px;font:12px "Cascadia Mono",Consolas,monospace}
+.valg{display:flex;flex-direction:column;gap:2px;margin-top:16px}
+.valg label{display:flex;gap:10px;align-items:center;padding:8px 10px;border-radius:8px;cursor:pointer}
+.valg label:hover{background:var(--raised)}
+.valg small{display:block;color:var(--fg-3);font-size:11px}
+.knapper{display:flex;justify-content:flex-end;gap:8px;margin-top:auto;padding-top:18px}
+button{height:34px;padding:0 18px;border-radius:6px;border:1px solid var(--line-2);background:transparent;
+  color:var(--fg);font:500 13px "Segoe UI",sans-serif;cursor:pointer}
+button:hover:not(:disabled){background:var(--hover)}
+button.primar{background:var(--fg);border-color:var(--fg);color:var(--bg);font-weight:600}
+button.primar:hover:not(:disabled){background:var(--fg-2);border-color:var(--fg-2)}
+button:disabled{opacity:.35;cursor:default}
+.spor{height:3px;background:var(--line);border-radius:2px;overflow:hidden;margin:26px 0 10px}
+.spor i{display:block;height:100%;width:0;background:var(--fg);transition:width .2s ease}
+.status{color:var(--fg-3);font-size:12px;min-height:18px;text-align:center}
+.fil{font-family:"Cascadia Mono",Consolas,monospace;font-size:11px;color:var(--fg-3);text-align:center;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.nabe .boks{fill:var(--fg)}.nabe .oye{fill:var(--bg)}.nabe .pup{fill:var(--fg);transition:transform .25s ease}
+.nabe .munn{fill:none;stroke:var(--bg);stroke-width:2;stroke-linecap:round;transition:d .3s ease}
+.nabe .led{fill:var(--warn)}
+.trist .munn{d:path('M12.6 24.8 Q16 21.6 19.4 24.8')}
+.glad .munn{d:path('M12.4 22.6 Q16 25.6 19.6 22.6')}
+.glad .led{fill:var(--ok)}
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute">
+  <symbol id="nabe" viewBox="0 0 32 32">
+    <line x1="16" y1="6" x2="16" y2="2.6" stroke="#ececee" stroke-width="1.6"/>
+    <circle cx="16" cy="2.4" r="1.7" class="led"/>
+    <rect x="3" y="6" width="26" height="23" rx="6.5" class="boks"/>
+    <circle cx="11.2" cy="15.6" r="4.6" class="oye"/><circle cx="20.8" cy="15.6" r="4.6" class="oye"/>
+    <g class="pup"><circle cx="11.2" cy="15.6" r="2.1"/><circle cx="20.8" cy="15.6" r="2.1"/></g>
+    <path class="munn" d="M12.6 23.4 Q16 23.4 19.4 23.4"/>
+  </symbol>
+</svg>
+
+<section class="side vis" id="s1">
+  <div class="figur"><svg class="nabe" width="110" height="110"><use href="#nabe"/></svg></div>
+  <h1>NABE</h1>
+  <div class="under">Not Another BACnet Explorer · <span id="ver"></span></div>
+  <p class="tekst" id="hei">Du er i ferd med å installere enda en BACnet-explorer.<br>Det er helt normalt. Det skjer de beste.</p>
+  <div class="knapper"><button onclick="api('lukk')">Avbryt</button><button class="primar" onclick="gaa(2)">Neste</button></div>
+</section>
+
+<section class="side" id="s2">
+  <h2>Vilkår</h2>
+  <p class="hjelp">Juridisk bindende på samme måte som en lapp på kaffemaskinen.</p>
+  <div class="vilkar" id="vilkar"></div>
+  <label class="rad"><input type="checkbox" id="lest" onchange="$('godta').disabled=!this.checked">
+    Jeg har lest vilkårene <span style="color:var(--fg-3)">(ingen gjør det)</span></label>
+  <div class="knapper"><button onclick="avslaa()">Avslå</button><button class="primar" id="godta" disabled onclick="gaa(3)">Godta</button></div>
+</section>
+
+<section class="side" id="s3">
+  <h2>Hvor og hvordan</h2>
+  <p class="hjelp">Bare for deg - ingen administratorrettigheter trengs. Anleggsminnet ditt ligger trygt i en egen mappe.</p>
+  <input class="felt" id="mappe" spellcheck="false">
+  <div class="valg">
+    <label><input type="checkbox" id="meny" checked><span>Start-menyen<small>Så du finner NABE når du trykker Windows-tasten.</small></span></label>
+    <label><input type="checkbox" id="skrivebord" checked><span>Skrivebordet<small>For de som har orden på skrivebordet. Eller ikke.</small></span></label>
+    <label><input type="checkbox" id="nettleser"><span>Også nettleserversjonen<small>Samme NABE, i nettleseren din, for deg som savner faner.</small></span></label>
+  </div>
+  <div class="knapper"><button onclick="gaa(2)">Tilbake</button><button class="primar" onclick="installer()">Installer</button></div>
+</section>
+
+<section class="side" id="s4">
+  <div class="figur" style="margin-top:40px"><svg class="nabe" id="jobbfigur" width="90" height="90"><use href="#nabe"/></svg></div>
+  <div class="spor"><i id="spor"></i></div>
+  <div class="status" id="status">Pakker ut …</div>
+  <div class="fil" id="fil"></div>
+</section>
+
+<section class="side" id="s5">
+  <div class="figur"><svg class="nabe glad" width="110" height="110"><use href="#nabe"/></svg></div>
+  <h1 style="font-size:24px;letter-spacing:0">Ferdig</h1>
+  <p class="tekst" id="ferdigtekst">NABE er installert. Ingen regulatorer ble skadet underveis.</p>
+  <label class="rad" style="justify-content:center"><input type="checkbox" id="startnaa" checked> Start NABE nå</label>
+  <div class="knapper"><button class="primar" onclick="avslutt()">Lukk</button></div>
+</section>
+
+<script>
+const $ = id => document.getElementById(id);
+const api = (navn, ...a) => window.pywebview.api[navn](...a);
+let MAPPE = '';
+const STATUS = [
+  'Pakker ut …', 'Kopierer Python. Den er tyngre enn den ser ut.', 'Lærer NABE å himle med øynene …',
+  'Kalibrerer sarkasme …', 'Overstyrer ingenting på prioritet 1 …', 'Ber YABE om unnskyldning …',
+  'Setter klokka riktig. Det er mer enn WAGO-en klarer.', 'Nesten ferdig. Det sier alle.',
+];
+function gaa(n) {
+  document.querySelectorAll('.side').forEach(s => s.classList.remove('vis'));
+  $('s' + n).classList.add('vis');
+}
+function avslaa() {
+  $('s2').querySelector('h2').textContent = 'Forståelig.';
+  $('s2').querySelector('.hjelp').textContent = 'YABE venter på deg. Den har ikke vilkår. Den har ingenting.';
+  setTimeout(() => api('lukk'), 2200);
+}
+function installer() {
+  MAPPE = $('mappe').value.trim();
+  gaa(4);
+  api('installer', MAPPE, {meny: $('meny').checked, skrivebord: $('skrivebord').checked, nettleser: $('nettleser').checked});
+}
+let sisteStatus = 0;
+function fremdrift(n, av, fil) {
+  $('spor').style.width = Math.round(n / av * 100) + '%';
+  const i = Math.min(STATUS.length - 1, Math.floor(n / av * STATUS.length));
+  if (i !== sisteStatus) { sisteStatus = i; $('status').textContent = STATUS[i]; }
+  $('fil').textContent = fil;
+  const g = $('jobbfigur').querySelector('.pup');
+  if (g) g.style.transform = `translate(${(Math.sin(n / 7) * 2).toFixed(2)}px, 1.6px)`;
+}
+function ferdig() { $('spor').style.width = '100%'; setTimeout(() => gaa(5), 400); }
+function feilet(e) { $('status').textContent = 'Noe gikk galt: ' + e; $('jobbfigur').classList.add('trist'); }
+function avslutt() { if ($('startnaa').checked) api('start_nabe', MAPPE); setTimeout(() => api('lukk'), 300); }
+
+// The big NABE watches the pointer, as the real one does.
+document.addEventListener('pointermove', e => {
+  document.querySelectorAll('.side.vis .nabe').forEach(svg => {
+    if (svg.id === 'jobbfigur') return;
+    const r = svg.getBoundingClientRect();
+    const vx = e.clientX - (r.left + r.width / 2), vy = e.clientY - (r.top + r.height / 2);
+    const l = Math.hypot(vx, vy) || 1, m = Math.min(2.2, l / 60);
+    svg.querySelector('.pup').style.transform = `translate(${(vx / l * m).toFixed(2)}px, ${(vy / l * m).toFixed(2)}px)`;
+  });
+});
+window.addEventListener('pywebviewready', async () => {
+  const i = await api('info');
+  $('ver').textContent = 'versjon ' + i.versjon;
+  $('vilkar').textContent = i.vilkar;
+  $('mappe').value = i.mappe;
+  if (i.finnes) $('hei').innerHTML = 'NABE er installert fra før. Dette oppdaterer den.<br>Anleggsminnet og notatene dine blir liggende.';
+});
+</script>
+</body>
+</html>

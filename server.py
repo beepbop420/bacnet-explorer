@@ -76,6 +76,14 @@ app.add_middleware(GZipMiddleware, minimum_size=2048)
 
 # Origins allowed to read across origins. Everything else may still call the
 # API same-origin, which is how the tool's own UI works.
+# Where site memory, notes, the write log and projects live. Next to the
+# program by default, as it always was; the installed app points this at the
+# user's own folder, because the program folder is not the place for data
+# that must survive an update or an uninstall.
+DATA_DIR = Path(os.environ.get("NABE_DATA") or Path(__file__).parent)
+DATA_DIR.mkdir(parents=True, exist_ok=True)
+
+
 def _env(navn: str, standard: str = "") -> str:
     """NABE_<navn>, with the old NM_<navn> still honoured so existing
     start scripts keep working."""
@@ -1131,7 +1139,7 @@ class ReadOnlyBody(BaseModel):
 # last line loses one entry rather than the whole log.
 WRITE_LOG: List[Dict[str, Any]] = []
 MAX_WRITE_LOG = 500
-WRITE_LOG_FILE = Path(__file__).parent / "writelog.jsonl"
+WRITE_LOG_FILE = DATA_DIR / "writelog.jsonl"
 # Roughly a year of heavy use before rotation; the file is a few hundred
 # bytes per entry.
 MAX_WRITE_LOG_FILE = 20000
@@ -1145,7 +1153,7 @@ MAX_WRITE_LOG_FILE = 20000
 # the old code simply returned, silently, leaving the point forced with nothing
 # in the log to say so.
 _release_tasks: Dict[str, asyncio.Task] = {}
-RELEASE_FILE = Path(__file__).parent / "pending-releases.json"
+RELEASE_FILE = DATA_DIR / "pending-releases.json"
 # How long to keep trying when the plant is unreachable at release time. The
 # link on a site VPN comes and goes in bursts, so giving up on the first miss
 # is giving up far too early.
@@ -2036,7 +2044,7 @@ async def write(body: WriteBody):
 # technician's head or in a text file, and the tool started every visit blank.
 # It is kept on disk rather than in the browser so it survives a cleared cache
 # and follows the shared server if the tool is run from one.
-SITES_FILE = Path(__file__).parent / "sites.json"
+SITES_FILE = DATA_DIR / "sites.json"
 SITES: Dict[str, Any] = {}
 SITES_MAX = 200
 
@@ -2170,7 +2178,7 @@ async def sites_delete(body: SiteKeyBody):
     return {"status": "done"}
 
 
-NOTES_FILE = Path(__file__).parent / "notes.json"
+NOTES_FILE = DATA_DIR / "notes.json"
 NOTES: Dict[str, Dict[str, Any]] = {}
 
 
@@ -2212,7 +2220,7 @@ NOTES_SYNC: Dict[str, Any] = {"state": "av", "detail": "", "ts": 0.0, "pending":
 # remembering: the key is queued on disk, and the queue is flushed the moment
 # the shared server answers again, which is usually when the laptop is back on
 # the office network.
-NOTES_QUEUE_FILE = Path(__file__).parent / "notes-queue.json"
+NOTES_QUEUE_FILE = DATA_DIR / "notes-queue.json"
 NOTES_QUEUE: set = set()
 NOTES_FLUSH_SECONDS = 60
 
@@ -2385,7 +2393,7 @@ async def set_note(body: NoteBody):
     return {"status": "done", "notes": NOTES, "sync": NOTES_SYNC}
 
 
-PROJECT_DIR = Path(__file__).parent / "projects"
+PROJECT_DIR = DATA_DIR / "projects"
 
 
 def _safe_name(name: str) -> str:
