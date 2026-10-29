@@ -79,7 +79,10 @@ function naboInnst() {
           // Which characters in a point name start a new folder in the path.
           skille: typeof p.skille === 'string' ? p.skille : '_.- ',
           // Hand edits, per device and object: what used to be done in Excel.
-          rett: p.rett || {}};
+          rett: p.rett || {},
+          // Where files go: '' is the browser's Downloads, anything else a
+          // folder the server writes into.
+          mappe: p.mappe || '', mapper: p.mapper || []};
 }
 function lagreNabo(patch) {
   savePrefs({nabo: Object.assign({}, loadPrefs().nabo || {}, patch)});
@@ -456,8 +459,84 @@ function lagIni() {
     const c = tekst.charCodeAt(i);
     bytes[i] = c < 256 ? c : 63;
   }
-  lastNedBytes(bytes, 'HeaderBTG.ini', 'text/plain');
-  toast(T('HeaderBTG.ini lagret', 'HeaderBTG.ini saved'));
+  naboLagre('HeaderBTG.ini', bytes, 'text/plain');
+  toast(T(`HeaderBTG.ini lagret i ${mappeNavn()}`, `HeaderBTG.ini saved in ${mappeNavn()}`));
+}
+
+/* -------------------------------------------------------- where files go
+   One queue for every file NABO writes, so several files land in order and
+   a download never overtakes a save. */
+let LAGRE_KO = Promise.resolve();
+function naboLagre(navn, data, type) {
+  LAGRE_KO = LAGRE_KO.then(() => lagreEn(navn, data, type)).catch(() => {});
+  return LAGRE_KO;
+}
+async function lagreEn(navn, data, type) {
+  const mappe = naboInnst().mappe;
+  if (!mappe) {
+    lastNedBytes(data, navn, type);
+    await new Promise(r => setTimeout(r, 350));   // the browser drops downloads fired together
+    return;
+  }
+  const bytes = typeof data === 'string' ? new TextEncoder().encode(data) : data;
+  let bin = '';
+  for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+  try {
+    const d = await api('/api/lagre', {mappe, navn, data: btoa(bin)});
+    if (d.status !== 'done') throw new Error(d.error || '?');
+    NABO.sistLagret = d.sti;
+    visLagret();
+  } catch (e) {
+    toast(T(`Fikk ikke lagret i mappa (${e.message}). Lastet ned i stedet.`,
+            `Could not save in the folder (${e.message}). Downloaded instead.`), true);
+    lastNedBytes(data, navn, type);
+  }
+}
+function mappeNavn() {
+  const m = naboInnst().mappe;
+  if (!m) return T('Nedlastinger', 'Downloads');
+  if (NABO.mapperInfo && m === NABO.mapperInfo.btg) return 'BTG-Export';
+  return m.split(/[\\/]/).filter(Boolean).pop() || m;
+}
+function visLagret() {
+  const b = $('naboVis');
+  if (!b || !NABO.sistLagret) return;
+  b.hidden = false;
+  b.title = NABO.sistLagret;
+}
+async function hentMapper() {
+  try { NABO.mapperInfo = await (await fetch('/api/mapper')).json(); } catch { NABO.mapperInfo = null; }
+  fyllMapper();
+}
+function fyllMapper() {
+  const s = $('naboMappe');
+  if (!s) return;
+  const o = naboInnst();
+  const info = NABO.mapperInfo || {};
+  const valg = [['', T('Nedlastinger', 'Downloads'), info.nedlastinger || '']];
+  if (info.btg) valg.push([info.btg, 'BTG-Export', info.btg]);
+  for (const m of o.mapper) if (m && !valg.some(v => v[0] === m)) valg.push([m, m.split(/[\\/]/).filter(Boolean).pop() || m, m]);
+  if (o.mappe && !valg.some(v => v[0] === o.mappe)) valg.push([o.mappe, o.mappe.split(/[\\/]/).pop(), o.mappe]);
+  s.innerHTML = valg.map(([v, l, t]) => `<option value="${esc(v)}" title="${esc(t)}">${esc(l)}</option>`).join('')
+    + `<option value="__velg">${T('Velg mappe…', 'Choose folder…')}</option>`;
+  s.value = o.mappe;
+  s.title = o.mappe || info.nedlastinger || '';
+}
+async function velgMappe() {
+  const o = naboInnst();
+  const start = o.mappe || (NABO.mapperInfo && NABO.mapperInfo.btg) || '';
+  let valgt = null;
+  try {
+    if (window.pywebview && window.pywebview.api && window.pywebview.api.velg_mappe) {
+      valgt = await window.pywebview.api.velg_mappe(start);
+    } else {
+      toast(T('Velg mappa i dialogen som åpnes', 'Choose the folder in the dialog that opens'));
+      const d = await api('/api/velg-mappe', {sti: start});
+      valgt = d.mappe;
+    }
+  } catch { /* closed or not available */ }
+  if (valgt) lagreNabo({mappe: valgt, mapper: [valgt, ...o.mapper.filter(m => m !== valgt)].slice(0, 4)});
+  fyllMapper();
 }
 
 function lastNedBytes(data, navn, type) {
@@ -558,14 +637,14 @@ function eksporterVariabel(bare) {
   const grupper = NABO.perEnhet
     ? [...new Set(r.rader.map(x => x.enhetNavn))].map(e => [e, r.rader.filter(x => x.enhetNavn === e)])
     : [['', r.rader]];
-  grupper.forEach(([e, rader], i) => setTimeout(() => {
+  grupper.forEach(([e, rader]) => {
     const navn = ren(`${r.t.prefiks} Variabel ${r.anlegg} ${tid}${e ? ' ' + e.split('.').slice(1).join('.') : ''}${bare ? ' endringer' : ''}.csv`);
-    lastNedBytes('\uFEFF' + rader.map(x => x.linje).join('\r\n') + '\r\n', navn, 'text/csv;charset=utf-8');
-  }, i * 350));
+    naboLagre(navn, '\uFEFF' + rader.map(x => x.linje).join('\r\n') + '\r\n', 'text/csv;charset=utf-8');
+  });
   toast(T(`Variabel-fil laget: ${r.rader.length} punkter fra ${new Set(r.rader.map(x => x.enhetNavn)).size} enheter`
-          + (feil ? ` · ${feil} med feil` : ''),
+          + (feil ? ` · ${feil} med feil` : '') + ` → ${mappeNavn()}`,
           `Variabel file made: ${r.rader.length} points from ${new Set(r.rader.map(x => x.enhetNavn)).size} devices`
-          + (feil ? ` · ${feil} with errors` : '')), !!feil);
+          + (feil ? ` · ${feil} with errors` : '') + ` → ${mappeNavn()}`), !!feil);
   naboFigur('vink');
   if (typeof tell === 'function') tell('nabo');
   if (typeof nabeSier === 'function' && !feil) setTimeout(() => nabeSier(
@@ -610,10 +689,10 @@ function eksporterEde() {
       st.tabell.forEach((x, j) => sl.push([j + 1, ...x.map(f)].join(';')));
       filer.push([sl.join('\r\n') + '\r\n', `${basis}_StateTexts.csv`]);
     }
-    for (const [tekst, fn] of filer) setTimeout(() => downloadText(tekst, fn, false), (i++) * 350);
+    for (const [tekst, fn] of filer) { naboLagre(fn, tekst, 'text/csv;charset=utf-8'); i++; }
   }
-  toast(T(`EDE for ${kilder.length} ${kilder.length === 1 ? 'enhet' : 'enheter'}`,
-          `EDE for ${kilder.length} ${kilder.length === 1 ? 'device' : 'devices'}`));
+  toast(T(`EDE for ${kilder.length} ${kilder.length === 1 ? 'enhet' : 'enheter'} → ${mappeNavn()}`,
+          `EDE for ${kilder.length} ${kilder.length === 1 ? 'device' : 'devices'} → ${mappeNavn()}`));
 }
 
 /* ------------------------------------------------------------ the view */
@@ -731,6 +810,8 @@ function tegnNabo(helt) {
       </div>
       <footer class="nabo-fot">
         <div class="nabo-sum" id="naboSum"></div>
+        <label class="nabo-mappe"><span>${T('Lagre i', 'Save in')}</span><select class="field" id="naboMappe"></select></label>
+        <button class="nabo-vis" id="naboVis" hidden>${T('Åpne mappa', 'Open folder')}</button>
         <label class="nabo-per"><input type="checkbox" id="naboPer"> ${T('Én fil per enhet', 'One file per device')}</label>
         <button class="btn" id="naboEde">${T('EDE-filer', 'EDE files')}</button>
         <button class="btn primary" id="naboVar">${T('Lag Variabel-fil', 'Make Variabel file')}</button>
@@ -1078,6 +1159,12 @@ function koblNabo(ov) {
   $('naboVar').onclick = () => eksporterVariabel();
   $('naboEde').onclick = eksporterEde;
   $('naboPer').onchange = (e) => { NABO.perEnhet = e.target.checked; lagreNabo({perEnhet: NABO.perEnhet}); };
+  $('naboMappe').onchange = (e) => {
+    if (e.target.value === '__velg') { velgMappe(); return; }
+    lagreNabo({mappe: e.target.value}); fyllMapper();
+  };
+  $('naboVis').onclick = () => NABO.sistLagret && api('/api/vis-fil', {sti: NABO.sistLagret});
+  hentMapper();
   const felt = {naboAnlegg: 'anleggsnavn', naboPrefiks: 'prefiks', naboCluster: 'cluster'};
   for (const [id, nokkel] of Object.entries(felt)) {
     $(id).addEventListener('input', (e) => senere(() => lagreTagging({[nokkel]: e.target.value.trim()}).then(() => tegnNabo())));

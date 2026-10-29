@@ -154,6 +154,10 @@ const FAKTA = [
   ['COV betyr at regulatoren sier fra selv. Mindre spørring, mer ro.', 'COV means the controller speaks up itself. Less asking, more peace.'],
 ];
 const NYTT = {
+  '1.9.1': [
+    ['NABO: velg hvor filene lagres - Nedlastinger, BTG-Export eller en mappe du velger selv', 'NABO: choose where files are saved - Downloads, BTG-Export or a folder of your own'],
+    ['«Åpne mappa» viser fila du nettopp lagret i Utforsker', '"Open folder" shows the file you just saved in Explorer'],
+  ],
   '1.9': [
     ['NABO: klikk en tag, beskrivelse, enhet eller desimaler for å rette den, Tab går nedover som i Excel', 'NABO: click a tag, description, unit or decimals to edit it, Tab goes down as in Excel'],
     ['Klikk trend eller alarm for å slå av og på, ↺ tar raden tilbake til det automatiske', 'Click trend or alarm to switch it, ↺ takes the row back to the automatic value'],

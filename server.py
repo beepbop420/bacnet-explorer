@@ -170,7 +170,7 @@ async def guard_and_cors(request, call_next):
         response.headers["Vary"] = "Origin"
     return response
 
-VERSJON = "1.9"
+VERSJON = "1.9.1"
 
 state = {"app": None, "local_address": None, "read_only": False, "bbmd": None}
 
@@ -488,6 +488,106 @@ def ruter_via(ip: str) -> List[Dict[str, Any]]:
     # on a VPN, and only on a cable is it the plant.
     ut_liste.sort(key=lambda r: (r["egen"], -ipaddress.IPv4Network(r["cidr"]).prefixlen))
     return ut_liste[:8]
+
+
+# ------------------------------------------------------------- saving files
+# A download in the window always lands in Downloads. NABO's files belong
+# where BTG puts them, or wherever the project keeps its NTI files, so the
+# server writes them there itself.
+
+_ULOVLIG_FILNAVN = re.compile(r'[\\/:*?"<>|\x00-\x1f]')
+
+
+def _btg_mappe() -> Optional[str]:
+    """BTG's own export folder, where it already is."""
+    hjem = Path.home()
+    kandidater = [*hjem.glob("OneDrive*/Desktop/BTG-Export"), hjem / "Desktop" / "BTG-Export"]
+    for k in kandidater:
+        if k.is_dir():
+            return str(k)
+    return None
+
+
+@app.get("/api/mapper")
+def mapper():
+    return {"status": "done", "nedlastinger": str(Path.home() / "Downloads"), "btg": _btg_mappe()}
+
+
+class LagreBody(BaseModel):
+    mappe: str
+    navn: str
+    data: str      # base64
+
+
+@app.post("/api/lagre")
+def lagre_fil(body: LagreBody):
+    """Write one file into a folder you chose. Never over an existing file:
+    the same name gets (2), (3) as a browser download would."""
+    import base64
+    mappe = Path(body.mappe)
+    if not mappe.is_absolute() or not mappe.is_dir():
+        return {"status": "error", "error": f"Fant ikke mappa {body.mappe}"}
+    navn = body.navn.strip()
+    if not navn or navn in (".", "..") or _ULOVLIG_FILNAVN.search(navn):
+        return {"status": "error", "error": "Ugyldig filnavn"}
+    try:
+        data = base64.b64decode(body.data, validate=True)
+    except Exception:
+        return {"status": "error", "error": "Ugyldig innhold"}
+    maal = mappe / navn
+    stamme, ending = maal.stem, maal.suffix
+    n = 2
+    while maal.exists():
+        maal = mappe / f"{stamme} ({n}){ending}"
+        n += 1
+    try:
+        maal.write_bytes(data)
+    except OSError as e:
+        return {"status": "error", "error": str(e)}
+    return {"status": "done", "sti": str(maal)}
+
+
+class StiBody(BaseModel):
+    sti: str = ""
+
+
+@app.post("/api/vis-fil")
+def vis_fil(body: StiBody):
+    """Open Explorer with the file selected."""
+    p = Path(body.sti)
+    if not p.is_absolute() or not p.exists():
+        return {"status": "error", "error": "Fila finnes ikke"}
+    if os.name == "nt":
+        subprocess.Popen(["explorer", "/select,", str(p)])
+    return {"status": "done"}
+
+
+@app.post("/api/velg-mappe")
+async def velg_mappe(body: StiBody):
+    """Windows' own folder dialog, for when NABE runs in a browser and has no
+    window of its own to ask. Shown on top, since nothing owns it."""
+    if os.name != "nt":
+        return {"status": "error", "error": "Bare på Windows"}
+    start = body.sti if body.sti and Path(body.sti).is_dir() else str(Path.home())
+    ps = (
+        "Add-Type -AssemblyName System.Windows.Forms;"
+        "$f = New-Object System.Windows.Forms.Form -Property @{TopMost=$true; ShowInTaskbar=$false};"
+        "$d = New-Object System.Windows.Forms.FolderBrowserDialog;"
+        "$d.Description = 'Hvor skal NABO lagre filene?';"
+        f"$d.SelectedPath = '{start.replace(chr(39), chr(39) * 2)}';"
+        "if ($d.ShowDialog($f) -eq 'OK') { [Console]::OutputEncoding = [Text.Encoding]::UTF8; $d.SelectedPath }"
+    )
+
+    def kjor():
+        ut = subprocess.run(["powershell", "-NoProfile", "-STA", "-Command", ps], capture_output=True,
+                            timeout=600, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+        return ut.stdout.decode("utf-8", errors="replace").strip()
+
+    try:
+        valgt = await asyncio.get_event_loop().run_in_executor(None, kjor)
+    except Exception as e:
+        return {"status": "error", "error": str(e)}
+    return {"status": "done", "mappe": valgt or None}
 
 
 @app.get("/api/forslag")

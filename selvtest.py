@@ -129,6 +129,13 @@ def kjor_tester():
     uten = [d.get("address") for d in r.get("devices") or [] if not d.get("object_name")]
     sjekk("Who-Is-funn får navn", bool(r.get("devices")) and not uten, f"uten navn: {uten}")
 
+    import base64, tempfile
+    tmp = tempfile.mkdtemp(prefix="nabo-")
+    r1 = kall("/api/lagre", {"mappe": tmp, "navn": "nabo.csv", "data": base64.b64encode(b"x").decode()})
+    r2 = kall("/api/lagre", {"mappe": tmp, "navn": "../ut.csv", "data": "eA=="})
+    sjekk("NABO lagrer i valgt mappe, aldri utenfor", r1.get("status") == "done"
+          and Path(r1.get("sti", "")).is_file() and r2.get("status") == "error", f"{r1} / {r2}")
+
     for fil in ("nabe-start", "nabe-verktoy", "nabe-felt", "nabe-moro", "nabe-finn", "nabo"):
         try:
             with urllib.request.urlopen(f"{BASE}/js/{fil}.js", timeout=5) as rr:

@@ -126,6 +126,11 @@ def main():
             Api.tillat_lukking = True
             vindu.destroy()
 
+        def velg_mappe(self, start=""):
+            """Windows' folder dialog, owned by this window."""
+            valgt = vindu.create_file_dialog(webview.FOLDER_DIALOG, directory=start or "")
+            return valgt[0] if valgt else None
+
     vindu = webview.create_window(
         "NABE", base, width=geo.get("b", 1440), height=geo.get("h", 900),
         x=geo.get("x"), y=geo.get("y"), min_size=(960, 600),
