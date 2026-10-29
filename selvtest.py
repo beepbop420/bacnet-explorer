@@ -143,6 +143,17 @@ def kjor_tester():
         except Exception:
             ok = False
         sjekk(f"serverer js/{fil}.js", ok)
+    # A file the browser cannot parse takes everything after it down with it,
+    # and nothing above would notice. Node checks the syntax where it is installed.
+    import shutil
+    node = shutil.which("node")
+    if node:
+        feil = []
+        for js in [HER / "app.js", *sorted((HER / "js").glob("*.js"))]:
+            p = subprocess.run([node, "--check", str(js)], capture_output=True, text=True)
+            if p.returncode:
+                feil.append(f"{js.name}: {(p.stderr.strip().splitlines() or ['?'])[-1]}")
+        sjekk("all JavaScript lar seg tolke", not feil, "; ".join(feil))
     v = kall("/api/ny-versjon")
     sjekk("versjonssjekk svarer (med eller uten nett)", v.get("status") == "done", f"her {v.get('her')}, github {v.get('github')}")
 
