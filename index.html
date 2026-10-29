@@ -3525,6 +3525,46 @@ body{font-family:var(--sans)}
 .nabo-sum .f{color:var(--err-fg)}
 .nabo-per{font-size:12px;color:var(--fg-2);display:flex;gap:6px;align-items:center;cursor:pointer}
 
+/* Hand edits: the table is the spreadsheet now. */
+.nabo-skille{display:flex;flex-direction:column;gap:4px;font-size:11px;color:var(--fg-3)}
+.nabo-skille div{display:flex;border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;height:30px}
+.nabo-skille button{background:none;border:0;border-right:1px solid var(--line);padding:0 10px;min-width:30px;
+  font-family:var(--mono);font-size:12px;color:var(--fg-3);cursor:pointer}
+.nabo-skille button:last-child{border-right:0;font-family:inherit;font-size:11px}
+.nabo-skille button.paa{background:var(--raised);color:var(--fg);box-shadow:inset 0 -2px 0 var(--accent)}
+.nabo-skille button:hover{color:var(--fg)}
+.nabo-rettbar td[data-felt]{cursor:text}
+.nabo-rettbar td[data-felt]:hover{box-shadow:inset 0 0 0 1px var(--line-2)}
+.nabo-rettbar td.bryter{cursor:pointer;text-align:center}
+.nabo-rettbar td.bryter:hover{box-shadow:inset 0 0 0 1px var(--line-2)}
+.nabo-av{display:inline-block;width:6px;height:6px;border-radius:50%;border:1px solid transparent;vertical-align:middle}
+.nabo-rettbar td.bryter:hover .nabo-av{border-color:var(--fg-3)}
+.nabo-rettbar td.egen{color:var(--accent)!important;background:color-mix(in srgb,var(--accent) 6%,transparent)}
+.nabo-rettbar td.egen.t{text-decoration:none}
+.nabo-rettbar tr.rettet td.d{box-shadow:inset 2px 0 0 var(--accent)}
+.nabo-rettbar td.n{font-family:var(--mono);font-size:11px;color:var(--fg-3)}
+.nabo-rett-inn{width:100%;min-width:120px;font:inherit;color:var(--fg);background:var(--sunken);
+  border:1px solid var(--accent-edge);border-radius:var(--r-sm);padding:1px 5px;outline:none}
+td.h .nabo-rett-inn{min-width:44px;text-align:right}
+.nabo-angre-c{width:24px;padding-left:0!important;padding-right:6px!important}
+.nabo-angre{background:none;border:0;color:var(--fg-3);cursor:pointer;font-size:13px;padding:0 4px}
+.nabo-angre:hover{color:var(--fg)}
+.nabo-rettbar .gml{text-decoration:line-through;color:var(--fg-3);margin-right:8px}
+.nabo-rettbar .ny{color:var(--ok)}
+.nabo-erstatt{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:8px 14px;border-bottom:1px solid var(--line);background:var(--raised)}
+.nabo-erstatt[hidden]{display:none}
+.nabo-erstatt .field{height:28px;font-size:12px}
+.nabo-erstatt input.field{width:180px;font-family:var(--mono)}
+.nabo-erstatt label{display:flex;gap:5px;align-items:center;font-size:12px;color:var(--fg-2);cursor:pointer}
+.nabo-pil{color:var(--fg-3)}
+.nabo-er-raske{display:flex;gap:4px}
+.nabo-er-raske button{background:none;border:1px solid var(--line);border-radius:var(--radius);height:26px;padding:0 8px;
+  font-family:var(--mono);font-size:11px;color:var(--fg-2);cursor:pointer}
+.nabo-er-raske button:hover{color:var(--fg);border-color:var(--line-2)}
+.nabo-er-tall{font-size:12px;color:var(--fg-3);margin-left:auto}
+.nabo-erstatt .gs-close{padding:0 6px}
+#naboErstattKnapp[hidden]{display:none}
+
 /* The family. The house next to NABE's name, behind a hairline fence. */
 .nabo-hus-knapp{display:inline-flex;align-items:center;gap:6px;height:22px;margin-left:10px;padding:0 8px 0 10px;
   background:none;border:0;border-left:1px solid var(--line);color:var(--fg-3);font:inherit;font-size:11px;

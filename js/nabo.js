@@ -75,7 +75,11 @@ function naboInnst() {
   const p = loadPrefs().nabo || {};
   return {trend: p.trend || '00:05:00', eu: Object.assign({}, EU_STD, p.eu || {}),
           ini: p.ini || '', navn: p.navn || {}, perEnhet: !!p.perEnhet,
-          norm: Object.assign({}, NORM_STD, p.norm || {})};
+          norm: Object.assign({}, NORM_STD, p.norm || {}),
+          // Which characters in a point name start a new folder in the path.
+          skille: typeof p.skille === 'string' ? p.skille : '_.- ',
+          // Hand edits, per device and object: what used to be done in Excel.
+          rett: p.rett || {}};
 }
 function lagreNabo(patch) {
   savePrefs({nabo: Object.assign({}, loadPrefs().nabo || {}, patch)});
@@ -100,6 +104,23 @@ function normOppsett(o) {
   return NORM_CACHE;
 }
 
+let SKILLE_CACHE = {k: null, re: null};
+function naboSkilleRe(o) {
+  if (SKILLE_CACHE.k !== o.skille) {
+    const tegn = [...new Set(o.skille.split(''))].map(c => c === ' ' ? '\\s' : c.replace(/[\]\\^-]/g, '\\$&')).join('');
+    SKILLE_CACHE = {k: o.skille, re: tegn ? new RegExp(`[${tegn}]+`, 'g') : null};
+  }
+  return SKILLE_CACHE.re;
+}
+/* The point name as a Niagara path: split where you have said it should be,
+   joined with dots. A dot left in a name is still a folder to Niagara. */
+function naboSti(navn, cluster, o) {
+  const re = naboSkilleRe(o);
+  const n = String(navn || '').trim();
+  const biter = (re ? n.split(re) : [n]).filter(Boolean);
+  return (cluster ? cluster + '.' : '') + biter.join('.');
+}
+
 /* A point name through the regex and the template, or null when it does not
    fit - then the ordinary path is used, and the row says so. */
 function normaliser(navn, o) {
@@ -114,23 +135,29 @@ function normaliser(navn, o) {
   }
   const sti = o.norm.mal.split('.')
     .map(del => del.replace(/\{(\w+)\}/g, (_, k) => g[k] ?? ''))
-    .map(x => x.replace(/[-_\s]+/g, '.').replace(/^\.+|\.+$/g, ''))
+    .map(x => (naboSkilleRe(o) ? x.replace(naboSkilleRe(o), '.') : x).replace(/^\.+|\.+$/g, ''))
     .filter(Boolean).join('.');
   return sti ? {sti, g} : null;
 }
 
 /* ------------------------------------------------------------ one row */
-function naboRad(p, t, o, anlegg, enhetNavn) {
+function naboRad(p, t, o, anlegg, enhetNavn, rett) {
   const type = BTG_TYPE[p.type];
   if (type === undefined) return null;
+  rett = rett || {};
   const analog = type <= 2;
   const norm = o.norm.paa ? normaliser(p.name, o) : null;
-  const sti = norm ? (t.cluster ? t.cluster + '.' : '') + norm.sti : btgSti(p.name, t.cluster);
+  const stiAuto = norm ? (t.cluster ? t.cluster + '.' : '') + norm.sti : naboSti(p.name, t.cluster, o);
+  const sti = rett.sti ?? stiAuto;
   const sd = btgSd(p.description || '');
-  const beskr = sd.rest || p.name || '';
-  const enhet = analog ? btgEnhet(p.units) : '';
+  const beskrAuto = sd.rest || p.name || '';
+  const beskr = rett.beskr ?? beskrAuto;
+  const enhetAuto = analog ? btgEnhet(p.units) : '';
+  const enhet = rett.enhet ?? enhetAuto;
   // No unit is a count or a state, never a fraction.
-  const des = analog ? (enhet === 'null' ? 0 : (o.eu[euNokkel(enhet)] ?? o.eu.EUDefault)) : 0;
+  const desAuto = analog ? (enhetAuto === 'null' ? 0 : (o.eu[euNokkel(enhetAuto)] ?? o.eu.EUDefault)) : 0;
+  const des = rett.des ?? desAuto;
+  const klasse = rett.klasse ?? sd.klasse;
   let tilstander = '';
   if (Array.isArray(p.state_text) && p.state_text.length) {
     tilstander = (type >= 3 && type <= 5)
@@ -138,21 +165,23 @@ function naboRad(p, t, o, anlegg, enhetNavn) {
       : p.state_text.map((s, i) => `${i + 1}=${s}`).join('|');
   }
   const biter = sti.split('.');
-  const kilde = sd.klasse
+  const kilde = klasse
     ? `${anlegg} ${biter.length >= 3 ? `${biter[0]}.${biter[1]}-${biter[2]}` : sti}` : '';
-  const trend = sd.trend ? `Interval|${o.trend}` : '';
+  const trend = (rett.trend ?? sd.trend) ? `Interval|${o.trend}` : '';
   const f = new Array(34).fill('');
   f[0] = 'BacnetNetwork'; f[1] = anlegg; f[2] = enhetNavn; f[3] = sti;
   f[4] = String(type); f[5] = String(p.instance ?? ''); f[6] = naboVerdi(p.value); f[7] = enhet;
   f[8] = String(des); f[9] = tilstander; f[10] = beskr; f[11] = trend;
-  if (sd.klasse) { f[12] = String(sd.klasse); f[13] = beskr; f[14] = kilde; }
+  if (klasse) { f[12] = String(klasse); f[13] = beskr; f[14] = kilde; }
   f[30] = p.name || '';
   if (norm) { f[29] = norm.g.komponent || ''; f[33] = norm.g.funksjonskode || ''; }
   return {
     normert: o.norm.paa ? !!norm : null,
     linje: f.map(x => String(x).replace(/[;\r\n]/g, ' ')).join(';'),
     sti, type, typeNavn: shortType(p.type), inst: p.instance, enhet, des,
-    trend: !!trend, klasse: sd.klasse, beskr, navn: p.name || '', harSd: sd.rest !== (p.description || '').trim(),
+    trend: !!trend, klasse, beskr, navn: p.name || '', harSd: sd.rest !== (p.description || '').trim(),
+    auto: {sti: stiAuto, beskr: beskrAuto, enhet: enhetAuto, des: desAuto, trend: sd.trend, klasse: sd.klasse},
+    rett,
   };
 }
 
@@ -188,9 +217,10 @@ function naboResultat() {
     const sett = new Map();
     const objekter = new Set();
     for (const p of k.punkter) {
-      const r = naboRad(p, t, o, anlegg, enhetNavn);
+      const key = `${k.id}|${p.type},${p.instance}`;
+      const r = naboRad(p, t, o, anlegg, enhetNavn, o.rett[key]);
       if (!r) { hoppet++; continue; }
-      r.kilde = k; r.enhetNavn = enhetNavn; r.feil = []; r.adv = [];
+      r.kilde = k; r.enhetNavn = enhetNavn; r.feil = []; r.adv = []; r.key = key;
       if (!r.navn) r.feil.push(T('Mangler objektnavn', 'No object name'));
       if (sett.has(r.sti)) {
         r.feil.push(T('Samme tag finnes alt på denne enheten', 'The same tag already exists on this device'));
@@ -649,6 +679,11 @@ function tegnNabo(helt) {
         <label class="kort"><span>Cluster</span><input class="field" id="naboCluster" autocomplete="off" spellcheck="false"></label>
         <label class="kort"><span>${T('Trend hvert', 'Trend every')}</span><input class="field" id="naboTrend" autocomplete="off" spellcheck="false"></label>
         <details class="nabo-des"><summary>${T('Desimaler', 'Decimals')}</summary><div class="nabo-des-grid"></div></details>
+        <div class="nabo-skille" title="${T('Tegnene som deler et punktnavn i mapper i stien', 'The characters that split a point name into folders in the path')}">
+          <span>${T('Del navnet på', 'Split the name on')}</span>
+          <div>${[['_', '_'], ['.', '.'], ['-', '-'], [' ', T('mellomrom', 'space')]].map(([c, l]) =>
+            `<button type="button" data-s="${c === ' ' ? 'sp' : esc(c)}">${l}</button>`).join('')}</div>
+        </div>
         <div class="nabo-eks"><span>${T('Slik blir det', 'What it becomes')}</span><code id="naboEks"></code></div>
       </section>
       <div class="nabo-kropp">
@@ -669,9 +704,26 @@ function tegnNabo(helt) {
             </div>
             <input class="field" id="naboSok" type="search" placeholder="${T('Søk i tag, navn eller beskrivelse', 'Search tag, name or description')}" autocomplete="off" spellcheck="false">
             <div class="nabo-filter" role="tablist">
-              ${[['alle', T('Alle', 'All')], ['adv', T('Advarsler', 'Warnings')], ['alarm', 'Alarm'], ['trend', 'Trend']]
+              ${[['alle', T('Alle', 'All')], ['adv', T('Advarsler', 'Warnings')], ['rettet', T('Rettet', 'Edited')], ['alarm', 'Alarm'], ['trend', 'Trend']]
                 .map(([k, l]) => `<button data-f="${k}" role="tab">${l}<em></em></button>`).join('')}
             </div>
+            <button class="btn" id="naboErstattKnapp" title="${T('Søk og erstatt i tagger eller beskrivelser (Ctrl+H)', 'Find and replace in tags or descriptions (Ctrl+H)')}">${T('Erstatt…', 'Replace…')}</button>
+          </div>
+          <div class="nabo-erstatt" id="naboErstatt" hidden>
+            <select class="field" id="naboErFelt"><option value="sti">Tag</option><option value="beskr">${T('Beskrivelse', 'Description')}</option></select>
+            <input class="field" id="naboErFinn" placeholder="${T('Finn', 'Find')}" spellcheck="false" autocomplete="off">
+            <span class="nabo-pil">→</span>
+            <input class="field" id="naboErMed" placeholder="${T('Erstatt med', 'Replace with')}" spellcheck="false" autocomplete="off">
+            <div class="nabo-er-raske">
+              <button type="button" data-fra="_" data-til=".">_ → .</button>
+              <button type="button" data-fra="." data-til="_">. → _</button>
+            </div>
+            <label><input type="checkbox" id="naboErRe"> Regex</label>
+            <label><input type="checkbox" id="naboErViste" checked> ${T('Bare viste rader', 'Only rows shown')}</label>
+            <span class="nabo-er-tall" id="naboErTall"></span>
+            <button class="btn primary" id="naboErBruk">${T('Bruk', 'Apply')}</button>
+            <button class="btn" id="naboErAngre" hidden>${T('Angre', 'Undo')}</button>
+            <button class="gs-close" id="naboErLukk" title="${T('Lukk', 'Close')}">✕</button>
           </div>
           <div class="nabo-globalt" id="naboGlobalt"></div>
           <div class="nabo-tabell" id="naboTabell"></div>
@@ -731,13 +783,19 @@ function tegnNabo(helt) {
   // Rows
   const q = NABO.sok.trim().toLowerCase().split(/\s+/).filter(Boolean);
   const passer = x => (NABO.filter === 'alle' || (NABO.filter === 'adv' && (x.feil.length || x.adv.length))
+    || (NABO.filter === 'rettet' && Object.keys(x.rett).length)
     || (NABO.filter === 'alarm' && x.klasse) || (NABO.filter === 'trend' && x.trend))
     && q.every(w => (x.sti + ' ' + x.navn + ' ' + x.beskr + ' ' + x.enhetNavn).toLowerCase().includes(w));
   const vis = r.rader.filter(passer);
   const tall = {alle: r.rader.length, adv: r.rader.filter(x => x.feil.length || x.adv.length).length,
+                rettet: r.rader.filter(x => Object.keys(x.rett).length).length,
                 alarm: r.rader.filter(x => x.klasse).length, trend: r.rader.filter(x => x.trend).length};
   ov.querySelectorAll('.nabo-visning button').forEach(b => b.classList.toggle('sel', b.dataset.v === NABO.visning));
   ov.querySelector('.nabo-filter').hidden = NABO.visning !== 'var';
+  $('naboErstattKnapp').hidden = NABO.visning !== 'var';
+  $('naboErstatt').hidden = NABO.visning !== 'var' || !NABO.erstatt;
+  ov.querySelectorAll('.nabo-skille button').forEach(b =>
+    b.classList.toggle('paa', o.skille.includes(b.dataset.s === 'sp' ? ' ' : b.dataset.s)));
   $('naboSok').hidden = NABO.visning === 'norm';
   ov.querySelectorAll('.nabo-filter button').forEach(b => {
     b.classList.toggle('sel', b.dataset.f === NABO.filter);
@@ -748,22 +806,45 @@ function tegnNabo(helt) {
   const MAKS = 1500;
   if (NABO.visning === 'diff') tegnDiff(r, q);
   else if (NABO.visning === 'norm') tegnNorm(r);
-  else $('naboTabell').innerHTML = r.rader.length ? `<table>
-    <thead><tr><th>Device</th><th>Tag</th><th>${T('Type', 'Type')}</th><th class="h">Inst</th><th>${T('Enhet', 'Unit')}</th>
-      <th class="h">Des</th><th>Trend</th><th>Alarm</th><th>${T('Beskrivelse', 'Description')}</th></tr></thead>
+  else {
+    NABO.vist = vis.map(x => x.key);
+    const er = NABO.erstatt;
+    let forslag = 0;
+    const celle = (x, felt, cls, tekst) => {
+      const egen = x.rett[felt] !== undefined;
+      const ny = er && er.felt === felt ? erstattVerdi(x[felt], er) : null;
+      if (ny !== null) forslag++;
+      const innhold = ny !== null ? `<span class="gml">${esc(tekst)}</span><span class="ny">${esc(ny)}</span>` : esc(tekst);
+      return `<td class="${cls}${egen ? ' egen' : ''}" data-felt="${felt}" data-k="${esc(x.key)}"
+        title="${egen ? esc(T('Rettet for hånd. Automatisk: ', 'Edited by hand. Automatic: ') + x.auto[felt]) : T('Klikk for å rette', 'Click to edit')}">${innhold}</td>`;
+    };
+    $('naboTabell').innerHTML = r.rader.length ? `<table class="nabo-rettbar">
+    <thead><tr><th>Device</th><th>Tag</th><th>${T('Navn i anlegget', 'Name in the plant')}</th><th>${T('Type', 'Type')}</th><th class="h">Inst</th><th>${T('Enhet', 'Unit')}</th>
+      <th class="h">Des</th><th>Trend</th><th>Alarm</th><th>${T('Beskrivelse', 'Description')}</th><th></th></tr></thead>
     <tbody>${vis.slice(0, MAKS).map(x => {
       const merk = x.feil.length ? 'feil' : x.adv.length ? 'adv' : '';
       const hvorfor = [...x.feil, ...x.adv].join(' · ');
-      return `<tr class="${merk}"${hvorfor ? ` title="${esc(hvorfor)}"` : ''}>
-        <td class="d">${esc(x.enhetNavn)}</td><td class="t">${esc(x.sti)}</td>
+      const rettet = Object.keys(x.rett).length;
+      return `<tr class="${merk}${rettet ? ' rettet' : ''}">
+        <td class="d">${esc(x.enhetNavn)}</td>${celle(x, 'sti', 't', x.sti)}
+        <td class="n">${esc(x.navn)}</td>
         <td><span class="type-tag">${esc(x.typeNavn)}</span></td><td class="h">${esc(x.inst)}</td>
-        <td class="u">${esc(x.enhet === 'null' ? '' : x.enhet)}</td><td class="h">${x.type <= 2 ? x.des : ''}</td>
-        <td>${x.trend ? '<span class="nabo-prikk tr"></span>' : ''}</td>
-        <td>${x.klasse ? `<span class="nabo-kl">${x.klasse}</span>` : ''}</td>
-        <td class="b">${esc(x.beskr)}${hvorfor ? `<span class="nabo-hvorfor">${esc(hvorfor)}</span>` : ''}</td></tr>`;
+        ${x.type <= 2 ? celle(x, 'enhet', 'u', x.enhet === 'null' ? '' : x.enhet) : '<td></td>'}
+        ${x.type <= 2 ? celle(x, 'des', 'h', String(x.des)) : '<td></td>'}
+        <td class="bryter${x.rett.trend !== undefined ? ' egen' : ''}" data-bryter="trend" data-k="${esc(x.key)}" title="${T('Klikk for å slå trend av eller på', 'Click to switch trend on or off')}">${x.trend ? '<span class="nabo-prikk tr"></span>' : '<span class="nabo-av"></span>'}</td>
+        <td class="bryter${x.rett.klasse !== undefined ? ' egen' : ''}" data-bryter="klasse" data-k="${esc(x.key)}" title="${T('Klikk for å bytte alarmklasse: ingen, 1, 2, 3', 'Click to change the alarm class: none, 1, 2, 3')}">${x.klasse ? `<span class="nabo-kl">${x.klasse}</span>` : '<span class="nabo-av"></span>'}</td>
+        ${celle(x, 'beskr', 'b', x.beskr).replace('</td>', `${hvorfor ? `<span class="nabo-hvorfor">${esc(hvorfor)}</span>` : ''}</td>`)}
+        <td class="nabo-angre-c">${rettet ? `<button class="nabo-angre" data-k="${esc(x.key)}" title="${T('Tilbake til det automatiske', 'Back to the automatic value')}">↺</button>` : ''}</td></tr>`;
     }).join('')}</tbody></table>${vis.length > MAKS ? `<div class="nabo-mer">${T(`Viser ${MAKS} av ${vis.length}. Søk for å snevre inn.`, `Showing ${MAKS} of ${vis.length}. Search to narrow it down.`)}</div>` : ''}
     ${!vis.length ? `<div class="nabo-tom">${T('Ingen rader passer.', 'No rows match.')}</div>` : ''}`
     : `<div class="nabo-tom stor">${NABO_SVG}<div>${T('Her kommer taggene. Åpne enheter i NABE eller legg til EDE-filer.', 'The tags will show here. Open devices in NABE or add EDE files.')}</div></div>`;
+    if (er) {
+      const alle = er.bareViste ? vis : r.rader;
+      const n = alle.filter(x => erstattVerdi(x[er.felt], er) !== null).length;
+      $('naboErTall').textContent = er.feil ? er.feil : T(`${n} ${n === 1 ? 'endres' : 'endres'}`, `${n} will change`);
+      $('naboErBruk').disabled = !n;
+    }
+  }
 
   const feil = r.rader.filter(x => x.feil.length).length;
   const enh = new Set(r.rader.map(x => x.enhetNavn)).size;
@@ -877,6 +958,111 @@ function tegnNorm(r) {
         <div class="nabo-norm-ikke">${ikke.slice(0, 120).map(x => `<code>${esc(x.n)}</code>`).join('')}</div>` : ''}`;
 }
 
+/* ------------------------------------------------------- hand edits
+   What used to be a round trip through Excel: click a tag, a description, a
+   unit or the decimals and type; click trend or alarm to switch it. Tab moves
+   down the column, as in a spreadsheet. An edit back to the automatic value
+   removes itself, so "edited" always means different. */
+function settRett(endringer) {
+  const alle = Object.assign({}, naboInnst().rett);
+  for (const [key, felt, verdi] of endringer) {
+    const x = Object.assign({}, alle[key] || {});
+    if (verdi === undefined) delete x[felt]; else x[felt] = verdi;
+    if (Object.keys(x).length) alle[key] = x; else delete alle[key];
+  }
+  lagreNabo({rett: alle});
+}
+
+function radFor(key) { return naboResultat().rader.find(x => x.key === key); }
+
+function rettCelle(td) {
+  const key = td.dataset.k, felt = td.dataset.felt;
+  const x = radFor(key);
+  if (!x) return;
+  const gammel = felt === 'enhet' && x.enhet === 'null' ? '' : String(x[felt] ?? '');
+  const inn = document.createElement('input');
+  inn.className = 'nabo-rett-inn';
+  inn.value = gammel;
+  inn.spellcheck = false;
+  if (felt === 'des') { inn.type = 'number'; inn.min = 0; inn.max = 6; }
+  td.textContent = '';
+  td.appendChild(inn);
+  inn.focus(); inn.select();
+  let ferdig = false;
+  const lagre = (flytt) => {
+    if (ferdig) return; ferdig = true;
+    let v = inn.value.trim();
+    if (felt === 'des') v = Math.max(0, Math.min(6, parseInt(v, 10) || 0));
+    if (felt === 'enhet' && v === '') v = 'null';
+    const auto = x.auto[felt];
+    settRett([[key, felt, String(v) === String(auto) ? undefined : v]]);
+    tegnNabo();
+    if (flytt) {
+      const i = NABO.vist.indexOf(key) + flytt;
+      const neste = NABO.vist[i];
+      const c = neste && document.querySelector(`#naboTabell td[data-felt="${felt}"][data-k="${CSS.escape(neste)}"]`);
+      if (c) { c.scrollIntoView({block: 'nearest'}); rettCelle(c); }
+    }
+  };
+  inn.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); lagre(e.shiftKey ? -1 : 1); }
+    else if (e.key === 'Tab') { e.preventDefault(); lagre(e.shiftKey ? -1 : 1); }
+    else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); ferdig = true; tegnNabo(); }
+  });
+  inn.addEventListener('blur', () => lagre(0));
+}
+
+function byttBryter(td) {
+  const key = td.dataset.k, hva = td.dataset.bryter;
+  const x = radFor(key);
+  if (!x) return;
+  if (hva === 'trend') {
+    const ny = !x.trend;
+    settRett([[key, 'trend', ny === !!x.auto.trend ? undefined : ny]]);
+  } else {
+    const ny = ((x.klasse || 0) + 1) % 4;
+    settRett([[key, 'klasse', ny === (x.auto.klasse || 0) ? undefined : ny]]);
+  }
+  tegnNabo();
+}
+
+/* ------------------------------------------------------- find and replace */
+function erstattVerdi(verdi, er) {
+  if (!er || !er.finn) return null;
+  const v = String(verdi ?? '');
+  let ny;
+  if (er.regex) {
+    try { ny = v.replace(new RegExp(er.finn, 'g'), er.med); er.feil = ''; }
+    catch (e) { er.feil = e.message; return null; }
+  } else ny = v.split(er.finn).join(er.med);
+  return ny !== v ? ny : null;
+}
+function aapneErstatt() {
+  if (!NABO.erstatt) NABO.erstatt = {felt: 'sti', finn: '', med: '', regex: false, bareViste: true};
+  tegnNabo();
+  setTimeout(() => $('naboErFinn')?.focus(), 30);
+}
+function lukkErstatt() { NABO.erstatt = null; tegnNabo(); }
+function brukErstatt() {
+  const er = NABO.erstatt;
+  if (!er) return;
+  const r = naboResultat();
+  const vist = new Set(NABO.vist || []);
+  const rader = r.rader.filter(x => !er.bareViste || vist.has(x.key));
+  const endr = [];
+  for (const x of rader) {
+    const ny = erstattVerdi(x[er.felt], er);
+    if (ny !== null) endr.push([x.key, er.felt, ny === String(x.auto[er.felt]) ? undefined : ny]);
+  }
+  if (!endr.length) return;
+  NABO.angre = naboInnst().rett;
+  settRett(endr);
+  er.finn = ''; $('naboErFinn').value = '';
+  $('naboErAngre').hidden = false;
+  toast(T(`${endr.length} ${er.felt === 'sti' ? 'tagger' : 'beskrivelser'} endret`, `${endr.length} ${er.felt === 'sti' ? 'tags' : 'descriptions'} changed`));
+  tegnNabo();
+}
+
 function koblNabo(ov) {
   let tid;
   const senere = (fn) => { clearTimeout(tid); tid = setTimeout(fn, 160); };
@@ -907,6 +1093,47 @@ function koblNabo(ov) {
     lagreNabo({eu: Object.assign({}, naboInnst().eu, {[k]: v})}); tegnNabo();
   });
   $('naboSok').addEventListener('input', (e) => { NABO.sok = e.target.value; senere(() => tegnNabo()); });
+  $('naboTabell').addEventListener('click', (e) => {
+    if (NABO.visning !== 'var') return;
+    const angre = e.target.closest('.nabo-angre');
+    if (angre) {
+      const key = angre.dataset.k;
+      settRett(Object.keys(naboInnst().rett[key] || {}).map(f => [key, f, undefined]));
+      tegnNabo(); return;
+    }
+    const b = e.target.closest('td[data-bryter]');
+    if (b) { byttBryter(b); return; }
+    const td = e.target.closest('td[data-felt]');
+    if (td && !td.querySelector('input')) rettCelle(td);
+  });
+  ov.querySelector('.nabo-skille').addEventListener('click', (e) => {
+    const b = e.target.closest('button'); if (!b) return;
+    const c = b.dataset.s === 'sp' ? ' ' : b.dataset.s;
+    const s = naboInnst().skille;
+    lagreNabo({skille: s.includes(c) ? s.replace(c, '') : s + c});
+    tegnNabo();
+  });
+  $('naboErstattKnapp').onclick = () => (NABO.erstatt ? lukkErstatt() : aapneErstatt());
+  $('naboErLukk').onclick = lukkErstatt;
+  $('naboErBruk').onclick = brukErstatt;
+  $('naboErAngre').onclick = () => {
+    if (NABO.angre) { lagreNabo({rett: NABO.angre}); NABO.angre = null; }
+    $('naboErAngre').hidden = true; tegnNabo();
+  };
+  const erOppdater = () => {
+    const er = NABO.erstatt; if (!er) return;
+    er.felt = $('naboErFelt').value; er.finn = $('naboErFinn').value; er.med = $('naboErMed').value;
+    er.regex = $('naboErRe').checked; er.bareViste = $('naboErViste').checked;
+    tegnNabo();
+  };
+  ['naboErFinn', 'naboErMed'].forEach(id => $(id).addEventListener('input', erOppdater));
+  ['naboErFelt', 'naboErRe', 'naboErViste'].forEach(id => $(id).addEventListener('change', erOppdater));
+  $('naboErFinn').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); brukErstatt(); } });
+  $('naboErMed').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); brukErstatt(); } });
+  ov.querySelector('.nabo-er-raske').addEventListener('click', (e) => {
+    const b = e.target.closest('button'); if (!b) return;
+    $('naboErFinn').value = b.dataset.fra; $('naboErMed').value = b.dataset.til; erOppdater();
+  });
   ov.querySelector('.nabo-visning').addEventListener('click', (e) => {
     const b = e.target.closest('button'); if (!b) return;
     NABO.visning = b.dataset.v; tegnNabo();
@@ -945,7 +1172,16 @@ function koblNabo(ov) {
   if (!ov) return;
   ov.addEventListener('mousedown', (e) => { if (e.target === ov) lukkNabo(); });
   document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && !ov.hidden) { e.preventDefault(); e.stopPropagation(); lukkNabo(); }
+    if (e.key === 'Escape' && !ov.hidden) {
+      if (document.activeElement?.classList.contains('nabo-rett-inn')) return;
+      if (NABO.erstatt && ov.contains(document.activeElement) && document.activeElement.closest('.nabo-erstatt')) {
+        e.preventDefault(); e.stopPropagation(); lukkErstatt(); return;
+      }
+      e.preventDefault(); e.stopPropagation(); lukkNabo();
+    }
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'h' && !ov.hidden && NABO.visning === 'var') {
+      e.preventDefault(); e.stopPropagation(); aapneErstatt();
+    }
   }, true);
   // The old way in now leads here: the menu item, the button under Tagging.
   lagBtgFil = aapneNabo;

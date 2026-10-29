@@ -154,6 +154,12 @@ const FAKTA = [
   ['COV betyr at regulatoren sier fra selv. Mindre spørring, mer ro.', 'COV means the controller speaks up itself. Less asking, more peace.'],
 ];
 const NYTT = {
+  '1.9': [
+    ['NABO: klikk en tag, beskrivelse, enhet eller desimaler for å rette den, Tab går nedover som i Excel', 'NABO: click a tag, description, unit or decimals to edit it, Tab goes down as in Excel'],
+    ['Klikk trend eller alarm for å slå av og på, ↺ tar raden tilbake til det automatiske', 'Click trend or alarm to switch it, ↺ takes the row back to the automatic value'],
+    ['Erstatt… (Ctrl+H): søk og erstatt i tagger eller beskrivelser, med forhåndsvisning og angre', 'Replace… (Ctrl+H): find and replace in tags or descriptions, with a preview and undo'],
+    ['Velg hvilke tegn navnet deles på: _ . - og mellomrom', 'Choose which characters split the name: _ . - and space'],
+  ],
   '1.8.1': [
     ['NABE har fått en nabo: huset ved navnet øverst, eller tasten N, går rett til NABO', 'NABE has a neighbour: the house by the name at the top, or the N key, goes straight to NABO'],
     ['På startskjermen står naboen ved siden av NABE, og i NABO titter NABE over gjerdet', 'On the start screen the neighbour stands beside NABE, and in NABO, NABE peeks over the fence'],
