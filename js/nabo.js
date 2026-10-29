@@ -988,8 +988,7 @@ function tegnNabo(helt) {
       <div class="nabo-k-tall"><b>${k.av ? k.punkter.length : a.n}</b>${a.feil ? `<i class="f">${a.feil}</i>` : a.adv ? `<i class="a">${a.adv}</i>` : ''}</div>
       ${k.type === 'ede' ? `<button class="nabo-k-fjern" title="${T('Fjern', 'Remove')}">✕</button>` : ''}
     </div>`;
-  }).join('') : `<div class="nabo-tom">${T('Ingen enheter ennå. Åpne enheter i NABE, eller legg til EDE-filer under.',
-                                        'No devices yet. Open devices in NABE, or add EDE files below.')}</div>`;
+  }).join('') : `<div class="nabo-tom">${T('Ingen enheter ennå.', 'No devices yet.')}</div>`;
 
   // Rows
   const q = NABO.sok.trim().toLowerCase().split(/\s+/).filter(Boolean);
@@ -1002,6 +1001,8 @@ function tegnNabo(helt) {
                 rettet: r.rader.filter(x => Object.keys(x.rett).length).length,
                 alarm: r.rader.filter(x => x.klasse).length, trend: r.rader.filter(x => x.trend).length};
   ov.querySelectorAll('.nabo-visning button').forEach(b => b.classList.toggle('sel', b.dataset.v === NABO.visning));
+  ov.querySelector('.nabo-verktoy').hidden = !NABO.kilder.length;
+  ov.querySelector('.nabo-slipp').hidden = !NABO.kilder.length;
   ov.querySelector('.nabo-filter').hidden = NABO.visning !== 'var';
   $('naboErstattKnapp').hidden = NABO.visning !== 'var';
   $('naboErstatt').hidden = NABO.visning !== 'var' || !NABO.erstatt;
@@ -1032,17 +1033,23 @@ function tegnNabo(helt) {
         title="${egen ? esc(T('Rettet for hånd. Automatisk: ', 'Edited by hand. Automatic: ') + (felt === 'sti' ? x.stiRen : x.auto[felt])) : T('Klikk for å rette', 'Click to edit')}">${innhold}</td>`;
     };
     $('naboTabell').innerHTML = r.rader.length ? `<table class="nabo-rettbar">
-    <thead><tr><th class="velg"><input type="checkbox" id="naboVelgAlle" title="${T('Marker alle viste rader (Shift-klikk en rad markerer alt mellom)', 'Tick every row shown (Shift-click a row ticks everything between)')}"${vis.length && vis.every(x => NABO.valgt.has(x.key)) ? ' checked' : ''}></th><th>Device</th><th>Tag</th><th>${T('Navn i anlegget', 'Name in the plant')}</th><th>${T('Type', 'Type')}</th><th class="h">Inst</th><th>${T('Enhet', 'Unit')}</th>
+    <thead><tr><th class="velg"><input type="checkbox" id="naboVelgAlle" title="${T('Marker alle viste rader (Shift-klikk en rad markerer alt mellom)', 'Tick every row shown (Shift-click a row ticks everything between)')}"${vis.length && vis.every(x => NABO.valgt.has(x.key)) ? ' checked' : ''}></th><th>Tag</th><th>${T('Navn i anlegget', 'Name in the plant')}</th><th>${T('Type', 'Type')}</th><th class="h">Inst</th><th>${T('Enhet', 'Unit')}</th>
       <th class="h">Des</th><th>Trend</th><th>Alarm</th><th>${T('Beskrivelse', 'Description')}</th><th></th></tr></thead>
-    <tbody>${vis.slice(0, MAKS).map(x => {
+    <tbody>${vis.slice(0, MAKS).map((x, i, a) => {
+      // A heading where the device changes: the device field is said once,
+      // not on every row, and clicking it ticks the whole device.
+      const hode = i === 0 || a[i - 1].enhetNavn !== x.enhetNavn
+        ? `<tr class="nabo-gruppe"><td colspan="12"><button class="nabo-gruppe-knapp" data-dev="${esc(x.enhetNavn)}"
+            title="${T('Marker alle punktene på denne enheten', 'Tick every point on this device')}"><b>${esc(x.enhetNavn)}</b>
+            <span>${vis.filter(y => y.enhetNavn === x.enhetNavn).length} ${T('variabler', 'variables')}</span></button></td></tr>` : '';
       const merk = x.feil.length ? 'feil' : x.adv.length ? 'adv' : '';
       const hvorfor = [...x.feil, ...x.adv].join(' · ');
       const rettet = Object.keys(x.rett).length;
       const valgt = NABO.valgt.has(x.key);
-      return `<tr class="${merk}${rettet ? ' rettet' : ''}${valgt ? ' valgt' : ''}">
+      return hode + `<tr class="${merk}${rettet ? ' rettet' : ''}${valgt ? ' valgt' : ''}">
         <td class="velg"><input type="checkbox" class="nabo-velg" data-k="${esc(x.key)}"${valgt ? ' checked' : ''}></td>
-        <td class="d sel-c" data-k="${esc(x.key)}">${esc(x.enhetNavn)}</td>${celle(x, 'sti', 't', x.sti, x.system ? '<span class="nabo-sys">SYSTEM</span>' : '')}
-        <td class="n sel-c" data-k="${esc(x.key)}">${esc(x.navn)}</td>
+        ${celle(x, 'sti', 't', x.sti, x.system ? '<span class="nabo-sys">SYSTEM</span>' : '')}
+        <td class="n sel-c" data-k="${esc(x.key)}" title="${esc(x.navn)}">${esc(x.navn)}</td>
         <td class="sel-c" data-k="${esc(x.key)}"><span class="type-tag">${esc(x.typeNavn)}</span></td><td class="h sel-c" data-k="${esc(x.key)}">${esc(x.inst)}</td>
         ${x.type <= 2 ? celle(x, 'enhet', 'u', x.enhet === 'null' ? '' : x.enhet) : '<td></td>'}
         ${x.type <= 2 ? celle(x, 'des', 'h', String(x.des)) : '<td></td>'}
@@ -1052,7 +1059,11 @@ function tegnNabo(helt) {
         <td class="nabo-angre-c">${rettet ? `<button class="nabo-angre" data-k="${esc(x.key)}" title="${T('Tilbake til det automatiske', 'Back to the automatic value')}">↺</button>` : ''}</td></tr>`;
     }).join('')}</tbody></table>${vis.length > MAKS ? `<div class="nabo-mer">${T(`Viser ${MAKS} av ${vis.length}. Søk for å snevre inn.`, `Showing ${MAKS} of ${vis.length}. Search to narrow it down.`)}</div>` : ''}
     ${!vis.length ? `<div class="nabo-tom">${T('Ingen rader passer.', 'No rows match.')}</div>` : ''}`
-    : `<div class="nabo-tom stor">${NABO_SVG}<div>${T('Her kommer taggene. Åpne enheter i NABE eller legg til EDE-filer.', 'The tags will show here. Open devices in NABE or add EDE files.')}</div></div>`;
+    : `<label class="nabo-start">${NABO_SVG}
+        <b>${T('Slipp EDE-filene her', 'Drop the EDE files here')}</b>
+        <span>${T('eller', 'or')} <u>${T('velg filer', 'choose files')}</u> · ${T('_StateTexts og HeaderBTG.ini kan være med', '_StateTexts and HeaderBTG.ini may come along')}</span>
+        <small>${T('Enheter du har åpnet i NABE kommer med av seg selv.', 'Devices you have opened in NABE come along by themselves.')}</small>
+        <input type="file" class="nabo-start-fil" accept=".csv,.txt,.ini" multiple hidden></label>`;
     if (er) {
       const alle = er.bareViste ? vis : r.rader;
       const n = alle.filter(x => erstattVerdi(x[er.felt], er) !== null).length;
@@ -1400,6 +1411,14 @@ function koblNabo(ov) {
     if (v) { velgRad(v.dataset.k, v.checked, e.shiftKey); return; }
     const s = e.target.closest('td.sel-c');
     if (s) { klikkRad(s.dataset.k, e); return; }
+    const g = e.target.closest('.nabo-gruppe-knapp');
+    if (g) {
+      const keys = naboResultat().rader.filter(x => x.enhetNavn === g.dataset.dev).map(x => x.key);
+      const alle = keys.every(k => NABO.valgt.has(k));
+      if (!(e.ctrlKey || e.metaKey || e.shiftKey)) NABO.valgt.clear();
+      keys.forEach(k => alle ? NABO.valgt.delete(k) : NABO.valgt.add(k));
+      tegnNabo(); return;
+    }
     const angre = e.target.closest('.nabo-angre');
     if (angre) {
       const key = angre.dataset.k;
@@ -1462,6 +1481,10 @@ function koblNabo(ov) {
     NABO.kilder = NABO.kilder.filter(x => x.id !== id); tegnNabo();
   });
   $('naboFil').addEventListener('change', (e) => { leggTilFiler(e.target.files); e.target.value = ''; });
+  $('naboTabell').addEventListener('change', (e) => {
+    if (!e.target.classList.contains('nabo-start-fil')) return;
+    leggTilFiler(e.target.files); e.target.value = '';
+  });
   const modal = ov.querySelector('.nabo-modal');
   modal.addEventListener('dragover', (e) => { e.preventDefault(); modal.classList.add('slipper'); });
   modal.addEventListener('dragleave', (e) => { if (!modal.contains(e.relatedTarget)) modal.classList.remove('slipper'); });

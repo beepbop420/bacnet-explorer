@@ -154,6 +154,11 @@ const FAKTA = [
   ['COV betyr at regulatoren sier fra selv. Mindre spørring, mer ro.', 'COV means the controller speaks up itself. Less asking, more peace.'],
 ];
 const NYTT = {
+  '1.12': [
+    ['NABO: punktene står gruppert per enhet, og klikk på enheten markerer alle punktene', 'NABO: points are grouped per device, and clicking the device ticks all of them'],
+    ['Hele tabellen får plass uten sidescroll, og verktøylinja bryter pent i smale vinduer', 'The whole table fits without sideways scrolling, and the toolbar wraps neatly in narrow windows'],
+    ['En stor slippsone midt i NABO når ingenting er lastet inn ennå', 'A big drop zone in the middle of NABO while nothing is loaded yet'],
+  ],
   '1.11': [
     ['NABO: klikk, Shift og Ctrl markerer rader, og «samme navnemønster» eller «samme type» tar resten', 'NABO: click, Shift and Ctrl tick rows, and "same name pattern" or "same type" takes the rest'],
     ['Unntakene huskes per anlegg, også når samme EDE kommer med ny dato i filnavnet', 'The exceptions are kept per site, also when the same EDE arrives with a new date in its name'],

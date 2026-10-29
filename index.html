@@ -3469,7 +3469,7 @@ body{font-family:var(--sans)}
 .nabo-eks code{font-family:var(--mono);font-size:12px;color:var(--fg);padding:6px 10px;border:1px solid var(--line);
   border-radius:var(--radius);background:var(--sunken);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:46vw}
 
-.nabo-kropp{display:grid;grid-template-columns:310px minmax(0,1fr);min-height:0}
+.nabo-kropp{display:grid;grid-template-columns:260px minmax(0,1fr);min-height:0}
 .nabo-kilder{border-right:1px solid var(--line);display:flex;flex-direction:column;min-height:0}
 .nabo-h{font-size:11px;color:var(--fg-3);padding:10px 14px 6px;display:flex;gap:6px}
 .nabo-h span{font-family:var(--mono)}
@@ -3500,8 +3500,8 @@ body{font-family:var(--sans)}
 .nabo-modal.slipper .nabo-slipp{border-color:var(--accent);border-style:solid;background:var(--accent-dim)}
 
 .nabo-forh{display:flex;flex-direction:column;min-height:0;min-width:0}
-.nabo-verktoy{display:flex;gap:10px;align-items:center;padding:10px 14px;border-bottom:1px solid var(--line)}
-.nabo-verktoy #naboSok{flex:1;height:30px;min-width:0}
+.nabo-verktoy{display:flex;flex-wrap:wrap;gap:8px 10px;align-items:center;padding:10px 14px;border-bottom:1px solid var(--line)}
+.nabo-verktoy #naboSok{flex:1 1 180px;height:30px;min-width:180px}
 .nabo-filter{display:flex;border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;flex:0 0 auto}
 .nabo-filter button{background:none;border:0;border-right:1px solid var(--line);padding:0 11px;height:28px;
   font:inherit;font-size:12px;color:var(--fg-2);cursor:pointer;display:flex;gap:7px;align-items:center}
@@ -3529,14 +3529,14 @@ body{font-family:var(--sans)}
 .nabo-tabell tbody td{overflow:visible;text-overflow:clip;height:auto;line-height:1.45}
 .nabo-tabell td.d{max-width:220px;overflow:hidden;text-overflow:ellipsis}
 .nabo-tabell thead th{position:sticky;top:0;z-index:1;background:var(--panel);text-align:left;font-weight:500;
-  font-size:11px;color:var(--fg-3);padding:7px 10px;border-bottom:1px solid var(--line);white-space:nowrap}
-.nabo-tabell td{padding:5px 10px;border-bottom:1px solid var(--line-soft);white-space:nowrap;vertical-align:top}
+  font-size:11px;color:var(--fg-3);padding:7px 8px;border-bottom:1px solid var(--line);white-space:nowrap}
+.nabo-tabell td{padding:5px 8px;border-bottom:1px solid var(--line-soft);white-space:nowrap;vertical-align:top}
 .nabo-tabell td.t,.nabo-tabell td.d{font-family:var(--mono);font-size:11.5px}
 .nabo-tabell td.t{color:var(--fg)}
 .nabo-tabell td.d{color:var(--fg-3)}
 .nabo-tabell .h{text-align:right;font-family:var(--mono)}
 .nabo-tabell td.u{color:var(--fg-2)}
-.nabo-tabell td.b{color:var(--fg-2);white-space:normal;min-width:240px}
+.nabo-tabell td.b{color:var(--fg-2);white-space:normal;min-width:170px}
 .nabo-tabell tbody tr:hover td{background:var(--hover)}
 .nabo-tabell tr.feil td{background:color-mix(in srgb,var(--err) 7%,transparent)}
 .nabo-tabell tr.feil td.t{color:var(--err-fg)}
@@ -3571,7 +3571,24 @@ body{font-family:var(--sans)}
 .nabo-rettbar td.bryter:hover .nabo-av{border-color:var(--fg-3)}
 .nabo-rettbar td.egen{color:var(--accent)!important;background:color-mix(in srgb,var(--accent) 6%,transparent)}
 .nabo-rettbar td.egen.t{text-decoration:none}
-.nabo-rettbar tr.rettet td.d{box-shadow:inset 2px 0 0 var(--accent)}
+.nabo-rettbar tr.rettet td.velg{box-shadow:inset 2px 0 0 var(--accent)}
+.nabo-rettbar td.n{max-width:170px;overflow:hidden!important;text-overflow:ellipsis!important}
+.nabo-rettbar tr.nabo-gruppe td{position:sticky;top:29px;z-index:1;padding:0!important;background:var(--panel);
+  border-bottom:1px solid var(--line)}
+.nabo-rettbar tr.nabo-gruppe:hover td{background:var(--panel)}
+.nabo-gruppe-knapp{display:flex;gap:10px;align-items:baseline;width:100%;padding:10px 12px 6px;background:none;border:0;
+  text-align:left;cursor:pointer;color:var(--fg-3);font:inherit;font-size:11px}
+.nabo-gruppe-knapp b{font-family:var(--mono);font-size:12px;font-weight:600;color:var(--fg)}
+.nabo-gruppe-knapp:hover b{text-decoration:underline;text-decoration-color:var(--line-2);text-underline-offset:3px}
+.nabo-verktoy[hidden],.nabo-slipp[hidden]{display:none!important}
+.nabo-start{display:flex;flex-direction:column;align-items:center;gap:10px;margin:8vh auto 0;max-width:460px;padding:36px 28px;
+  border:1px dashed var(--line-2);border-radius:var(--r-lg);text-align:center;cursor:pointer;color:var(--fg-3);font-size:12px}
+.nabo-start:hover{border-color:var(--fg-3)}
+.nabo-modal.slipper .nabo-start{border-color:var(--accent);border-style:solid;background:var(--accent-dim)}
+.nabo-start .nabo-fig{width:64px;height:64px;margin-bottom:4px}
+.nabo-start b{font-size:15px;font-weight:600;color:var(--fg)}
+.nabo-start u{color:var(--fg);text-decoration-color:var(--line-2);text-underline-offset:3px}
+.nabo-start small{font-size:11px;color:var(--fg-3);opacity:.85}
 .nabo-rettbar td.n{font-family:var(--mono);font-size:11px;color:var(--fg-3)}
 .nabo-rett-inn{width:100%;min-width:120px;font:inherit;color:var(--fg);background:var(--sunken);
   border:1px solid var(--accent-edge);border-radius:var(--r-sm);padding:1px 5px;outline:none}
