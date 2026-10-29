@@ -1080,7 +1080,7 @@ td.c-val{font-family:var(--mono);text-align:right;font-weight:600}
 #pointsWrap.cramped .st-txt{display:none}
 /* Units are data, not chrome — they belong at reading contrast. */
 td.c-unit{color:var(--fg-2);font-size:11px}
-td.c-act{text-align:center}
+td.c-act{text-align:center;padding:0;text-overflow:clip}
 /* Only the narrow columns get fixed widths. Name and description are left
    auto so they share whatever space is left instead of overflowing the pane
    on a small window. */
@@ -3712,7 +3712,11 @@ td.c-val.ned{animation:verdi-lb-ned 700ms var(--mot-kurve)}
 .ss-kort{width:min(440px,calc(100vw - 32px));max-height:calc(100vh - 32px);overflow:auto;
   background:var(--panel);border:1px solid var(--line-2);border-radius:14px;
   box-shadow:0 30px 80px rgba(0,0,0,.45);padding:28px 28px 20px;text-align:center;
-  animation:ss-kort .4s cubic-bezier(.2,.8,.2,1) both}
+  animation:ss-kort .4s cubic-bezier(.2,.8,.2,1) both;position:relative}
+.startskjerm.igjen,.startskjerm.igjen .ss-kort{animation:none}
+.ss-sprak{position:absolute;top:12px;right:12px;background:none;border:1px solid var(--line);border-radius:6px;
+  color:var(--fg-3);font-size:11px;padding:3px 8px;cursor:pointer}
+.ss-sprak:hover,.ss-sprak:focus-visible{color:var(--fg);border-color:var(--line-2)}
 @keyframes ss-kort{from{transform:translateY(10px) scale(.98);opacity:0}to{transform:none;opacity:1}}
 .ss-logo{display:flex;justify-content:center;margin-bottom:6px}
 .ss-logo .nabe{width:96px;height:96px}

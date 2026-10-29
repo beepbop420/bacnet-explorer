@@ -9999,8 +9999,8 @@ const ORDBOK = {
   'bak knappene øverst': 'behind the buttons at the top',
   'Legg inn et bakgrunnsbilde for å få flere valg.': 'Add a background image for more options.',
   'Velg fil, dra et bilde hit, eller lim inn med Ctrl+V': 'Choose a file, drag an image here, or paste with Ctrl+V',
-  'Velg fil, dra et bilde inn i raden, eller lim inn': 'Choose a file, drag an image onto the row, or paste',
-  'med Ctrl+V når raden er markert.': 'with Ctrl+V when the row is selected.',
+  'Velg fil, dra et bilde inn i raden, eller lim inn med Ctrl+V når raden er markert.':
+    'Choose a file, drag an image onto the row, or paste with Ctrl+V when the row is selected.',
   'Det er ikke et bilde': 'That is not an image',
   'ikke et bilde': 'not an image',
   'Kunne ikke lese bildet:': 'Could not read the image:',
@@ -10189,6 +10189,55 @@ const ORDBOK = {
   'Lesemodus - blokker all skriving': 'Read-only mode - block all writing',
   'Sammenlign med EDE-fil...': 'Compare with an EDE file...',
   'Utseende - farger, bilder og størrelse...': 'Appearance - colours, images and size...',
+  // Settings → Tagging
+  'Identifikasjon': 'Identification',
+  'Prefiks': 'Prefix',
+  'Anleggsnavn': 'Site name',
+  'Prosjekt': 'Project',
+  'Oppbygging': 'Structure',
+  'Skilletegn': 'Separator',
+  'Bygg-ID foran systemnummeret': 'Building ID before the system number',
+  'Ventilasjonssystemets ledd': 'Ventilation system segment',
+  'Sortering': 'Sorting',
+  'Etasje': 'Floor',
+  'Ventilasjonssystem': 'Ventilation system',
+  // Settings → Appearance
+  'Ferdige oppsett': 'Presets',
+  'Standard': 'Default',
+  'Dempet': 'Muted',
+  'Bilder': 'Images',
+  'tomt': 'empty',
+  'Bakgrunnsbilde': 'Background image',
+  'Logo i toppbaren': 'Logo in the top bar',
+  'erstatter N-merket': 'replaces the N mark',
+  'Banner i toppbaren': 'Banner in the top bar',
+  'Tittel': 'Title',
+  'Undertittel': 'Subtitle',
+  'Fjern': 'Remove',
+  'Flater': 'Surfaces',
+  'Bakgrunn': 'Background',
+  'Paneler': 'Panels',
+  'Hevet flate': 'Raised surface',
+  'Innfelte felt': 'Inset fields',
+  'Linjer': 'Lines',
+  'Linjer, sterkere': 'Lines, stronger',
+  'Linjer, svake': 'Lines, faint',
+  'Tekst': 'Text',
+  'Tekst, dempet': 'Text, muted',
+  'Tekst, svak': 'Text, faint',
+  'Aksent': 'Accent',
+  'Aksent, flate': 'Accent, surface',
+  'Aksent, kant': 'Accent, edge',
+  'Aksent, trykket': 'Accent, pressed',
+  'Unormal tilstand': 'Abnormal state',
+  'Alarmtekst': 'Alarm text',
+  'Justerbart settpunkt': 'Adjustable setpoint',
+  'Merkevare': 'Brand',
+  'Topplinje': 'Top bar',
+  'Topplinje, lysere': 'Top bar, lighter',
+  'Merke': 'Mark',
+  // Status bar fragments - the number sits in its own <b>, so these have none
+  'enheter lest': 'devices read',
   /* Deliberately absent: Av, På, Ja, Nei. Those are state texts, and a
      controller supplies them - translating one would be editing what the
      plant reports, not what the tool says. */
@@ -10198,6 +10247,8 @@ const ORDBOK = {
    English shape, and the group order that maps one to the other. Anything
    not listed here stays Norwegian rather than coming out half-translated. */
 const MONSTER = [
+  [/^(.+) som heksadesimal$/, (m) => `${oversettTekst(m[1], true)} as hex`,
+   /^(.+) as hex$/, (m) => `${oversettTekst(m[1], false)} som heksadesimal`],
   [/^deg · (.+)$/, (m) => `you · ${m[1]}`, /^you · (.+)$/, (m) => `deg · ${m[1]}`],
   [/^Svarer på (.+)$/, (m) => `Answers on ${m[1]}`, /^Answers on (.+)$/, (m) => `Svarer på ${m[1]}`],
   [/^Bruker (.+) som sist på dette anlegget$/, (m) => `Using ${m[1]}, as last time on this site`,
@@ -10276,6 +10327,10 @@ const MONSTER = [
    and each side is applied to text the other side has not touched. */
 const FRASER = [
   ['uendret på', 'unchanged at'],
+  ['overvåker', 'watching'],
+  ['svarte ikke', 'did not answer'],
+  ['runder', 'rounds'],
+  ['t siden', 'h ago'],
   ['trykk ⟳ for å lese på nytt', 'press ⟳ to read again'],
   ['nå nettopp', 'just now'],
   ['Live av', 'Live off'],
@@ -10391,7 +10446,8 @@ function oversettTekst(s, tilEn) {
   const kjerne = s.trim();
   if (kjerne.length < 2) return s;
   const bok = tilEn ? ORDBOK : revOrdbok();
-  let ny = bok[kjerne];
+  // Text that wraps in the markup arrives with a newline and indentation inside it.
+  let ny = bok[kjerne] ?? bok[kjerne.replace(/\s+/g, ' ')];
   if (ny === undefined) {
     for (const [nbRe, nbUt, enRe, enUt] of MONSTER) {
       const m = (tilEn ? nbRe : enRe).exec(kjerne);

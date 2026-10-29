@@ -197,17 +197,22 @@ function hilsen() {
   return T('God kveld. Sen igangkjøring?', 'Good evening. Late commissioning?');
 }
 
-async function visStartskjerm() {
-  tell('aapnet');
+let FAKTA_NR = null;
+
+/* igjen: drawn again after a language switch - same fact, no count, no entrance. */
+async function visStartskjerm(igjen = false) {
+  if (!igjen) tell('aapnet');
   const lag = document.createElement('div');
   lag.id = 'startskjerm';
-  lag.className = 'startskjerm';
+  lag.className = 'startskjerm' + (igjen ? ' igjen' : '');
   lag.setAttribute('role', 'dialog');
   lag.setAttribute('aria-label', 'NABE');
-  const fakta = FAKTA[Math.floor(Math.random() * FAKTA.length)];
+  if (FAKTA_NR === null) FAKTA_NR = Math.floor(Math.random() * FAKTA.length);
+  const fakta = FAKTA[FAKTA_NR];
   const sistSett = (() => { try { return localStorage.getItem('nabe_sett_versjon'); } catch { return null; } })();
   lag.innerHTML = `
     <div class="ss-kort">
+      <button class="ss-sprak" type="button" lang="${T('en', 'no')}">${T('English', 'Norsk')}</button>
       <div class="ss-logo">${NABE_SVG.replace('width="26" height="26"', 'width="96" height="96"')}</div>
       <h1 class="ss-navn">NABE</h1>
       <div class="ss-under">Not Another BACnet Explorer<span class="ss-ver"></span></div>
@@ -244,6 +249,14 @@ async function visStartskjerm() {
   };
   document.addEventListener('keydown', tast, true);
   lag.querySelector('.ss-videre').onclick = lukk;
+  lag.querySelector('.ss-sprak').onclick = () => {
+    const omr = $('ssOmr').value;
+    settSprak(SPRAAK === 'en' ? 'nb' : 'en', true);
+    document.removeEventListener('keydown', tast, true);
+    lag.remove();
+    visStartskjerm(true);  // the card is in place before its first await
+    if (omr) $('ssOmr').value = omr;
+  };
   lag.addEventListener('click', (e) => { if (e.target === lag) lukk(); });
   lag.querySelector('.ss-nytt').onsubmit = (e) => {
     e.preventDefault();
