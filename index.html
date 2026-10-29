@@ -3436,6 +3436,20 @@ body{font-family:var(--sans)}
 .nabo-oppsett .kort .field{width:116px;font-family:var(--mono)}
 .nabo-oppsett .field.mangler{border-color:var(--warn)}
 .nabo-oppsett select.field{width:136px;padding-right:24px}
+.nabo-pref{display:flex;flex-direction:column;gap:4px;font-size:11px;color:var(--fg-3)}
+.nabo-pref i,.nabo-oppsett label i{font-style:normal;color:var(--fg-3);opacity:.7}
+.nabo-pref-felt{display:flex}
+.nabo-pref-felt .field{border-radius:var(--radius) 0 0 var(--radius)}
+.nabo-oppsett .nabo-pref-felt input.field{width:96px;font-family:var(--mono)}
+.nabo-oppsett .nabo-pref-felt select.field{width:auto;border-left:0;border-radius:0 var(--radius) var(--radius) 0;color:var(--fg-2)}
+.nabo-pref-felt select:disabled{opacity:.5}
+.nabo-eks code{display:flex;gap:12px;align-items:baseline}
+.nabo-eks code b{font-weight:500;color:var(--fg-3)}
+.nabo-eks code span+span::before{content:'·';margin-right:12px;color:var(--fg-3)}
+.nabo-sys{font-family:var(--mono);font-size:9px;letter-spacing:.06em;color:var(--fg-3);border:1px solid var(--line-2);
+  border-radius:var(--r-sm);padding:0 3px;margin-right:6px;vertical-align:1px}
+.nabo-rettbar td.sel-c{cursor:default;user-select:none}
+.nabo-mark-skille{font-size:11px;color:var(--fg-3);margin-left:6px}
 .nabo-des summary{list-style:none;cursor:pointer;height:30px;display:flex;align-items:center;padding:0 10px;
   font-size:12px;color:var(--fg-2);border:1px solid var(--line);border-radius:var(--radius)}
 .nabo-des summary::-webkit-details-marker{display:none}

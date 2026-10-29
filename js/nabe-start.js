@@ -154,6 +154,14 @@ const FAKTA = [
   ['COV betyr at regulatoren sier fra selv. Mindre spørring, mer ro.', 'COV means the controller speaks up itself. Less asking, more peace.'],
 ];
 const NYTT = {
+  '1.11': [
+    ['NABO: klikk, Shift og Ctrl markerer rader, og «samme navnemønster» eller «samme type» tar resten', 'NABO: click, Shift and Ctrl tick rows, and "same name pattern" or "same type" takes the rest'],
+    ['Unntakene huskes per anlegg, også når samme EDE kommer med ny dato i filnavnet', 'The exceptions are kept per site, also when the same EDE arrives with a new date in its name'],
+    ['SYSTEM-punktene ligger i egen mappe på toppnivå, utenfor systemene', 'SYSTEM points sit in their own folder at the top, outside the systems'],
+    ['Prefiks er valgfritt, med en velger som i BTG: foran device, foran device og tag, eller +PRE=360.001', 'The prefix is optional, with a choice as in BTG: before the device, before device and tag, or +PRE=360.001'],
+    ['Cluster er Citect-clusteret fra BTG og påvirker ikke Niagara-taggene', 'Cluster is BTG’s Citect cluster and does not touch the Niagara tags'],
+    ['Slipp en EDE-fil hvor som helst i NABE, så åpner NABO seg med den', 'Drop an EDE file anywhere on NABE and NABO opens with it'],
+  ],
   '1.10': [
     ['NABO: punktum mellom alle ledd er fast standard, slik Niagara lager mapper, og «Del navnet på» er borte', 'NABO: dots between all parts is the fixed standard, the way Niagara makes folders, and "Split the name on" is gone'],
     ['Marker rader (Shift for flere) og velg «Siste ledd med _» for punkter som SYSTEM.OU001.HB_KV, eller «Marker alle som slutter likt»', 'Tick rows (Shift for a range) and choose "Last part with _" for points like SYSTEM.OU001.HB_KV, or "Tick all that end the same"'],

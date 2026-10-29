@@ -73,22 +73,46 @@ function euNokkel(enhet) {
   return 'EUDefault';
 }
 
+/* Hand edits and device names belong to a site: the same EDE loaded next
+   month finds them again. Keyed by the site name, and inside it by device
+   instance and object - never by the EDE file name, which changes with the
+   date in it. */
+function anleggNokkel() {
+  const t = tagInnstillinger();
+  return String(t.anleggsnavn || t.prefiks || '-').trim().toLowerCase() || '-';
+}
+function devNokkel(k) {
+  return k.instans !== null && k.instans !== undefined && k.instans !== '' ? 'd' + k.instans : k.id;
+}
+function naboKey(k, p) { return `${devNokkel(k)}|${p.type},${p.instance}`; }
+function lagreAnlegg(patch) {
+  const p = loadPrefs().nabo || {};
+  const alle = Object.assign({}, p.anlegg || {});
+  alle[anleggNokkel()] = Object.assign({}, alle[anleggNokkel()] || {}, patch);
+  lagreNabo({anlegg: alle});
+}
+
+/* How the prefix is used. BTG asks the same in its Format list; here it is
+   one choice beside the prefix itself, and blank means no prefix at all. */
+const PREF_MOD = ['device', 'tag', 'btg', 'ingen'];
+
 function naboInnst() {
   const p = loadPrefs().nabo || {};
+  const her = (p.anlegg || {})[anleggNokkel()] || {};
   return {trend: p.trend || '00:05:00', eu: Object.assign({}, EU_STD, p.eu || {}),
-          ini: p.ini || '', navn: p.navn || {}, perEnhet: !!p.perEnhet,
+          ini: p.ini || '', navn: her.navn || {}, perEnhet: !!p.perEnhet,
+          prefMod: PREF_MOD.includes(p.prefMod) ? p.prefMod : (p.foran === 'prefiks' ? 'tag' : 'device'),
+          foranAnlegg: p.foranAnlegg !== undefined ? !!p.foranAnlegg : p.foran === 'anlegg',
           norm: Object.assign({}, NORM_STD, p.norm || {}),
           // Every separator in a point name starts a new folder in the path:
           // a dot is a folder to Niagara, so dots all the way is the rule.
           // Names that keep an underscore at the end are set per row (hale).
           skille: '_.- ',
           // Hand edits, per device and object: what used to be done in Excel.
-          rett: p.rett || {},
+          rett: her.rett || {},
           // Where files go: '' is the browser's Downloads, anything else a
           // folder the server writes into.
           mappe: p.mappe || '', mapper: p.mapper || [],
-          // What goes first in the tag itself: nothing, the prefix or the site.
-          foran: ['prefiks', 'anlegg'].includes(p.foran) ? p.foran : '',
           // Write the SD code (alarm class, then T for trend or 0) in front
           // of the description, for tools that read it from there.
           sdBeskr: !!p.sdBeskr};
@@ -133,11 +157,21 @@ function naboSti(navn, cluster, o) {
   return (cluster ? cluster + '.' : '') + biter.join('.');
 }
 
-/* What stands in front of the systems in every tag: the prefix or the site
-   name if you want it there, then the cluster. */
+/* What stands in front of the systems in every tag: the prefix as a folder
+   if you chose that, and the site name if you want it there. Cluster is not
+   here: in BTG it is the Citect cluster and has never been part of a Niagara
+   tag - NABO keeps it only for HeaderBTG.ini. */
 function naboTopp(t, o) {
-  const foran = o.foran === 'prefiks' ? t.prefiks : o.foran === 'anlegg' ? t.anleggsnavn : '';
-  return [foran, t.cluster].map(x => String(x || '').trim().replace(/[\s.]+/g, '_')).filter(Boolean).join('.');
+  const pref = o.prefMod === 'tag' ? t.prefiks : '';
+  return [pref, o.foranAnlegg ? t.anleggsnavn : ''].map(x => String(x || '').trim().replace(/[\s.]+/g, '_'))
+    .filter(Boolean).join('.');
+}
+
+/* A SYSTEM point is common to the whole controller: its name starts with
+   SYSTEM. SYSTEM further in, as in 360.013.SYSTEM.Utekomp, belongs to that
+   system and stays where it is. */
+function erSystemNavn(navn) {
+  return /^SYSTEM(?:[_.\-\s]|$)/i.test(String(navn || '').trim());
 }
 
 /* The last two folders joined with an underscore, for the points whose name
@@ -146,13 +180,6 @@ function naboHale(sti) {
   const biter = sti.split('.');
   if (biter.length < 2) return sti;
   return [...biter.slice(0, -2), biter.slice(-2).join('_')].join('.');
-}
-
-/* SYSTEM is common to the whole controller and sits at the top of the path,
-   beside the systems rather than inside any of them. */
-function erSystemSti(sti, cluster) {
-  const s = cluster && sti.startsWith(cluster + '.') ? sti.slice(cluster.length + 1) : sti;
-  return /^SYSTEM(\.|$)/i.test(s);
 }
 
 /* A point name through the regex and the template, or null when it does not
@@ -180,9 +207,22 @@ function naboRad(p, t, o, anlegg, enhetNavn, rett) {
   if (type === undefined) return null;
   rett = rett || {};
   const analog = type <= 2;
-  const norm = o.norm.paa ? normaliser(p.name, o) : null;
+  const system = erSystemNavn(p.name);
+  // SYSTEM points are not system-numbered, so the normalisation leaves them be.
+  const norm = o.norm.paa && !system ? normaliser(p.name, o) : null;
   const topp = naboTopp(t, o);
-  const stiRen = norm ? (topp ? topp + '.' : '') + norm.sti : naboSti(p.name, topp, o);
+  let stiRen = norm ? norm.sti : naboSti(p.name, '', o);
+  // BTG's +PRE=360.001: the prefix glued to the system number. A SYSTEM
+  // point has no system number and sits outside them all, so it goes bare.
+  // It goes on the system number - the first part that is a number - so a
+  // location in front, as VMS in VMS.639.001, stays in front of it.
+  if (o.prefMod === 'btg' && t.prefiks && !system && !/\+[^.]*=/.test(stiRen)) {
+    const biter = stiRen.split('.');
+    const i = Math.max(0, biter.findIndex(b => /^\d/.test(b)));
+    biter[i] = `+${t.prefiks}=${biter[i]}`;
+    stiRen = biter.join('.');
+  }
+  stiRen = (topp ? topp + '.' : '') + stiRen;
   const stiAuto = rett.hale ? naboHale(stiRen) : stiRen;
   const sti = rett.sti ?? stiAuto;
   const sd = btgSd(p.description || '');
@@ -201,8 +241,13 @@ function naboRad(p, t, o, anlegg, enhetNavn, rett) {
       : p.state_text.map((s, i) => `${i + 1}=${s}`).join('|');
   }
   const biter = sti.split('.');
+  // The alarm source is system.sub-component, as BTG writes 310.02-JP40: it
+  // starts at the system number (or SYSTEM), past any prefix or location.
+  const fra = biter.findIndex(b => /^(\+[^=]*=)?\d/.test(b) || /^SYSTEM$/i.test(b));
+  const del = fra >= 0 ? biter.slice(fra) : biter;
+  if (del[0]) del[0] = del[0].replace(/^\+[^=]*=/, '');
   const kilde = klasse
-    ? `${anlegg} ${biter.length >= 3 ? `${biter[0]}.${biter[1]}-${biter[2]}` : sti}` : '';
+    ? `${anlegg} ${del.length >= 3 ? `${del[0]}.${del[1]}-${del[2]}` : sti}` : '';
   const trend = (rett.trend ?? sd.trend) ? `Interval|${o.trend}` : '';
   const sdKode = `SD${klasse || 0}${trend ? 'T' : '0'}`;
   // The code is written once, from Trend and Alarm; any code already in the
@@ -216,7 +261,7 @@ function naboRad(p, t, o, anlegg, enhetNavn, rett) {
   f[30] = p.name || '';
   if (norm) { f[29] = norm.g.komponent || ''; f[33] = norm.g.funksjonskode || ''; }
   return {
-    normert: o.norm.paa ? !!norm : null,
+    normert: o.norm.paa && !system ? !!norm : null, system,
     linje: f.map(x => String(x).replace(/[;\r\n]/g, ' ')).join(';'),
     sti, type, typeNavn: shortType(p.type), inst: p.instance, enhet, des,
     trend: !!trend, klasse, beskr, navn: p.name || '', harSd: sd.rest !== (p.description || '').trim(),
@@ -233,10 +278,13 @@ function naboVerdi(v) {
 
 function enhetsfelt(kilde, t) {
   const o = naboInnst();
-  let navn = String((o.navn[kilde.id] ?? kilde.auto) || '').trim();
-  if (t.prefiks && navn.toLowerCase().startsWith(t.prefiks.toLowerCase()))
-    navn = navn.slice(t.prefiks.length).replace(/^[._\-\s]+/, '');
-  return `${t.prefiks || '?'}.${navn.replace(/[\s\-.]+/g, '_')}`;
+  let navn = String((o.navn[devNokkel(kilde)] ?? kilde.auto) || '').trim();
+  const pref = o.prefMod === 'ingen' ? '' : (t.prefiks || '').trim();
+  if (pref && navn.toLowerCase().startsWith(pref.toLowerCase()))
+    navn = navn.slice(pref.length).replace(/^[._\-\s]+/, '');
+  navn = navn.replace(/[\s\-.]+/g, '_');
+  // No prefix is a choice, not a mistake: the device is then just its name.
+  return pref ? `${pref}.${navn}` : navn;
 }
 
 /* Every row of every included device, with what is wrong with it. */
@@ -258,7 +306,7 @@ function naboResultat() {
     const sett = new Map();
     const objekter = new Set();
     for (const p of k.punkter) {
-      const key = `${k.id}|${p.type},${p.instance}`;
+      const key = naboKey(k, p);
       const r = naboRad(p, t, o, anlegg, enhetNavn, o.rett[key]);
       if (!r) { hoppet++; continue; }
       r.kilde = k; r.enhetNavn = enhetNavn; r.feil = []; r.adv = []; r.key = key;
@@ -271,7 +319,7 @@ function naboResultat() {
       if (objekter.has(ob)) r.feil.push(T('Samme objekt (type og instans) finnes to ganger', 'The same object (type and instance) appears twice'));
       objekter.add(ob);
       if (navnBrukt.get(enhetNavn) > 1) r.feil.push(T('En annen enhet får samme device-navn', 'Another device gets the same device name'));
-      if (r.sti.split('.').length < 3 && !erSystemSti(r.sti, naboTopp(t, o)))
+      if (r.sti.split('.').length < 3 && !r.system)
         r.adv.push(T('Kort sti, følger ikke system.nummer.komponent', 'Short path, not system.number.component'));
       if (r.normert === false) r.adv.push(T('Passer ikke normaliseringen, vanlig sti brukt', 'Does not fit the normalisation, plain path used'));
       // + and = are BTG's own +01=360.001 format; Niagara escapes them and NTI expects it.
@@ -282,11 +330,10 @@ function naboResultat() {
     }
   }
   const globalt = [];
-  if (!t.prefiks) globalt.push(T('Prefiks mangler', 'Prefix missing'));
   if (!anlegg) globalt.push(T('Anleggsnavn mangler', 'Site name missing'));
   if (t.prefiks && t.prefiks.length > PREFIKS_MAKS)
     globalt.push(T(`Prefikset er over ${PREFIKS_MAKS} tegn`, `The prefix is over ${PREFIKS_MAKS} characters`));
-  const usikre = NABO.kilder.filter(k => !k.av && k.usikker && !o.navn[k.id]).length;
+  const usikre = NABO.kilder.filter(k => !k.av && k.usikker && !o.navn[devNokkel(k)]).length;
   if (usikre) globalt.push(T(`${usikre} ${usikre === 1 ? 'enhet har' : 'enheter har'} et device-navn som må sjekkes`,
                              `${usikre} ${usikre === 1 ? 'device has' : 'devices have'} a device name to check`));
   if (o.norm.paa && normOppsett(o).feil) globalt.push(T('Regex-feil i normaliseringen', 'Regex error in the normalisation'));
@@ -456,11 +503,13 @@ async function lesIniFil(fil) {
   const sek = lesIni(tekst);
   if (!sek.length) { toast(T('Fant ingen innstillinger i fila', 'No settings found in the file'), true); return; }
   const patch = {};
-  // Cluster stays in the file: it is BTG's Citect cluster, and in NABE the
-  // field of that name is what goes in front of the path.
-  const a = iniVerdi(sek, 'Generator', 'Anleggsnavn'), p = iniVerdi(sek, 'Generator', 'Prefix');
+  // Cluster is BTG's Citect cluster. It is kept for the round trip and does
+  // not touch the Niagara tags.
+  const a = iniVerdi(sek, 'Generator', 'Anleggsnavn'), p = iniVerdi(sek, 'Generator', 'Prefix'),
+        c = iniVerdi(sek, 'Generator', 'Cluster');
   if (a !== undefined) patch.anleggsnavn = a.trim();
   if (p !== undefined) patch.prefiks = p.trim();
+  if (c !== undefined) patch.cluster = c.trim();
   const eu = {};
   for (const k of Object.keys(EU_STD)) {
     const v = iniVerdi(sek, 'EngineeringUnits', k);
@@ -488,6 +537,7 @@ function lagIni() {
   };
   sett('Generator', 'Anleggsnavn', t.anleggsnavn || '');
   sett('Generator', 'Prefix', t.prefiks || '');
+  sett('Generator', 'Cluster', t.cluster || '');
   sett('Trend', 'SamplerPeriode', o.trend);
   for (const [k, v] of Object.entries(o.eu)) sett('EngineeringUnits', k, v);
   const tekst = sek.map(s => `[${s.navn}]\r\n` + s.par.map(([k, v]) => `${k}=${v}`).join('\r\n')).join('\r\n') + '\r\n';
@@ -708,7 +758,7 @@ function eksporterEde() {
   // With SD codes on, the description is the one in the table, code in front.
   const rader = o.sdBeskr ? new Map(naboResultat().rader.map(x => [x.key, x])) : null;
   const beskrivelse = (k, p) => {
-    const x = rader && rader.get(`${k.id}|${p.type},${p.instance}`);
+    const x = rader && rader.get(naboKey(k, p));
     return x ? x.beskrSd : p.description;
   };
   let i = 0;
@@ -803,15 +853,21 @@ function tegnNabo(helt) {
       </header>
       <section class="nabo-oppsett">
         <label><span>${T('Anlegg', 'Site')}</span><input class="field" id="naboAnlegg" autocomplete="off"></label>
-        <label class="kort"><span>${T('Prefiks', 'Prefix')}</span><input class="field" id="naboPrefiks" autocomplete="off" spellcheck="false"></label>
-        <label><span>${T('Først i taggen', 'First in the tag')}</span><select class="field" id="naboForan">
-          <option value="">${T('Ingenting', 'Nothing')}</option>
-          <option value="prefiks">${T('Prefiks', 'Prefix')}</option>
-          <option value="anlegg">${T('Anleggsnavn', 'Site name')}</option></select></label>
+        <div class="nabo-pref"><span>${T('Prefiks', 'Prefix')} <i>${T('valgfritt', 'optional')}</i></span>
+          <div class="nabo-pref-felt">
+            <input class="field" id="naboPrefiks" autocomplete="off" spellcheck="false" placeholder="${T('ingen', 'none')}">
+            <select class="field" id="naboPrefMod" title="${T('Hvor prefikset brukes, som Format i BTG', 'Where the prefix is used, like Format in BTG')}">
+              <option value="device">${T('foran device', 'before the device')}</option>
+              <option value="tag">${T('foran device og tag', 'before device and tag')}</option>
+              <option value="btg">${T('BTG-format +PRE=360.001', 'BTG format +PRE=360.001')}</option>
+              <option value="ingen">${T('ikke i bruk', 'not used')}</option>
+            </select></div></div>
         <label class="kort"><span>${T('Trend hvert', 'Trend every')}</span><input class="field" id="naboTrend" autocomplete="off" spellcheck="false"></label>
         <details class="nabo-des"><summary>${T('Avansert', 'Advanced')}</summary>
           <div class="nabo-avansert">
-            <label class="kort"><span>Cluster</span><input class="field" id="naboCluster" autocomplete="off" spellcheck="false"></label>
+            <label class="kort" title="${T('Citect-cluster fra BTG. Brukes ikke i Niagara-taggene, bare lagret i HeaderBTG.ini.', 'Citect cluster from BTG. Not used in the Niagara tags, only kept in HeaderBTG.ini.')}"><span>Cluster <i>(Citect)</i></span><input class="field" id="naboCluster" autocomplete="off" spellcheck="false"></label>
+            <label class="nabo-sd-valg"><span>${T('Først i taggen', 'First in the tag')}</span>
+              <span class="nabo-sd-boks"><input type="checkbox" id="naboForanAnlegg"> ${T('Anleggsnavnet', 'The site name')}</span></label>
             <label class="nabo-sd-valg" title="${T('SD + alarmklasse + T for trend eller 0 uten, f.eks. SD1T. Hentes fra Trend og Alarm i tabellen.', 'SD + alarm class + T for trend or 0 without, e.g. SD1T. Taken from Trend and Alarm in the table.')}">
               <span>${T('SD-kode', 'SD code')}</span>
               <span class="nabo-sd-boks"><input type="checkbox" id="naboSd"> ${T('Legg SD-koden først i beskrivelsen', 'Put the SD code first in the description')}</span></label>
@@ -862,9 +918,11 @@ function tegnNabo(helt) {
           <div class="nabo-globalt" id="naboGlobalt"></div>
           <div class="nabo-markert" id="naboMarkert" hidden>
             <span class="nabo-mark-tall" id="naboMarkTall"></span>
-            <button class="btn" id="naboHale" title="${T('Slå sammen de to siste leddene med understrek, f.eks. SYSTEM.OU001.HB_KV', 'Join the last two parts with an underscore, e.g. SYSTEM.OU001.HB_KV')}">${T('Siste ledd med _', 'Last part with _')}</button>
+            <button class="btn primary" id="naboHale" title="${T('Slå sammen de to siste leddene med understrek, f.eks. SYSTEM.OU001.HB_KV', 'Join the last two parts with an underscore, e.g. SYSTEM.OU001.HB_KV')}">${T('Siste med understrek', 'Last with underscore')}</button>
             <button class="btn" id="naboPunktum" title="${T('Tilbake til standard: punktum mellom alle leddene', 'Back to the standard: dots between all parts')}">${T('Punktum hele veien', 'Dots all the way')}</button>
-            <button class="btn" id="naboLike" title="${T('Marker også alle andre punkter som slutter på det samme, f.eks. alle …HB.KV', 'Also tick every other point that ends the same way, e.g. every …HB.KV')}">${T('Marker alle som slutter likt', 'Tick all that end the same')}</button>
+            <span class="nabo-mark-skille">${T('marker også', 'also tick')}</span>
+            <button class="btn" id="naboLike" title="${T('Alle punkter med samme navnemønster, f.eks. alle *_HB_KV', 'Every point with the same name pattern, e.g. every *_HB_KV')}">${T('samme navnemønster', 'same name pattern')}</button>
+            <button class="btn" id="naboType" title="${T('Alle punkter av samme punkttype', 'Every point of the same point type')}">${T('samme type', 'same type')}</button>
             <button class="gs-close" id="naboMarkLukk" title="${T('Fjern markeringen', 'Clear the selection')}">✕</button>
           </div>
           <div class="nabo-tabell" id="naboTabell"></div>
@@ -883,10 +941,11 @@ function tegnNabo(helt) {
   }
   const sett = (id, v) => { const el = $(id); if (el && document.activeElement !== el) el.value = v; };
   sett('naboAnlegg', t.anleggsnavn || ''); sett('naboPrefiks', t.prefiks || '');
-  sett('naboCluster', t.cluster || ''); sett('naboTrend', o.trend); sett('naboForan', o.foran);
+  sett('naboCluster', t.cluster || ''); sett('naboTrend', o.trend); sett('naboPrefMod', o.prefMod);
+  $('naboForanAnlegg').checked = o.foranAnlegg;
+  $('naboPrefMod').disabled = !t.prefiks;
   $('naboSd').checked = o.sdBeskr;
   $('naboPer').checked = NABO.perEnhet;
-  $('naboPrefiks').classList.toggle('mangler', !t.prefiks);
   $('naboAnlegg').classList.toggle('mangler', !(t.anleggsnavn || '').trim());
 
   const grid = ov.querySelector('.nabo-des-grid');
@@ -898,12 +957,14 @@ function tegnNabo(helt) {
 
   // One ordinary point and one SYSTEM point, so both halves of the tree show.
   const topp = naboTopp(t, o);
-  const vanlig = r.rader.find(x => !erSystemSti(x.sti, topp));
-  const system = r.rader.find(x => erSystemSti(x.sti, topp));
-  $('naboEks').textContent = vanlig || system
-    ? [vanlig, system].filter(Boolean).map(x => x.sti).join('   ·   ')
-    : ['360.001.RT401.MV', 'SYSTEM.OU001.HB_KV'].map(x => (topp ? topp + '.' : '') + x).join('   ·   ');
-  $('naboEks').title = (vanlig || system || {}).enhetNavn || '';
+  const vanlig = r.rader.find(x => !x.system);
+  const system = r.rader.find(x => x.system);
+  const pre = o.prefMod === 'btg' && t.prefiks ? `+${t.prefiks}=` : '';
+  const dev = (vanlig || system || {}).enhetNavn || ((o.prefMod !== 'ingen' && t.prefiks ? t.prefiks + '.' : '') + 'OU001');
+  const tt = x => (topp ? topp + '.' : '') + x;
+  $('naboEks').innerHTML = `<b>${esc(dev)}</b><span>${esc(vanlig ? vanlig.sti : tt(pre + 'VMS.639.001.RR001'))}</span>`
+    + `<span>${esc(system ? system.sti : tt('SYSTEM.OU001.HB.KV'))}</span>`;
+  $('naboEks').title = T('Device · et vanlig punkt · et SYSTEM-punkt', 'Device · an ordinary point · a SYSTEM point');
 
   // Devices
   const perKilde = new Map();
@@ -915,13 +976,13 @@ function tegnNabo(helt) {
   $('naboAntK').textContent = NABO.kilder.length;
   $('naboKliste').innerHTML = NABO.kilder.length ? NABO.kilder.map(k => {
     const a = perKilde.get(k) || {n: 0, feil: 0, adv: 0};
-    const navn = naboInnst().navn[k.id] ?? k.auto;
+    const navn = naboInnst().navn[devNokkel(k)] ?? k.auto;
     return `<div class="nabo-k${k.av ? ' av' : ''}" data-id="${esc(k.id)}">
       <input type="checkbox" class="nabo-k-med" ${k.av ? '' : 'checked'} title="${T('Ta med', 'Include')}">
       <div class="nabo-k-tekst">
         <input class="nabo-k-navn" value="${esc(navn)}" spellcheck="false" title="${T('Navnet devicen har i Niagara. Prefikset settes foran.', 'The device\u2019s name in Niagara. The prefix goes in front.')}">
         <div class="nabo-k-meta"><span class="nabo-kilde-${k.type}">${k.type === 'ede' ? 'EDE' : T('Anlegg', 'Plant')}</span>${
-          k.usikker && !(naboInnst().navn[k.id]) ? `<span class="nabo-sjekk">${T('sjekk navnet', 'check the name')}</span>` : ''}
+          k.usikker && !(naboInnst().navn[devNokkel(k)]) ? `<span class="nabo-sjekk">${T('sjekk navnet', 'check the name')}</span>` : ''}
           ${esc(k.type === 'ede' ? k.fil : k.fil)}${k.instans != null && k.instans !== '' ? ` · #${esc(k.instans)}` : ''}</div>
       </div>
       <div class="nabo-k-tall"><b>${k.av ? k.punkter.length : a.n}</b>${a.feil ? `<i class="f">${a.feil}</i>` : a.adv ? `<i class="a">${a.adv}</i>` : ''}</div>
@@ -980,9 +1041,9 @@ function tegnNabo(helt) {
       const valgt = NABO.valgt.has(x.key);
       return `<tr class="${merk}${rettet ? ' rettet' : ''}${valgt ? ' valgt' : ''}">
         <td class="velg"><input type="checkbox" class="nabo-velg" data-k="${esc(x.key)}"${valgt ? ' checked' : ''}></td>
-        <td class="d">${esc(x.enhetNavn)}</td>${celle(x, 'sti', 't', x.sti)}
-        <td class="n">${esc(x.navn)}</td>
-        <td><span class="type-tag">${esc(x.typeNavn)}</span></td><td class="h">${esc(x.inst)}</td>
+        <td class="d sel-c" data-k="${esc(x.key)}">${esc(x.enhetNavn)}</td>${celle(x, 'sti', 't', x.sti, x.system ? '<span class="nabo-sys">SYSTEM</span>' : '')}
+        <td class="n sel-c" data-k="${esc(x.key)}">${esc(x.navn)}</td>
+        <td class="sel-c" data-k="${esc(x.key)}"><span class="type-tag">${esc(x.typeNavn)}</span></td><td class="h sel-c" data-k="${esc(x.key)}">${esc(x.inst)}</td>
         ${x.type <= 2 ? celle(x, 'enhet', 'u', x.enhet === 'null' ? '' : x.enhet) : '<td></td>'}
         ${x.type <= 2 ? celle(x, 'des', 'h', String(x.des)) : '<td></td>'}
         <td class="bryter${x.rett.trend !== undefined ? ' egen' : ''}" data-bryter="trend" data-k="${esc(x.key)}" title="${T('Klikk for å slå trend av eller på', 'Click to switch trend on or off')}">${x.trend ? '<span class="nabo-prikk tr"></span>' : '<span class="nabo-av"></span>'}</td>
@@ -1124,7 +1185,7 @@ function settRett(endringer) {
     if (verdi === undefined) delete x[felt]; else x[felt] = verdi;
     if (Object.keys(x).length) alle[key] = x; else delete alle[key];
   }
-  lagreNabo({rett: alle});
+  lagreAnlegg({rett: alle});
 }
 
 function radFor(key) { return naboResultat().rader.find(x => x.key === key); }
@@ -1203,14 +1264,41 @@ function velgRad(key, paa, omraade) {
   tegnNabo();
 }
 
+/* Click a row as in Explorer: a click picks that one, Ctrl adds or removes,
+   Shift takes everything from the last one. */
+function klikkRad(key, e) {
+  if (e.shiftKey) { velgRad(key, true, true); return; }
+  if (e.ctrlKey || e.metaKey) { velgRad(key, !NABO.valgt.has(key), false); return; }
+  const bare = NABO.valgt.size === 1 && NABO.valgt.has(key);
+  NABO.valgt.clear();
+  if (!bare) NABO.valgt.add(key);
+  NABO.sistValgt = key;
+  tegnNabo();
+}
+
+/* The name pattern of a point: its last two parts, as *_HB_KV. Points that
+   share it are the ones that want the same treatment. */
+function navnMonster(x) {
+  const biter = String(x.navn || '').split(/[_.\-\s]+/).filter(Boolean);
+  return biter.length >= 3 ? biter.slice(-2).join('_').toLowerCase() : null;
+}
 function velgLike() {
   const rader = naboResultat().rader;
-  const slutt = x => x.stiRen.split('.').slice(-2).join('.');
-  const ender = new Set(rader.filter(x => NABO.valgt.has(x.key)).map(slutt));
+  const monstre = new Set(rader.filter(x => NABO.valgt.has(x.key)).map(navnMonster).filter(Boolean));
   const for_ = NABO.valgt.size;
-  rader.forEach(x => { if (ender.has(slutt(x))) NABO.valgt.add(x.key); });
+  rader.forEach(x => { if (monstre.has(navnMonster(x))) NABO.valgt.add(x.key); });
   const ny = NABO.valgt.size - for_;
-  toast(ny ? T(`${ny} til markert`, `${ny} more ticked`) : T('Ingen andre slutter likt', 'No others end the same way'));
+  const vis = [...monstre].slice(0, 3).map(m => '*_' + m.toUpperCase()).join(', ');
+  toast(ny ? T(`${ny} til markert (${vis})`, `${ny} more ticked (${vis})`) : T('Ingen andre har samme navnemønster', 'No others share the name pattern'));
+  tegnNabo();
+}
+function velgSammeType() {
+  const rader = naboResultat().rader;
+  const typer = new Set(rader.filter(x => NABO.valgt.has(x.key)).map(x => x.type));
+  const for_ = NABO.valgt.size;
+  rader.forEach(x => { if (typer.has(x.type)) NABO.valgt.add(x.key); });
+  const ny = NABO.valgt.size - for_;
+  toast(ny ? T(`${ny} til markert`, `${ny} more ticked`) : T('Ingen andre av samme type', 'No others of the same type'));
   tegnNabo();
 }
 
@@ -1288,7 +1376,8 @@ function koblNabo(ov) {
     $(id).addEventListener('input', (e) => senere(() => lagreTagging({[nokkel]: e.target.value.trim()}).then(() => tegnNabo()), id));
   }
   $('naboSd').onchange = (e) => { lagreNabo({sdBeskr: e.target.checked}); tegnNabo(); };
-  $('naboForan').onchange = (e) => { lagreNabo({foran: e.target.value}); tegnNabo(); };
+  $('naboPrefMod').onchange = (e) => { lagreNabo({prefMod: e.target.value}); tegnNabo(); };
+  $('naboForanAnlegg').onchange = (e) => { lagreNabo({foranAnlegg: e.target.checked}); tegnNabo(); };
   $('naboTrend').addEventListener('change', (e) => {
     const v = e.target.value.trim();
     if (!/^\d\d:\d\d:\d\d$/.test(v)) { toast(T('Skriv tiden som tt:mm:ss', 'Write the time as hh:mm:ss'), true); e.target.value = naboInnst().trend; return; }
@@ -1309,6 +1398,8 @@ function koblNabo(ov) {
     }
     const v = e.target.closest('.nabo-velg');
     if (v) { velgRad(v.dataset.k, v.checked, e.shiftKey); return; }
+    const s = e.target.closest('td.sel-c');
+    if (s) { klikkRad(s.dataset.k, e); return; }
     const angre = e.target.closest('.nabo-angre');
     if (angre) {
       const key = angre.dataset.k;
@@ -1323,12 +1414,13 @@ function koblNabo(ov) {
   $('naboHale').onclick = () => settHale(true);
   $('naboPunktum').onclick = () => settHale(false);
   $('naboLike').onclick = velgLike;
+  $('naboType').onclick = velgSammeType;
   $('naboMarkLukk').onclick = () => { NABO.valgt.clear(); tegnNabo(); };
   $('naboErstattKnapp').onclick = () => (NABO.erstatt ? lukkErstatt() : aapneErstatt());
   $('naboErLukk').onclick = lukkErstatt;
   $('naboErBruk').onclick = brukErstatt;
   $('naboErAngre').onclick = () => {
-    if (NABO.angre) { lagreNabo({rett: NABO.angre}); NABO.angre = null; }
+    if (NABO.angre) { lagreAnlegg({rett: NABO.angre}); NABO.angre = null; }
     $('naboErAngre').hidden = true; tegnNabo();
   };
   const erOppdater = () => {
@@ -1360,8 +1452,9 @@ function koblNabo(ov) {
   });
   $('naboKliste').addEventListener('input', (e) => {
     if (!e.target.classList.contains('nabo-k-navn')) return;
-    const id = e.target.closest('.nabo-k').dataset.id;
-    senere(() => { lagreNabo({navn: Object.assign({}, naboInnst().navn, {[id]: e.target.value.trim()})}); tegnNabo(); });
+    const k = NABO.kilder.find(x => x.id === e.target.closest('.nabo-k').dataset.id);
+    if (!k) return;
+    senere(() => { lagreAnlegg({navn: Object.assign({}, naboInnst().navn, {[devNokkel(k)]: e.target.value.trim()})}); tegnNabo(); }, 'navn');
   });
   $('naboKliste').addEventListener('click', (e) => {
     if (!e.target.closest('.nabo-k-fjern')) return;
@@ -1439,6 +1532,21 @@ function naboHusTittel() {
     if (document.querySelector('.gs-overlay:not([hidden])') || $('startskjerm')) return;
     e.preventDefault();
     aapneNabo();
+  });
+
+  /* An EDE dropped anywhere on NABE goes next door: NABO opens with it. Only
+     files NABO reads, and only when nothing else on the page took the drop. */
+  const naboFil = (e) => [...(e.dataTransfer?.items || [])].some(i => i.kind === 'file')
+    && $('naboOverlay').hidden && !document.querySelector('.gs-overlay:not([hidden])');
+  window.addEventListener('dragover', (e) => { if (!e.defaultPrevented && naboFil(e)) e.preventDefault(); });
+  window.addEventListener('drop', (e) => {
+    if (e.defaultPrevented || !naboFil(e)) return;
+    const filer = [...e.dataTransfer.files].filter(f => /\.(csv|txt|ini)$/i.test(f.name));
+    if (!filer.length) return;
+    e.preventDefault();
+    $('startskjerm')?.querySelector('.ss-videre')?.click();
+    aapneNabo();
+    leggTilFiler(filer);
   });
 
   // On the start screen the neighbour stands beside NABE, and is a way in.
