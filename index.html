@@ -3452,6 +3452,25 @@ body{font-family:var(--sans)}
 .nabo-rettbar td.sel-c{cursor:default;user-select:none}
 .nabo-mark-skille{font-size:11px;color:var(--fg-3);margin-left:6px}
 
+/* Small surprises: seasons on the house, NABO's bubble, the lights on late. */
+.nabo-fig .nabo-sno,.nabo-fig .nabo-flagg{display:none}
+html.nabo-jul .nabo-fig .nabo-sno{display:block;stroke:#fff;stroke-width:2.4;opacity:.9}
+html.nabo-mai17 .nabo-fig .nabo-flagg{display:block}
+.nabo-fig .nabo-flagg path{stroke:var(--fg-3);stroke-width:.8}
+.nabo-fig .nabo-flagg rect{fill:#ba0c2f;stroke:none}
+.nabo-fig .nabo-flagg .kryss{stroke:#fff;stroke-width:.9}
+html.nabo-halloween .nabo-fig .nabo-oyne rect,.lys .nabo-fig .nabo-oyne rect{fill:#f2b64a}
+.nabo-merke{position:relative}
+#naboHusStor{display:inline-flex;cursor:pointer}
+#naboHusStor.banke .nabo-fig{animation:nabo-banke .35s linear}
+.nabo-boble{position:absolute;left:46px;top:-6px;z-index:5;white-space:nowrap;padding:4px 10px;border-radius:10px;
+  background:var(--panel);color:var(--fg);border:1px solid var(--line-2);font:400 12px/1.4 var(--sans);
+  box-shadow:0 8px 24px rgba(0,0,0,.25);opacity:0;transform:translateY(4px) scale(.96);pointer-events:none;
+  transition:opacity .18s ease,transform .25s var(--fjaer)}
+.nabo-boble.inne{opacity:1;transform:none}
+.nabo-titt.opp svg.nabe{transform:translateY(-1px)!important;animation:none}
+.nabo-konfetti{position:fixed;width:5px;height:5px;border-radius:1px;z-index:9991;pointer-events:none}
+
 /* The neighbour's face: cheeks, a chimney that breathes, and sleep. */
 .nabo-fig .nabo-kinn ellipse{fill:#e8838f;stroke:none;opacity:.45}
 .nabo-fig .nabo-roeyk circle{fill:var(--fg-3);stroke:none;opacity:0}
@@ -3471,8 +3490,9 @@ body{font-family:var(--sans)}
 .banke .nabo-fig{animation:nabo-banke .35s linear 2}
 .fange .nabo-fig{animation:nabo-fange .38s ease-out}
 .nabo-hus-knapp.sover{color:var(--fg-3)}
-.nabo-ball{position:fixed;left:0;top:0;width:6px;height:6px;border-radius:50%;background:var(--accent);
-  z-index:9990;pointer-events:none}
+.nabo-ball{position:fixed;left:0;top:0;width:7px;height:7px;border-radius:50%;background:var(--accent);cursor:pointer;
+  z-index:9990}
+.nabo-ball::after{content:'';position:absolute;inset:-9px}
 @media (prefers-reduced-motion:reduce){
   html:not(.med-bevegelse) .nabo-fig *,html:not(.med-bevegelse) .nabo-fig{animation:none!important}
 }

@@ -798,6 +798,13 @@ function eksporterVariabel(bare) {
   naboFigur('vink');
   const hus = $('naboHus');
   if (hus) { hus.classList.add('puff'); setTimeout(() => hus.classList.remove('puff'), 1600); }
+  const t = new Date().getHours();
+  if (t >= 22 || t < 5) {
+    // Working late: the lights are on next door.
+    [hus, $('naboHusStor')].forEach(x => { if (x) { x.classList.add('lys'); setTimeout(() => x.classList.remove('lys'), 6000); } });
+    naboSier(T('Lys i vinduet hos naboen. Legg deg snart.', 'Lights on next door. Go to bed soon.'));
+  }
+  if (!feil && !loadPrefs().nabo?.forsteFil) { lagreNabo({forsteFil: Date.now()}); naboKonfetti(); }
   if (typeof tell === 'function') tell('nabo');
   if (typeof nabeSier === 'function' && !feil) setTimeout(() => nabeSier(
     T('Naboen har levert. Pent arbeid, egentlig.', 'The neighbour delivered. Decent work, actually.'), 'fornoyd', 'nabo-levert'), 900);
@@ -857,6 +864,8 @@ function eksporterEde() {
 /* ------------------------------------------------------------ the view */
 const NABO_SVG = `<svg class="nabo-fig" viewBox="0 0 32 32" aria-hidden="true">
   <path class="nabo-tak" d="M3.5 14.5 16 4.5l12.5 10"/>
+  <path class="nabo-sno" d="M5.4 13.4 16 5.2l7.2 5.6"/>
+  <g class="nabo-flagg"><path d="M24.6 5.6V.6"/><rect x="24.6" y=".6" width="4.4" height="3"/><path class="kryss" d="M24.6 2.1h4.4M26.1.6v3"/></g>
   <rect class="nabo-hus" x="6.5" y="12.5" width="19" height="16.5" rx="3"/>
   <g class="nabo-oyne"><rect x="10.5" y="17" width="3.6" height="3.6" rx=".8"/><rect x="17.9" y="17" width="3.6" height="3.6" rx=".8"/></g>
   <g class="nabo-kinn"><ellipse cx="9.4" cy="23.6" rx="1.5" ry=".85"/><ellipse cx="22.6" cy="23.6" rx="1.5" ry=".85"/></g>
@@ -905,7 +914,7 @@ function tegnNabo(helt) {
   if (helt || !ov.querySelector('.nabo-modal')) {
     ov.innerHTML = `<div class="gs-modal nabo-modal" role="document">
       <header class="nabo-topp">
-        <div class="nabo-merke">${NABO_SVG}<div><div class="nabo-ord">NABO</div>
+        <div class="nabo-merke"><span id="naboHusStor" title="NABO">${NABO_SVG}</span><span class="nabo-boble" id="naboBoble"></span><div><div class="nabo-ord">NABO</div>
           <div class="nabo-under">Not Another BACnet Object-namer · ${T('naboen til NABE', 'NABE\u2019s neighbour')}</div></div></div>
         <div class="nabo-gjerde" aria-hidden="true"><button class="nabo-titt" id="naboTitt" title="${T('Tilbake til NABE', 'Back to NABE')}">${NABE_SVG}</button></div>
         <div class="nabo-topp-knapper">
@@ -1595,6 +1604,40 @@ function koblNabo(ov) {
    name in the top bar, behind a hairline fence; NABE glances at it when you
    point there, it stands beside him on the start screen, and N goes next
    door from anywhere. */
+/* NABO talks from beside his house in the header, briefly. */
+function naboSier(tekst) {
+  const b = $('naboBoble');
+  if (!b || $('naboOverlay').hidden) return;
+  b.textContent = tekst;
+  b.classList.add('inne');
+  clearTimeout(naboSier.t);
+  naboSier.t = setTimeout(() => b.classList.remove('inne'), 3200);
+}
+
+/* A little confetti from the chimney, once: the first Variabel file. In the
+   theme's own colours, and not at all with motion off. */
+function naboKonfetti() {
+  const kilde = $('naboHusStor');
+  if (!kilde || bevegelseAv()) return;
+  const r = kilde.getBoundingClientRect();
+  const farger = ['var(--accent)', 'var(--ok)', 'var(--warn)', 'var(--live)', 'var(--fg-2)'];
+  for (let i = 0; i < 18; i++) {
+    const p = document.createElement('span');
+    p.className = 'nabo-konfetti';
+    p.style.background = farger[i % farger.length];
+    p.style.left = (r.left + r.width * .72) + 'px';
+    p.style.top = (r.top + 4) + 'px';
+    document.body.appendChild(p);
+    const dx = (Math.random() - .3) * 120, dy = -40 - Math.random() * 50, rot = (Math.random() - .5) * 540;
+    p.animate([{transform: 'translate(0,0) rotate(0)', opacity: 1},
+               {transform: `translate(${dx * .6}px,${dy}px) rotate(${rot / 2}deg)`, opacity: 1, offset: .45},
+               {transform: `translate(${dx}px,${dy + 110}px) rotate(${rot}deg)`, opacity: 0}],
+              {duration: 1400 + Math.random() * 500, easing: 'cubic-bezier(.2,.7,.4,1)'}).finished
+      .then(() => p.remove(), () => p.remove());
+  }
+  naboSier(T('Første fil fra naboen. Den henger vi opp.', 'The first file from next door. That one goes on the wall.'));
+}
+
 function naboHusTittel() {
   const b = $('naboHus');
   if (b) b.title = T('NABO, naboen: tagger og Variabel-fil (N)', 'NABO, the neighbour: tags and the Variabel file (N)');
@@ -1656,6 +1699,17 @@ function naboHusTittel() {
     const a = midt(fra), b = midt(til);
     const ball = document.createElement('span');
     ball.className = 'nabo-ball';
+    ball.title = T('Ta den!', 'Catch it!');
+    ball.addEventListener('pointerdown', (e) => {
+      e.stopPropagation();
+      LEK.leker = false;
+      LEK.baller.forEach(b => b.remove()); LEK.baller = [];
+      const n = (loadPrefs().nabo?.fanget || 0) + 1;
+      lagreNabo({fanget: n});
+      if (typeof nabeSier === 'function') nabeSier(n === 1
+        ? T('Du tok ballen. Det har ingen gjort før.', 'You caught the ball. Nobody has done that before.')
+        : T(`Tatt igjen. ${n} baller nå. Vi teller.`, `Caught again. ${n} balls now. We are counting.`), 'fornoyd');
+    });
     document.body.appendChild(ball);
     LEK.baller.push(ball);
     const hoyde = 26 + Math.random() * 10;
@@ -1677,7 +1731,7 @@ function naboHusTittel() {
   async function lek() {
     const m = nabeMerke(), h = $('naboHus');
     if (!m || !h || LEK.leker || bevegelseAv()) return;
-    LEK.leker = true; LEK.lekt = true;
+    LEK.leker = true; LEK.lekt = true; LEK.avbrutt = false;
     // NABE's own clock would put him straight back to sleep; tell it he just moved.
     NABE.sist = Date.now() - 60000;
     const huset = Math.random() < 0.5;
@@ -1697,8 +1751,9 @@ function naboHusTittel() {
     }
     let fra = huset ? m : h, til = huset ? h : m;
     const runder = 2 + Math.floor(Math.random() * 3);
-    for (let i = 0; i < runder && LEK.leker; i++) { await kast(fra, til); [fra, til] = [til, fra]; }
+    for (let i = 0; i < runder && LEK.leker && !LEK.avbrutt; i++) { await kast(fra, til); [fra, til] = [til, fra]; }
     if (!LEK.leker) return;
+    if (LEK.avbrutt) { LEK.leker = false; LEK.avbrutt = false; h.classList.remove('sover'); return; }
     await vent(900);
     m.classList.add('sover'); nabeOppdater();
     await vent(1400);
@@ -1718,10 +1773,9 @@ function naboHusTittel() {
   }, 1000);
 
   document.addEventListener('pointermove', () => {
-    if (LEK.leker) {
-      LEK.leker = false;
-      LEK.baller.forEach(b => b.remove()); LEK.baller = [];
-    }
+    // You are back: they finish this throw and stay awake, and the ball in
+    // the air is yours to catch.
+    if (LEK.leker) LEK.avbrutt = true;
     const h = $('naboHus');
     if (h && h.classList.contains('sover')) {
       h.classList.remove('sover'); h.classList.add('vekk');
@@ -1740,6 +1794,42 @@ function naboHusTittel() {
       pust();
     }, 40000 + Math.random() * 50000);
   })();
+
+  /* ----------------------------------------------------- small surprises
+     The house dresses for the season; a few words typed in NABO's search get
+     an answer; five knocks on the house in NABO and NABE asks who it is. */
+  const d = new Date(), md = (d.getMonth() + 1) * 100 + d.getDate();
+  const sesong = d.getMonth() === 11 ? 'jul' : md === 517 ? 'mai17' : md === 1031 ? 'halloween' : '';
+  if (sesong) document.documentElement.classList.add('nabo-' + sesong);
+
+  const SOK_SVAR = {
+    btg: ['Hvem?', 'Who?'],
+    yabe: ['Feil nabolag.', 'Wrong neighbourhood.'],
+    excel: ['Ikke her. Aldri mer.', 'Not here. Never again.'],
+    nabe: ['Han bor ved siden av. Han kjeder seg.', 'He lives next door. He is bored.'],
+    nabo: ['Det er meg.', 'That is me.'],
+    nti: ['Den får fila når du er klar.', 'It gets the file when you are ready.'],
+  };
+  document.addEventListener('input', (e) => {
+    if (e.target.id !== 'naboSok') return;
+    const s = SOK_SVAR[e.target.value.trim().toLowerCase()];
+    if (s) naboSier(T(...s));
+  });
+
+  let bank = [];
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('#naboHusStor')) return;
+    const naa = Date.now();
+    bank = bank.filter(t => naa - t < 2000); bank.push(naa);
+    const h = $('naboHusStor');
+    h.classList.add('banke'); setTimeout(() => h.classList.remove('banke'), 380);
+    if (bank.length >= 5) {
+      bank = [];
+      const titt = $('naboTitt');
+      if (titt) { titt.classList.add('opp'); setTimeout(() => titt.classList.remove('opp'), 2600); }
+      naboSier(T('NABE: «Hvem banker?» – Det er naboen.', 'NABE: "Who is knocking?" - It is the neighbour.'));
+    }
+  });
 
   // On the start screen the neighbour stands beside NABE, and is a way in.
   const paaStart = () => {

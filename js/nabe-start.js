@@ -154,6 +154,11 @@ const FAKTA = [
   ['COV betyr at regulatoren sier fra selv. Mindre spørring, mer ro.', 'COV means the controller speaks up itself. Less asking, more peace.'],
 ];
 const NYTT = {
+  '1.17': [
+    ['Naboen kler seg for årstiden. Mer sier vi ikke', 'The neighbour dresses for the season. We say no more'],
+    ['Når de leker, kan du ta ballen', 'When they play, you can catch the ball'],
+    ['Noen ord i NABOs søkefelt får svar, og det lønner seg å banke på', 'A few words in NABO’s search get an answer, and knocking pays off'],
+  ],
   '1.16': [
     ['NABO er målt mot 7516 punkter BTG har laget fra ekte EDE-filer, og gjør nå som BTG der BTG har rett', 'NABO is measured against 7516 points BTG made from real EDE files, and now does as BTG where BTG is right'],
     ['Tekst med mellomrom er ett ledd (Drift fra SD-anlegg), romkoder blir R00_0004, og skråstrek beholdes', 'Text with spaces is one part (Drift fra SD-anlegg), room codes become R00_0004, and a slash is kept'],
