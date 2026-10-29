@@ -154,6 +154,9 @@ const FAKTA = [
   ['COV betyr at regulatoren sier fra selv. Mindre spørring, mer ro.', 'COV means the controller speaks up itself. Less asking, more peace.'],
 ];
 const NYTT = {
+  '1.6.2': [
+    ['Enheter funnet med Who-Is - på eget nett og via BBMD - får navn og leverandør', 'Devices found by Who-Is - on your own subnet and through a BBMD - get their name and vendor'],
+  ],
   '1.6.1': [
     ['Kortet som sitter på samme nett som anlegget velges alltid - ikke mobilen fordi Windows husket en gammel vei', 'The adapter on the plant’s own subnet is always picked - not the 4G modem because Windows remembered an old path'],
     ['Kort uten link (Wi-Fi utenfor rekkevidde, frakoblet VPN) står ikke lenger i lista', 'Adapters with no link (Wi-Fi out of range, VPN disconnected) are no longer listed'],

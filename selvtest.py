@@ -126,6 +126,8 @@ def kjor_tester():
     r = j.get("result") or {}
     sjekk("BBMD-modus registrerer og finner", r.get("bbmd_status") == 0 and r.get("count", 0) >= 1,
           f"status {r.get('bbmd_status')}, {r.get('count')} enheter, tabell {r.get('bdt')}")
+    uten = [d.get("address") for d in r.get("devices") or [] if not d.get("object_name")]
+    sjekk("Who-Is-funn får navn", bool(r.get("devices")) and not uten, f"uten navn: {uten}")
 
     for fil in ("nabe-start", "nabe-verktoy", "nabe-felt", "nabe-moro", "nabe-finn"):
         try:

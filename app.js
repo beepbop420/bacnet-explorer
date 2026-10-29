@@ -10332,6 +10332,7 @@ const MONSTER = [
    and each side is applied to text the other side has not touched. */
 const FRASER = [
   ['uendret på', 'unchanged at'],
+  ['henter navn', 'reading names'],
   ['overvåker', 'watching'],
   ['svarte ikke', 'did not answer'],
   ['runder', 'rounds'],

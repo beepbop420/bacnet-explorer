@@ -170,7 +170,7 @@ async def guard_and_cors(request, call_next):
         response.headers["Vary"] = "Origin"
     return response
 
-VERSJON = "1.6.1"
+VERSJON = "1.6.2"
 
 state = {"app": None, "local_address": None, "read_only": False, "bbmd": None}
 
@@ -918,6 +918,40 @@ async def probe_host_unicast(bacnet_app, ip: str, per_host_timeout: float,
         }
 
 
+async def berik_navn(bacnet_app, devices: List[Dict[str, Any]], timeout: float = 2.0,
+                     samtidig: int = 16):
+    """
+    Ask each device found by Who-Is for its name and vendor.
+
+    An I-Am carries the instance and a vendor number, nothing else. The sweep
+    asks for the name as part of probing, but a Who-Is on our own subnet or
+    through a BBMD did not ask at all - so a Beckhoff on the cable came up as
+    "-" while the same controller over a VPN had its name.
+    """
+    sem = asyncio.Semaphore(samtidig)
+
+    async def en(d):
+        if d.get("object_name") is not None or d.get("device_instance") is None:
+            return
+        async with sem:
+            addr = device_address(d["address"])
+            objid = f"device,{d['device_instance']}"
+            for prop, felt in (("object-name", "object_name"), ("vendor-name", "vendor_name")):
+                if d.get(felt) is not None:
+                    continue
+                try:
+                    v = await bc.read_retry(bacnet_app, addr, objid, prop,
+                                            attempts=2, timeout=timeout)
+                    if v is not None:
+                        d[felt] = str(v)
+                except COMM_ERRORS:
+                    pass
+                except Exception:
+                    pass
+
+    await asyncio.gather(*(en(d) for d in devices))
+
+
 async def scan_unicast_sweep(bacnet_app, hosts: List[str],
                              per_host_timeout: float, concurrency: int,
                              thorough: bool = True, job=None,
@@ -1129,6 +1163,10 @@ async def _run_scan(job, body: "ScanBody", hosts: List[str], net):
             job["phase"] = "who-is"
             devices, broadcast_ip = await scan_broadcast(bacnet_app, net, body.timeout, only)
             hosts_scanned = net.num_addresses
+
+    if state["app"] is not None and any(d.get("object_name") is None for d in devices):
+        job["phase"] = "henter navn"
+        await berik_navn(state["app"], devices)
 
     devices.sort(key=lambda d: (d["device_instance"] is None, d["device_instance"]))
     for d in devices:
