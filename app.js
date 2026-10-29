@@ -464,8 +464,10 @@ async function loadInterfaces() {
     const d = await (await fetch('/api/interfaces')).json();
     const list = d.interfaces || [];
     if (!list.length) { sel.innerHTML = '<option value="">Fant ingen nettverkskort</option>'; return []; }
+    // The address first: it is what you compare with the plant, and a long
+    // adapter name is what gets cut when the field is narrow.
     sel.innerHTML = list.map(i =>
-      `<option value="${esc(i.cidr)}" title="${esc(i.cidr)}">${esc(i.interface)}</option>`).join('');
+      `<option value="${esc(i.cidr)}" title="${esc(i.interface + ' · ' + i.cidr)}">${esc(i.cidr.split('/')[0])} · ${esc(i.interface)}</option>`).join('');
     const saved = loadPrefs().iface;
     if (saved && list.some(i => i.cidr === saved)) sel.value = saved;
     return list;
