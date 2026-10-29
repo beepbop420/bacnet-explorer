@@ -154,6 +154,11 @@ const FAKTA = [
   ['COV betyr at regulatoren sier fra selv. Mindre spørring, mer ro.', 'COV means the controller speaks up itself. Less asking, more peace.'],
 ];
 const NYTT = {
+  '1.6.4': [
+    ['Startskjermen viser kortene dine med IP og nettene bak dem - klikk for å skanne derfra', 'The start screen shows your adapters with their IP and the networks behind them - click to scan from there'],
+    ['Anleggene står med kontrollernavn, leverandør og hvilket kort de nås via', 'Sites are listed by controller name, vendor and the adapter that reaches them'],
+    ['Nedtrekkslister er mørke i mørk modus', 'Dropdowns are dark in dark mode'],
+  ],
   '1.6.3': [
     ['Siste rad i en kort punktliste er ikke lenger tonet ned', 'The last row of a short point list is no longer faded'],
   ],
@@ -239,6 +244,10 @@ async function visStartskjerm(igjen = false) {
         <div class="ss-tittel">${T('Fortsett der du slapp', 'Pick up where you left off')}</div>
         <div class="ss-liste"></div>
       </div>
+      <div class="ss-nett" hidden>
+        <div class="ss-tittel">${T('Nettverket nå', 'The network now')}</div>
+        <div class="ss-kortliste"></div>
+      </div>
       <form class="ss-nytt">
         <input class="field" id="ssOmr" placeholder="${T('Nytt område, f.eks. 10.75.1.0/24', 'New range, e.g. 10.75.1.0/24')}" autocomplete="off">
         <button class="btn primary" type="submit">${T('Skann', 'Scan')}</button>
@@ -261,6 +270,14 @@ async function visStartskjerm(igjen = false) {
     savePrefs({range: omr, mode: $('modeSel').value});
     lukk();
     setTimeout(() => { if (S.connected) runScan(); }, 300);
+  };
+  // From the network section: bind that adapter first, so the scan goes
+  // out where the route is rather than wherever Windows last sent it.
+  const skannVia = async (omr, cidr) => {
+    if (cidr && S.localAddr !== cidr) {
+      try { await connectTo(cidr, {quiet: true}); } catch {}
+    }
+    skann(omr);
   };
   const tast = (e) => {
     if (e.key === 'Escape') { e.preventDefault(); lukk(); }
@@ -304,22 +321,89 @@ async function visStartskjerm(igjen = false) {
     }
   }, 400);
 
-  // The last plants, newest first.
+  // The last plants, newest first, and the adapters as they are right now.
   try { if (typeof hentMinne === 'function') await hentMinne(); } catch {}
+  const nett = await hentNettNaa();
+  if (!document.body.contains(lag)) return;
+  const via = {};
+  for (const k of nett) for (const a of k.anlegg) if (!via[a.key]) via[a.key] = k.interface;
+
   const rader = Object.entries(MINNE || {}).sort((a, b) => (b[1].sist || 0) - (a[1].sist || 0)).slice(0, 5);
-  if (rader.length && document.body.contains(lag)) {
+  if (rader.length) {
     lag.querySelector('.ss-anlegg').hidden = false;
     const liste = lag.querySelector('.ss-liste');
-    liste.innerHTML = rader.map(([key, s]) => `
-      <button class="ss-rad" data-k="${esc(key)}">
-        <span class="ss-rad-navn">${esc(s.navn || key)}</span>
-        <span class="ss-rad-meta">${s.navn ? esc(key) + ' · ' : ''}${(s.enheter || []).length} ${(s.enheter || []).length === 1 ? T('enhet', 'device') : T('enheter', 'devices')}${s.modus === 'bbmd' ? ' · BBMD' : ''}${(() => {
+    liste.innerHTML = rader.map(([key, s]) => {
+      const n = (s.enheter || []).length;
+      const tittel = s.navn || enhetsnavn(s) || key;
+      return `
+      <button class="ss-rad" data-k="${esc(key)}" title="${esc(enhetsliste(s))}">
+        <span class="ss-rad-navn">${esc(tittel)}</span>
+        <span class="ss-rad-meta">${tittel !== key ? `<span class="ss-ip">${esc(key)}</span> · ` : ''}${n} ${n === 1 ? T('enhet', 'device') : T('enheter', 'devices')}${leverandorer(s)}${s.modus === 'bbmd' ? ' · BBMD' : ''}${via[key] ? ` · via ${esc(via[key])}` : ''}${(() => {
           const b = sisteBesok(key);
           return b && b.over ? ` · <span class="ss-over">${b.over} ${T('overstyrt da du gikk', 'overridden when you left')}</span>` : '';
         })()}</span>
-      </button>`).join('');
+      </button>`;
+    }).join('');
     liste.querySelectorAll('.ss-rad').forEach(b => b.onclick = () =>
       skann(b.dataset.k.split(' ').join(', '), (MINNE[b.dataset.k] || {}).modus));
   }
+
+  const vis = nett.filter(k => k.brikker.length);
+  if (vis.length) {
+    lag.querySelector('.ss-nett').hidden = false;
+    lag.querySelector('.ss-kortliste').innerHTML = vis.map(k => `
+      <div class="ss-kort-rad">
+        <div class="ss-kort-hode"><span class="ss-kort-navn">${esc(k.interface)}</span>
+          <span class="ss-ip">${esc(k.ip)}</span>${S.localAddr === k.cidr ? `<span class="ss-kort-i-bruk">${T('i bruk', 'in use')}</span>` : ''}</div>
+        <div class="ss-kort-nett">${k.brikker.map(b => `
+          <button type="button" class="ss-nett-brikke" data-v="${esc(b.v)}" data-c="${esc(k.cidr)}" title="${esc(b.tittel)}">
+            <span class="ss-ip">${esc(b.v)}</span><span class="ss-nett-merke">${esc(b.merke)}</span>
+          </button>`).join('')}</div>
+      </div>`).join('');
+    lag.querySelectorAll('.ss-nett-brikke').forEach(b => b.onclick = () => skannVia(b.dataset.v, b.dataset.c));
+  }
+}
+
+/* What a remembered site is, in the words on the equipment: the controller
+   names, not the range you would have to remember. */
+function enhetsnavn(s) {
+  const navn = (s.enheter || []).map(d => d.object_name).filter(Boolean);
+  if (!navn.length) return '';
+  return navn.slice(0, 2).join(', ') + (navn.length > 2 ? ` +${navn.length - 2}` : '');
+}
+function enhetsliste(s) {
+  return (s.enheter || []).map(d => `${d.object_name || '-'}  ${d.address}  #${d.device_instance ?? '?'}`).join('\n');
+}
+function leverandorer(s) {
+  const v = [...new Set((s.enheter || []).map(d => d.vendor).filter(Boolean))];
+  return v.length ? ' · ' + esc(v.slice(0, 2).join(', ') + (v.length > 2 ? ' …' : '')) : '';
+}
+
+/* Every adapter with a link, what it sits on and what lies behind it. An
+   adapter with nothing behind it - the 4G modem's own /28, a Tailscale
+   address - is left out; it is not where a building is. */
+async function hentNettNaa() {
+  let kort = [];
+  try { kort = (await (await fetch('/api/interfaces')).json()).interfaces || []; } catch { return []; }
+  return Promise.all(kort.map(async (k) => {
+    let d = {};
+    try { d = await (await fetch('/api/forslag?ip=' + encodeURIComponent(k.ip))).json(); } catch {}
+    const anlegg = d.anlegg || [];
+    const brikker = [];
+    for (const a of anlegg) {
+      const s = (MINNE || {})[a.key] || {};
+      brikker.push({v: a.key.split(' ').join(', '),
+        merke: s.navn || enhetsnavn(s) || `${a.enheter} ${a.enheter === 1 ? T('enhet', 'device') : T('enheter', 'devices')}`,
+        tittel: T('Skannet herfra før', 'Scanned from here before')});
+    }
+    for (const r of d.ruter || []) {
+      if (brikker.some(b => b.v === r.cidr)) continue;
+      if (r.egen && Number(r.cidr.split('/')[1]) > 24) continue;
+      brikker.push({v: r.cidr, merke: r.egen ? T('eget nett', 'own subnet') : T('rute', 'route'),
+        tittel: r.egen ? T('Nettet kortet sitter på', 'The network the adapter is on')
+                       : T('Windows sender dit gjennom dette kortet', 'Windows routes it through this adapter')});
+    }
+    return {...k, anlegg, brikker: brikker.slice(0, 4)};
+  }));
 }
 setTimeout(visStartskjerm, 0);

@@ -335,6 +335,10 @@ button{background:none;border:none;cursor:pointer}
    treatment rather than inheriting the neutral panel styling. */
 .topbar .field{background:rgba(255,255,255,.10);border-color:rgba(255,255,255,.20);color:#fff}
 .topbar .field:focus{border-color:#fff;background:rgba(255,255,255,.16)}
+/* A select with a transparent background hands Windows nothing to draw its
+   list with, and WebView2 falls back to a white menu carrying the field's
+   grey text. The options get the theme's own surface and ink. */
+select option,select optgroup{background-color:var(--raised);color:var(--fg)}
 .topbar .field option{background:#1a1550;color:#fff}
 .topbar .btn{background:rgba(255,255,255,.12);border-color:rgba(255,255,255,.22);color:#fff}
 .topbar .btn:hover:not(:disabled){background:rgba(255,255,255,.20)}
@@ -3754,6 +3758,24 @@ td.c-val.ned{animation:verdi-lb-ned 700ms var(--mot-kurve)}
 .ss-rad:hover,.ss-rad:focus-visible{background:var(--hover)}
 .ss-rad-navn{font-size:13px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .ss-rad-meta{font-size:11px;color:var(--fg-3);white-space:nowrap;font-family:var(--mono)}
+/* Names on top, the range and how it is reached underneath: the meta line grew
+   long enough to push the name out when they shared a row. */
+.ss-rad{flex-direction:column;align-items:stretch;gap:1px}
+.ss-rad-navn,.ss-rad-meta{min-width:0;overflow:hidden;text-overflow:ellipsis}
+.ss-rad-meta{font-family:inherit}
+.ss-ip{font-family:var(--mono)}
+.ss-nett{margin-bottom:14px}
+.ss-kortliste{display:flex;flex-direction:column;gap:8px;text-align:left}
+.ss-kort-hode{display:flex;align-items:baseline;gap:8px;font-size:12px;color:var(--fg-2);padding:0 10px 3px}
+.ss-kort-navn{font-weight:500;color:var(--fg)}
+.ss-kort-hode .ss-ip{font-size:11px;color:var(--fg-3)}
+.ss-kort-i-bruk{margin-left:auto;font-size:10px;color:var(--fg-3)}
+.ss-kort-nett{display:flex;flex-wrap:wrap;gap:4px;padding:0 10px}
+.ss-nett-brikke{display:inline-flex;align-items:baseline;gap:6px;max-width:100%;min-width:0;padding:4px 8px;
+  border:1px solid var(--line);border-radius:var(--r-sm);background:transparent;color:var(--fg);font-size:12px;cursor:pointer}
+.ss-nett-brikke:hover,.ss-nett-brikke:focus-visible{border-color:var(--line-2);background:var(--hover)}
+.ss-nett-brikke .ss-ip{font-size:11px}
+.ss-nett-merke{font-size:11px;color:var(--fg-3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
 .ss-nytt{display:flex;gap:6px}
 .ss-nytt .field{flex:1;height:34px;font-size:13px}
 .ss-nytt .btn{height:34px;padding:0 16px}
