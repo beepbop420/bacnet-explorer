@@ -154,6 +154,13 @@ const FAKTA = [
   ['COV betyr at regulatoren sier fra selv. Mindre spørring, mer ro.', 'COV means the controller speaks up itself. Less asking, more peace.'],
 ];
 const NYTT = {
+  '1.8': [
+    ['NABO › Sammenlign: les inn Variabel-fila Niagara fikk, og se hva som er nytt, endret og borte', 'NABO › Compare: read in the Variabel file Niagara got, and see what is new, changed and gone'],
+    ['Lag en fil med bare nye og endrede rader til NTI', 'Make a file with only the new and changed rows for NTI'],
+    ['NABO › Normalisering: BTGs regex, mal for stien og funksjonskoder fra TC2 til NM, med test på ekte navn', 'NABO › Normalisation: BTG’s regex, a path template and function codes from TC2 to NM, tested on real names'],
+    ['Flere sjekker, og et stopp før en fil med feil eksporteres', 'More checks, and a stop before a file with errors is exported'],
+    ['Enheter skrives i entall som i BTG: pascal, bar, kilowatt hour', 'Units are written in the singular as BTG does: pascal, bar, kilowatt hour'],
+  ],
   '1.7': [
     ['NABO - Not Another BACnet Object-namer: tagger og Variabel-fil til Niagara, under Eksport', 'NABO - Not Another BACnet Object-namer: tags and the Variabel file for Niagara, under Export'],
     ['Enheter fra anlegget og EDE-filer side om side, med device-navnet riktig', 'Devices from the plant and EDE files side by side, with the device name right'],

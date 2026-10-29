@@ -20,6 +20,18 @@ const NABO = {
   sok: '',
   filter: 'alle',      // alle | adv | alarm | trend
   perEnhet: false,
+  visning: 'var',      // var | diff | norm
+  fasit: null,         // a Variabel file read back: {fil, rader}
+  bekreft: 0,          // when "export anyway" was offered
+};
+
+/* BTG's normalisation, as its Normalisering tab ships it: a regex with named
+   groups, a template the groups fill, and TC2 function codes mapped to NM. */
+const NORM_STD = {
+  paa: false,
+  regex: '^(?:(?<lokasjon>[A-Za-z][A-Za-z0-9]*)_)?(?<hoved>\\d{1,5})_(?<under>\\d{1,5})(?:_(?<subdir>\\d{2}))?_(?<komponent>[A-Za-z]{1,3}\\d{1,4})_(?<funksjonskode>.+)$',
+  mal: '{hoved}.{under}.{komponent}.{funksjonskode}',
+  koder: 'C = Pådrag, JV_AU, SB_AO, AO, SB.AO, SB.AU, LX_AO\nS = Start, Starts, JP_DO, JP.DO, LX_DO\nA = Alarm, Feil\nA1 = Alarm1, AlarmA, FeilA\nA2 = Alarm2, AlarmB, FeilB\nKMD = Auto, JP_Auto, SB_Auto, AM',
 };
 
 /* BTG's decimals per kind of unit, as HeaderBTG.ini calls them. */
@@ -49,9 +61,9 @@ function euNokkel(enhet) {
   if (/liters per (second|minute|hour)/.test(u)) return 'EUliterprsek';
   if (/parts per million/.test(u)) return 'EUluftkvalitet';
   if (/percent/.test(u)) return 'EUprosent';
-  if (/^(cubic meters|liters)$/.test(u)) return 'EUVolum';
-  if (/^kilowatt hours$/.test(u)) return 'EUEl_kWh';
-  if (/^megawatt hours$/.test(u)) return 'EUEl_MWh';
+  if (/^(cubic meters?|liters?)$/.test(u)) return 'EUVolum';
+  if (/^kilowatt hours?$/.test(u)) return 'EUEl_kWh';
+  if (/^megawatt hours?$/.test(u)) return 'EUEl_MWh';
   if (/^watts?$/.test(u)) return 'EUEl_W';
   if (/^kilowatts?$/.test(u)) return 'EUEl_kW';
   if (/volts?$/.test(u)) return 'EUEl_V';
@@ -62,10 +74,49 @@ function euNokkel(enhet) {
 function naboInnst() {
   const p = loadPrefs().nabo || {};
   return {trend: p.trend || '00:05:00', eu: Object.assign({}, EU_STD, p.eu || {}),
-          ini: p.ini || '', navn: p.navn || {}, perEnhet: !!p.perEnhet};
+          ini: p.ini || '', navn: p.navn || {}, perEnhet: !!p.perEnhet,
+          norm: Object.assign({}, NORM_STD, p.norm || {})};
 }
 function lagreNabo(patch) {
   savePrefs({nabo: Object.assign({}, loadPrefs().nabo || {}, patch)});
+}
+
+/* ------------------------------------------------------- normalisation */
+let NORM_CACHE = {nokkel: null};
+function normOppsett(o) {
+  const n = o.norm;
+  const nokkel = n.regex + '\u0001' + n.koder;
+  if (NORM_CACHE.nokkel !== nokkel) {
+    let re = null, feil = '';
+    try { re = new RegExp(n.regex); } catch (e) { feil = e.message; }
+    const kart = new Map();
+    for (const l of String(n.koder || '').split(/\r?\n/)) {
+      const m = /^\s*([^=]+?)\s*=\s*(.+)$/.exec(l);
+      if (!m) continue;
+      for (const fra of m[2].split(',')) { const k = fra.trim().toLowerCase(); if (k) kart.set(k, m[1].trim()); }
+    }
+    NORM_CACHE = {nokkel, re, feil, kart};
+  }
+  return NORM_CACHE;
+}
+
+/* A point name through the regex and the template, or null when it does not
+   fit - then the ordinary path is used, and the row says so. */
+function normaliser(navn, o) {
+  const c = normOppsett(o);
+  if (!c.re) return null;
+  const m = c.re.exec(String(navn || '').trim());
+  if (!m || !m.groups) return null;
+  const g = Object.assign({}, m.groups);
+  if (g.funksjonskode) {
+    const hel = c.kart.get(g.funksjonskode.toLowerCase());
+    g.funksjonskode = hel || g.funksjonskode.split(/([_.])/).map(x => c.kart.get(x.toLowerCase()) || x).join('');
+  }
+  const sti = o.norm.mal.split('.')
+    .map(del => del.replace(/\{(\w+)\}/g, (_, k) => g[k] ?? ''))
+    .map(x => x.replace(/[-_\s]+/g, '.').replace(/^\.+|\.+$/g, ''))
+    .filter(Boolean).join('.');
+  return sti ? {sti, g} : null;
 }
 
 /* ------------------------------------------------------------ one row */
@@ -73,7 +124,8 @@ function naboRad(p, t, o, anlegg, enhetNavn) {
   const type = BTG_TYPE[p.type];
   if (type === undefined) return null;
   const analog = type <= 2;
-  const sti = btgSti(p.name, t.cluster);
+  const norm = o.norm.paa ? normaliser(p.name, o) : null;
+  const sti = norm ? (t.cluster ? t.cluster + '.' : '') + norm.sti : btgSti(p.name, t.cluster);
   const sd = btgSd(p.description || '');
   const beskr = sd.rest || p.name || '';
   const enhet = analog ? btgEnhet(p.units) : '';
@@ -95,7 +147,9 @@ function naboRad(p, t, o, anlegg, enhetNavn) {
   f[8] = String(des); f[9] = tilstander; f[10] = beskr; f[11] = trend;
   if (sd.klasse) { f[12] = String(sd.klasse); f[13] = beskr; f[14] = kilde; }
   f[30] = p.name || '';
+  if (norm) { f[29] = norm.g.komponent || ''; f[33] = norm.g.funksjonskode || ''; }
   return {
+    normert: o.norm.paa ? !!norm : null,
     linje: f.map(x => String(x).replace(/[;\r\n]/g, ' ')).join(';'),
     sti, type, typeNavn: shortType(p.type), inst: p.instance, enhet, des,
     trend: !!trend, klasse: sd.klasse, beskr, navn: p.name || '', harSd: sd.rest !== (p.description || '').trim(),
@@ -122,10 +176,17 @@ function naboResultat() {
   const anlegg = (t.anleggsnavn || '').trim();
   const rader = [];
   let hoppet = 0;
+  // Two devices that end up with the same name would be one device to NTI.
+  const navnBrukt = new Map();
+  for (const k of NABO.kilder) if (!k.av) {
+    const e = enhetsfelt(k, t);
+    navnBrukt.set(e, (navnBrukt.get(e) || 0) + 1);
+  }
   for (const k of NABO.kilder) {
     if (k.av) continue;
     const enhetNavn = enhetsfelt(k, t);
     const sett = new Map();
+    const objekter = new Set();
     for (const p of k.punkter) {
       const r = naboRad(p, t, o, anlegg, enhetNavn);
       if (!r) { hoppet++; continue; }
@@ -135,6 +196,13 @@ function naboResultat() {
         r.feil.push(T('Samme tag finnes alt på denne enheten', 'The same tag already exists on this device'));
         sett.get(r.sti).feil.push(T('Samme tag finnes to ganger', 'The same tag appears twice'));
       } else sett.set(r.sti, r);
+      const ob = `${r.type}:${r.inst}`;
+      if (objekter.has(ob)) r.feil.push(T('Samme objekt (type og instans) finnes to ganger', 'The same object (type and instance) appears twice'));
+      objekter.add(ob);
+      if (navnBrukt.get(enhetNavn) > 1) r.feil.push(T('En annen enhet får samme device-navn', 'Another device gets the same device name'));
+      if (r.sti.split('.').length < 3)
+        r.adv.push(T('Kort sti, følger ikke system.nummer.komponent', 'Short path, not system.number.component'));
+      if (r.normert === false) r.adv.push(T('Passer ikke normaliseringen, vanlig sti brukt', 'Does not fit the normalisation, plain path used'));
       // + and = are BTG's own +01=360.001 format; Niagara escapes them and NTI expects it.
       const rare = [...new Set((r.sti.match(/[^A-Za-z0-9_.$+=]/g) || []))];
       if (rare.length) r.adv.push(T(`Niagara må escape ${rare.map(c => c === ' ' ? 'mellomrom' : c).join(' ')}`,
@@ -147,6 +215,10 @@ function naboResultat() {
   if (!anlegg) globalt.push(T('Anleggsnavn mangler', 'Site name missing'));
   if (t.prefiks && t.prefiks.length > PREFIKS_MAKS)
     globalt.push(T(`Prefikset er over ${PREFIKS_MAKS} tegn`, `The prefix is over ${PREFIKS_MAKS} characters`));
+  const usikre = NABO.kilder.filter(k => !k.av && k.usikker && !o.navn[k.id]).length;
+  if (usikre) globalt.push(T(`${usikre} ${usikre === 1 ? 'enhet har' : 'enheter har'} et device-navn som må sjekkes`,
+                             `${usikre} ${usikre === 1 ? 'device has' : 'devices have'} a device name to check`));
+  if (o.norm.paa && normOppsett(o).feil) globalt.push(T('Regex-feil i normaliseringen', 'Regex error in the normalisation'));
   return {rader, hoppet, globalt, t, o, anlegg};
 }
 
@@ -253,6 +325,13 @@ function devicenavnFor(inst, prosjekt) {
   return {navn: '', hvor: ''};
 }
 
+/* A Variabel file read back - what Niagara got last time. BTG writes it with
+   no quoting, so a plain split is the honest parser. */
+function lesVariabel(tekst, fil) {
+  const rader = tekst.replace(/^\uFEFF/, '').split(/\r?\n/).filter(l => l.startsWith('BacnetNetwork;')).map(l => l.split(';'));
+  return rader.length ? {fil, rader} : null;
+}
+
 async function leggTilFiler(filer) {
   const liste = [...filer];
   const basis = n => n.replace(/_(EDE|StateTexts|ObjTypes|Units|TagSettings)\.csv$/i, '').toLowerCase();
@@ -264,7 +343,14 @@ async function leggTilFiler(filer) {
     if (/\.ini$/i.test(f.name)) { await lesIniFil(f); continue; }
     if (/_(StateTexts|ObjTypes|Units|TagSettings)\.csv$/i.test(f.name)) continue;
     if (!/\.(csv|txt)$/i.test(f.name)) continue;
-    const r = lesEdeFil(await lesTekst(f), f.name, tilst.get(basis(f.name)));
+    const tekst = await lesTekst(f);
+    if (/^\uFEFF?BacnetNetwork;/.test(tekst)) {
+      NABO.fasit = lesVariabel(tekst, f.name);
+      NABO.visning = 'diff';
+      toast(T(`${f.name} lest inn til sammenligning`, `${f.name} read in for comparison`));
+      continue;
+    }
+    const r = lesEdeFil(tekst, f.name, tilst.get(basis(f.name)));
     if (r.error) { toast(r.error, true); continue; }
     for (const k of r.kilder) {
       NABO.kilder = NABO.kilder.filter(x => x.id !== k.id);
@@ -352,28 +438,98 @@ function lastNedBytes(data, navn, type) {
   setTimeout(() => URL.revokeObjectURL(a.href), 2000);
 }
 
+/* What changed between the file Niagara got and what NABO would write now.
+   Devices are paired by the objects they share, not by name: a device that
+   was named after the EDE file last time is still the same controller. */
+const DIFF_FELT = [[3, ['Tag', 'Tag']], [7, ['Enhet', 'Unit']], [8, ['Desimaler', 'Decimals']],
+  [9, ['Tilstander', 'States']], [10, ['Beskrivelse', 'Description']], [11, ['Trend', 'Trend']],
+  [12, ['Alarmklasse', 'Alarm class']]];
+
+function naboDiff(r) {
+  const fasit = NABO.fasit;
+  if (!fasit) return null;
+  const nokkel = f => `${f[4]}:${f[5]}`;
+  const naa = r.rader.map(x => ({x, f: x.linje.split(';')}));
+  const gruppe = (liste, dev) => {
+    const m = new Map();
+    for (const e of liste) { const d = dev(e); if (!m.has(d)) m.set(d, new Map()); m.get(d).set(nokkel(e.f || e), e); }
+    return m;
+  };
+  const filDev = gruppe(fasit.rader, f => f[2]);
+  const naaDev = gruppe(naa, e => e.x.enhetNavn);
+  const par = new Map();   // NABO device -> file device
+  for (const [fd, fm] of filDev) {
+    let best = null, n = 0;
+    for (const [nd, nm] of naaDev) {
+      let k = 0; for (const key of fm.keys()) if (nm.has(key)) k++;
+      if (k > n) { n = k; best = nd; }
+    }
+    if (best && !par.has(best)) par.set(best, fd);
+  }
+  const ut = {nye: [], endret: [], borte: [], like: 0, omdopt: []};
+  const sett = new Set();
+  for (const [nd, nm] of naaDev) {
+    const fd = par.get(nd);
+    if (fd && fd !== nd) ut.omdopt.push([fd, nd]);
+    const fm = fd ? filDev.get(fd) : null;
+    for (const [key, e] of nm) {
+      const gml = fm && fm.get(key);
+      if (!gml) { ut.nye.push(e.x); continue; }
+      sett.add(fd + '|' + key);
+      const diff = DIFF_FELT.filter(([i]) => (gml[i] || '') !== (e.f[i] || ''))
+        .map(([i, navn]) => ({navn: T(...navn), fra: gml[i] || '', til: e.f[i] || ''}));
+      if (diff.length) ut.endret.push({x: e.x, diff}); else ut.like++;
+    }
+  }
+  for (const [fd, fm] of filDev) for (const [key, f] of fm) if (!sett.has(fd + '|' + key)) ut.borte.push(f);
+  return ut;
+}
+
 /* ------------------------------------------------------------ export */
 function stempel() {
   const n = new Date(), to = x => String(x).padStart(2, '0');
   return `${n.getFullYear()}-${to(n.getMonth() + 1)}-${to(n.getDate())} ${to(n.getHours())}${to(n.getMinutes())}${to(n.getSeconds())}`;
 }
 
-function eksporterVariabel() {
+function eksporterVariabel(bare) {
   const r = naboResultat();
-  if (r.globalt.some(g => /mangler|missing/i.test(g))) {
+  if (!r.t.prefiks || !r.anlegg) {
     toast(r.globalt.join(' · '), true);
-    $('naboAnlegg')?.focus();
+    $(r.t.prefiks ? 'naboAnlegg' : 'naboPrefiks')?.focus();
     return;
   }
+  if (bare) r.rader = bare;
   const feil = r.rader.filter(x => x.feil.length).length;
   if (!r.rader.length) { toast(T('Ingen punkter å eksportere', 'No points to export'), true); return; }
+  /* A file with errors in it is NTI's problem an hour later on site. The
+     first click shows what is wrong; a second within a few seconds means
+     you have looked and want it anyway. */
+  if (feil && !(NABO.bekreft && Date.now() - NABO.bekreft < 6000)) {
+    NABO.bekreft = Date.now();
+    if (!bare) { NABO.visning = 'var'; NABO.filter = 'adv'; tegnNabo(); }
+    const b = $('naboVar');
+    if (b && !bare) {
+      b.classList.add('fare');
+      b.textContent = T(`Eksporter likevel (${feil} med feil)`, `Export anyway (${feil} with errors)`);
+      setTimeout(() => {
+        const k = $('naboVar');
+        if (k) { k.classList.remove('fare'); k.textContent = T('Lag Variabel-fil', 'Make Variabel file'); }
+      }, 6000);
+    }
+    toast(T(`${feil} rader har feil. Se gjennom, eller klikk igjen for å eksportere likevel.`,
+            `${feil} rows have errors. Look them over, or click again to export anyway.`), true);
+    return;
+  }
+  NABO.bekreft = 0;
+  const b0 = $('naboVar');
+  if (b0) { b0.classList.remove('fare'); b0.textContent = T('Lag Variabel-fil', 'Make Variabel file'); }
   const tid = stempel();
   const ren = s => s.replace(/[\\/:*?"<>|]/g, '_');
   const grupper = NABO.perEnhet
     ? [...new Set(r.rader.map(x => x.enhetNavn))].map(e => [e, r.rader.filter(x => x.enhetNavn === e)])
     : [['', r.rader]];
   grupper.forEach(([e, rader], i) => setTimeout(() => {
-    const navn = ren(`${r.t.prefiks} Variabel ${r.anlegg} ${tid}${e ? ' ' + e.split('.').slice(1).join('.') : ''}.csv`);
+    const navn = ren(`${r.t.prefiks} Variabel ${r.anlegg} ${tid}${e ? ' ' + e.split('.').slice(1).join('.') : ''}${bare ? ' endringer' : ''}.csv`);
     lastNedBytes('\uFEFF' + rader.map(x => x.linje).join('\r\n') + '\r\n', navn, 'text/csv;charset=utf-8');
   }, i * 350));
   toast(T(`Variabel-fil laget: ${r.rader.length} punkter fra ${new Set(r.rader.map(x => x.enhetNavn)).size} enheter`
@@ -494,6 +650,10 @@ function tegnNabo(helt) {
         </aside>
         <main class="nabo-forh">
           <div class="nabo-verktoy">
+            <div class="nabo-visning" role="tablist">
+              ${[['var', T('Variabler', 'Variables')], ['diff', T('Sammenlign', 'Compare')], ['norm', T('Normalisering', 'Normalisation')]]
+                .map(([k, l]) => `<button data-v="${k}" role="tab">${l}</button>`).join('')}
+            </div>
             <input class="field" id="naboSok" type="search" placeholder="${T('Søk i tag, navn eller beskrivelse', 'Search tag, name or description')}" autocomplete="off" spellcheck="false">
             <div class="nabo-filter" role="tablist">
               ${[['alle', T('Alle', 'All')], ['adv', T('Advarsler', 'Warnings')], ['alarm', 'Alarm'], ['trend', 'Trend']]
@@ -563,6 +723,9 @@ function tegnNabo(helt) {
   const vis = r.rader.filter(passer);
   const tall = {alle: r.rader.length, adv: r.rader.filter(x => x.feil.length || x.adv.length).length,
                 alarm: r.rader.filter(x => x.klasse).length, trend: r.rader.filter(x => x.trend).length};
+  ov.querySelectorAll('.nabo-visning button').forEach(b => b.classList.toggle('sel', b.dataset.v === NABO.visning));
+  ov.querySelector('.nabo-filter').hidden = NABO.visning !== 'var';
+  $('naboSok').hidden = NABO.visning === 'norm';
   ov.querySelectorAll('.nabo-filter button').forEach(b => {
     b.classList.toggle('sel', b.dataset.f === NABO.filter);
     b.querySelector('em').textContent = tall[b.dataset.f];
@@ -570,7 +733,9 @@ function tegnNabo(helt) {
   $('naboGlobalt').innerHTML = r.globalt.map(g => `<span>${esc(g)}</span>`).join('');
   $('naboGlobalt').hidden = !r.globalt.length;
   const MAKS = 1500;
-  $('naboTabell').innerHTML = r.rader.length ? `<table>
+  if (NABO.visning === 'diff') tegnDiff(r, q);
+  else if (NABO.visning === 'norm') tegnNorm(r);
+  else $('naboTabell').innerHTML = r.rader.length ? `<table>
     <thead><tr><th>Device</th><th>Tag</th><th>${T('Type', 'Type')}</th><th class="h">Inst</th><th>${T('Enhet', 'Unit')}</th>
       <th class="h">Des</th><th>Trend</th><th>Alarm</th><th>${T('Beskrivelse', 'Description')}</th></tr></thead>
     <tbody>${vis.slice(0, MAKS).map(x => {
@@ -596,6 +761,109 @@ function tegnNabo(helt) {
   $('naboEde').disabled = !NABO.kilder.some(k => !k.av);
 }
 
+function tegnDiff(r, q) {
+  const el = $('naboTabell');
+  if (!NABO.fasit) {
+    el.innerHTML = `<div class="nabo-tom stor">${NABO_SVG}<div>${T(
+      'Les inn Variabel-fila Niagara fikk sist, så viser NABO hva som er nytt, endret og borte siden da.',
+      'Read in the Variabel file Niagara got last time, and NABO shows what is new, changed and gone since.')}</div>
+      <button class="btn" id="naboFasitVelg">${T('Velg Variabel-fil', 'Choose Variabel file')}</button></div>`;
+    $('naboFasitVelg').onclick = velgFasit;
+    return;
+  }
+  const d = naboDiff(r);
+  const treff = s => !q.length || q.every(w => s.toLowerCase().includes(w));
+  const endret = d.endret.filter(e => treff(e.x.sti + ' ' + e.x.beskr + ' ' + e.x.enhetNavn));
+  const nye = d.nye.filter(x => treff(x.sti + ' ' + x.beskr + ' ' + x.enhetNavn));
+  const borte = d.borte.filter(f => treff(f[3] + ' ' + f[10] + ' ' + f[2]));
+  const vis = (s, n) => s.length > n ? s.slice(0, n) : s;
+  el.innerHTML = `<div class="nabo-diff">
+    <div class="nabo-diff-hode">
+      <div><span class="nabo-diff-fil">${esc(NABO.fasit.fil)}</span>
+        <span class="nabo-diff-tall"><b class="ny">${d.nye.length}</b> ${T('nye', 'new')}
+          · <b class="endr">${d.endret.length}</b> ${T('endret', 'changed')}
+          · <b class="borte">${d.borte.length}</b> ${T('borte', 'gone')}
+          · <b>${d.like}</b> ${T('like', 'unchanged')}</span></div>
+      <button class="btn" id="naboFasitVelg">${T('Annen fil', 'Another file')}</button>
+      <button class="btn primary" id="naboBareEndr" ${d.nye.length + d.endret.length ? '' : 'disabled'}
+        title="${T('Bare radene NTI må importere på nytt', 'Only the rows NTI needs to import again')}">${T('Fil med bare nye og endrede', 'File with only new and changed')}</button>
+    </div>
+    ${d.omdopt.length ? `<div class="nabo-diff-omdopt">${d.omdopt.map(([a, b]) =>
+      `<span>${T('Device-navn', 'Device name')} <s>${esc(a)}</s> → <b>${esc(b)}</b></span>`).join('')}</div>` : ''}
+    ${endret.length ? `<div class="nabo-diff-sek"><div class="nabo-diff-h endr">${T('Endret', 'Changed')} <em>${endret.length}</em></div>
+      ${vis(endret, 400).map(e => `<div class="nabo-diff-rad"><code>${esc(e.x.sti)}</code><span class="d">${esc(e.x.enhetNavn)}</span>
+        <div class="nabo-diff-felt">${e.diff.map(x => `<span><i>${esc(x.navn)}</i> <s>${esc(x.fra) || '–'}</s> → <b>${esc(x.til) || '–'}</b></span>`).join('')}</div></div>`).join('')}</div>` : ''}
+    ${nye.length ? `<div class="nabo-diff-sek"><div class="nabo-diff-h ny">${T('Nye', 'New')} <em>${nye.length}</em></div>
+      ${vis(nye, 400).map(x => `<div class="nabo-diff-rad"><code>${esc(x.sti)}</code><span class="d">${esc(x.enhetNavn)}</span><span class="b">${esc(x.beskr)}</span></div>`).join('')}</div>` : ''}
+    ${borte.length ? `<div class="nabo-diff-sek"><div class="nabo-diff-h borte">${T('Borte', 'Gone')} <em>${borte.length}</em></div>
+      ${vis(borte, 400).map(f => `<div class="nabo-diff-rad"><code>${esc(f[3])}</code><span class="d">${esc(f[2])}</span><span class="b">${esc(f[10])}</span></div>`).join('')}</div>` : ''}
+    ${!d.nye.length && !d.endret.length && !d.borte.length ? `<div class="nabo-tom">${T('Ingen forskjeller. Niagara har det samme som NABO ville skrevet.', 'No differences. Niagara has what NABO would write.')}</div>` : ''}
+  </div>`;
+  $('naboFasitVelg').onclick = velgFasit;
+  $('naboBareEndr').onclick = () => eksporterVariabel([...d.nye, ...d.endret.map(e => e.x)]);
+}
+
+function velgFasit() {
+  const i = document.createElement('input');
+  i.type = 'file'; i.accept = '.csv';
+  i.onchange = async () => {
+    const f = i.files[0]; if (!f) return;
+    const v = lesVariabel(await lesTekst(f), f.name);
+    if (!v) { toast(T('Fant ingen Variabel-rader i fila', 'No Variabel rows found in the file'), true); return; }
+    NABO.fasit = v; NABO.visning = 'diff'; tegnNabo();
+  };
+  i.click();
+}
+
+function tegnNorm(r) {
+  const el = $('naboTabell');
+  const o = r.o;
+  if (!el.querySelector('.nabo-norm')) {
+    el.innerHTML = `<div class="nabo-norm">
+      <div class="nabo-norm-oppsett">
+        <label class="nabo-bryter"><input type="checkbox" id="naboNormPaa"> <b>${T('Bruk normalisering', 'Use normalisation')}</b>
+          <span>${T('Stien bygges fra regex-gruppene i stedet for å deles på _ og .', 'The path is built from the regex groups instead of splitting on _ and .')}</span></label>
+        <label><span>Regex</span><textarea class="field" id="naboNormRe" rows="3" spellcheck="false"></textarea>
+          <small id="naboNormFeil"></small></label>
+        <label><span>${T('Mal for stien', 'Path template')}</span><input class="field" id="naboNormMal" spellcheck="false">
+          <small>{lokasjon} {hoved} {under} {subdir} {komponent} {funksjonskode}</small></label>
+        <label><span>${T('Funksjonskoder, NM = TC2, TC2 …', 'Function codes, NM = TC2, TC2 …')}</span>
+          <textarea class="field" id="naboNormKoder" rows="7" spellcheck="false"></textarea></label>
+        <button class="btn" id="naboNormStd">${T('Tilbake til BTG-standard', 'Back to BTG default')}</button>
+      </div>
+      <div class="nabo-norm-test" id="naboNormTest"></div>
+    </div>`;
+    const lagre = () => {
+      lagreNabo({norm: {paa: $('naboNormPaa').checked, regex: $('naboNormRe').value,
+                        mal: $('naboNormMal').value, koder: $('naboNormKoder').value}});
+      tegnNabo();
+    };
+    let tid;
+    const senere = () => { clearTimeout(tid); tid = setTimeout(lagre, 250); };
+    $('naboNormPaa').onchange = lagre;
+    ['naboNormRe', 'naboNormMal', 'naboNormKoder'].forEach(id => $(id).addEventListener('input', senere));
+    $('naboNormStd').onclick = () => { lagreNabo({norm: Object.assign({}, NORM_STD, {paa: naboInnst().norm.paa})}); el.innerHTML = ''; tegnNabo(); };
+    $('naboNormPaa').checked = o.norm.paa;
+    $('naboNormRe').value = o.norm.regex;
+    $('naboNormMal').value = o.norm.mal;
+    $('naboNormKoder').value = o.norm.koder;
+  }
+  const c = normOppsett(o);
+  $('naboNormFeil').textContent = c.feil ? T('Feil: ', 'Error: ') + c.feil : '';
+  const navn = [...new Set(NABO.kilder.filter(k => !k.av).flatMap(k => k.punkter.map(p => p.name).filter(Boolean)))];
+  const prov = navn.map(n => ({n, r: normaliser(n, o)}));
+  const ok = prov.filter(x => x.r), ikke = prov.filter(x => !x.r);
+  const GR = ['lokasjon', 'hoved', 'under', 'subdir', 'komponent', 'funksjonskode'];
+  $('naboNormTest').innerHTML = !navn.length
+    ? `<div class="nabo-tom">${T('Legg til enheter for å prøve regexen på ekte navn.', 'Add devices to try the regex on real names.')}</div>`
+    : `<div class="nabo-norm-sum"><b>${ok.length}</b> ${T('av', 'of')} ${navn.length} ${T('navn passer', 'names fit')}${
+        o.norm.paa ? '' : ` · <span>${T('ikke i bruk ennå', 'not in use yet')}</span>`}</div>
+      <table><thead><tr><th>${T('Navn', 'Name')}</th>${GR.map(g => `<th>${g}</th>`).join('')}<th>${T('Blir', 'Becomes')}</th></tr></thead>
+      <tbody>${ok.slice(0, 200).map(x => `<tr><td class="t">${esc(x.n)}</td>${GR.map(g => `<td>${esc(x.r.g[g] ?? '')}</td>`).join('')}<td class="t blir">${esc(x.r.sti)}</td></tr>`).join('')}</tbody></table>
+      ${ikke.length ? `<div class="nabo-diff-h borte">${T('Passer ikke', 'Does not fit')} <em>${ikke.length}</em></div>
+        <div class="nabo-norm-ikke">${ikke.slice(0, 120).map(x => `<code>${esc(x.n)}</code>`).join('')}</div>` : ''}`;
+}
+
 function koblNabo(ov) {
   let tid;
   const senere = (fn) => { clearTimeout(tid); tid = setTimeout(fn, 160); };
@@ -607,7 +875,7 @@ function koblNabo(ov) {
     i.click();
   };
   $('naboIniUt').onclick = lagIni;
-  $('naboVar').onclick = eksporterVariabel;
+  $('naboVar').onclick = () => eksporterVariabel();
   $('naboEde').onclick = eksporterEde;
   $('naboPer').onchange = (e) => { NABO.perEnhet = e.target.checked; lagreNabo({perEnhet: NABO.perEnhet}); };
   const felt = {naboAnlegg: 'anleggsnavn', naboPrefiks: 'prefiks', naboCluster: 'cluster'};
@@ -625,6 +893,10 @@ function koblNabo(ov) {
     lagreNabo({eu: Object.assign({}, naboInnst().eu, {[k]: v})}); tegnNabo();
   });
   $('naboSok').addEventListener('input', (e) => { NABO.sok = e.target.value; senere(() => tegnNabo()); });
+  ov.querySelector('.nabo-visning').addEventListener('click', (e) => {
+    const b = e.target.closest('button'); if (!b) return;
+    NABO.visning = b.dataset.v; tegnNabo();
+  });
   ov.querySelector('.nabo-filter').addEventListener('click', (e) => {
     const b = e.target.closest('button'); if (!b) return;
     NABO.filter = b.dataset.f; tegnNabo();

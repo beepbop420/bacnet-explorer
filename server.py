@@ -170,7 +170,7 @@ async def guard_and_cors(request, call_next):
         response.headers["Vary"] = "Origin"
     return response
 
-VERSJON = "1.7"
+VERSJON = "1.8"
 
 state = {"app": None, "local_address": None, "read_only": False, "bbmd": None}
 

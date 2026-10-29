@@ -98,8 +98,11 @@ const BTG_HELE = new Set(['percent', 'pascal', 'parts per million', 'volt', 'nul
 
 function btgEnhet(units) {
   if (!units || typeof units !== 'string' || units === 'no-units') return 'null';
-  let u = units.replace(/-/g, ' ').replace(/^degrees /, '');
-  u = u.replace(/^(hours|minutes|seconds|days)$/, m => m.slice(0, -1));
+  let u = units.replace(/-/g, ' ').replace(/^degrees /, '').toLowerCase();
+  // BTG writes the unit in the singular - pascal, bar, kilowatt hour, cubic
+  // meter - except where it is a rate: liters per second stays plural.
+  if (!/ per /.test(u))
+    u = u.split(' ').map(w => /s$/.test(w) && !/^(celsius|fahrenheit|hertz|lux|siemens)$/.test(w) ? w.slice(0, -1) : w).join(' ');
   return u;
 }
 
