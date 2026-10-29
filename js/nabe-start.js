@@ -154,6 +154,11 @@ const FAKTA = [
   ['COV betyr at regulatoren sier fra selv. Mindre spørring, mer ro.', 'COV means the controller speaks up itself. Less asking, more peace.'],
 ];
 const NYTT = {
+  '1.3': [
+    ['NABE puster, fikler når ingen ser, og liker å bli klappet', 'NABE breathes, fidgets when nobody is looking, and likes being petted'],
+    ['Prøv å dra i ham', 'Try dragging him'],
+    ['Animasjoner på i Innstillinger betyr på, selv om Windows har skrudd dem av', 'Animations on in Settings now means on, even when Windows has them off'],
+  ],
   '1.2': [
     ['Lukker du med punkter overstyrt, sier NABE fra', 'Close with points still overridden and NABE says so'],
     ['Prioritetslista viser hvilke plasser som er dine', 'The priority list shows which slots are yours'],

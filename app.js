@@ -3881,8 +3881,9 @@ function hexAv(farge) {
 }
 
 function brukBevegelse() {
-  const av = loadPrefs().utenBevegelse === true;
-  document.body.classList.toggle('uten-bevegelse', av);
+  const av = bevegelseAv();
+  document.body.classList.toggle('uten-bevegelse', loadPrefs().utenBevegelse === true);
+  document.documentElement.classList.toggle('med-bevegelse', loadPrefs().utenBevegelse === false);
   const el = $('motionState');
   if (el) el.textContent = av ? 'av' : 'på';
   const knapp = $('motionBtn');
@@ -8752,8 +8753,7 @@ $('rescanBtn').onclick = () => { RESCAN.on ? rescanStop() : rescanStart();
 $('rescanNow').onclick = () => { toast('Søker…'); rescanOnce(true); };
 $('minneBtn').onclick = () => { closeMenus(); openMinne(); };
 $('motionBtn').onclick = () => {
-  const av = loadPrefs().utenBevegelse === true;
-  savePrefs({utenBevegelse: !av});
+  savePrefs({utenBevegelse: !bevegelseAv()});
   brukBevegelse();
   syncMenuStates();
 };
@@ -8852,9 +8852,13 @@ function visHimmel(lys) {
 
 /* One place to ask whether motion is wanted: the setting, or the operating
    system's own answer, which is not ours to override. */
+/* The setting wins when it has been set, either way. Windows' own "animation
+   effects" switch is often off on work machines without anyone choosing it,
+   so it is only the default - and turning motion on in NABE means on. */
 function bevegelseAv() {
-  return loadPrefs().utenBevegelse === true
-      || window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const valgt = loadPrefs().utenBevegelse;
+  if (valgt === true || valgt === false) return valgt;
+  return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 }
 
 const GROUP_AKSER = ['vendor', 'range', 'none'];
@@ -9647,8 +9651,8 @@ const ORDBOK = {
   'ingen felles start': 'no common prefix',
   'På, men punktnavnene her har ingen felles start å utelate':
     'On, but the point names here have no common prefix to drop',
-  'Menyer, dialoger og temabytte beveger seg. Slås av\n              automatisk hvis Windows er satt til redusert bevegelse':
-    'Menus, dialogs and the theme switch move. Turned off\n              automatically if Windows is set to reduced motion',
+  'Menyer, dialoger, temabytte og NABE selv beveger seg. Følger\n              Windows til du velger her':
+    'Menus, dialogs, the theme switch and NABE himself move. Follows\n              Windows until you choose here',
 
   /* --- table and selection --- */
   'Kopier': 'Copy',

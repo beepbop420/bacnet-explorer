@@ -277,7 +277,7 @@ button{background:none;border:none;cursor:pointer}
 #edeBody .ede-sec .ede-row:nth-child(10){animation-delay:224ms}
 #edeBody .ede-sec .ede-row:nth-child(n+11){animation-delay:238ms}
 @media (prefers-reduced-motion:reduce){
-  .backend-warn:not([hidden]),#edeBody .ede-sec,#edeBody .ede-sec .ede-row{animation:none}
+  html:not(.med-bevegelse) .backend-warn:not([hidden]),html:not(.med-bevegelse) #edeBody .ede-sec,html:not(.med-bevegelse) #edeBody .ede-sec .ede-row{animation:none}
 }
 .bw-note{font-weight:400;font-size:11px;opacity:.92}
 .bw-note b{font-weight:600}
@@ -735,9 +735,9 @@ body.resizing iframe{pointer-events:none}
 .vgroup.av .vgroup-body{grid-template-rows:0fr}
 .vgroup-inner{overflow:hidden;min-height:0}
 @media (prefers-reduced-motion:reduce){
-  .vgroup-body{transition:none}
-  .vgroup-chev{transition:none}
-  td.c-val{transition:none}
+  html:not(.med-bevegelse) .vgroup-body{transition:none}
+  html:not(.med-bevegelse) .vgroup-chev{transition:none}
+  html:not(.med-bevegelse) td.c-val{transition:none}
 }
 .vgroup-body{padding-bottom:3px}
 .vgroup.av .vgroup-head{color:var(--fg-3)}
@@ -1027,9 +1027,8 @@ tbody tr.drift td.c-val{animation:drift-ut 900ms ease-out}
 }
 
 @media (prefers-reduced-motion:reduce){
-  tbody tr.tvang,tbody tr.drift td.c-val,
-  .dev.tilbake,.dev.tilbake::after{animation:none}
-  .dev.tilbake::after{display:none}
+  html:not(.med-bevegelse) tbody tr.tvang,html:not(.med-bevegelse) tbody tr.drift td.c-val,html:not(.med-bevegelse) .dev.tilbake,html:not(.med-bevegelse) .dev.tilbake::after{animation:none}
+  html:not(.med-bevegelse) .dev.tilbake::after{display:none}
 }
 
 /* Den staaende markeringa staar STILLE.
@@ -1051,7 +1050,7 @@ tbody tr.alarm td.c-act::before{
 
 .sum-card.alarm.slaar{animation:alarm-slag 900ms ease-in-out 3}
 @media (prefers-reduced-motion:reduce){
-  tbody tr.tenn,.sum-card.alarm.slaar{animation:none}
+  html:not(.med-bevegelse) tbody tr.tenn,html:not(.med-bevegelse) .sum-card.alarm.slaar{animation:none}
 }
 
 /* Sammendragstallene teller opp i stedet for aa staa der ferdig.
@@ -1298,7 +1297,7 @@ tr.alarm.over td.c-name{color:var(--err)}
 /* Tegn som ikke er siffer - komma, minus, bokstaver - staar stille. */
 .od-fast{display:inline-block;height:1em;line-height:1}
 @media (prefers-reduced-motion:reduce){
-  .od-sif.rull .od-strip{transition:none}
+  html:not(.med-bevegelse) .od-sif.rull .od-strip{transition:none}
 }
 
 /* The guide colours "justerbart settpunkt" darkOrange — a value a person can
@@ -1504,14 +1503,14 @@ body.gjennomsiktig .menu-pop{backdrop-filter:blur(14px) saturate(1.1)}
   --mot-kurve:cubic-bezier(.2,.8,.25,1);
 }
 @media (prefers-reduced-motion:reduce){
-  :root{--mot-rask:0ms; --mot:0ms; --mot-rolig:0ms}
+  :root:not(.med-bevegelse){--mot-rask:0ms; --mot:0ms; --mot-rolig:0ms}
 }
 body.uten-bevegelse{--mot-rask:0ms; --mot:0ms; --mot-rolig:0ms}
 body.uten-bevegelse *{
   animation-duration:.001ms !important;animation-iteration-count:1 !important;
 }
 @media (prefers-reduced-motion:reduce){
-  *{animation-duration:.001ms !important;animation-iteration-count:1 !important}
+  html:not(.med-bevegelse) *{animation-duration:.001ms !important;animation-iteration-count:1 !important}
 }
 
 /* Menus grow from the corner they are anchored to, which is where the eye
@@ -1937,7 +1936,7 @@ body.uten-bevegelse #himmel{display:none}
    element stuck at frame zero, sometimes invisible. One millisecond runs the
    animation, lands on the end state, and shows nobody the motion. */
 @media (prefers-reduced-motion:reduce){
-  *,*::before,*::after{
+  html:not(.med-bevegelse) *,html:not(.med-bevegelse) *::before,html:not(.med-bevegelse) *::after{
     animation-duration:1ms !important;
     animation-iteration-count:1 !important;
     transition-duration:1ms !important;
@@ -1962,7 +1961,7 @@ body.uten-bevegelse #himmel{display:none}
   max-width:120px;opacity:1;pointer-events:auto;
   padding-left:8px;padding-right:8px;margin-left:6px;
 }
-@media (prefers-reduced-motion:reduce){ .diag-kjapp{transition:none} }
+@media (prefers-reduced-motion:reduce){ html:not(.med-bevegelse) .diag-kjapp{transition:none} }
 
 
 /* Controls that cannot do anything yet are not shown yet.
@@ -2138,7 +2137,7 @@ tbody tr{position:relative}
 .rv-knapp:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
 
 @media (prefers-reduced-motion:reduce){
-  #radVerktoy{transition:none}
+  html:not(.med-bevegelse) #radVerktoy{transition:none}
 }
 
 /* Hva som faktisk snevrer inn lista - alltid synlig, en om gangen aa fjerne.
@@ -2184,7 +2183,7 @@ tbody tr{position:relative}
   transition:color 120ms ease,border-color 120ms ease;
 }
 .fchip-alle:hover{color:var(--fg);border-color:var(--fg-3)}
-@media (prefers-reduced-motion:reduce){.fchip{animation:none}}
+@media (prefers-reduced-motion:reduce){html:not(.med-bevegelse) .fchip{animation:none}}
 /* Kept for the case where a device appears without a scan behind it - loading
    a saved site, for one - where there is no button for it to come from. */
 /* Ingen forflytning - bare storrelse og opasitet.
@@ -2467,12 +2466,12 @@ body.skanner .pane-devices .pane-head::after{
   background-repeat:no-repeat;
 }
 @media (prefers-reduced-motion:reduce){
-  .bolge,.dev.puls::after,#scanBtn.lader{animation:none}
-  .bolge{display:none}
+  html:not(.med-bevegelse) .bolge,html:not(.med-bevegelse) .dev.puls::after,html:not(.med-bevegelse) #scanBtn.lader{animation:none}
+  html:not(.med-bevegelse) .bolge{display:none}
 }
 @media (prefers-reduced-motion:reduce){
-  .skjelett-felt{animation:none}
-  #radmarkor{transition:none}
+  html:not(.med-bevegelse) .skjelett-felt{animation:none}
+  html:not(.med-bevegelse) #radmarkor{transition:none}
 }
 
 /* Tomme tilstander stiger fram i stedet for aa bare vaere der.
@@ -2535,9 +2534,8 @@ body.skanner .pane-devices .pane-head::after{
 .cols-row.over{transform:translateY(5px)}
 
 @media (prefers-reduced-motion:reduce){
-  .empty,.gs-empty,.tl-tab tbody tr,#gsResults.kaskade .gs-row,
-  .note-field.lagret{animation:none}
-  .cols-row{transition:none}
+  html:not(.med-bevegelse) .empty,html:not(.med-bevegelse) .gs-empty,html:not(.med-bevegelse) .tl-tab tbody tr,html:not(.med-bevegelse) #gsResults.kaskade .gs-row,html:not(.med-bevegelse) .note-field.lagret{animation:none}
+  html:not(.med-bevegelse) .cols-row{transition:none}
 }
 #punktrull::after{
   content:'';position:absolute;inset:0;
@@ -2611,8 +2609,8 @@ body.skanner .pane-devices .pane-head::after{
 tbody tr.kopiert td{animation:kopiert 800ms ease-out}
 
 @media (prefers-reduced-motion:reduce){
-  #pointsWrap.vaakner::after{animation:none;display:none}
-  tbody tr.kopiert td{animation:none}
+  html:not(.med-bevegelse) #pointsWrap.vaakner::after{animation:none;display:none}
+  html:not(.med-bevegelse) tbody tr.kopiert td{animation:none}
 }
 
 #linjelag{position:fixed;inset:0;pointer-events:none;z-index:95;overflow:hidden}
@@ -2678,8 +2676,8 @@ body:not(.frakoblet) .pane-points,body:not(.frakoblet) .pane-inspect{
   to  {transform:scaleX(1);opacity:.65}
 }
 @media (prefers-reduced-motion:reduce){
-  .samband{display:none}
-  .dev.borte.nyborte::after{animation:none}
+  html:not(.med-bevegelse) .samband{display:none}
+  html:not(.med-bevegelse) .dev.borte.nyborte::after{animation:none}
 }
 
 #festlag{position:fixed;inset:0;pointer-events:none;z-index:60}
@@ -2704,7 +2702,7 @@ body:not(.frakoblet) .pane-points,body:not(.frakoblet) .pane-inspect{
 }
 #watchList.mottok{animation:fest-mottok 700ms ease-out}
 @media (prefers-reduced-motion:reduce){
-  .fest-fly{display:none}
+  html:not(.med-bevegelse) .fest-fly{display:none}
 }
 
 @keyframes tegn-linje{from{stroke-dashoffset:1} to{stroke-dashoffset:0}}
@@ -2718,8 +2716,8 @@ body:not(.frakoblet) .pane-points,body:not(.frakoblet) .pane-inspect{
    vaere raskere, ellers ser lista ut som den flimrer. */
 .spark polyline{animation-duration:520ms}
 @media (prefers-reduced-motion:reduce){
-  .trend polyline,.spark polyline{animation:none;stroke-dashoffset:0}
-  .trend polygon{animation:none;opacity:.10}
+  html:not(.med-bevegelse) .trend polyline,html:not(.med-bevegelse) .spark polyline{animation:none;stroke-dashoffset:0}
+  html:not(.med-bevegelse) .trend polygon{animation:none;opacity:.10}
 }
 
 /* --- the palette ---------------------------------------------------------
@@ -3385,7 +3383,7 @@ body{font-family:var(--sans)}
 .skann-linje.ukjent{transform:none!important;background:linear-gradient(90deg,transparent,var(--fg),transparent);
   background-size:40% 100%;background-repeat:no-repeat;animation:linje-leter 1.4s cubic-bezier(.45,0,.55,1) infinite}
 @keyframes linje-leter{from{background-position:-40% 0}to{background-position:140% 0}}
-@media (prefers-reduced-motion:reduce){.skann-linje.ukjent{animation:none}}
+@media (prefers-reduced-motion:reduce){html:not(.med-bevegelse) .skann-linje.ukjent{animation:none}}
 /* The flare on the button is gone: the list shows each arrival itself. */
 #scanBtn.svar{animation:none}
 /* The gliding card: placed by script every frame, so no keyframes of its own. */
@@ -3565,8 +3563,8 @@ body.skanner .nabe-led{fill:var(--ok)}
 .nabe-mark.fornoyd .nabe-lokk{opacity:0}
 .nabe-mark.fornoyd .nabe-pupiller{transform:translate(0,1.5px)}
 @media (prefers-reduced-motion:reduce){
-  .brand:hover .nabe-pupiller{animation:none}
-  .nabe-pupiller,.nabe-munn,.nabe-led{transition:none}
+  html:not(.med-bevegelse) .brand:hover .nabe-pupiller{animation:none}
+  html:not(.med-bevegelse) .nabe-pupiller,html:not(.med-bevegelse) .nabe-munn,html:not(.med-bevegelse) .nabe-led{transition:none}
 }
 
 /* ---- NABE has moods ----
@@ -3610,8 +3608,8 @@ body.skanner .nabe-led{fill:var(--ok)}
 :root[data-theme="light"] .nabe-briller{transform:none;opacity:1}
 :root[data-theme="light"] .nabe-lokk{opacity:0}
 @media (prefers-reduced-motion:reduce){
-  .nabe-mark.sover .nabe-z,.nabe-mark.svimmel .nabe-pupiller{animation:none}
-  .nabe-briller,.nabe-pupiller,.nabe-oyne{transition:none}
+  html:not(.med-bevegelse) .nabe-mark.sover .nabe-z,html:not(.med-bevegelse) .nabe-mark.svimmel .nabe-pupiller{animation:none}
+  html:not(.med-bevegelse) .nabe-briller,html:not(.med-bevegelse) .nabe-pupiller,html:not(.med-bevegelse) .nabe-oyne{transition:none}
 }
 
 /* ---- motion, re-tuned for this edition ----
@@ -3649,7 +3647,7 @@ td.c-val.ned{animation:verdi-lb-ned 700ms var(--mot-kurve)}
 /* Showing off: one full turn. */
 @keyframes nabe-snurr{to{transform:rotate(360deg)}}
 .nabe-mark.snurr .nabe{animation:nabe-snurr .7s cubic-bezier(.45,0,.55,1)}
-@media (prefers-reduced-motion:reduce){.nabe-mark.snurr .nabe{animation:none}}
+@media (prefers-reduced-motion:reduce){html:not(.med-bevegelse) .nabe-mark.snurr .nabe{animation:none}}
 
 /* ---- NABE's speech bubble ----
    Hangs from the logo with a little tail pointing up at him. Plain panel
@@ -3674,7 +3672,7 @@ td.c-val.ned{animation:verdi-lb-ned 700ms var(--mot-kurve)}
 }
 .nabe-mark.snakker .nabe-munn{animation:nabe-prat .22s ease-in-out infinite}
 .nabe-mark.snakker .nabe-lokk{opacity:0}
-@media (prefers-reduced-motion:reduce){.nabe-boble{transition:none}.nabe-mark.snakker .nabe-munn{animation:none}}
+@media (prefers-reduced-motion:reduce){html:not(.med-bevegelse) .nabe-boble{transition:none}html:not(.med-bevegelse) .nabe-mark.snakker .nabe-munn{animation:none}}
 
 /* ---- vendor colours, where they help you find your way ----
    Used as marks, never as text and never as fills: a bar, a dot, a tinted
@@ -3737,7 +3735,7 @@ td.c-val.ned{animation:verdi-lb-ned 700ms var(--mot-kurve)}
 .ss-nytt-i{text-align:left;margin-top:16px;padding-top:12px;border-top:1px solid var(--line)}
 .ss-nytt-i ul{margin:0;padding-left:18px;font-size:12px;color:var(--fg-2);line-height:1.7}
 .ss-fakta{margin-top:16px;padding-top:12px;border-top:1px solid var(--line);font-size:11px;color:var(--fg-3);line-height:1.5}
-@media (prefers-reduced-motion:reduce){.startskjerm,.ss-kort,.startskjerm.ut{animation:none}}
+@media (prefers-reduced-motion:reduce){html:not(.med-bevegelse) .startskjerm,html:not(.med-bevegelse) .ss-kort,html:not(.med-bevegelse) .startskjerm.ut{animation:none}}
 
 /* ---- active alarms in the inspector ---- */
 .alarm-liste{display:flex;flex-direction:column;padding:0 6px 8px}
@@ -3827,6 +3825,89 @@ button.ctx-stat:hover{text-decoration:underline}
 .nabe-mark.nyttaar .nabe-hatt{display:inline}
 .nabe-mark.nyttaar .nabe-ant,.nabe-mark.nyttaar .nabe-led{display:none}
 .nabe-mark.fredag13 .nabe-oyne circle:nth-of-type(2){transform:scale(.72);transform-box:fill-box;transform-origin:center}
+
+/* ---- NABE's character ----
+   The habits that make him someone rather than an icon: he breathes, fidgets
+   when nobody is looking, likes being petted, does not like being dragged,
+   and dances a little when the scan goes well. The body moves on the outer
+   span, the face inside the svg, so the two never fight over one transform.
+   Everything stands still with reduced motion. */
+.brand-mark.nabe-mark{transform-origin:50% 100%;transition:transform .35s cubic-bezier(.3,1.4,.5,1)}
+.nabe-mark .nabe{transform-origin:50% 100%;animation:nabe-pust 4.2s ease-in-out infinite}
+.nabe-mark.sover .nabe{animation-duration:6.5s}
+.nabe-mark.snurr .nabe{transform-origin:50% 50%}
+@keyframes nabe-pust{0%,100%{transform:scale(1,1)}50%{transform:scale(1.015,1.035)}}
+
+/* Antenna on a spring. */
+.nabe-ant,.nabe-led{transform-box:view-box;transform-origin:16px 6px}
+@keyframes nabe-boing{0%{transform:rotate(0)}15%{transform:rotate(-24deg)}35%{transform:rotate(18deg)}
+  55%{transform:rotate(-10deg)}72%{transform:rotate(5deg)}86%{transform:rotate(-2deg)}100%{transform:rotate(0)}}
+.nabe-mark.boing .nabe-ant,.nabe-mark.boing .nabe-led{animation:nabe-boing .9s ease-out}
+
+/* The body: squash when clicked, hop, dance, stretch, sneeze, hiccup. */
+@keyframes nabe-klem{0%{transform:none}30%{transform:scale(1.12,.86)}60%{transform:scale(.94,1.08)}100%{transform:none}}
+@keyframes nabe-hopp{0%{transform:none}20%{transform:scale(1.1,.88)}45%{transform:translateY(-5px) scale(.95,1.06)}
+  75%{transform:scale(1.08,.92)}100%{transform:none}}
+@keyframes nabe-dans{0%,100%{transform:none}12%{transform:translateX(-2px) rotate(-10deg)}25%{transform:translateY(-3px)}
+  37%{transform:translateX(2px) rotate(10deg)}50%{transform:translateY(-3px)}62%{transform:translateX(-2px) rotate(-10deg)}
+  75%{transform:translateY(-3px)}87%{transform:translateX(2px) rotate(10deg)}}
+@keyframes nabe-strekk{0%,100%{transform:none}35%,60%{transform:scale(.9,1.14)}78%{transform:scale(1.06,.94)}}
+@keyframes nabe-nys{0%{transform:none}45%{transform:rotate(-8deg) scale(1,1.05)}58%{transform:rotate(-10deg) scale(1,1.07)}
+  64%{transform:rotate(9deg) scale(1.05,.92)}82%{transform:rotate(-2deg)}100%{transform:none}}
+@keyframes nabe-hikk{0%,100%{transform:none}30%{transform:translateY(-2.5px) scale(.97,1.04)}}
+.nabe-mark.klem{animation:nabe-klem .38s cubic-bezier(.3,1.4,.5,1)}
+.nabe-mark.hopp{animation:nabe-hopp .55s ease-out}
+.nabe-mark.dans{animation:nabe-dans 1.4s ease-in-out}
+.nabe-mark.strekk{animation:nabe-strekk 1.6s ease-in-out}
+.nabe-mark.nys{animation:nabe-nys .9s ease-in}
+.nabe-mark.hikk{animation:nabe-hikk .22s ease-out}
+.nabe-mark.lurer{transform:rotate(-12deg)}
+
+/* Dragged: he stretches after the pointer, looks alarmed, and springs back. */
+.nabe-mark.dras{transition:none;cursor:grabbing}
+.nabe-mark.dras .nabe-oyne{transform:scale(1.14)}
+.nabe-mark.dras .nabe-munn,.nabe-mark.hikk .nabe-munn{d:path('M12.6 23.6 Q14.3 22.6 16 23.6 Q17.7 24.6 19.4 23.6')}
+.nabe-mark.dras .nabe-lokk{opacity:0}
+@keyframes nabe-fjaer{0%{transform:translate(var(--dx),var(--dy))}
+  30%{transform:translate(calc(var(--dx) * -.45),calc(var(--dy) * -.45))}
+  55%{transform:translate(calc(var(--dx) * .2),calc(var(--dy) * .2))}
+  75%{transform:translate(calc(var(--dx) * -.08),calc(var(--dy) * -.08))}100%{transform:none}}
+.nabe-mark.fjaer{animation:nabe-fjaer .7s ease-out}
+
+/* The face: happy eyes and cheeks when petted, a wink, a yawn, a whistle. */
+.nabe-glad,.nabe-vinkoye{fill:none;stroke:var(--bg);stroke-width:1.9;stroke-linecap:round;opacity:0}
+.nabe-mark.vink .nabe-vinkoye{opacity:1}
+.nabe-kinn{fill:#ff8fa3;opacity:0;transition:opacity .3s}
+.nabe-mark.kos .nabe-glad{opacity:1}
+.nabe-mark.kos .nabe-oyne,.nabe-mark.kos .nabe-lokk,.nabe-mark.kos .nabe-briller{opacity:0}
+.nabe-mark.kos .nabe-kinn{opacity:.85}
+.nabe-mark.kos .nabe-munn,.nabe-mark.vink .nabe-munn{d:path('M12.4 22.6 Q16 25.6 19.6 22.6')}
+.nabe-mark.vink .nabe-lokk-h{transform:scaleY(1)}
+.nabe-mark.vink .nabe-lokk{opacity:0}
+.nabe-mark.vink .nabe-kinn{opacity:.55}
+.nabe-mark.gjesp .nabe-munn{d:path('M13.8 23.2 Q16 19.4 18.2 23.2 Q16 27.6 13.8 23.2');fill:var(--bg)}
+.nabe-mark.gjesp .nabe-lokk-v,.nabe-mark.gjesp .nabe-lokk-h{transform:scaleY(.85)}
+.nabe-mark.gjesp .nabe-lokk,.nabe-mark.plystre .nabe-lokk{opacity:0}
+.nabe-mark.plystre .nabe-munn,.nabe-mark.nys .nabe-munn{d:path('M15 23.4 Q16 22.2 17 23.4 Q16 24.6 15 23.4')}
+.nabe-mark.nys .nabe-lokk-v,.nabe-mark.nys .nabe-lokk-h{transform:scaleY(.7)}
+.nabe-hjerte{fill:#ff5d73;opacity:0;transform-box:fill-box;transform-origin:center}
+@keyframes nabe-hjerte{0%{opacity:0;transform:translate(0,3px) scale(.4)}25%{opacity:1;transform:none}
+  100%{opacity:0;transform:translate(1.5px,-7px) scale(.9)}}
+.nabe-mark.hjerte .nabe-hjerte{animation:nabe-hjerte 1.6s ease-out}
+.nabe-note{font:700 8px var(--sans);fill:var(--fg-2);opacity:0}
+@keyframes nabe-note{0%{opacity:0;transform:translate(0,2px)}20%{opacity:1}100%{opacity:0;transform:translate(5px,-8px)}}
+.nabe-mark.plystre .nabe-note{animation:nabe-note 1.3s ease-out 2}
+
+/* Scanning: he is broadcasting, and it shows above the antenna. */
+.nabe-radio{fill:none;stroke:var(--ok);stroke-width:1.1;stroke-linecap:round;opacity:0}
+@keyframes nabe-radio{0%{opacity:0;transform:translateY(1.5px)}30%{opacity:.9}100%{opacity:0;transform:translateY(-1.5px)}}
+body.skanner .nabe-mark .nabe-radio{animation:nabe-radio 1.1s ease-out infinite}
+.nabe-mark.paaske .nabe-radio,.nabe-mark.nyttaar .nabe-radio,.nabe-mark.mai17 .nabe-radio{display:none}
+
+@media (prefers-reduced-motion:reduce){
+  html:not(.med-bevegelse) .nabe-mark,html:not(.med-bevegelse) .nabe-mark *{animation:none!important;transition:none!important}
+}
+body.uten-bevegelse .nabe-mark,body.uten-bevegelse .nabe-mark *{animation:none!important;transition:none!important}
 </style>
 </head>
 <body>
@@ -3871,6 +3952,12 @@ button.ctx-stat:hover{text-decoration:underline}
         <g class="nabe-lue"><path d="M6 8.4 Q14 -3 25.6 7.2 Z" fill="#d8262e"/><rect x="5" y="7" width="22" height="2.6" rx="1.3" fill="#f2f2f2"/><circle cx="25.8" cy="6.2" r="1.8" fill="#f2f2f2"/></g>
         <g class="nabe-flagg"><rect x="16" y="0" width="7.6" height="5.2" fill="#ba0c2f"/><rect x="18.1" y="0" width="1.6" height="5.2" fill="#fff"/><rect x="16" y="1.8" width="7.6" height="1.6" fill="#fff"/><rect x="18.5" y="0" width=".8" height="5.2" fill="#00205b"/><rect x="16" y="2.2" width="7.6" height=".8" fill="#00205b"/></g>
         <g class="nabe-hoggtenner"><path d="M13.6 23.6 L14.4 25.6 L15.2 23.6 Z M16.8 23.6 L17.6 25.6 L18.4 23.6 Z" fill="var(--bg)"/></g>
+        <path d="M7.8 17 Q11.2 12.4 14.6 17 M17.4 17 Q20.8 12.4 24.2 17" class="nabe-glad"/>
+        <path d="M17.4 16.2 Q20.8 13.2 24.2 16.2" class="nabe-vinkoye"/>
+        <g class="nabe-kinn"><ellipse cx="6.8" cy="21.4" rx="1.9" ry="1.1"/><ellipse cx="25.2" cy="21.4" rx="1.9" ry="1.1"/></g>
+        <path d="M27 1.6 C27 0 24.8 -.2 24.8 1.4 C24.8 2.8 27 4 27 4.6 C27 4 29.2 2.8 29.2 1.4 C29.2 -.2 27 0 27 1.6 Z" class="nabe-hjerte"/>
+        <text x="24" y="10" class="nabe-note">♪</text>
+        <path d="M12.2 1.2 Q16 -2.6 19.8 1.2 M9.6 -.6 Q16 -6.4 22.4 -.6" class="nabe-radio"/>
       </svg></span>
       <span class="brand-text"><b>NABE</b><span id="brandSub" hidden></span></span>
     </a>
@@ -4086,8 +4173,8 @@ button.ctx-stat:hover{text-decoration:underline}
         </div>
         <div class="sett-gruppe"><div class="tema-tittel">Bevegelse</div>
           <button id="motionBtn" class="sett-rad">Animasjoner
-            <small>Menyer, dialoger og temabytte beveger seg. Slås av
-              automatisk hvis Windows er satt til redusert bevegelse</small>
+            <small>Menyer, dialoger, temabytte og NABE selv beveger seg. Følger
+              Windows til du velger her</small>
             <span id="motionState" class="menu-state"></span></button>
         </div>
         <div class="sett-gruppe"><div class="tema-tittel">Skriving</div>
@@ -4321,5 +4408,6 @@ button.ctx-stat:hover{text-decoration:underline}
 <script src="/js/nabe-verktoy.js"></script>
 <script src="/js/nabe-felt.js"></script>
 <script src="/js/nabe-moro.js"></script>
+<script src="/js/nabe-figur.js"></script>
 </body>
 </html>
