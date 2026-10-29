@@ -67,6 +67,16 @@ const FIKLING = [
     figur('nys', 900);
     setTimeout(() => figur('boing', 900), 560);
   }],
+  // Blows a bubble. It pops. He is surprised every time.
+  [2, () => {
+    blikk(0, 1.6, 2200);
+    figur('tyggis', 2200);
+    setTimeout(() => figur('hikk', 220), 1700);
+  }],
+  // Juggles a couple of bits.
+  [2, () => { blikk(0, -2.6, 3200); figur('sjonglere', 3200); }],
+  // Says hi in Morse with his LED, to nobody in particular.
+  [1, () => morse('.... ..')],
 ];
 const FIKLE_SUM = FIKLING.reduce((s, f) => s + f[0], 0);
 
@@ -126,6 +136,7 @@ const KOS = {snu: [], ret: 0, sist: 0};
       figur('hjerte', 1600);
       setTimeout(() => figur('hjerte', 1600), 900);
       nabeSier(T('... ikke si det til noen.', '... do not tell anyone.'), null, 'kos');
+      tell('kos');
     }
   });
 })();
@@ -164,7 +175,11 @@ const DRA = {aktiv: false, x0: 0, y0: 0, ned: false};
     setTimeout(() => figur('boing', 900), 120);
     // The release is not a click.
     m.addEventListener('click', e => { e.stopImmediatePropagation(); e.preventDefault(); }, {capture: true, once: true});
-    setTimeout(() => nabeSier(T('Au. Jeg er DIN-skinnemontert.', 'Ouch. I am DIN-rail mounted.'), null, 'dra'), 500);
+    tell('dratt');
+    const igjen = (teller().dratt || 0) > 5;
+    setTimeout(() => igjen
+      ? nabeSier(T('Igjen? Jeg husker forrige gang.', 'Again? I remember last time.'), 'trist', 'dra')
+      : nabeSier(T('Au. Jeg er DIN-skinnemontert.', 'Ouch. I am DIN-rail mounted.'), null, 'dra'), 500);
   };
   m.addEventListener('pointerup', slipp);
   m.addEventListener('pointercancel', slipp);
@@ -221,3 +236,153 @@ setTimeout(() => {
                'Windows has turned animations off, so I am standing still. Turn them on under Settings if you want to see me dance.'),
              'trist', 'stille');
 }, 6000);
+
+/* ===================================================== round two: he notices */
+
+/* Morse on the LED. A dot is a short flash, a dash a long one. */
+function morse(kode) {
+  const m = nabeMerke();
+  if (!m || bevegelseAv()) return;
+  blikk(0, -2.6, kode.length * 400 + 600);
+  let t = 0;
+  for (const c of kode) {
+    if (c === ' ') { t += 450; continue; }
+    const lengde = c === '-' ? 450 : 150;
+    setTimeout(() => m.classList.add('led-paa'), t);
+    setTimeout(() => m.classList.remove('led-paa'), t + lengde);
+    t += lengde + 150;
+  }
+}
+
+/* Where did you go? The pointer leaves the window and he looks after it;
+   gone a while and he starts to wonder; back again and he is pleased. */
+const UTE = {naar: 0, t: 0};
+document.addEventListener('pointerout', (e) => {
+  if (e.relatedTarget || bevegelseAv()) return;
+  const m = nabeMerke();
+  if (!m) return;
+  const r = m.getBoundingClientRect();
+  const vx = e.clientX - (r.left + 13), vy = e.clientY - (r.top + 13);
+  const len = Math.hypot(vx, vy) || 1;
+  UTE.naar = Date.now();
+  blikk(vx / len * 2.4, vy / len * 2.4);
+  clearTimeout(UTE.t);
+  UTE.t = setTimeout(() => figur('lurer', 1800), 4000);
+});
+document.addEventListener('pointerover', (e) => {
+  if (!UTE.naar || e.relatedTarget) return;
+  clearTimeout(UTE.t);
+  const borte = Date.now() - UTE.naar;
+  UTE.naar = 0;
+  blikk(null);
+  if (borte > 4000) figur('hopp', 550);
+});
+
+/* Ducks when the pointer comes at him fast. More so if he has been dragged
+   around a lot - he remembers. */
+const DUKK = {x: 0, y: 0, t: 0, sist: 0};
+window.addEventListener('pointermove', (e) => {
+  const naa = performance.now();
+  const m = nabeMerke();
+  if (m && !bevegelseAv() && !DRA.ned && DUKK.t) {
+    const r = m.getBoundingClientRect();
+    const cx = r.left + 13, cy = r.top + 13;
+    const for_ = Math.hypot(DUKK.x - cx, DUKK.y - cy), naa_ = Math.hypot(e.clientX - cx, e.clientY - cy);
+    const fart = (for_ - naa_) / Math.max(1, naa - DUKK.t);      // px/ms towards him
+    const redd = (teller().dratt || 0) > 5;
+    if (naa_ < (redd ? 90 : 55) && fart > (redd ? 1.2 : 2.2) && naa - DUKK.sist > 4000) {
+      DUKK.sist = naa;
+      figur('dukk', 450);
+      nabeKlasse('blunk', 220);
+    }
+  }
+  DUKK.x = e.clientX; DUKK.y = e.clientY; DUKK.t = naa;
+}, {passive: true});
+
+/* Shy: rest the pointer on him and after a few seconds he looks away and
+   goes a bit pink. (At eight seconds he tells you that you are staring.) */
+(function sjenert() {
+  const m = nabeMerke();
+  if (!m) return;
+  let t = 0;
+  m.addEventListener('pointerenter', () => {
+    clearTimeout(t);
+    t = setTimeout(() => {
+      if (DRA.ned || bevegelseAv()) return;
+      blikk(2.4, 1.2, 2600);
+      nabeKlasse('rodmer', 2600);
+    }, 3000);
+  });
+  m.addEventListener('pointerleave', () => clearTimeout(t));
+})();
+
+/* Scrolling a list: his eyes go with it. */
+window.addEventListener('wheel', (e) => {
+  if (bevegelseAv() || !e.target.closest?.('#devList, #pointsWrap, .tl-tab, #watchList')) return;
+  blikk(0, Math.sign(e.deltaY) * 2.4, 700);
+}, {passive: true});
+
+/* Copying: the LED flashes like a camera. */
+document.addEventListener('copy', () => {
+  if (bevegelseAv()) return;
+  figur('blits', 260);
+  nabeKlasse('blunk', 160);
+});
+
+/* An error makes him flinch, on top of the sigh. */
+const _figurToast = toast;
+toast = function (tekst, feil, ...rest) {
+  if (feil) figur('dukk', 450);
+  return _figurToast(tekst, feil, ...rest);
+};
+
+/* Hot and cold. Open a temperature point and he feels it. */
+const _figurVelg = selectPoint;
+selectPoint = async function (objid) {
+  const r = await _figurVelg(objid);
+  const p = S.pointIndex && S.pointIndex.get(objid);
+  const v = p && p.value;
+  if (p && typeof v === 'number' && p.units === 'degrees-celsius' && !bevegelseAv()) {
+    const tall = (Math.round(v * 10) / 10).toLocaleString('no');
+    if (v >= 40) {
+      nabeKlasse('varm', 3000);
+      nabeSier(T(`${tall} °C. Jeg svetter med.`, `${tall} °C. I am sweating along.`), null, 'varm');
+    } else if (v <= 5 && v !== 0) {     // exactly 0 is usually a sensor that is not there
+      figur('fryser', 2000);
+      nabeSier(T(`${tall} °C. Brr. Noen har glemt å lukke spjeldet.`, `${tall} °C. Brr. Someone forgot to close the damper.`), null, 'kald');
+    }
+  }
+  return r;
+};
+
+/* He remembers you. Petted often enough and he is pleased to see you when
+   the start screen goes; there is a milestone or two on the way. */
+MILEPAELER.kos = [[10, 'Ti ganger klappet. Vi snakker ikke om det.', 'Petted ten times. We do not talk about it.'],
+                  [50, 'Femti. Jeg har sluttet å late som jeg ikke liker det.', 'Fifty. I have stopped pretending I do not like it.']];
+MILEPAELER.dratt = [[10, 'Ti ganger dratt i. Jeg har ringt verneombudet.', 'Dragged ten times. I have called the safety rep.']];
+(function hilsDeg() {
+  if ((teller().kos || 0) < 5) return;
+  let n = 0;
+  const vent = setInterval(() => {
+    if (document.getElementById('startskjerm') && ++n < 120) return;
+    clearInterval(vent);
+    setTimeout(() => { figur('hopp', 550); nabeKlasse('rodmer', 1800); }, 500);
+  }, 500);
+})();
+
+/* One thing at a time. A line that arrives while he is still talking waits
+   its turn instead of cutting the first one off. Clicking him still
+   interrupts - that goes straight to nabeSnakk. */
+const SIER_KO = [];
+const _figurSier = nabeSier;
+nabeSier = function (tekst, humor, nokkel) {
+  const snakker = document.getElementById('nabeBoble')?.classList.contains('inne');
+  if (!snakker) return _figurSier(tekst, humor, nokkel);
+  if (nokkel && (NABE_SAGT.has(nokkel) || SIER_KO.some(x => x[2] === nokkel))) return;
+  SIER_KO.push([tekst, humor, nokkel]);
+  if (SIER_KO.length > 2) SIER_KO.shift();
+};
+setInterval(() => {
+  if (!SIER_KO.length || document.getElementById('nabeBoble')?.classList.contains('inne')) return;
+  _figurSier(...SIER_KO.shift());
+}, 900);

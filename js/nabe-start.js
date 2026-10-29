@@ -154,6 +154,12 @@ const FAKTA = [
   ['COV betyr at regulatoren sier fra selv. Mindre spørring, mer ro.', 'COV means the controller speaks up itself. Less asking, more peace.'],
 ];
 const NYTT = {
+  '1.4': [
+    ['NABE ser etter musa når den forlater vinduet, og dukker når den kommer for fort', 'NABE watches the pointer leave the window, and ducks when it comes too fast'],
+    ['Åpne et varmt eller kaldt temperaturpunkt', 'Open a hot or a cold temperature point'],
+    ['Han husker om du klapper ham - eller drar i ham', 'He remembers whether you pet him - or drag him'],
+    ['Han snakker ferdig før han sier noe nytt', 'He finishes a line before starting the next'],
+  ],
   '1.3': [
     ['NABE puster, fikler når ingen ser, og liker å bli klappet', 'NABE breathes, fidgets when nobody is looking, and likes being petted'],
     ['Prøv å dra i ham', 'Try dragging him'],
