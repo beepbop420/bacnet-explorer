@@ -3382,6 +3382,91 @@ body{font-family:var(--sans)}
 /* Ranges behind the chosen adapter: its routes and the sites scanned through it */
 .scanbox .omr-forslag{grid-column:1 / -1;grid-row:4;display:flex;flex-wrap:wrap;gap:4px;min-width:0}
 .scanbox .omr-forslag[hidden]{display:none}
+
+/* ---- the scan box around one field (nabe-skann.js) */
+.scanbox.skann-ny{grid-template-columns:minmax(0,1fr) auto;row-gap:6px}
+.skann-ny #rangeInput{grid-column:1;grid-row:1;transition:border-color .15s}
+.skann-ny #scanBtn{grid-column:2;grid-row:1}
+.skann-ny .felt-fremdrift{grid-column:1;grid-row:1;justify-self:end;align-self:center;margin-right:8px;pointer-events:none;
+  font:11px var(--mono);color:var(--fg-3);font-variant-numeric:tabular-nums;opacity:0;transition:opacity .2s}
+.skann-ny .felt-fremdrift.aktiv{opacity:1}
+.skann-ny .felt-fremdrift.ferdig{color:var(--fg-2)}
+.skann-ny .felt-fremdrift.bump{animation:sk-bump .26s ease-out}
+.skann-ny .vei-linje,.skann-ny .rutevakt,.skann-ny .bbmd-seg,.skann-ny .kort-panel,.skann-ny .anlegg-liste,.skann-ny .diag-kjapp{grid-column:1 / -1;grid-row:auto}
+.skann-ny .omr-forslag{display:none!important}
+.vei-linje{display:flex;align-items:baseline;gap:8px;min-width:0;font-size:11px;color:var(--fg-3)}
+.vei-linje .vei-tekst{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.vei-linje b{font-weight:500;color:var(--fg-2)}
+.vei-linje .mono{font-family:var(--mono)}
+.vei-endre{margin-left:auto;flex:0 0 auto;background:none;border:0;padding:0;font:inherit;color:var(--fg-2);
+  text-decoration:underline;text-underline-offset:2px;cursor:pointer}
+.vei-endre:hover,.vei-endre:focus-visible{color:var(--fg)}
+.rutevakt{font-size:11.5px;line-height:1.4;padding:5px 8px;border-left:2px solid var(--warn);color:var(--fg-2);
+  background:color-mix(in srgb,var(--warn) 8%,transparent)}
+.rutevakt.av{border-left-color:var(--line-2);background:var(--sunken)}
+.rutevakt b{font-weight:500;color:var(--fg)}
+.rutevakt.inn{animation:sk-inn .4s cubic-bezier(.2,.8,.3,1)}
+.bbmd-seg{display:inline-flex;justify-self:start;border:1px solid var(--line-2);border-radius:var(--radius);overflow:hidden;height:24px}
+.bbmd-seg[hidden]{display:none}
+.bbmd-seg button{background:none;border:0;border-right:1px solid var(--line-2);padding:0 10px;font:inherit;font-size:11px;color:var(--fg-3);cursor:pointer}
+.bbmd-seg button:last-child{border-right:0}
+.bbmd-seg button.sel{background:var(--raised);color:var(--fg);box-shadow:inset 0 -2px 0 var(--accent)}
+.skann-ny .sk-verktoy{grid-column:1 / -1;display:flex;align-items:center;gap:6px;min-width:0}
+.skann-ny .sk-verktoy:not(:has(.bbmd-seg:not([hidden]),.diag-kjapp.vis)){display:none}
+.skann-ny .sk-verktoy .diag-kjapp{height:24px;padding:0 10px;font-size:11px;width:auto;margin:0}
+.kort-panel{display:flex;flex-direction:column;gap:6px;padding:8px 0 2px;border-top:1px solid var(--line);animation:sk-inn .3s cubic-bezier(.2,.8,.3,1)}
+.kort-panel[hidden]{display:none}
+.kort-panel #localAddr{display:none}
+.kp-kort{display:flex;flex-direction:column;gap:2px}
+.kp-rad{display:flex;align-items:baseline;gap:8px;min-width:0;padding:5px 6px;border:0;border-radius:var(--radius);background:none;
+  font:inherit;font-size:12px;color:var(--fg-2);text-align:left;cursor:pointer;position:relative}
+.kp-rad b{font-weight:500;color:var(--fg);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.kp-rad .mono{font:11px var(--mono);color:var(--fg-3)}
+.kp-rad .kp-merke{margin-left:auto;flex:0 0 auto;font-size:11px;color:var(--fg-3);white-space:nowrap}
+.kp-rad .mono{flex:0 0 auto}
+.kp-rad:hover,.kp-rad:focus-visible{background:var(--hover)}
+.kp-rad.i-bruk{cursor:default;box-shadow:inset 2px 0 0 var(--accent)}
+.kp-rad.plugg{animation:sk-plugg .5s ease-out}
+.kp-modus{display:flex;align-items:center;gap:8px;font-size:11px;color:var(--fg-3)}
+.kp-modus #modeSel{flex:1;min-width:0;height:26px;font-size:12px}
+.anlegg-liste{display:flex;flex-direction:column;gap:1px;min-width:0}
+.anlegg-liste[hidden]{display:none}
+.an-hode{font-size:11px;color:var(--fg-3);padding:2px 6px 2px}
+.an-rad{display:flex;align-items:center;gap:8px;min-width:0;padding:5px 6px;border:0;border-radius:var(--radius);background:none;
+  font:inherit;color:var(--fg);text-align:left;cursor:pointer}
+.an-rad:hover,.an-rad:focus-visible,.an-rad.valgt{background:var(--hover)}
+.an-rad.valgt{box-shadow:inset 2px 0 0 var(--accent)}
+.an-rad .prikk{width:7px;height:7px;border-radius:50%;flex:0 0 auto;background:var(--line-2);position:relative;transition:background .3s}
+.an-rad .prikk.ok{background:var(--ok)}
+.an-rad.ny-naabar .prikk::after{content:'';position:absolute;inset:-4px;border-radius:50%;border:1px solid var(--ok);animation:sk-ring 1.2s ease-out 2}
+.an-rad.av .an-tittel{color:var(--fg-3)}
+.an-navn{flex:1;min-width:0;display:flex;flex-direction:column}
+.an-tittel{font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.an-under{font-size:11px;color:var(--fg-3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.an-over{color:var(--warn)}
+.an-ip{flex:0 0 auto;font:11px var(--mono);color:var(--fg-3)}
+.an-tips{font-size:11.5px;color:var(--fg-3);padding:4px 6px;line-height:1.45}
+body.skanner .scanbox .an-rad.valgt .prikk{animation:sk-pust 1.2s ease-in-out infinite}
+.skann-ny #rangeInput.nei{animation:sk-nei .42s cubic-bezier(.3,.7,.4,1)}
+.an-rad.nei{animation:sk-nei .42s cubic-bezier(.3,.7,.4,1)}
+.skann-ny #rangeInput.ryddet{animation:sk-ryddet .7s ease-out}
+.skann-ny #rangeInput.hint{animation:sk-hint .9s ease-in-out}
+.skann-ny #rangeInput.sveip{animation:sk-hint .6s ease-in-out}
+@keyframes sk-bump{0%{transform:none}40%{transform:translateY(-2px);color:var(--ok)}100%{transform:none}}
+@keyframes sk-inn{from{opacity:0;transform:translateY(-3px)}to{opacity:1;transform:none}}
+@keyframes sk-ring{0%{opacity:.9;transform:scale(.6)}100%{opacity:0;transform:scale(1.8)}}
+@keyframes sk-pust{0%,100%{opacity:1}50%{opacity:.35}}
+@keyframes sk-nei{0%,100%{transform:none}20%{transform:translateX(-4px)}40%{transform:translateX(3px)}60%{transform:translateX(-2px)}80%{transform:translateX(1px)}}
+@keyframes sk-ryddet{0%{border-color:var(--ok)}100%{border-color:var(--line-2)}}
+@keyframes sk-hint{0%,100%{border-color:var(--line-2)}50%{border-color:var(--accent)}}
+@keyframes sk-plugg{0%{box-shadow:inset 0 0 0 var(--accent)}60%{box-shadow:inset 6px 0 0 var(--accent)}100%{box-shadow:inset 2px 0 0 var(--accent)}}
+/* NABE nods when the field turns into a site he knows */
+@keyframes nabe-nikk{0%,100%{transform:none}35%{transform:translateY(2px) rotate(3deg)}65%{transform:translateY(-1px)}}
+.nabe-mark.nikk{animation:nabe-nikk .52s ease-in-out}
+body.uten-bevegelse .scanbox *,body.uten-bevegelse .nabe-mark.nikk{animation:none!important;transition:none!important}
+@media (prefers-reduced-motion:reduce){
+  html:not(.med-bevegelse) .scanbox *,html:not(.med-bevegelse) .nabe-mark.nikk{animation:none!important}
+}
 .omr-brikke{display:inline-flex;align-items:baseline;gap:5px;max-width:100%;min-width:0;padding:2px 7px;
   border:1px solid var(--line);border-radius:var(--r-sm);background:transparent;color:var(--fg-2);font-size:11px;cursor:pointer}
 .omr-brikke:hover,.omr-brikke:focus-visible{border-color:var(--line-2);color:var(--fg);background:var(--hover)}
@@ -4935,6 +5020,7 @@ button:focus:not(:focus-visible){outline:none;box-shadow:none}
 <script src="/js/nabe-moro.js"></script>
 <script src="/js/nabe-figur.js"></script>
 <script src="/js/nabe-finn.js"></script>
+<script src="/js/nabe-skann.js"></script>
 <script src="/js/nabo.js"></script>
 </body>
 </html>

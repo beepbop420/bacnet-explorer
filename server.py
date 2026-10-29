@@ -106,6 +106,7 @@ ALLOWED_ORIGINS = {
 READ_ONLY_PATHS = {"/api/sites",
                    
     "/api/status", "/api/interfaces", "/api/readonly", "/api/mine", "/api/ny-versjon",
+    "/api/anlegg", "/api/route",
     "/api/writelog", "/api/notes", "/download", "/logo",
 }
 
@@ -170,7 +171,7 @@ async def guard_and_cors(request, call_next):
         response.headers["Vary"] = "Origin"
     return response
 
-VERSJON = "1.18"
+VERSJON = "1.19"
 
 state = {"app": None, "local_address": None, "read_only": False, "bbmd": None}
 
@@ -440,11 +441,18 @@ def route(target: str):
         ip = kort_for(first)
     except Exception as e:
         return {"status": "error", "error": str(e)}
-    for e in list_interfaces():
+    try:
+        windows = route_source_ip(first)
+    except Exception:
+        windows = ip
+    kort = list_interfaces()
+    win_navn = next((e["interface"] for e in kort if e["ip"] == windows), None)
+    ekstra = {"windows": windows, "windows_interface": win_navn}
+    for e in kort:
         if e["ip"] == ip:
-            return {"status": "done", "target": first, **e}
+            return {"status": "done", "target": first, **e, **ekstra}
     return {"status": "done", "target": first, "ip": ip, "cidr": f"{ip}/32",
-            "interface": None, "prefix": 32}
+            "interface": None, "prefix": 32, **ekstra}
 
 
 _RUTE_LINJE = re.compile(
@@ -2084,6 +2092,89 @@ def mine_overstyringer() -> List[Dict[str, Any]]:
             aktive.pop(k, None)
     return [{"address": k[0], "objid": k[1], "priority": k[2], "value": e.get("value"),
              "ts": e.get("ts")} for k, e in aktive.items()]
+
+
+_RUTER = {"t": 0.0, "liste": []}
+
+
+def rutetabell() -> List[tuple]:
+    """(network, local ip) for every route except the default one, read at
+    most every few seconds - the site list asks about all sites at once."""
+    if time.time() - _RUTER["t"] < 4:
+        return _RUTER["liste"]
+    liste = []
+    try:
+        ut = subprocess.run(["route", "print", "-4"], capture_output=True, timeout=4,
+                            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+        tekst = ut.stdout.decode("oem" if os.name == "nt" else "utf-8", errors="replace")
+        for linje in tekst.splitlines():
+            m = _RUTE_LINJE.match(linje)
+            if not m:
+                continue
+            try:
+                net = ipaddress.IPv4Network(f"{m.group(1)}/{m.group(2)}", strict=False)
+            except ValueError:
+                continue
+            if net.prefixlen == 0 or net.is_multicast or net.is_loopback or net.is_link_local:
+                continue
+            liste.append((net, m.group(4)))
+    except Exception:
+        pass
+    _RUTER.update(t=time.time(), liste=liste)
+    return liste
+
+
+def naabar(target: str, kort: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    """The adapter that reaches `target` without the default route: one on
+    its subnet, or one a VPN has put a route through. None means the only
+    way there is the internet, which on site means the tunnel is down."""
+    try:
+        hosts, net = parse_target(target)
+        mal = ipaddress.IPv4Address(hosts[0] if hosts else str(net.network_address + 1))
+    except Exception:
+        return None
+    oppe = {e["ip"]: e for e in kort}
+    for e in sorted(kort, key=lambda e: -e["prefix"]):
+        if e["prefix"] < 32 and mal in ipaddress.IPv4Network(e["cidr"], strict=False):
+            return {"ip": e["ip"], "interface": e["interface"], "cidr": e["cidr"]}
+    treff = [(n, ip) for n, ip in rutetabell() if mal in n and ip in oppe and n.prefixlen < 32]
+    if not treff:
+        return None
+    n, ip = max(treff, key=lambda t: t[0].prefixlen)
+    e = oppe[ip]
+    return {"ip": ip, "interface": e["interface"], "cidr": e["cidr"]}
+
+
+@app.get("/api/anlegg")
+def anlegg_liste():
+    """The sites panel: every remembered site, newest first, with its
+    vendors, what is still overridden there, and whether it is reachable."""
+    try:
+        kort = list_interfaces()
+    except Exception:
+        kort = []
+    overstyrt: Dict[str, int] = {}
+    for o in mine_overstyringer():
+        a = str(o.get("address") or "")
+        overstyrt[a] = overstyrt.get(a, 0) + 1
+    ut = []
+    for key, s in sorted(SITES.items(), key=lambda kv: -(kv[1].get("sist") or 0)):
+        enheter = s.get("enheter") or []
+        adr = {str(d.get("address") or "") for d in enheter}
+        lev: Dict[str, int] = {}
+        for d in enheter:
+            if d.get("vendor"):
+                lev[d["vendor"]] = lev.get(d["vendor"], 0) + 1
+        ranges = s.get("ranges") or key.split(" ")
+        ut.append({
+            "key": key, "navn": s.get("navn") or "", "enheter": len(enheter),
+            "sist": s.get("sist"), "ganger": s.get("ganger", 0), "modus": s.get("modus"),
+            "leverandorer": sorted(lev.items(), key=lambda kv: -kv[1])[:3],
+            "overstyrt": sum(n for a, n in overstyrt.items() if a in adr),
+            "naabar": naabar(ranges[0], kort) if ranges else None,
+            "navnliste": [d.get("object_name") for d in enheter if d.get("object_name")][:60],
+        })
+    return {"status": "done", "anlegg": ut[:40]}
 
 
 @app.get("/api/mine")

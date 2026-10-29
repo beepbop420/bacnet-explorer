@@ -154,6 +154,11 @@ const FAKTA = [
   ['COV betyr at regulatoren sier fra selv. Mindre spørring, mer ro.', 'COV means the controller speaks up itself. Less asking, more peace.'],
 ];
 const NYTT = {
+  '1.19': [
+    ['Ett felt for IP, område eller anleggsnavn. Anleggene står under med grønn prikk når det finnes en vei dit', 'One field for an IP, a range or a site name. Your sites sit below it, with a green dot when there is a way there'],
+    ['Kort og modus er én linje. NABE sier fra når Windows ville tatt feil vei, og bruker riktig kort', 'Adapter and mode are one line. NABE tells you when Windows would have taken the wrong way, and uses the right adapter'],
+    ['NABE legger merke til en tunnel som kommer opp, et anlegg du lot stå overstyrt og en regulator som mangler siden sist', 'NABE notices a tunnel coming up, a site you left overridden and a controller missing since last time'],
+  ],
   '1.18': [
     ['Designgjennomgang med tre par øyne: flat temabryter, lyse skillelinjer i lys modus, ingen piller eller indigo igjen', 'A design review with three pairs of eyes: a flat theme switch, light hairlines in light mode, no pills or indigo left'],
     ['NABO: én knappehøyde, én type faner, Esc går ett steg tilbake om gangen, og .ini ligger under Avansert', 'NABO: one button height, one kind of tab, Esc goes back one step at a time, and .ini sits under Advanced'],

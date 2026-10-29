@@ -10484,7 +10484,7 @@ const HOPP_OVER = /^(SCRIPT|STYLE|CODE|SVG|PATH)$/;
    the device list also holds the getting-started text and the watch pane its
    own empty state, and both of those are the tool talking. */
 const DATA_SONE = 'tbody, .nabe-boble, .startskjerm, #alarmSect, .ruter-info, .dev-name, .dev-ip, .dev-note, '
-  + '.watch-name, .watch-ip, .insp-title, .insp-sub, .insp-val, .data-verdier, .cmp-navn, .cmp-v, .omr-forslag, #naboOverlay';
+  + '.watch-name, .watch-ip, .insp-title, .insp-sub, .insp-val, .data-verdier, .cmp-navn, .cmp-v, .omr-forslag, #naboOverlay, .skann-ny';
 
 function iDataSone(n) {
   const el = n.nodeType === 1 ? n : n.parentElement;
