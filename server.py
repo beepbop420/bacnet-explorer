@@ -37,20 +37,26 @@ from typing import Any, Dict, List, Optional
 
 from fastapi import FastAPI, Form
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel
 
 from bacpypes3.pdu import Address, IPv4Address
 from bacpypes3.object import DeviceObject
-from bacpypes3.ipv4.app import NormalApplication
-from bacpypes3.apdu import WhoIsRequest
+from bacpypes3.ipv4.app import NormalApplication, ForeignApplication
+from bacpypes3.apdu import WhoIsRequest, GetEventInformationRequest
 from bacpypes3.service.device import WhoIsFuture
 
 import bacnet_core as bc
 from bacnet_core import COMM_ERRORS
+from bacpypes3.apdu import ErrorRejectAbortNack
 
-app = FastAPI(title="BACnet IP Range Scanner")
+app = FastAPI(title="NABE")
+# app.js and the page are 700 kB of text and compress to about a fifth. On
+# 127.0.0.1 that is nothing; through a remote desktop or the shared server it
+# is the difference between a page that is there and one that arrives.
+app.add_middleware(GZipMiddleware, minimum_size=2048)
 
 # ---------------------------------------------------------------- security
 # This service commands building plant: a POST to /api/write moves a setpoint
@@ -70,11 +76,25 @@ app = FastAPI(title="BACnet IP Range Scanner")
 
 # Origins allowed to read across origins. Everything else may still call the
 # API same-origin, which is how the tool's own UI works.
+# Where site memory, notes, the write log and projects live. Next to the
+# program by default, as it always was; the installed app points this at the
+# user's own folder, because the program folder is not the place for data
+# that must survive an update or an uninstall.
+DATA_DIR = Path(os.environ.get("NABE_DATA") or Path(__file__).parent)
+DATA_DIR.mkdir(parents=True, exist_ok=True)
+
+
+def _env(navn: str, standard: str = "") -> str:
+    """NABE_<navn>, with the old NM_<navn> still honoured so existing
+    start scripts keep working."""
+    return os.environ.get("NABE_" + navn, os.environ.get("NM_" + navn, standard))
+
+
 ALLOWED_ORIGINS = {
     o.strip().rstrip("/")
-    for o in os.environ.get(
-        "NM_ALLOWED_ORIGINS",
-        "http://127.0.0.1:8090,http://localhost:8090",
+    for o in _env(
+        "ALLOWED_ORIGINS",
+        "http://127.0.0.1:8092,http://localhost:8092",
     ).split(",")
     if o.strip()
 }
@@ -149,16 +169,31 @@ async def guard_and_cors(request, call_next):
         response.headers["Vary"] = "Origin"
     return response
 
-state = {"app": None, "local_address": None, "read_only": False}
+VERSJON = "1.1"
+
+state = {"app": None, "local_address": None, "read_only": False, "bbmd": None}
 
 
-def detect_local_ip() -> str:
+def route_source_ip(target: str) -> str:
+    """
+    The local IP Windows would send from to reach `target`.
+
+    connect() on a UDP socket sends nothing; it only asks the routing table.
+    Asking about the plant itself is the point. The old question was "which
+    adapter reaches 8.8.8.8", and on site that is Wi-Fi or the 4G modem - the
+    one adapter guaranteed NOT to be the cable into the plant - and with no
+    internet at all it fails outright.
+    """
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     try:
-        s.connect(("8.8.8.8", 80))
+        s.connect((target, 47808))
         return s.getsockname()[0]
     finally:
         s.close()
+
+
+def detect_local_ip() -> str:
+    return route_source_ip("8.8.8.8")
 
 
 def list_interfaces() -> List[Dict[str, Any]]:
@@ -199,9 +234,9 @@ def list_interfaces() -> List[Dict[str, Any]]:
 
 
 # BACnet reserves UDP 47808-47823 so several BACnet applications can share a
-# host. On a shared server 47808 may already be held by another BACnet
-# daemon, so the explorer is given its own port via NM_BACNET_PORT.
-BACNET_PORT = int(os.environ.get("NM_BACNET_PORT", "47808"))
+# host. Where 47808 is already taken by another BACnet program, NABE can be
+# given its own port with NABE_BACNET_PORT.
+BACNET_PORT = int(_env("BACNET_PORT", "47808"))
 
 
 def _with_port(cidr: str) -> str:
@@ -300,13 +335,53 @@ class ScanBody(BaseModel):
 
 
 MAX_SWEEP_HOSTS = 4096
+SISTE_ENHETER: List[str] = []      # addresses found this session, for router discovery
+
+
+def parse_target(spec: str):
+    """
+    "10.1.2.0/24", "10.1.2.7", "10.1.2.10-40" or "10.1.2.10-10.1.2.40".
+
+    Returns (hosts, net). net is the smallest network that covers the hosts:
+    it is what a Who-Is is aimed at, and the sweep only ever touches `hosts`.
+
+    Ranges exist for the VPN case. One FortiClient tunnel often reaches many
+    buildings in the same address block, and a /24 or /16 would then probe
+    other customers' plants. Typing exactly the addresses you mean is the
+    only scan that stays inside your own building.
+    """
+    s = str(spec).strip()
+    if "-" in s and "/" not in s:
+        a, b = (x.strip() for x in s.split("-", 1))
+        start = ipaddress.IPv4Address(a)
+        if "." in b:
+            end = ipaddress.IPv4Address(b)
+        else:
+            end = ipaddress.IPv4Address(int(start) - (int(start) & 0xFF) + int(b))
+        if int(end) < int(start):
+            raise ValueError(f"{s}: slutten er lavere enn starten")
+        hosts = [str(ipaddress.IPv4Address(i)) for i in range(int(start), int(end) + 1)]
+        # At least the /24 around it: that is the subnet a building actually
+        # has, and a Who-Is aimed at a /26 would go to the wrong .63.
+        net = ipaddress.ip_network(f"{start}/24", strict=False)
+        while end not in net:
+            net = net.supernet()
+        return hosts, net
+    net = ipaddress.ip_network(s, strict=False)
+    if net.num_addresses > 65536:
+        # Only a Who-Is can cover a block this size; listing it would not.
+        return None, net
+    hosts = [str(ip) for ip in net.hosts()] or [str(net.network_address)]
+    return hosts, net
 
 
 @app.get("/api/status")
 def status():
     return {
         "running": state["app"] is not None,
+        "versjon": VERSJON,
         "local_address": state["local_address"],
+        "bbmd": state.get("bbmd"),
         "port_advarsel": port_advarsel(port_naboer()) if state["app"] else None,
     }
 
@@ -317,6 +392,22 @@ def interfaces():
         return {"status": "done", "interfaces": list_interfaces()}
     except Exception as e:
         return {"status": "error", "error": str(e), "interfaces": []}
+
+
+@app.get("/api/route")
+def route(target: str):
+    """Which of our interfaces the OS would use to reach `target`."""
+    try:
+        hosts, net = parse_target(target)
+        first = hosts[0] if hosts else str(net.network_address + 1)
+        ip = route_source_ip(first)
+    except Exception as e:
+        return {"status": "error", "error": str(e)}
+    for e in list_interfaces():
+        if e["ip"] == ip:
+            return {"status": "done", "target": first, **e}
+    return {"status": "done", "target": first, "ip": ip, "cidr": f"{ip}/32",
+            "interface": None, "prefix": 32}
 
 
 
@@ -383,7 +474,7 @@ def port_advarsel(naboer: List[Dict[str, Any]]) -> Optional[str]:
         "Windows tillater det, men da er det tilfeldig hvem av dere som får "
         "svarene fra anlegget - og den andre finner ingenting uten å si fra. "
         "Lukk det andre BACnet-verktøyet og trykk «Koble til på nytt», eller "
-        f"gi denne en egen port med NM_BACNET_PORT=47809 i start.bat."
+        f"gi denne en egen port med NABE_BACNET_PORT=47809 i start.bat."
     )
 
 
@@ -412,21 +503,82 @@ def device_address(spec) -> Address:
     return Address(str(spec).strip())
 
 
+async def _open_app(local_address: str, bbmd: Optional[str] = None):
+    """
+    Bind the BACnet stack, as an ordinary device or as a foreign device.
+
+    A foreign device registers with a BBMD and hands it its broadcasts, which
+    the BBMD then repeats on its own network. That is how one Who-Is over a
+    VPN reaches a whole building - MS/TP behind routers included - and only
+    that building, however many others share the tunnel.
+    """
+    addr = IPv4Address(local_address)
+    device_obj = build_device_object()
+    if bbmd:
+        bacnet_app = ForeignApplication(device_obj, addr)
+        bacnet_app.register(IPv4Address(bbmd), 300)
+    else:
+        bacnet_app = NormalApplication(device_obj, addr)
+    # The transports are created asynchronously; give them a moment to
+    # exist before resizing their buffers.
+    await asyncio.sleep(0.3)
+    rcvbuf = _enlarge_socket_buffers(bacnet_app)
+    state["app"] = bacnet_app
+    state["local_address"] = local_address
+    state["bbmd"] = bbmd
+    return bacnet_app, rcvbuf
+
+
+def _close_app() -> None:
+    a = state["app"]
+    if a is None:
+        return
+    _cov_stopp_alle()
+    try:
+        if state.get("bbmd"):
+            a.unregister()
+    except Exception:
+        pass
+    try:
+        a.close()
+    except Exception:
+        pass
+    state["app"] = None
+    state["local_address"] = None
+    state["bbmd"] = None
+
+
+async def _switch_bbmd(bbmd: Optional[str]):
+    """Rebind on the same local address, registered with `bbmd` or not."""
+    if state["app"] is not None and state.get("bbmd") == bbmd:
+        return state["app"]
+    local = state["local_address"]
+    _close_app()
+    # The old socket has to be gone before the same port is bound again.
+    await asyncio.sleep(0.2)
+    bacnet_app, _ = await _open_app(local, bbmd)
+    return bacnet_app
+
+
+async def _wait_registration(bacnet_app, timeout: float = 6.0) -> int:
+    """-1 no answer, 0 accepted, >0 the BBMD's NAK code."""
+    loop = asyncio.get_event_loop()
+    end = loop.time() + timeout
+    while loop.time() < end:
+        status = bacnet_app.foreign.bbmdRegistrationStatus
+        if status >= 0:
+            return status
+        await asyncio.sleep(0.1)
+    return -1
+
+
 @app.post("/api/start")
 async def start_proxy(body: StartBody):
     if state["app"] is not None:
         return {"status": "already-running", "local_address": state["local_address"]}
     try:
         local_address = resolve_local_address(body.local_address)
-        addr = IPv4Address(local_address)
-        device_obj = build_device_object()
-        bacnet_app = NormalApplication(device_obj, addr)
-        # The transports are created asynchronously; give them a moment to
-        # exist before resizing their buffers.
-        await asyncio.sleep(0.3)
-        rcvbuf = _enlarge_socket_buffers(bacnet_app)
-        state["app"] = bacnet_app
-        state["local_address"] = local_address
+        bacnet_app, rcvbuf = await _open_app(local_address)
         naboer = port_naboer()
         return {"status": "done", "local_address": local_address,
                 "rcvbuf": rcvbuf, "port_naboer": naboer,
@@ -452,7 +604,7 @@ async def start_proxy(body: StartBody):
                 f"    netstat -ano | findstr {BACNET_PORT}\n"
                 "    tasklist /FI \"PID eq <tallet>\"\n\n"
                 "Må de kjøre samtidig, kan denne bruke en annen port: sett "
-                "NM_BACNET_PORT=47809 i start.bat. Da lytter den på 47809, "
+                "NABE_BACNET_PORT=47809 i start.bat. Da lytter den på 47809, "
                 "mens den fortsatt snakker med anlegget på 47808."
             ),
             "port_opptatt": True,
@@ -463,18 +615,70 @@ async def start_proxy(body: StartBody):
 
 @app.post("/api/stop")
 async def stop_proxy():
-    if state["app"] is not None:
-        try:
-            state["app"].close()
-        except Exception:
-            pass
-        state["app"] = None
-        state["local_address"] = None
+    _close_app()
     return {"status": "done"}
 
 
-async def scan_broadcast(bacnet_app, net: ipaddress.IPv4Network, timeout: float):
-    broadcast_ip = str(net.broadcast_address)
+def _local_network() -> Optional[ipaddress.IPv4Network]:
+    """The subnet we are bound on, or None for a /32 tunnel address."""
+    lokal = state.get("local_address")
+    if not lokal:
+        return None
+    try:
+        nett = ipaddress.ip_interface(lokal.split(":")[0]).network
+    except ValueError:
+        return None
+    return nett if nett.prefixlen < 32 else None
+
+
+def _is_local(net: ipaddress.IPv4Network) -> bool:
+    lokal = _local_network()
+    return lokal is not None and net.subnet_of(lokal)
+
+
+async def scan_broadcast(bacnet_app, net: ipaddress.IPv4Network, timeout: float,
+                         hosts: Optional[List[str]] = None):
+    """
+    Who-Is, sent the way the network in question can actually carry it.
+
+    On our own subnet it goes out as a real BACnet broadcast to every network
+    (DNET 65535). Routers repeat that onto their MS/TP side, and devices that
+    ignore a unicast frame which merely happens to be addressed to .255 still
+    answer it. The directed .255 form the tool used to send alone was, as far
+    as BACnet is concerned, a unicast to one odd address - so locally it
+    missed exactly the controllers behind routers.
+
+    Through a BBMD it is handed to the BBMD to repeat in its own building.
+    Off-subnet without one, the directed .255 is the only thing left to try.
+    """
+    if state.get("bbmd"):
+        destination = Address("*:*")
+        broadcast_ip = f"BBMD {state['bbmd']}"
+    elif _is_local(net):
+        destination = Address("*:*")
+        broadcast_ip = "*:* (lokal kringkasting)"
+    else:
+        destination = None
+        broadcast_ip = str(net.broadcast_address)
+    devices = await _who_is(bacnet_app, destination or device_address(broadcast_ip), timeout)
+    if hosts is not None and not state.get("bbmd"):
+        # A range like .10-40 still gets a whole-subnet broadcast; keep what
+        # was asked for. Devices behind a router have no IP and are kept.
+        wanted = set(hosts)
+        devices = [d for d in devices if d["address"] in wanted
+                   or not _plain_ip(d["address"])]
+    return devices, broadcast_ip
+
+
+def _plain_ip(a: str) -> bool:
+    try:
+        ipaddress.IPv4Address(a.split(":")[0])
+        return ":" not in a or a.split(":")[1].isdigit()
+    except ValueError:
+        return False
+
+
+async def _who_is(bacnet_app, destination, timeout: float):
 
     # Build the Who-Is request manually and send it as a *directed broadcast*
     # to the target subnet's broadcast address. We deliberately do NOT use
@@ -485,7 +689,6 @@ async def scan_broadcast(bacnet_app, net: ipaddress.IPv4Network, timeout: float)
     # since devices reply from their own unicast IP, never from the
     # broadcast address itself. Building the WhoIsFuture with address=None
     # collects all I-Am replies while still targeting the chosen subnet.
-    destination = device_address(broadcast_ip)
     who_is = WhoIsRequest(destination=destination)
 
     if not hasattr(bacnet_app, "_who_is_futures"):
@@ -513,7 +716,7 @@ async def scan_broadcast(bacnet_app, net: ipaddress.IPv4Network, timeout: float)
             })
         except Exception:
             continue
-    return devices, broadcast_ip
+    return devices
 
 
 class Pacer:
@@ -556,6 +759,19 @@ async def probe_host_unicast(bacnet_app, ip: str, per_host_timeout: float,
                 timeout=per_host_timeout,
             )
             device_instance = oid[1] if oid is not None else None
+        except ErrorRejectAbortNack:
+            # Something answered - it just refused the wildcard. Some
+            # controllers (and every bacpypes3 simulator) do. A Who-Is sent
+            # straight to the address gets its real instance instead.
+            try:
+                i_ams = await asyncio.wait_for(
+                    bacnet_app.who_is(address=addr, timeout=max(1, int(per_host_timeout + 0.5))),
+                    timeout=per_host_timeout + 1.5)
+            except COMM_ERRORS:
+                return None
+            if not i_ams:
+                return None
+            device_instance = i_ams[0].iAmDeviceIdentifier[1]
         except COMM_ERRORS:
             return None
 
@@ -592,7 +808,7 @@ async def probe_host_unicast(bacnet_app, ip: str, per_host_timeout: float,
         }
 
 
-async def scan_unicast_sweep(bacnet_app, net: ipaddress.IPv4Network,
+async def scan_unicast_sweep(bacnet_app, hosts: List[str],
                              per_host_timeout: float, concurrency: int,
                              thorough: bool = True, job=None,
                              plan_override=None):
@@ -613,7 +829,6 @@ async def scan_unicast_sweep(bacnet_app, net: ipaddress.IPv4Network,
        silent probe means very little, and the fix for that is more
        attempts - not a longer wait on each one.
     """
-    hosts = [str(ip) for ip in net.hosts()] or [str(net.network_address)]
     found: Dict[str, Dict[str, Any]] = {}
     pending = list(hosts)
 
@@ -660,7 +875,7 @@ async def scan_unicast_sweep(bacnet_app, net: ipaddress.IPv4Network,
                 if job is not None:
                     job["devices"] = _sorted_devices(found)
             done += 1
-            if job is not None and (done % 5 == 0 or done == len(pending)):
+            if job is not None:
                 job["done"] = done
                 job["found"] = len(found)
             return r
@@ -673,27 +888,154 @@ async def scan_unicast_sweep(bacnet_app, net: ipaddress.IPv4Network,
     return list(found.values()), len(hosts)
 
 
-async def _run_scan(job, bacnet_app, body: "ScanBody", net):
-    if body.mode == "unicast_sweep":
-        devices, hosts_scanned = await scan_unicast_sweep(
-            bacnet_app, net, body.per_host_timeout, body.concurrency,
-            thorough=body.thorough, job=job, plan_override=body.plan,
-        )
-        broadcast_ip = None
+def _les_bdt(bbmd: str, timeout: float = 2.0) -> Optional[List[str]]:
+    """
+    Read-Broadcast-Distribution-Table, sent straight as BVLC.
+
+    The table lists every BBMD the building's BBMDs forward broadcasts to - in
+    practice, where the rest of the plant is. bacpypes3 has the service but
+    does not wire it into an application, and the request is four bytes, so it
+    goes out on its own short-lived socket instead.
+
+    Returns the peers as "ip" or "ip:port", [] for a BBMD with an empty table,
+    or None when the address does not act as a BBMD at all.
+    """
+    host, _, port = bbmd.partition(":")
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    s.settimeout(timeout)
+    try:
+        s.sendto(bytes([0x81, 0x02, 0x00, 0x04]), (host, int(port or 47808)))
+        while True:
+            data, _ = s.recvfrom(1500)
+            if len(data) < 4 or data[0] != 0x81:
+                continue
+            if data[1] == 0x00:          # BVLC-Result: a NAK, so not a BBMD
+                return None
+            if data[1] != 0x03:
+                continue
+            peers = []
+            for i in range(4, len(data) - 9, 10):
+                ip = ".".join(str(b) for b in data[i:i + 4])
+                p = int.from_bytes(data[i + 4:i + 6], "big")
+                peers.append(ip if p == 47808 else f"{ip}:{p}")
+            return peers
+    except OSError:
+        return None
+    finally:
+        s.close()
+
+
+async def _scan_via_bbmd(job, body: "ScanBody", hosts: List[str]):
+    """
+    Register with the BBMD at the one address given and Who-Is through it.
+
+    Returns (devices, note, bbmd_status). When the address turns out not to be
+    a BBMD - no answer, or a NAK because foreign devices are switched off - the
+    stack goes back to normal and the address is at least read on its own, so
+    typing one IP never comes back with nothing to show for it.
+    """
+    bbmd = hosts[0]
+    job["phase"] = f"leser BBMD-tabellen hos {bbmd}"
+    loop = asyncio.get_event_loop()
+    bdt = await loop.run_in_executor(None, _les_bdt, bbmd)
+    job["bdt"] = bdt
+    job["phase"] = f"registrerer hos BBMD {bbmd}"
+    bacnet_app = await _switch_bbmd(bbmd)
+    status = await _wait_registration(bacnet_app)
+    if status == 0:
+        job["phase"] = "who-is via BBMD"
+        devices = await _who_is(bacnet_app, Address("*:*"), max(body.timeout, 6.0))
+        if not any(d["address"] == bbmd for d in devices):
+            # A JACE acting as BBMD does not always answer its own Who-Is.
+            r = await probe_host_unicast(bacnet_app, bbmd, 2.0, asyncio.Semaphore(1))
+            if r:
+                devices.append(r)
+        return devices, f"Registrert hos BBMD {bbmd}" + _bdt_tekst(bbmd, bdt), status
+
+    bacnet_app = await _switch_bbmd(None)
+    if status == -1:
+        note = (f"{bbmd} svarte ikke på registrering som foreign device - "
+                "den er trolig ikke BBMD. Leste adressen alene.")
     else:
-        job["phase"] = "who-is"
-        devices, broadcast_ip = await scan_broadcast(bacnet_app, net, body.timeout)
-        hosts_scanned = net.num_addresses
+        # 0x30 is what every BACnet/IP device that is not a BBMD answers with,
+        # and also what a BBMD with foreign registration switched off says.
+        note = (f"{bbmd} avviste registreringen (kode 0x{status:02X}). Den er "
+                "enten ikke BBMD, eller tar ikke imot foreign devices. "
+                "Leste adressen alene.")
+    job["phase"] = f"leser {bbmd}"
+    r = await probe_host_unicast(bacnet_app, bbmd, 2.0, asyncio.Semaphore(1))
+    return ([r] if r else []), note + _bdt_tekst(bbmd, bdt), status
+
+
+def _bdt_tekst(bbmd: str, bdt: Optional[List[str]]) -> str:
+    """One sentence about the other BBMDs, or nothing."""
+    andre = [p for p in (bdt or []) if p.split(":")[0] != bbmd.split(":")[0]]
+    if not andre:
+        return ""
+    return (f". Bygget har {len(andre) + 1} BBMD-er - de andre er "
+            + ", ".join(andre) + ". Skann dem i BBMD-modus for resten av anlegget.")
+
+
+async def _run_scan(job, body: "ScanBody", hosts: List[str], net):
+    mode = body.mode
+    note = None
+    bbmd_status = None
+    broadcast_ip = None
+    hosts_scanned = len(hosts) if hosts else net.num_addresses
+    # A typed range (.10-40) is answered by a whole-subnet broadcast; only
+    # then are the replies trimmed back to what was asked for.
+    only = hosts if "-" in body.subnet else None
+
+    if mode == "bbmd":
+        devices, note, bbmd_status = await _scan_via_bbmd(job, body, hosts)
+        broadcast_ip = f"BBMD {hosts[0]}" if bbmd_status == 0 else None
+    else:
+        # Anything else is a scan of addresses, not of a building behind a
+        # BBMD, so a registration left over from earlier would only send the
+        # Who-Is to the wrong place.
+        bacnet_app = await _switch_bbmd(None)
+        if mode == "auto":
+            # On our own subnet a broadcast reaches everything in seconds and
+            # the link does not drift, so the patient VPN passes buy nothing.
+            # Anywhere else broadcasts do not arrive and the sweep is the scan.
+            mode = "lokal" if _is_local(net) else "unicast_sweep"
+        if mode == "lokal":
+            job["phase"] = "who-is"
+            devices, broadcast_ip = await scan_broadcast(bacnet_app, net, body.timeout, only)
+            seen = {d["address"] for d in devices}
+            rest = [h for h in (hosts or []) if h not in seen][:MAX_SWEEP_HOSTS]
+            # One quick pass for devices that ignore broadcasts. Locally an
+            # empty address costs one ARP timeout, not a VPN round trip.
+            more, _ = await scan_unicast_sweep(
+                bacnet_app, rest, body.per_host_timeout, body.concurrency,
+                thorough=False, job=job)
+            devices += more
+        elif mode == "unicast_sweep":
+            devices, hosts_scanned = await scan_unicast_sweep(
+                bacnet_app, hosts, body.per_host_timeout, body.concurrency,
+                thorough=body.thorough, job=job, plan_override=body.plan,
+            )
+        else:
+            job["phase"] = "who-is"
+            devices, broadcast_ip = await scan_broadcast(bacnet_app, net, body.timeout, only)
+            hosts_scanned = net.num_addresses
 
     devices.sort(key=lambda d: (d["device_instance"] is None, d["device_instance"]))
+    for d in devices:
+        if d.get("address") and d["address"] not in SISTE_ENHETER:
+            SISTE_ENHETER.append(d["address"])
     return {
         "status": "done",
-        "subnet": str(net),
+        "subnet": body.subnet,
         "mode": body.mode,
+        "mode_used": mode,
         "broadcast": broadcast_ip,
         "hosts_scanned": hosts_scanned,
         "count": len(devices),
         "devices": devices,
+        "note": note,
+        "bbmd_status": bbmd_status,
+        "bdt": job.get("bdt"),
     }
 
 
@@ -707,28 +1049,42 @@ async def scan_subnet(body: ScanBody):
     if state["app"] is None:
         return {"status": "error", "error": "Proxy er ikke startet. Kall /api/start først."}
     try:
-        net = ipaddress.ip_network(body.subnet, strict=False)
+        spec = body.subnet.strip()
+        if body.mode == "bbmd" and spec.count(":") == 1:
+            # A BBMD on a non-standard port: 10.0.0.5:47809.
+            ip, port = spec.split(":")
+            net = ipaddress.ip_network(ip)
+            hosts = [f"{net.network_address}:{int(port)}"]
+        else:
+            hosts, net = parse_target(spec)
     except Exception as e:
         return {"status": "error", "error": f"Ugyldig subnet/IP-range: {e}"}
-    if body.mode == "unicast_sweep" and net.num_addresses > MAX_SWEEP_HOSTS:
+    if body.mode == "bbmd" and (hosts is None or len(hosts) != 1):
+        return {"status": "error",
+                "error": "BBMD-modus tar én IP: adressen til byggets BBMD, "
+                         "som oftest JACE-en eller hovedsentralen."}
+    sweep = body.mode == "unicast_sweep" or (body.mode == "auto" and not _is_local(net))
+    if sweep and (hosts is None or len(hosts) > MAX_SWEEP_HOSTS):
         return {
             "status": "error",
             "error": f"Rangen er for stor for unicast-sweep ({net.num_addresses} adresser, "
                      f"maks {MAX_SWEEP_HOSTS}). Bruk et mindre subnet.",
         }
 
-    bacnet_app = state["app"]
     job = _new_job("scan")
     job["found"] = 0
 
     async def run():
         try:
-            job["result"] = await _run_scan(job, bacnet_app, body, net)
+            job["result"] = await _run_scan(job, body, hosts, net)
             job["status"] = "done"
         except asyncio.CancelledError:
             job["status"] = "cancelled"
             raise
         except COMM_ERRORS as e:
+            job["status"] = "error"
+            job["error"] = f"{type(e).__name__}: {e}"
+        except Exception as e:
             job["status"] = "error"
             job["error"] = f"{type(e).__name__}: {e}"
 
@@ -783,7 +1139,7 @@ class ReadOnlyBody(BaseModel):
 # last line loses one entry rather than the whole log.
 WRITE_LOG: List[Dict[str, Any]] = []
 MAX_WRITE_LOG = 500
-WRITE_LOG_FILE = Path(__file__).parent / "writelog.jsonl"
+WRITE_LOG_FILE = DATA_DIR / "writelog.jsonl"
 # Roughly a year of heavy use before rotation; the file is a few hundred
 # bytes per entry.
 MAX_WRITE_LOG_FILE = 20000
@@ -797,7 +1153,7 @@ MAX_WRITE_LOG_FILE = 20000
 # the old code simply returned, silently, leaving the point forced with nothing
 # in the log to say so.
 _release_tasks: Dict[str, asyncio.Task] = {}
-RELEASE_FILE = Path(__file__).parent / "pending-releases.json"
+RELEASE_FILE = DATA_DIR / "pending-releases.json"
 # How long to keep trying when the plant is unreachable at release time. The
 # link on a site VPN comes and goes in bursts, so giving up on the first miss
 # is giving up far too early.
@@ -1313,13 +1669,16 @@ async def poll(body: PollBody):
 
     async def one_device(ip: str, objids: List[str]):
         addr = device_address(ip)
+        fra_cov, les = _cov_del(bacnet_app, ip, objids)
         try:
-            out[ip] = await bc.poll_values(bacnet_app, addr, objids)
+            out[ip] = await bc.poll_values(bacnet_app, addr, les) if les else {}
         except COMM_ERRORS:
             out[ip] = {}
+        out[ip].update(fra_cov)
 
     await asyncio.gather(*[one_device(ip, oids) for ip, oids in body.targets.items() if oids])
-    return {"status": "done", "ts": time.time(), "values": out}
+    return {"status": "done", "ts": time.time(), "values": out,
+            "cov": sum(1 for c in COV.values() if c.get("ok"))}
 
 
 @app.post("/api/object/detail")
@@ -1685,7 +2044,7 @@ async def write(body: WriteBody):
 # technician's head or in a text file, and the tool started every visit blank.
 # It is kept on disk rather than in the browser so it survives a cleared cache
 # and follows the shared server if the tool is run from one.
-SITES_FILE = Path(__file__).parent / "sites.json"
+SITES_FILE = DATA_DIR / "sites.json"
 SITES: Dict[str, Any] = {}
 SITES_MAX = 200
 
@@ -1717,6 +2076,9 @@ class SiteBody(BaseModel):
     devices: List[Dict[str, Any]] = []
     local_address: Optional[str] = None
     name: Optional[str] = None
+    # A building reached through its BBMD has to be scanned that way again;
+    # swept as an address it is one controller instead of the whole site.
+    mode: Optional[str] = None
     # The tag generator's settings belong to the building, not to the PC: it is
     # the same prefix and cluster every time you come back to it.
     tagging: Optional[Dict[str, Any]] = None
@@ -1747,6 +2109,8 @@ async def sites_record(body: SiteBody):
         site["lokal"] = body.local_address
     if body.name is not None:
         site["navn"] = body.name
+    if body.mode:
+        site["modus"] = body.mode
     if body.tagging is not None:
         site["tagging"] = body.tagging
 
@@ -1814,7 +2178,7 @@ async def sites_delete(body: SiteKeyBody):
     return {"status": "done"}
 
 
-NOTES_FILE = Path(__file__).parent / "notes.json"
+NOTES_FILE = DATA_DIR / "notes.json"
 NOTES: Dict[str, Dict[str, Any]] = {}
 
 
@@ -1843,20 +2207,20 @@ def _save_notes() -> bool:
 # A copy running on a technician's own PC keeps its notes on that PC, which
 # would mean two people on the same plant never see each other's. So a local
 # copy also talks to the shared instance: it pulls on start-up and pushes on
-# every save. Measured from a customer VPN, a shared server answered in
-# 30 ms - split tunnels leave the office network reachable - but the sync is
-# strictly best-effort and never blocks saving locally.
+# every save. Measured from a customer VPN, a shared server on the office
+# network answered in 30 ms - split tunnels leave it reachable - but the sync
+# is strictly best-effort and never blocks saving locally.
 #
-# Set NOTES_UPSTREAM to empty on the shared server itself so it does not
-# try to sync with itself.
-NOTES_UPSTREAM = os.environ.get("NOTES_UPSTREAM", "").rstrip("/")
+# Off unless NABE_NOTES_UPSTREAM is set. Leave it empty on the shared server
+# itself so it does not try to sync with itself.
+NOTES_UPSTREAM = _env("NOTES_UPSTREAM", "").rstrip("/")
 NOTES_SYNC: Dict[str, Any] = {"state": "av", "detail": "", "ts": 0.0, "pending": 0}
-# Sites like Oslobygg and Statsbygg close the network completely - no route to
+# Some public-sector sites close the network completely - no route to
 # the office at all. A note written there must not be lost and must not need
 # remembering: the key is queued on disk, and the queue is flushed the moment
 # the shared server answers again, which is usually when the laptop is back on
 # the office network.
-NOTES_QUEUE_FILE = Path(__file__).parent / "notes-queue.json"
+NOTES_QUEUE_FILE = DATA_DIR / "notes-queue.json"
 NOTES_QUEUE: set = set()
 NOTES_FLUSH_SECONDS = 60
 
@@ -2029,7 +2393,7 @@ async def set_note(body: NoteBody):
     return {"status": "done", "notes": NOTES, "sync": NOTES_SYNC}
 
 
-PROJECT_DIR = Path(__file__).parent / "projects"
+PROJECT_DIR = DATA_DIR / "projects"
 
 
 def _safe_name(name: str) -> str:
@@ -2155,6 +2519,237 @@ async def _ping_one(ip: str, timeout_ms: int, sem: asyncio.Semaphore) -> bool:
 
 
 
+async def _tjenester(ip: str) -> Dict[str, Any]:
+    """
+    Does anything at all answer on this address?
+
+    Separates the two silences that look the same from a BACnet tool: a VPN
+    that lets web and Workbench through but not UDP 47808, and an address
+    that this PC simply cannot reach - the plant that is only reachable from
+    a remote desktop on the other side of the tunnel.
+    """
+    porter = {80: "nettside", 443: "nettside (https)", 4911: "Niagara Fox",
+              3011: "Niagara Fox", 3389: "fjernskrivebord", 22: "SSH"}
+    host = ip.split(":")[0]
+
+    async def prov(p):
+        try:
+            _, w = await asyncio.wait_for(asyncio.open_connection(host, p), timeout=1.2)
+            w.close()
+            return p
+        except Exception:
+            return None
+    apne = [p for p in await asyncio.gather(*[prov(p) for p in porter]) if p]
+    if not apne:
+        return {"status": "feil", "detalj": "Ingenting svarer på denne adressen",
+                "forklaring": "Verken nettside, Workbench, fjernskrivebord eller BACnet svarer. "
+                              "Da slipper ikke VPN-en deg fram hit. Når du anlegget bare via "
+                              "fjernskrivebord til en maskin der ute, må NABE kjøre på den "
+                              "maskinen - bruk den portable utgaven."}
+    navn = ", ".join(sorted({porter[p] for p in apne}))
+    return {"status": "advarsel", "detalj": f"Svarer på {navn}",
+            "forklaring": "Adressen nås, men hvis BACnet over ikke svarte, slipper VPN-en "
+                          "trolig TCP men ikke UDP 47808. Be den som drifter VPN-en åpne "
+                          "UDP 47808 til dette nettet."}
+
+
+# ------------------------------------------------------------------- alarms
+class AlarmBody(BaseModel):
+    address: str
+
+
+@app.post("/api/device/alarms")
+async def device_alarms(body: AlarmBody):
+    """
+    The device's own list of active and unacknowledged events.
+
+    One GetEventInformation request returns every object that is not normal
+    or still waiting for an acknowledgement - which is the list a service
+    visit starts from - instead of reading status flags off every point.
+    Devices that do not implement the service say so, and the page falls back
+    to the flags it already has.
+    """
+    bacnet_app = _require_app()
+    if bacnet_app is None:
+        return {"status": "error", "error": "Ikke tilkoblet."}
+    addr = device_address(body.address)
+    ut: List[Dict[str, Any]] = []
+    siste = None
+    try:
+        for _ in range(20):
+            req = GetEventInformationRequest(destination=addr)
+            if siste is not None:
+                req.lastReceivedObjectIdentifier = siste
+            ack = await asyncio.wait_for(bacnet_app.request(req), timeout=6)
+            for e in ack.listOfEventSummaries or []:
+                siste = e.objectIdentifier
+                kvitt = e.acknowledgedTransitions
+                ukvittert = [n for i, n in enumerate(("til unormal", "til feil", "til normal"))
+                             if kvitt is not None and len(kvitt) > i and not kvitt[i]]
+                ut.append({
+                    "objid": bc.objid_str(e.objectIdentifier),
+                    "tilstand": str(e.eventState),
+                    "ukvittert": ukvittert,
+                    "type": str(e.notifyType),
+                })
+            if not ack.moreEvents:
+                break
+    except asyncio.TimeoutError:
+        return {"status": "error", "error": "Ingen svar på alarmspørringen."}
+    except COMM_ERRORS as e:
+        tekst = f"{type(e).__name__}: {e}"
+        if "unrecognized" in tekst.lower() or "service" in tekst.lower() or "reject" in tekst.lower():
+            return {"status": "unsupported", "error": "Enheten støtter ikke alarmlister."}
+        return {"status": "error", "error": tekst}
+    return {"status": "done", "alarmer": ut}
+
+
+# ------------------------------------------------------------------ routers
+@app.get("/api/routers")
+async def routers():
+    """
+    Which routers are out there, and which BACnet networks sit behind them.
+
+    On our own subnet one broadcast asks everybody. Over a VPN broadcasts do
+    not arrive, so each device already found is asked directly instead -
+    routers answer a unicast too.
+    """
+    bacnet_app = _require_app()
+    if bacnet_app is None:
+        return {"status": "error", "error": "Ikke tilkoblet."}
+    funn: Dict[str, set] = {}
+
+    async def spor(dest):
+        try:
+            svar = await asyncio.wait_for(
+                bacnet_app.nse.who_is_router_to_network(destination=dest), timeout=3)
+        except Exception:
+            return
+        for _adapter, npdu in svar or []:
+            nett = getattr(npdu, "iartnNetworkList", None) or []
+            funn.setdefault(str(npdu.pduSource), set()).update(int(n) for n in nett)
+
+    lokal = _local_network()
+    if lokal is not None and not state.get("bbmd"):
+        await spor(None)
+    else:
+        ips = [d for d in SISTE_ENHETER if _plain_ip(d)][:64]
+        await asyncio.gather(*[spor(Address(ip)) for ip in ips])
+    return {"status": "done",
+            "rutere": [{"ruter": r, "nett": sorted(n)} for r, n in sorted(funn.items()) if n]}
+
+
+# ---------------------------------------------------------------------- COV
+# Live values by subscription where the device allows it. The page keeps
+# asking /api/poll as before; behind it, a point that accepted a COV
+# subscription is answered from what the device last pushed, and only the
+# rest are read over the wire. On a VPN that is most of the traffic gone.
+COV: Dict[tuple, Dict[str, Any]] = {}
+COV_IKKE_FOR = 600.0          # a refusal is not asked again for ten minutes
+COV_STILLE = 90.0             # unpolled this long: the subscription is dropped
+
+
+def _cov_del(bacnet_app, ip: str, objids: List[str]):
+    naa = time.time()
+    fra_cov: Dict[str, Any] = {}
+    les: List[str] = []
+    for oid in objids:
+        k = (ip, oid)
+        c = COV.get(k)
+        if c is None or (not c.get("ok") and naa - c.get("feilet", 0) > COV_IKKE_FOR and not c.get("task")):
+            COV[k] = c = {"ok": False, "verdi": None, "sist_spurt": naa}
+            c["task"] = asyncio.ensure_future(_cov_lytt(bacnet_app, ip, oid, c))
+        c["sist_spurt"] = naa
+        if c.get("ok") and c.get("har"):
+            fra_cov[oid] = c["verdi"]
+        else:
+            les.append(oid)
+    for k, c in list(COV.items()):
+        if naa - c.get("sist_spurt", 0) > COV_STILLE:
+            t = c.get("task")
+            if t:
+                t.cancel()
+            COV.pop(k, None)
+    return fra_cov, les
+
+
+async def _cov_lytt(bacnet_app, ip: str, oid: str, c: Dict[str, Any]):
+    try:
+        async with bacnet_app.change_of_value(
+                device_address(ip), oid, issue_confirmed_notifications=False, lifetime=300) as scm:
+            c["ok"] = True
+            while True:
+                prop, verdi = await scm.get_value()
+                if str(prop) in ("present-value", "presentValue"):
+                    c["verdi"] = bc.serialize(verdi)
+                    c["har"] = True
+    except asyncio.CancelledError:
+        raise
+    except Exception:
+        c["ok"] = False
+        c["feilet"] = time.time()
+    finally:
+        c["task"] = None
+
+
+def _cov_stopp_alle() -> None:
+    for c in COV.values():
+        t = c.get("task")
+        if t:
+            t.cancel()
+    COV.clear()
+
+
+def _brannmur_sjekk() -> Dict[str, Any]:
+    """
+    Will Windows let the plant's answers in?
+
+    Replies to what we sent get in on any profile - the firewall keeps state.
+    What does not get in is an I-Am a controller sends as a broadcast, which is
+    how many answer Who-Is, unless an inbound rule allows it. Windows files an
+    unknown plant network as Public, and the rule it offers on first start is
+    often ticked for Private only. So the question is: which profile is the
+    adapter on, and is there an allow rule for this Python on that profile?
+    """
+    if os.name != "nt":
+        return {"status": "ok", "detalj": "Ikke Windows", "forklaring": "Ingen Windows-brannmur å sjekke."}
+    import sys
+    lokal = (state.get("local_address") or "").split("/")[0].split(":")[0]
+    alias = next((e["interface"] for e in list_interfaces() if e["ip"] == lokal), None)
+    exe = getattr(sys, "_base_executable", None) or sys.executable
+    ps = (
+        "$ErrorActionPreference='SilentlyContinue';"
+        f"$kat = if ('{alias or ''}') {{ (Get-NetConnectionProfile -InterfaceAlias '{alias or ''}').NetworkCategory }} else {{ '' }};"
+        f"$r = @(Get-NetFirewallApplicationFilter -Program '{exe}' | Get-NetFirewallRule | "
+        "Where-Object { $_.Enabled -eq 'True' -and $_.Direction -eq 'Inbound' -and $_.Action -eq 'Allow' } | "
+        "ForEach-Object { [string]$_.Profile });"
+        "@{kat=[string]$kat; profiler=$r} | ConvertTo-Json -Compress"
+    )
+    try:
+        ut = subprocess.run(["powershell", "-NoProfile", "-Command", ps], capture_output=True,
+                            text=True, timeout=20,
+                            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+        data = json.loads(ut.stdout.strip() or "{}")
+    except Exception as e:
+        return {"status": "advarsel", "detalj": "Kunne ikke lese brannmuren", "forklaring": str(e)}
+    kat = (data.get("kat") or "").strip()
+    profiler = data.get("profiler") or []
+    if isinstance(profiler, str):
+        profiler = [profiler]
+    dekket = any(p == "Any" or (kat and kat in p) for p in profiler)
+    kommando = (f'New-NetFirewallRule -DisplayName "NABE BACnet" -Direction Inbound '
+                f'-Program "{exe}" -Protocol UDP -LocalPort {BACNET_PORT} -Action Allow -Profile Any')
+    if dekket:
+        return {"status": "ok", "detalj": f"Tillatt på {kat or 'nettet'}",
+                "forklaring": "Svar som kommer som kringkasting slipper inn."}
+    return {"status": "advarsel",
+            "detalj": f"{alias or 'Kortet'} er {kat or 'ukjent'}, og Python har ingen regel der",
+            "forklaring": "Direkte svar slipper inn, men I-Am som kringkastes stoppes - "
+                          "Who-Is kan da gå glipp av enheter, mens sweep virker. "
+                          "Kjør dette i PowerShell som administrator for å åpne: " + kommando,
+            "kommando": kommando}
+
+
 class DiagnoseBody(BaseModel):
     address: str
     step: str
@@ -2200,6 +2795,18 @@ async def diagnose(body: DiagnoseBody):
                     "forklaring": "Adressen er ikke en vanlig IP - trolig en enhet "
                                   "bak en gateway. Da går trafikken via ruteren, "
                                   "og samme subnett gjelder ikke."}
+        try:
+            via = route_source_ip(ip)
+        except OSError:
+            via = None
+        bundet = lokal.split("/")[0]
+        if via and via != bundet and bundet != "0.0.0.0":
+            return {"status": "feil",
+                    "detalj": f"Windows sender til {ip} fra {via}, ikke fra {bundet}",
+                    "forklaring": "Verktøyet er koblet til feil nettverkskort for "
+                                  "denne adressen, så forespørslene kommer aldri "
+                                  "fram. Skann på nytt - da byttes kortet "
+                                  "automatisk - eller velg kortet med " + via + "."}
         if mal in nett:
             return {"status": "ok", "detalj": f"{ip} er i samme subnett som {lokal}",
                     "forklaring": "Trafikken går direkte, uten ruter."}
@@ -2208,6 +2815,12 @@ async def diagnose(body: DiagnoseBody):
                 "forklaring": "Den må rutes. Det kan gå helt fint, men da må "
                               "ruteren slippe BACnet gjennom - og kringkasting "
                               "(Who-Is) stopper som regel her. Bruk sweep."}
+
+    if steg == "tjenester":
+        return await _tjenester(ip)
+
+    if steg == "brannmur":
+        return await asyncio.get_event_loop().run_in_executor(None, _brannmur_sjekk)
 
     if steg == "ping":
         sem = asyncio.Semaphore(1)
@@ -2293,7 +2906,67 @@ def app_js():
     )
 
 
-README_TXT = """BACnet Explorer
+README_TXT = """NABE - Not Another BACnet Explorer
+===================================
+
+Kjør denne på din egen PC når du skal skanne et anlegg du bare når
+gjennom VPN. Serverversjonen ser aldri kundens nett; det gjør din maskin.
+
+SLIK STARTER DU
+  1. Pakk ut mappen et sted du finner igjen.
+  2. Dobbeltklikk start.bat
+     Første gang tar det et par minutter (setter opp Python-miljø).
+  3. Nettleseren åpnes på http://127.0.0.1:8092
+
+KRAV
+  Python 3.10 eller nyere fra python.org.
+  Husk å huke av "Add Python to PATH" under installasjonen.
+
+KOM I GANG
+  1. Skriv området i feltet over enhetslista, f.eks. 10.75.1.0/24,
+     én IP eller 10.75.1.10-40, og trykk Skann. Kortet velges selv.
+  2. Bygg på delt VPN: velg «BBMD — via én IP» og skriv byggets BBMD.
+  3. Klikk en enhet for å laste punktene.
+  4. Klikk et punkt for detaljer, live trend og skriving.
+
+  Auto er standard: Who-Is på eget nett, grundig sweep over VPN.
+
+HURTIGTASTER
+  /            søk i punktene
+  ? / Ctrl+F   søk på tvers av alle åpnede enheter
+  pil opp/ned  bla mellom punkter
+  mellomrom    fest punkt til overvåking
+  L            live av/på
+  Z            stor visning av valgt punkt
+  Ctrl-klikk   velg enkeltrad   Shift: område   Ctrl+A: alle
+
+VELGE FLERE PUNKTER
+  Ctrl-klikk eller Shift-klikk rader. Eksport (CSV/EDE) og
+  festing gjelder da kun utvalget. Kopier legger dem på
+  utklippstavlen klart for Excel.
+
+MENYEN ⋯ (øverst til høyre)
+  Lagre / åpne anlegg    enheter, overvåking og snapshot per kunde
+  Skrivelogg             alt som er skrevet, med før- og etterverdi
+  Lesemodus              blokkerer all skriving
+  Tett visning           flere rader på skjermen
+
+EKSPORT-MENYEN
+  Snapshot               lagrer alle verdier for sammenligning
+  CSV / EDE 2.3          punktliste for overlevering
+  Sammenlign med EDE     finner avvik mot levert dokumentasjon
+  Ukeprogram             viser skjema som ukesrutenett
+
+SKRIVING - LES DETTE
+  Skriving endrer et anlegg i drift. Bekreftelsen viser både
+  nåværende og ny verdi. Bruk auto-frigi (standard 15 min) så
+  overstyringen slipper seg selv om du blir avbrutt.
+  Alt som skrives havner i skriveloggen.
+
+IKKE VERIFISERT ENNÅ
+  Ukeprogram er kun testet mot tomme skjema, og trendlogglesing
+  er ikke testet mot utstyr i det hele tatt. Si fra hvis noe
+  ser feil ut når du møter et anlegg som har dette.
 """
 
 
@@ -2324,7 +2997,7 @@ def download():
         content=buf.read(),
         media_type="application/zip",
         headers={
-            "Content-Disposition": 'attachment; filename="bacnet-explorer.zip"',
+            "Content-Disposition": 'attachment; filename="nabe.zip"',
             "Cache-Control": "no-store",
         },
     )
@@ -2333,7 +3006,7 @@ def download():
 @app.get("/logo")
 def logo():
     """
-    Serve a logo if someone drops one next to this file.
+    Serve the official logo if someone drops one next to this file.
     Nothing is invented here: with no file present the UI falls back to a
     plain wordmark rather than an approximation of the real mark.
     """

@@ -1,9 +1,10 @@
 <!doctype html>
-<html lang="no">
+<html lang="no" class="levfarge">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>BACnet Explorer</title>
+<title>NABE · Not Another BACnet Explorer</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2032%2032%22%3E%3Cline%20x1%3D%2216%22%20y1%3D%226%22%20x2%3D%2216%22%20y2%3D%222.6%22%20stroke%3D%22%23ececee%22%20stroke-width%3D%221.6%22/%3E%3Ccircle%20cx%3D%2216%22%20cy%3D%222.4%22%20r%3D%221.9%22%20fill%3D%22%23ffc900%22/%3E%3Crect%20x%3D%223%22%20y%3D%226%22%20width%3D%2226%22%20height%3D%2223%22%20rx%3D%226.5%22%20fill%3D%22%23ececee%22/%3E%3Ccircle%20cx%3D%2211.2%22%20cy%3D%2215.6%22%20r%3D%224.6%22%20fill%3D%22%23111113%22/%3E%3Ccircle%20cx%3D%2220.8%22%20cy%3D%2215.6%22%20r%3D%224.6%22%20fill%3D%22%23111113%22/%3E%3Ccircle%20cx%3D%2211.2%22%20cy%3D%2212.9%22%20r%3D%222.1%22%20fill%3D%22%23ececee%22/%3E%3Ccircle%20cx%3D%2220.8%22%20cy%3D%2212.9%22%20r%3D%222.1%22%20fill%3D%22%23ececee%22/%3E%3Cline%20x1%3D%2212.6%22%20y1%3D%2223.4%22%20x2%3D%2219.4%22%20y2%3D%2223.4%22%20stroke%3D%22%23111113%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22/%3E%3C/svg%3E">
 <style>
 :root{
   /* Without this the browser assumes a light page and draws every native
@@ -34,7 +35,7 @@
      The previous fg-3 sat at 3.19:1, which made unit symbols, column
      headers and the status bar genuinely hard to read. */
   --fg:#d5dde6; --fg-2:#a3aebc; --fg-3:#828d9a;
-  /* Status colours follow the palette used in the building-automation tools
+  /* Status colours follow the SD design guide used in the field, because
      that is the language read all day in Niagara: green is "på / normal
      tilstand", yellow is "unormal tilstand, bør undersøkes", red is
      "alarm/nødsituasjon", dodgerBlue is "manuell betjening kreves". The guide
@@ -50,26 +51,13 @@
   --warn:#ffc900;                            /* guide: unormal tilstand */
   --err:#ff6b57;                             /* guide red, lifted for dark */
   --adjust:#ff8c00;                          /* guide: justerbart settpunkt */
-  /* A deep indigo as the brand surface. It is far too dark to use as
+  /* The brand book. The brand blue is far too dark to use as
      text on a dark UI, so it is used the way the book allows it — as an
      identity surface with white text — while the data area stays neutral
      for legibility. */
-  /* Brand. The data area has already spent every hue on meaning - dodgerBlue
-     is --accent, teal is --live, and green/yellow/orange/red are the four
-     status colours read all day. Violet is the only hue left that cannot be
-     mistaken for a status, so the brand takes it.
-
-     The top bar is a real surface in both themes, not a fixed dark slab, so
-     these have light values too - otherwise an accent "tuned for the theme"
-     would never be visible, since every use of it sits up there. */
-  --merke:#191b2e; --merke-lys:#23263f;
-  --merke-aksent:#7856f8; --merke-aksent-2:#a86ce8; --merke-aksent-press:#6a49ec;
-  --tb-fg:#e9eaf6; --tb-fg-2:rgba(233,234,246,.56);
-  --tb-ctl:rgba(255,255,255,.10); --tb-ctl-line:rgba(255,255,255,.20);
-  --tb-ctl-hover:rgba(255,255,255,.19); --tb-ctl-focus:rgba(255,255,255,.16);
-  --tb-line:#0d0f1c; --tb-option:#23263f; --tb-sep:rgba(255,255,255,.18);
+  --nm-blue:#282071; --nm-blue-lift:#332a8c; --nm-red:#ff3a20;
   --mono:ui-monospace,"Cascadia Mono","Segoe UI Mono",Consolas,monospace;
-  --sans:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",sans-serif;
+  --sans:"Lexend",system-ui,-apple-system,"Segoe UI",sans-serif;
   --row:26px;
 }
 
@@ -98,15 +86,6 @@
   --warn:#8a6400;
   --err:#d81400;
   --adjust:#a85800;
-  /* The band goes light with the rest of the page. Violet-tinted so it still
-     reads as its own surface next to --bg #f4f6f8, and the accent drops in
-     lightness so white text on it stays above 4.5:1. */
-  --merke:#eae7f8; --merke-lys:#ded9f3;
-  --merke-aksent:#5b3fd6; --merke-aksent-2:#8b4fc9; --merke-aksent-press:#4c33bb;
-  --tb-fg:#1b1830; --tb-fg-2:#5a5470;
-  --tb-ctl:#ffffff; --tb-ctl-line:#c6bfe2;
-  --tb-ctl-hover:#f2effc; --tb-ctl-focus:#ffffff;
-  --tb-line:#cec7e6; --tb-option:#ffffff; --tb-sep:rgba(27,24,48,.16);
 }
 /* Surfaces that were tinted for dark need their own light values: an alpha
    tint designed to lift off near-black turns muddy over white. */
@@ -130,7 +109,7 @@
    the border alone carries the shape just as well. */
 :root[data-theme="light"] .ctx-stat.bad{background:none;border-color:rgba(216,20,0,.45)}
 :root[data-theme="light"] .ctx-stat.warn{background:none;border-color:rgba(138,100,0,.45)}
-/* The top bar is a brand surface: the same indigo in both themes, with
+/* (Original edition: the top bar was a brand surface in both themes, with
    light-on-dark controls. Light-mode rules must therefore stay out of it —
    this one was written unscoped and turned the search fields into white
    blocks with white text on the blue bar. */
@@ -306,8 +285,8 @@ button{background:none;border:none;cursor:pointer}
 /* ---------- top bar ---------- */
 .topbar{
   display:flex;align-items:center;gap:10px;height:46px;flex:0 0 46px;
-  padding:0 clamp(8px,1.1vw,16px);background:var(--merke);
-  border-bottom:1px solid var(--tb-line);
+  padding:0 clamp(8px,1.1vw,16px);background:var(--nm-blue);
+  border-bottom:1px solid #1b1650;
   /* Without this the scan controls push the right-hand buttons off the
      window on a narrow screen - and a menu anchored to a button that is
      itself off-screen opens off-screen too. */
@@ -335,7 +314,7 @@ button{background:none;border:none;cursor:pointer}
 /* Only clickable when the Portal actually lives on this host — the local
    version runs on 127.0.0.1 where there is no Portal to go back to. */
 .brand.linked{cursor:pointer}
-.brand.linked:hover{background:var(--tb-ctl)}
+.brand.linked:hover{background:rgba(255,255,255,.10)}
 .brand.linked:hover .brand-back{opacity:1;transform:translateX(0)}
 .brand-back{
   color:rgba(255,255,255,.6);font-size:11px;font-weight:500;white-space:nowrap;
@@ -345,34 +324,29 @@ button{background:none;border:none;cursor:pointer}
 .brand-mark{
   display:flex;align-items:center;justify-content:center;
   width:24px;height:24px;border-radius:var(--radius);flex:0 0 24px;
-  background:linear-gradient(135deg,var(--merke-aksent),var(--merke-aksent-2));
-  color:#fff;
+  background:linear-gradient(135deg,var(--nm-red),#fc6924);
+  color:#fff;font-weight:700;font-size:13px;letter-spacing:-.02em;
 }
-/* There is no default mark. A 24px glyph next to the name only competes with
-   it, and any glyph generic enough to mean "network scanner" reads as stock
-   art. The bar gets its identity from the band and the wordmark instead.
-   The slot stays, empty, for whoever drops a logo.png next to server.py. */
-.brand-mark:empty{display:none}
 .brand-text{line-height:1.1}
-.brand-text b{display:block;color:var(--tb-fg);font-size:13px;font-weight:600;letter-spacing:-.01em}
-.brand-text span{display:block;color:var(--tb-fg-2);font-size:10px}
+.brand-text b{display:block;color:#fff;font-size:13px;font-weight:600;letter-spacing:-.01em}
+.brand-text span{display:block;color:rgba(255,255,255,.55);font-size:10px}
 
 /* Controls sit on the brand surface, so they get their own light-on-dark
    treatment rather than inheriting the neutral panel styling. */
-.topbar .field{background:var(--tb-ctl);border-color:var(--tb-ctl-line);color:var(--tb-fg)}
-.topbar .field:focus{border-color:var(--merke-aksent);background:var(--tb-ctl-focus)}
-.topbar .field option{background:var(--tb-option);color:var(--tb-fg)}
-.topbar .btn{background:var(--tb-ctl);border-color:var(--tb-ctl-line);color:var(--tb-fg)}
-.topbar .btn:hover:not(:disabled){background:var(--tb-ctl-hover)}
-.topbar .btn.primary{background:var(--merke-aksent);border-color:var(--merke-aksent);color:#fff;font-weight:500}
-.topbar .btn.primary:hover:not(:disabled){background:var(--merke-aksent-press);border-color:var(--merke-aksent-press)}
-.topbar .conn{color:var(--tb-fg);opacity:.8}
+.topbar .field{background:rgba(255,255,255,.10);border-color:rgba(255,255,255,.20);color:#fff}
+.topbar .field:focus{border-color:#fff;background:rgba(255,255,255,.16)}
+.topbar .field option{background:#1a1550;color:#fff}
+.topbar .btn{background:rgba(255,255,255,.12);border-color:rgba(255,255,255,.22);color:#fff}
+.topbar .btn:hover:not(:disabled){background:rgba(255,255,255,.20)}
+.topbar .btn.primary{background:var(--nm-red);border-color:var(--nm-red);color:#fff;font-weight:500}
+.topbar .btn.primary:hover:not(:disabled){background:#e63218;border-color:#e63218}
+.topbar .conn{color:rgba(255,255,255,.75)}
 /* Measured against the brand blue: .45 gives 3.92:1, under the 4.5:1 needed
    for text this size. .55 gives 5.13:1 and still reads as secondary. */
-.topbar .conn code{color:var(--tb-fg-2)}
-.tb-sep{width:1px;height:20px;background:var(--tb-sep)}
+.topbar .conn code{color:rgba(255,255,255,.55)}
+.tb-sep{width:1px;height:20px;background:rgba(255,255,255,.18)}
 .tb-group{display:flex;align-items:center;gap:6px}
-.tb-label{color:var(--tb-fg-2);font-size:10px;text-transform:uppercase;letter-spacing:var(--spor)}
+.tb-label{color:rgba(255,255,255,.5);font-size:10px;text-transform:uppercase;letter-spacing:var(--spor)}
 .spacer{flex:1}
 
 .field{
@@ -998,7 +972,7 @@ tbody tr.tenn td.c-name,
 
    Dette er den nest viktigste hendelsen i verktoyet, og den var - som alarmen
    var - en tekstfarge. En overstyring betyr at noen har satt anlegget i manuell
-   og at reguleringa er koblet ut. Paa en I/O-modul sto ti analoge utganger tvunget
+   og at reguleringa er koblet ut. Paa en sentral sto ti analoge utganger tvunget
    paa prioritet 8, og ingenting paa skjermen fortalte at det hadde skjedd.
 
    Samme grep som alarmen: gult glimt en gang, saa en stille gul kant som blir
@@ -1064,7 +1038,7 @@ tbody tr.drift td.c-val{animation:drift-ut 900ms ease-out}
 
 /* Den staaende markeringa staar STILLE.
 
-   Foerste utkast lot den puste evig. Paa en stor sentral var 1236 av 2418 punkter
+   Foerste utkast lot den puste evig. Paa 558269 er 1236 av 2418 punkter
    flagget - det er 1236 uendelige animasjoner som aldri faar sove, og en vegg
    som blinker mot deg saa lenge lista er aapen. En markering skal kunne staa
    der uten aa kreve noe.
@@ -2948,7 +2922,7 @@ tbody tr.picked > td:first-child::before{
 #scanBtn.sender::after{
   content:'';position:absolute;top:50%;left:50%;
   width:46px;height:46px;margin:-23px 0 0 -23px;border-radius:50%;
-  border:1.5px solid var(--merke-aksent);pointer-events:none;
+  border:1.5px solid var(--nm-red);pointer-events:none;
   animation:ping-ut 900ms cubic-bezier(.2,.7,.3,1) both;
 }
 #scanBtn.sender::after{animation-delay:220ms}
@@ -3449,6 +3423,497 @@ body.drar,body.drar .wk-blk.redigerbar{cursor:grabbing;user-select:none}
   padding:7px 14px;font-size:12px;box-shadow:0 6px 24px rgba(0,0,0,.5);z-index:50;
 }
 .toast.err{border-color:#5c2b26;color:var(--err-fg)}
+
+/* ================================================================ Lillebø
+   This edition's own look, kept in one block at the end so it wins over the
+   rules above without rewriting them.
+
+   Graphite instead of blue-black: a neutral grey lets the status colours be
+   the only colour on screen, which is the point of them. The top bar stops
+   being a coloured brand band and becomes part of the window. Scanning moves
+   down into the device pane, above the list it fills, so the cause and the
+   result sit together. */
+:root{
+  --bg:#111113; --panel:#161618; --raised:#1c1c1f; --hover:#232327;
+  --line:#26262a; --line-2:#35353b; --line-soft:#1a1a1d; --sunken:#0e0e10;
+  --fg:#ececee; --fg-2:#a9a9b0; --fg-3:#85858d;
+  --accent:#6aa7ff; --accent-dim:#1d2a3d; --accent-edge:#34507a; --accent-press:#26385a;
+  --on-accent:#dce9ff;
+  --nm-blue:#161618; --nm-blue-lift:#1c1c1f;
+  --sans:"Segoe UI Variable Text","Segoe UI Variable","Segoe UI",system-ui,-apple-system,sans-serif;
+  --mono:"Cascadia Mono",ui-monospace,Consolas,monospace;
+  --radius:6px; --r-lg:8px;
+}
+:root[data-theme="light"]{
+  --bg:#f6f6f4; --panel:#ffffff; --raised:#f2f2ef; --hover:#e9e9e5;
+  --line:#e4e4e0; --line-2:#cfcfca; --line-soft:#efefec; --sunken:#ffffff;
+  --fg:#1b1b1d; --fg-2:#55555c; --fg-3:#6b6b72;
+  --accent:#0b5cad; --accent-dim:#e3edf8; --accent-edge:#a9c6e8; --accent-press:#cfe0f3;
+  --on-accent:#0b4a8c;
+  --nm-blue:#ffffff; --nm-blue-lift:#f2f2ef;
+}
+body{font-family:var(--sans)}
+
+/* ---- top bar: part of the window, not a band */
+.topbar{background:var(--panel);border-bottom:1px solid var(--line);height:44px;flex:0 0 44px}
+.brand-mark{display:none}
+.brand-text b{color:var(--fg);font-size:13px;font-weight:600;letter-spacing:0}
+.brand-text span{display:none}
+.help-credit{margin-top:12px;padding-top:8px;border-top:1px solid var(--line);font-size:11px;color:var(--fg-3);text-align:right}
+.topbar .btn{background:transparent;border-color:transparent;color:var(--fg-2)}
+.topbar .btn:hover:not(:disabled){background:var(--hover);color:var(--fg)}
+.topbar .conn{color:var(--fg-3)}
+.topbar .conn code{color:var(--fg-3)}
+.brand.linked:hover{background:var(--hover)}
+.brand-back{color:var(--fg-3)}
+
+/* ---- the one primary button: light on dark, dark on light */
+.btn.primary{background:var(--fg);border-color:var(--fg);color:var(--bg);font-weight:600}
+.btn.primary:hover:not(:disabled){background:var(--fg-2);border-color:var(--fg-2)}
+:root[data-theme="light"] .btn.primary:not(.topbar .btn){color:var(--bg)}
+
+/* ---- scanning lives above the list it fills */
+.scanbox{
+  display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) auto;gap:6px;
+  padding:12px 10px 10px;border-bottom:1px solid var(--line);
+}
+.scanbox #rangeInput{grid-column:1 / 3;grid-row:1;width:auto!important;min-width:0;height:32px;font-size:13px}
+.scanbox #scanBtn{grid-column:3;grid-row:1;height:32px;padding:0 14px}
+.scanbox #localAddr{grid-column:1;grid-row:2;max-width:none!important;min-width:0;font-size:12px}
+.scanbox #modeSel{grid-column:2 / 4;grid-row:2;min-width:0;font-size:12px}
+.scanbox .diag-kjapp{grid-column:1 / -1;grid-row:3;max-width:none;margin:0}
+.scanbox .diag-kjapp:not(.vis){display:none}
+.scanbox{position:relative}
+/* Progress: a hairline along the bottom edge of the scan box. Only transform
+   and opacity change, so it never triggers layout. */
+.skann-linje{position:absolute;left:0;right:0;bottom:-1px;height:2px;
+  background:var(--fg);transform:scaleX(0);transform-origin:left center;
+  opacity:0;transition:opacity .45s ease;pointer-events:none}
+.skann-linje.aktiv{opacity:.85}
+.skann-linje.ut{opacity:0}
+.skann-linje.ukjent{transform:none!important;background:linear-gradient(90deg,transparent,var(--fg),transparent);
+  background-size:40% 100%;background-repeat:no-repeat;animation:linje-leter 1.4s cubic-bezier(.45,0,.55,1) infinite}
+@keyframes linje-leter{from{background-position:-40% 0}to{background-position:140% 0}}
+@media (prefers-reduced-motion:reduce){.skann-linje.ukjent{animation:none}}
+/* The flare on the button is gone: the list shows each arrival itself. */
+#scanBtn.svar{animation:none}
+/* The gliding card: placed by script every frame, so no keyframes of its own. */
+#flylag .dev.glid{animation:none;left:0;top:0;transform-origin:center center;
+  background:var(--panel);border:1px solid var(--line-2);border-radius:var(--radius);will-change:transform,opacity}
+/* The slot waits empty - no tint, it is simply opening. */
+.dev.venter{background:transparent;box-shadow:none}
+
+/* ---- device cards: name first, the one thing wrong on the right, the
+   address underneath. No vendor colours on the cards - the vendor is the
+   group heading, and colour is kept for what is wrong. */
+#devList{padding:4px 6px 10px}
+.dev{display:flex;flex-direction:column;gap:3px;padding:8px 10px;margin:1px 0;
+  border:0;border-left:0!important;border-radius:var(--radius);background:transparent;
+  box-shadow:none;transition:background .12s}
+.dev:hover{background:var(--raised)}
+.dev.sel{background:var(--hover);box-shadow:inset 2px 0 0 var(--fg)}
+.dev-l1,.dev-l2{display:flex;align-items:baseline;gap:8px;min-width:0}
+.dev .dev-name{flex:1 1 auto;min-width:0;font-size:13px;font-weight:500;color:var(--fg);
+  font-family:var(--sans);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin:0}
+.dev-st{flex:0 0 auto;font-style:normal;font-size:11px;color:var(--fg-3);white-space:nowrap}
+.dev-st.bad{color:var(--err)}
+.dev-st.warn{color:var(--warn)}
+.dev-l2{font-size:11px;color:var(--fg-3)}
+.dev .dev-ip{font-family:var(--mono);font-size:11px;color:var(--fg-3);margin-left:0;flex:0 0 auto}
+.dev .dev-id{min-width:0;width:auto;flex:0 0 auto}
+.dev .dev-id{font-family:var(--mono);font-size:11px;font-weight:400;color:var(--fg-3)}
+.dev .dev-id::before{content:'· ';color:var(--line-2)}
+.dev-lev{color:var(--fg-3)}
+.dev-pkt{margin-left:auto;font-style:normal;color:var(--fg-3);white-space:nowrap}
+.dev .dev-note{font-size:10px;color:var(--fg-2);border:1px solid var(--line-2);border-radius:var(--r-sm);padding:0 4px}
+.dev .dev-seen{font-style:normal}
+
+/* Reading a device: a hairline along the bottom, the same mark as the scan
+   line above, instead of tinting the whole card. */
+.dev.laster{background-image:none}
+.dev.laster::before,.dev.laster::after{inset:auto 10px 3px 10px;height:2px;border-radius:1px}
+.dev.laster::before{background:var(--fg-2)}
+.dev.laster::after{background:var(--live)}
+.dev.laster.ukjent::before{background:linear-gradient(90deg,transparent,var(--fg-2),transparent)}
+.dev.laster .dev-ip,.dev.laster .dev-name,.dev.laster .dev-pkt,.dev.laster .dev-seen{color:inherit}
+.dev.laster .dev-name{color:var(--fg)}
+
+/* Vendor headings: plain words and a count, a small dot for the maker. */
+.vgroup{border-bottom:0;margin-top:6px}
+.vgroup-head{padding:6px 10px;font-size:12px;font-weight:500;color:var(--fg-2);
+  background:var(--panel);border-radius:var(--radius)}
+.vgroup-head:hover{background:var(--raised)}
+.vgroup-bar{flex:0 0 6px;height:6px;align-self:center;border-radius:50%;opacity:.8}
+.vgroup-n{background:transparent;color:var(--fg-3);font-family:var(--sans);font-size:11px;padding:0}
+.vgroup-head .dev-flag{font-family:var(--sans);font-size:10px;background:transparent;padding:0}
+.vgroup-head .dev-flag.bad{color:var(--err)}
+.vgroup-head .dev-flag.warn{color:var(--warn)}
+.scanbox .field{background:var(--sunken);border-color:var(--line-2);color:var(--fg)}
+.pane-devices{flex-basis:var(--w-devices,300px)}
+
+/* ---- pane headings: quieter, no shouting caps */
+.pane-head{text-transform:none;letter-spacing:0;font-size:12px;color:var(--fg-2);height:34px;flex:0 0 34px}
+
+/* ---- the device you are in is a title, not a row of chips */
+.ctx-bar{height:auto;flex:0 0 auto;padding:14px 16px 12px;align-items:flex-end;
+  background:var(--panel);box-shadow:none;gap:8px}
+.ctx-tittel{display:flex;flex-direction:column;gap:3px;min-width:0;flex:0 1 auto}
+.ctx-bar .ctx-name{font-size:20px;font-weight:600;color:var(--fg);letter-spacing:-.01em;line-height:1.2}
+.ctx-under{display:flex;align-items:center;gap:10px;font-size:12px;color:var(--fg-3);min-width:0;overflow:hidden}
+.ctx-under .ctx-id{font-size:12px;font-weight:400;color:var(--fg-3)}
+.ctx-stat{font-family:var(--sans);font-size:11px;background:transparent;border-color:var(--line)}
+
+/* ---- table: calmer header, tags in mono, values carry the weight */
+thead th{text-transform:none;letter-spacing:0;font-weight:500}
+td.c-name{font-family:var(--mono);font-size:12px}
+td.c-val{font-weight:600}
+
+/* While it scans, Skann turns into Cancel and carries the progress. On the
+   light primary button the white fill and flare were invisible, so the
+   button goes quiet for the duration and the fill takes the text colour. */
+#scanBtn.skanner{background:var(--raised);border-color:var(--line-2);color:var(--fg)}
+#scanBtn.skanner > span.fyll{background:linear-gradient(90deg,
+  color-mix(in srgb,var(--fg) 10%,transparent) 0%,
+  color-mix(in srgb,var(--fg) 16%,transparent) calc(100% - 12px),
+  color-mix(in srgb,var(--fg) 45%,transparent) 100%)}
+#scanBtn.skanner.ukjent > span.fyll{background:linear-gradient(90deg,transparent,color-mix(in srgb,var(--fg) 30%,transparent),transparent)}
+
+/* ---- round two: the rest of the window in the same voice ---- */
+
+/* Device heading: counts are words beside the title, not boxes. Only what is
+   wrong keeps a colour. */
+.ctx-stat{border:0!important;background:transparent!important;padding:0 0 0 10px;
+  font-size:12px;color:var(--fg-3)}
+.ctx-stat.bad{color:var(--err)}
+.ctx-stat.warn{color:var(--warn)}
+.ctx-stat[data-flag]:hover{color:var(--fg);text-decoration:underline}
+
+/* Toolbar above the table: borderless buttons, a search field that can breathe. */
+.filterbar{gap:4px;padding:8px 12px;border-bottom:1px solid var(--line);background:var(--panel)}
+.filterbar .btn{background:transparent;border-color:transparent;color:var(--fg-2)}
+.filterbar .btn:hover:not(:disabled){background:var(--hover);color:var(--fg)}
+.filterbar .btn.on{background:var(--hover);color:var(--fg);border-color:transparent}
+.filterbar .field{background:transparent;border-color:transparent;color:var(--fg-2)}
+.filterbar{flex-wrap:nowrap}
+.filterbar #q{flex:1 1 220px;max-width:340px;min-width:120px;background:var(--sunken);border-color:var(--line-2);color:var(--fg);height:30px}
+.filterbar #typeSel:hover,.filterbar #pollInt:hover{background:var(--hover)}
+
+/* Object type as quiet text, and the star only when you are on the row. */
+.type-tag{border:0!important;background:transparent!important;padding:0;color:var(--fg-3);font-size:11px}
+td.c-act .pin{opacity:0;transition:opacity .12s}
+tbody tr:hover td.c-act .pin,td.c-act .pin.on,tbody tr.sel td.c-act .pin{opacity:1}
+.pin.on{color:var(--warn)}
+thead th{color:var(--fg-3);font-size:12px;background:var(--panel)}
+
+/* Inspector: headings in normal case, numbers without tiles. */
+.sect-head{text-transform:none;letter-spacing:0;font-size:12px;font-weight:500;color:var(--fg-2);padding:12px 12px 6px}
+.sum-grid{gap:2px 14px;padding:0 12px 10px;grid-template-columns:repeat(auto-fill,minmax(88px,1fr))}
+.sum-card{background:transparent;border:0;padding:4px 0}
+.sum-card b{font-family:var(--sans);font-size:18px;font-weight:600}
+.sum-card span{text-transform:none;letter-spacing:0;font-size:11px}
+.sum-grid .sum-card{animation:none}
+.insp-title{font-size:16px}
+
+/* Site warning: one quiet line, not a stripe. */
+.dup-warn{background:transparent!important;border-bottom:1px solid var(--line)!important;box-shadow:none!important}
+.warn-head{font-weight:500;font-size:12px;padding:8px 12px}
+.warn-head:hover{background:var(--raised)}
+.warn-title::before{content:'';display:inline-block;width:6px;height:6px;border-radius:50%;
+  background:currentColor;margin-right:8px;vertical-align:1px}
+
+/* The address the tool sends from, at the right of the status bar. */
+.statusbar .conn{color:var(--fg-3);font-size:11px}
+.statusbar .conn code{color:var(--fg-3)}
+.statusbar .conn.down{color:var(--err)}
+
+/* Dialogs: one surface, one border, one shadow, sentence case. */
+.gs-modal{background:var(--panel);border:1px solid var(--line-2);border-radius:10px;
+  box-shadow:0 24px 64px rgba(0,0,0,.45)}
+.gs-head{padding:12px 16px}
+.gs-head span[style*="font-weight:600"]{font-size:14px!important}
+.gs-overlay{backdrop-filter:none;background:rgba(0,0,0,.45)}
+:root[data-theme="light"] .gs-overlay{background:rgba(20,20,22,.25)}
+.menu-pop{background:var(--panel);border:1px solid var(--line-2);border-radius:8px;box-shadow:0 12px 32px rgba(0,0,0,.35)}
+.menu-gruppe{text-transform:none!important;letter-spacing:0!important;font-size:11px}
+
+
+
+/* ---- NABE: the mascot ----
+   A controller box that has seen one BACnet explorer too many. Eyes rolled to
+   the ceiling, mouth flat. It is drawn in the text colour, so it follows the
+   theme; only the LED has a colour of its own. */
+.brand-mark.nabe-mark{display:flex;background:none;width:26px;height:26px;flex:0 0 26px;
+  border-radius:0;cursor:pointer;overflow:visible}
+.nabe{overflow:visible;display:block}
+.nabe-boks{fill:var(--fg)}
+.nabe-oye{fill:var(--bg)}
+.nabe-pupiller{fill:var(--fg);transition:transform .45s cubic-bezier(.2,.8,.2,1)}
+.nabe-lokk{fill:none;stroke:var(--bg);stroke-width:1.3;stroke-linecap:round;opacity:.9}
+.nabe-munn{stroke:var(--bg);stroke-width:2;stroke-linecap:round;transition:transform .3s ease}
+.nabe-ant{stroke:var(--fg);stroke-width:1.6}
+.nabe-led{fill:var(--warn);transition:fill .3s ease}
+.brand-text b{font-size:15px;font-weight:700;letter-spacing:.06em}
+
+/* Hover: the full eye-roll, left, up and over to the right. */
+@keyframes nabe-rull{
+  0%  {transform:translate(0,0)}
+  25% {transform:translate(-2px,1.6px)}
+  55% {transform:translate(0,-.6px)}
+  80% {transform:translate(2px,1.4px)}
+  100%{transform:translate(0,0)}
+}
+.brand:hover .nabe-pupiller{animation:nabe-rull .9s cubic-bezier(.45,0,.55,1)}
+
+/* Scanning: it gives in and looks down at the list after all, and the LED
+   goes to work. */
+body.skanner .nabe-pupiller{transform:translate(0,4.4px)}
+body.skanner .nabe-lokk{opacity:0}
+body.skanner .nabe-led{fill:var(--ok)}
+/* Something answered: a small, reluctant smile for a moment. */
+.nabe-mark.fornoyd .nabe-munn{transform:translateY(-.4px)}
+.nabe-mark.fornoyd .nabe-lokk{opacity:0}
+.nabe-mark.fornoyd .nabe-pupiller{transform:translate(0,1.5px)}
+@media (prefers-reduced-motion:reduce){
+  .brand:hover .nabe-pupiller{animation:none}
+  .nabe-pupiller,.nabe-munn,.nabe-led{transition:none}
+}
+
+/* ---- NABE has moods ----
+   It watches the pointer when you are doing something and looks bored at the
+   ceiling when you are not. It blinks now and then, falls asleep if left
+   alone, gets dizzy if you shake the mouse at it, sweats when you hover a
+   write button, sulks after an empty scan, and wears sunglasses in light mode.
+   Everything is driven from one place in app.js. */
+.nabe-pupiller{transition:transform .18s ease-out}
+.nabe-lokk-v,.nabe-lokk-h{fill:var(--fg);transform:scaleY(0);transform-box:fill-box;transform-origin:center top;
+  transition:transform .09s ease-in}
+.nabe-mark.blunk .nabe-lokk-v,.nabe-mark.blunk .nabe-lokk-h,
+.nabe-mark.sover .nabe-lokk-v,.nabe-mark.sover .nabe-lokk-h{transform:scaleY(1)}
+.nabe-mark.sover .nabe-lokk-v,.nabe-mark.sover .nabe-lokk-h{transform:scaleY(.62)}
+.nabe-munn{fill:none;stroke:var(--bg);stroke-width:2;stroke-linecap:round;
+  d:path('M12.6 23.4 Q16 23.4 19.4 23.4');transition:d .3s ease}
+.nabe-mark.fornoyd .nabe-munn{d:path('M12.4 22.6 Q16 25.6 19.6 22.6')}
+.nabe-mark.trist .nabe-munn{d:path('M12.6 24.8 Q16 21.6 19.4 24.8')}
+.nabe-mark.sover .nabe-munn{d:path('M14.8 23.6 Q16 24.4 17.2 23.6')}
+.nabe-mark.nervos .nabe-munn{d:path('M12.6 23.6 Q14.3 22.6 16 23.6 Q17.7 24.6 19.4 23.6')}
+.nabe-mark.trist .nabe-led{fill:var(--err)}
+.nabe-mark.sover .nabe-led{fill:var(--fg-3)}
+.nabe-oyne{transform-box:fill-box;transform-origin:center;transition:transform .2s cubic-bezier(.2,.8,.2,1)}
+.nabe-mark.nervos .nabe-oyne,.nabe-mark.skvatt .nabe-oyne{transform:scale(1.14)}
+.nabe-svette{fill:#6aa7ff;opacity:0;transform:translateY(-2px);transition:opacity .2s,transform .4s}
+.nabe-mark.nervos .nabe-svette{opacity:1;transform:translateY(1.5px)}
+.nabe-mark.nervos .nabe-lokk,.nabe-mark.fornoyd .nabe-lokk,.nabe-mark.sover .nabe-lokk,
+.nabe-mark.ser .nabe-lokk{opacity:0}
+.nabe-lokk{transition:opacity .2s}
+.nabe-z{font:700 7px var(--sans);fill:var(--fg-2);opacity:0}
+.nabe-mark.sover .nabe-z{animation:nabe-zzz 2.4s ease-in-out infinite}
+@keyframes nabe-zzz{0%{opacity:0;transform:translate(0,4px)}30%{opacity:1}100%{opacity:0;transform:translate(4px,-5px)}}
+/* Shaken: the pupils go round. */
+@keyframes nabe-svimmel{0%{transform:translate(1.8px,0)}25%{transform:translate(0,1.8px)}
+  50%{transform:translate(-1.8px,0)}75%{transform:translate(0,-1.8px)}100%{transform:translate(1.8px,0)}}
+.nabe-mark.svimmel .nabe-pupiller{animation:nabe-svimmel .32s linear infinite}
+.nabe-mark.svimmel .nabe-munn{d:path('M12.6 23.6 Q14.3 22.6 16 23.6 Q17.7 24.6 19.4 23.6')}
+/* Light mode is bright. NABE came prepared. */
+.nabe-briller{fill:#111113;transform:translateY(-9px);opacity:0;
+  transition:transform .55s cubic-bezier(.3,1.4,.5,1),opacity .25s}
+:root[data-theme="light"] .nabe-briller{transform:none;opacity:1}
+:root[data-theme="light"] .nabe-lokk{opacity:0}
+@media (prefers-reduced-motion:reduce){
+  .nabe-mark.sover .nabe-z,.nabe-mark.svimmel .nabe-pupiller{animation:none}
+  .nabe-briller,.nabe-pupiller,.nabe-oyne{transition:none}
+}
+
+/* ---- motion, re-tuned for this edition ----
+   One curve for everything that settles. Colour in motion only where it
+   means something: a value going up or down is not good or bad, so its flash
+   is neutral and the direction is in the movement. */
+:root{--mot-kurve:cubic-bezier(.2,.8,.2,1)}
+/* The progress line is the scan's signal now; the radar sweep over the
+   heading, the rings off the button and its squash were three more. */
+body.skanner .pane-devices .pane-head::after{display:none}
+#scanBtn.sender::before,#scanBtn.sender::after{display:none}
+#scanBtn.lader{animation:none}
+/* Material-style click ripples are someone else's language. */
+.bolge{display:none}
+@keyframes verdi-lb-opp{0%{background:color-mix(in srgb,var(--fg) 12%,transparent);transform:translateY(2px)}100%{background:transparent;transform:none}}
+@keyframes verdi-lb-ned{0%{background:color-mix(in srgb,var(--fg) 12%,transparent);transform:translateY(-2px)}100%{background:transparent;transform:none}}
+td.c-val.opp{animation:verdi-lb-opp 700ms var(--mot-kurve)}
+td.c-val.ned{animation:verdi-lb-ned 700ms var(--mot-kurve)}
+@keyframes mottok-lb{0%{box-shadow:0 0 0 0 color-mix(in srgb,var(--fg) 35%,transparent)}100%{box-shadow:0 0 0 6px transparent}}
+.dev.mottok{animation:mottok-lb 700ms var(--mot-kurve) 150ms both}
+@keyframes fest-lb{0%{background:color-mix(in srgb,var(--fg) 10%,transparent)}100%{background:transparent}}
+#watchList.mottok{animation:fest-lb 700ms ease-out}
+.dev.puls::after{background:linear-gradient(90deg,transparent 35%,color-mix(in srgb,var(--fg) 9%,transparent) 50%,transparent 65%);background-size:220% 100%}
+.dev.ferdig::before{background:linear-gradient(90deg,transparent,color-mix(in srgb,var(--fg) 10%,transparent),transparent)}
+#ctxBar.byttet::after{background:var(--fg);opacity:.35}
+.sum-card.alarm.slaar{animation:none}
+
+/* ---- NABE in costume ---- */
+.nabe-lue,.nabe-flagg,.nabe-hoggtenner{display:none}
+.nabe-mark.jul .nabe-lue{display:inline}
+.nabe-mark.mai17 .nabe-flagg{display:inline}
+.nabe-mark.mai17 .nabe-led{display:none}
+.nabe-mark.halloween .nabe-hoggtenner{display:inline}
+.nabe-mark.halloween .nabe-led{fill:#ff8c00}
+/* Showing off: one full turn. */
+@keyframes nabe-snurr{to{transform:rotate(360deg)}}
+.nabe-mark.snurr .nabe{animation:nabe-snurr .7s cubic-bezier(.45,0,.55,1)}
+@media (prefers-reduced-motion:reduce){.nabe-mark.snurr .nabe{animation:none}}
+
+/* ---- NABE's speech bubble ----
+   Hangs from the logo with a little tail pointing up at him. Plain panel
+   surface, the same border and shadow as menus, so it belongs to the window. */
+.nabe-boble{position:fixed;z-index:9990;max-width:min(460px,50vw);min-height:18px;white-space:nowrap;
+  overflow:hidden;text-overflow:ellipsis;padding:6px 12px;border-radius:10px;background:var(--panel);color:var(--fg);
+  border:1px solid var(--line-2);box-shadow:0 12px 32px rgba(0,0,0,.35);
+  font:400 13px/1.45 var(--sans);cursor:pointer;
+  opacity:0;transform:translate(-6px,-50%) scale(.96);transform-origin:-6px 50%;pointer-events:none;
+  transition:opacity .18s ease,transform .25s cubic-bezier(.2,.8,.2,1)}
+.nabe-boble::before{content:'';position:absolute;left:-6px;top:50%;width:10px;height:10px;margin-top:-5px;
+  background:var(--panel);border-left:1px solid var(--line-2);border-bottom:1px solid var(--line-2);
+  transform:rotate(45deg)}
+.nabe-boble{overflow:visible}
+.nabe-boble .nb-tekst{display:block;overflow:hidden;text-overflow:ellipsis}
+.nabe-boble.inne{opacity:1;transform:translate(0,-50%);pointer-events:auto}
+.nabe-boble.ut{opacity:0;transform:translate(-6px,-50%) scale(.96)}
+/* Talking: the mouth opens and closes while the line is typed. */
+@keyframes nabe-prat{
+  0%,100%{d:path('M12.6 23.4 Q16 23.4 19.4 23.4')}
+  50%{d:path('M13.4 22.8 Q16 26.2 18.6 22.8')}
+}
+.nabe-mark.snakker .nabe-munn{animation:nabe-prat .22s ease-in-out infinite}
+.nabe-mark.snakker .nabe-lokk{opacity:0}
+@media (prefers-reduced-motion:reduce){.nabe-boble{transition:none}.nabe-mark.snakker .nabe-munn{animation:none}}
+
+/* ---- vendor colours, where they help you find your way ----
+   Used as marks, never as text and never as fills: a bar, a dot, a tinted
+   chip. That keeps them from being read as status - a Regin red bar beside
+   the words "21 faults" in red text are two different things, and the words
+   are what carry the meaning. Switched off by removing the class on <html>. */
+:root.levfarge .vgroup-bar{width:8px;height:8px;flex:0 0 8px;opacity:1;background:var(--vc)}
+:root.levfarge .vgroup-name{color:var(--fg)}
+/* Each card carries its maker as a thin bar down the left edge. */
+:root.levfarge .dev{box-shadow:inset 3px 0 0 color-mix(in srgb,var(--vc) 55%,transparent)}
+:root.levfarge .dev:hover{box-shadow:inset 3px 0 0 color-mix(in srgb,var(--vc) 80%,transparent)}
+:root.levfarge .dev.sel{background:color-mix(in srgb,var(--vc) 10%,var(--hover));box-shadow:inset 3px 0 0 var(--vc)}
+/* Reading a device: the hairline is in its maker's colour. */
+:root.levfarge .dev.laster::before{background:var(--vc)}
+/* The card gliding in carries the same bar, so it lands already belonging. */
+:root.levfarge #flylag .dev.glid{box-shadow:inset 3px 0 0 var(--vc)}
+/* Device heading: the maker as a tinted chip under the name. */
+:root.levfarge .ctx-under .vendor{font-size:11px;padding:1px 8px 1px 6px;border-radius:999px;
+  background:color-mix(in srgb,var(--vc) 16%,transparent);
+  color:color-mix(in srgb,var(--vc) 55%,var(--fg))}
+:root.levfarge .ctx-under .vendor i{width:6px;height:6px;flex:0 0 6px;border-radius:50%;opacity:1}
+:root.levfarge #ctxBar.byttet::after{background:var(--vc);opacity:.8}
+:root.levfarge .insp-sub .vendor i{width:6px;height:6px;flex:0 0 6px;border-radius:50%;opacity:1}
+:root.levfarge .insp-sub .vendor{color:color-mix(in srgb,var(--vc) 55%,var(--fg))}
+:root[data-theme="light"].levfarge .ctx-under .vendor,
+:root[data-theme="light"].levfarge .insp-sub .vendor{color:color-mix(in srgb,var(--vc) 70%,#000)}
+
+/* ---- NABE 1.1: start screen ----
+   Plain and quick: the mascot, the name, the plants you were on, a field for
+   a new one. A card on a dimmed window, gone with any of the obvious keys. */
+.startskjerm{position:fixed;inset:0;z-index:9980;display:flex;align-items:center;justify-content:center;
+  background:color-mix(in srgb,var(--bg) 82%,transparent);backdrop-filter:blur(3px);
+  animation:ss-inn .28s cubic-bezier(.2,.8,.2,1) both}
+.startskjerm.ut{animation:ss-ut .24s ease-in forwards}
+@keyframes ss-inn{from{opacity:0}to{opacity:1}}
+@keyframes ss-ut{to{opacity:0}}
+.ss-kort{width:min(440px,calc(100vw - 32px));max-height:calc(100vh - 32px);overflow:auto;
+  background:var(--panel);border:1px solid var(--line-2);border-radius:14px;
+  box-shadow:0 30px 80px rgba(0,0,0,.45);padding:28px 28px 20px;text-align:center;
+  animation:ss-kort .4s cubic-bezier(.2,.8,.2,1) both}
+@keyframes ss-kort{from{transform:translateY(10px) scale(.98);opacity:0}to{transform:none;opacity:1}}
+.ss-logo{display:flex;justify-content:center;margin-bottom:6px}
+.ss-logo .nabe{width:96px;height:96px}
+.ss-navn{margin:0;font-size:34px;font-weight:700;letter-spacing:.08em;color:var(--fg)}
+.ss-under{font-size:12px;color:var(--fg-3);margin-top:2px}
+.ss-hilsen{margin:14px 0 18px;font-size:14px;color:var(--fg-2)}
+.ss-tittel{font-size:12px;color:var(--fg-3);text-align:left;margin:0 0 6px}
+.ss-liste{display:flex;flex-direction:column;gap:2px;margin-bottom:14px}
+.ss-rad{display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding:8px 10px;
+  border-radius:8px;text-align:left;background:transparent;border:0;color:var(--fg);cursor:pointer}
+.ss-rad:hover,.ss-rad:focus-visible{background:var(--hover)}
+.ss-rad-navn{font-size:13px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ss-rad-meta{font-size:11px;color:var(--fg-3);white-space:nowrap;font-family:var(--mono)}
+.ss-nytt{display:flex;gap:6px}
+.ss-nytt .field{flex:1;height:34px;font-size:13px}
+.ss-nytt .btn{height:34px;padding:0 16px}
+.ss-videre{margin-top:10px;background:none;border:0;color:var(--fg-3);font-size:12px;cursor:pointer}
+.ss-videre:hover{color:var(--fg)}
+.ss-videre kbd{font-family:var(--mono);font-size:10px;border:1px solid var(--line-2);border-radius:4px;padding:0 4px;margin-left:4px}
+.ss-nytt-i{text-align:left;margin-top:16px;padding-top:12px;border-top:1px solid var(--line)}
+.ss-nytt-i ul{margin:0;padding-left:18px;font-size:12px;color:var(--fg-2);line-height:1.7}
+.ss-fakta{margin-top:16px;padding-top:12px;border-top:1px solid var(--line);font-size:11px;color:var(--fg-3);line-height:1.5}
+@media (prefers-reduced-motion:reduce){.startskjerm,.ss-kort,.startskjerm.ut{animation:none}}
+
+/* ---- active alarms in the inspector ---- */
+.alarm-liste{display:flex;flex-direction:column;padding:0 6px 8px}
+.alarm-rad{display:flex;align-items:baseline;gap:8px;padding:6px 6px;border:0;border-radius:6px;
+  background:transparent;color:var(--fg);text-align:left;cursor:pointer;font-size:12px}
+.alarm-rad:hover{background:var(--hover)}
+.alarm-navn{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:var(--mono);font-size:11px}
+.alarm-til{font-size:11px}
+.alarm-til.bad{color:var(--err)}
+.alarm-til.warn{color:var(--warn)}
+.alarm-ukv{font-size:10px;color:var(--fg-2);border:1px solid var(--line-2);border-radius:4px;padding:0 4px}
+.alarm-tom{font-size:12px;color:var(--fg-3);padding:0 12px 10px}
+
+/* ---- routers found on site ---- */
+.ruter-info{padding:6px 12px 8px;border-bottom:1px solid var(--line);font-size:11px;color:var(--fg-3);line-height:1.6}
+.ruter-info[hidden]{display:none}
+.ruter-ip{font-family:var(--mono);color:var(--fg-2)}
+
+/* ---- motion style, final pass ----
+   One rule for everything: things settle on one calm curve, nothing springs
+   past where it is going, nothing glows outward, and nothing is frosted glass.
+   Exceptions are kept on purpose: the row flash for a new alarm or override
+   (it means something), loading indicators while something is loading, and
+   NABE himself, whose sunglasses are allowed to drop with a bounce. */
+:root{--fjaer:cubic-bezier(.2,.8,.2,1)}
+/* No frosted glass: a plain dim behind dialogs, menus and the start screen.
+   Blur is also the single most expensive thing to draw over remote desktop. */
+.gs-overlay,.gs-overlay:not([hidden]){backdrop-filter:none!important}
+body.gjennomsiktig .menu-pop{backdrop-filter:none}
+.startskjerm{backdrop-filter:none;background:color-mix(in srgb,var(--bg) 88%,transparent)}
+/* Arrivals and returns: a short tint that fades, not a ring that spreads. */
+@keyframes stille-tint{0%{background-color:color-mix(in srgb,var(--fg) 9%,transparent)}100%{background-color:transparent}}
+@keyframes stille-ok{0%{background-color:color-mix(in srgb,var(--ok) 12%,transparent)}100%{background-color:transparent}}
+.dev.mottok{animation:stille-tint 600ms var(--mot-kurve) both}
+.dev.tilbake{animation:stille-ok 800ms var(--mot-kurve)}
+.note-field.lagret{animation:stille-ok 900ms ease-out}
+
+/* ---- design pass 2 ---- */
+/* 1. The interval only matters while Live is on, so it only shows then. */
+.filterbar #pollInt{display:none}
+.filterbar:has(#pollBtn.on) #pollInt{display:inline-block}
+
+/* 3. Read and unread: a device that has not been read yet is a step quieter. */
+.dev:not(.lest):not(.sel) .dev-name{color:var(--fg-2);font-weight:400}
+
+/* 4. Light mode: more space between the greys, so muted text still reads. */
+:root[data-theme="light"]{--fg-2:#4a4a51;--fg-3:#5c5c63;--line:#dcdcd7;--line-2:#c6c6c0}
+
+/* 5. Values in the interface's own face, with fixed-width digits so the
+   decimal points still line up. */
+td.c-val,td.c-obj .inst,.dev-pkt,.sum-card b,.ctx-stat{font-family:var(--sans);font-variant-numeric:tabular-nums}
+
+/* 6. Labels everywhere in sentence case - dialogs, menus, palettes and tables
+   had small shouting capitals left over from the first look. */
+.tb-label,.cmp-hode,.cmp-merke,.rap-h,.pane-head,thead th,.sect-head,.tl-tab th,
+.sum-card span,.menu-gruppe,.tema-tittel,.cmd-group,.ede-h,.help-title{
+  text-transform:none!important;letter-spacing:0!important}
+.tema-tittel,.cmd-group,.ede-h,.help-title,.rap-h,.cmp-hode{font-size:12px;font-weight:500;color:var(--fg-2)}
+.gs-head{border-bottom:1px solid var(--line)}
+.gs-modal .btn{border-radius:var(--radius)}
+
+/* 7. Four type sizes: 11 for metadata, 12 for controls and labels, 13 for
+   body text, and the large ones for titles. */
+:root{--t-1:11px;--t-2:11px;--t-3:12px;--t-4:12px;--t-5:13px}
+
+/* 8. How the plant was left, on the start screen. */
+.ss-over{color:var(--warn)}
 </style>
 </head>
 <body>
@@ -3472,32 +3937,31 @@ body.drar,body.drar .wk-blk.redigerbar{cursor:grabbing;user-select:none}
            exist (drop logo.svg or logo.png next to server.py). Embedding
            the <img> here instead would flash its alt text whenever no file
            is installed. -->
-      <span id="brandMark" class="brand-mark"></span>
-      <span class="brand-text"><b>BACnet Explorer</b><span id="brandSub">lokal</span></span>
+      <span id="brandMark" class="brand-mark nabe-mark" title="Not Another BACnet Explorer"><svg class="nabe" viewBox="0 0 32 32" width="26" height="26" aria-hidden="true">
+        <line x1="16" y1="6" x2="16" y2="2.6" class="nabe-ant"/>
+        <circle cx="16" cy="2.4" r="1.7" class="nabe-led"/>
+        <rect x="3" y="6" width="26" height="23" rx="6.5" class="nabe-boks"/>
+        <g class="nabe-oyne">
+          <circle cx="11.2" cy="15.6" r="4.6" class="nabe-oye"/>
+          <circle cx="20.8" cy="15.6" r="4.6" class="nabe-oye"/>
+          <g class="nabe-pupiller"><circle cx="11.2" cy="15.6" r="2.1"/><circle cx="20.8" cy="15.6" r="2.1"/></g>
+          <ellipse cx="11.2" cy="15.6" rx="4.9" ry="4.9" class="nabe-lokk-v"/>
+          <ellipse cx="20.8" cy="15.6" rx="4.9" ry="4.9" class="nabe-lokk-h"/>
+        </g>
+        <path d="M11 11.2 Q11.2 10.4 13.2 10.6 M18.8 10.6 Q20.8 10.4 21 11.2" class="nabe-lokk"/>
+        <g class="nabe-briller"><rect x="5.6" y="12" width="9.6" height="6.4" rx="2.4"/><rect x="16.8" y="12" width="9.6" height="6.4" rx="2.4"/><rect x="15" y="13.6" width="2" height="1.2"/></g>
+        <path d="M27.2 9.2 Q28.6 11.4 27.2 12.2 Q25.8 11.4 27.2 9.2 Z" class="nabe-svette"/>
+        <path d="M12.6 23.4 Q16 23.4 19.4 23.4" class="nabe-munn"/>
+        <text x="25" y="5" class="nabe-z">z</text>
+        <g class="nabe-lue"><path d="M6 8.4 Q14 -3 25.6 7.2 Z" fill="#d8262e"/><rect x="5" y="7" width="22" height="2.6" rx="1.3" fill="#f2f2f2"/><circle cx="25.8" cy="6.2" r="1.8" fill="#f2f2f2"/></g>
+        <g class="nabe-flagg"><rect x="16" y="0" width="7.6" height="5.2" fill="#ba0c2f"/><rect x="18.1" y="0" width="1.6" height="5.2" fill="#fff"/><rect x="16" y="1.8" width="7.6" height="1.6" fill="#fff"/><rect x="18.5" y="0" width=".8" height="5.2" fill="#00205b"/><rect x="16" y="2.2" width="7.6" height=".8" fill="#00205b"/></g>
+        <g class="nabe-hoggtenner"><path d="M13.6 23.6 L14.4 25.6 L15.2 23.6 Z M16.8 23.6 L17.6 25.6 L18.4 23.6 Z" fill="var(--bg)"/></g>
+      </svg></span>
+      <span class="brand-text"><b>NABE</b><span id="brandSub" hidden></span></span>
     </a>
-
-    <div class="tb-sep"></div>
-
-    <div class="tb-group">
-      <select id="localAddr" class="field" style="max-width:210px" title="Nettverkskortet forespørslene sendes fra">
-        <option value="">Laster nettverkskort…</option>
-      </select>
-      <datalist id="kjenteOmrader"></datalist>
-      <input id="rangeInput" class="field" list="kjenteOmrader" style="width:148px" placeholder="10.75.1.0/24, …" title="Ett eller flere IP-områder. Skill dem med komma, semikolon eller mellomrom — de skannes etter tur inn i én liste."
-             list="recentRanges" autocomplete="off">
-      <datalist id="recentRanges"></datalist>
-      <button id="diagKjapp" class="btn diag-kjapp" type="button" tabindex="-1">Sjekk én</button>
-      <select id="modeSel" class="field" title="Grundig prøver stille adresser en gang til, langsomt — finner enheter som ellers mistes over VPN. Rask tar én runde. Who-Is blokkeres ofte.">
-        <option value="unicast_sweep">Sweep — grundig</option>
-        <option value="unicast_fast">Sweep — rask</option>
-        <option value="broadcast">Who-Is</option>
-      </select>
-      <button id="scanBtn" class="btn primary" disabled>Skann</button>
-    </div>
 
     <div class="spacer"></div>
 
-    <div id="conn" class="conn"><span id="connText"></span><code id="connAddr"></code></div>
 
     <div class="menu">
       <button id="toolsBtn" class="btn btn-icon" title="Mer">⋯</button>
@@ -3785,6 +4249,7 @@ body.drar,body.drar .wk-blk.redigerbar{cursor:grabbing;user-select:none}
       <li>Klikk en enhet for å laste punktene.</li>
       <li>Klikk et punkt for detaljer, trend og skriving.</li>
     </ol>
+    <div class="help-credit">NABE · Not Another BACnet Explorer · Martin Lillebø</div>
   </div>
 
   <div id="backendWarn" class="backend-warn" hidden></div>
@@ -3796,6 +4261,25 @@ body.drar,body.drar .wk-blk.redigerbar{cursor:grabbing;user-select:none}
       <!-- Radaren ligger i sitt eget lag som klipper seg selv, ikke paa panelet.
            Panelet kan ikke faa overflow:hidden - da forsvinner menyene som
            spretter ut av det. -->
+      <div class="scanbox">
+      <select id="localAddr" class="field" style="max-width:210px" title="Nettverkskortet forespørslene sendes fra">
+        <option value="">Laster nettverkskort…</option>
+      </select>
+      <datalist id="kjenteOmrader"></datalist>
+      <input id="rangeInput" class="field" list="kjenteOmrader" style="width:148px" placeholder="10.75.1.0/24, …" title="Ett eller flere IP-områder: 10.75.1.0/24, én IP, eller 10.75.1.10-40. Skill dem med komma, semikolon eller mellomrom — de skannes etter tur inn i én liste. I BBMD-modus: IP-en til byggets BBMD."
+             list="recentRanges" autocomplete="off">
+      <datalist id="recentRanges"></datalist>
+      <button id="diagKjapp" class="btn diag-kjapp" type="button" tabindex="-1">Sjekk én</button>
+      <select id="modeSel" class="field" title="Auto: Who-Is på eget subnett, grundig sweep over VPN og rutet nett. BBMD: skriv IP-en til byggets BBMD og få hele bygget - også MS/TP bak rutere - uten å treffe nabobyggene på samme VPN.">
+        <option value="auto">Auto</option>
+        <option value="bbmd">BBMD — via én IP</option>
+        <option value="unicast_sweep">Sweep — grundig</option>
+        <option value="unicast_fast">Sweep — rask</option>
+        <option value="broadcast">Who-Is</option>
+      </select>
+      <button id="scanBtn" class="btn primary" disabled>Skann</button>
+      <div class="skann-linje" aria-hidden="true"></div>
+    </div>
       <div class="pane-head">Enheter <span id="devCount" class="count">0</span></div>
       <div id="dupWarn" class="dup-warn" hidden></div>
       <div id="devList" tabindex="-1" class="pane-body">
@@ -3911,6 +4395,7 @@ body.drar,body.drar .wk-blk.redigerbar{cursor:grabbing;user-select:none}
     <div class="sb-item" id="sbSnap"></div>
     <div class="spacer"></div>
     <div class="sb-item" id="sbMsg" role="status" aria-live="polite"></div>
+    <div id="conn" class="conn sb-item"><span id="connText"></span><code id="connAddr"></code></div>
   </footer>
 
 </div>

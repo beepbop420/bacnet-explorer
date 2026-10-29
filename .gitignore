@@ -1,21 +1,14 @@
-# Python-miljø som start.bat bygger selv
+# Only the program itself is versioned. Everything a plant visit leaves
+# behind - site memory, notes, the write log, saved projects - stays out.
 venv/
 __pycache__/
-*.pyc
-
-# Anleggsdata og notater — aldri i et repo
+backup-*/
 sites.json
 notes.json
 notes-queue.json
 writelog.jsonl
+pending-releases.json
 projects/
+logo.*
 *.log
-
-# Valgfri logo som hver installasjon legger inn selv
-logo.png
-logo.svg
-
-# Redigering
-.vscode/
-.idea/
-.DS_Store
+dist/

@@ -1,7 +1,7 @@
 @echo off
 setlocal
 cd /d "%~dp0"
-title BACnet Explorer
+title NABE
 
 REM First run sets up an isolated Python environment next to this file.
 if not exist "venv\Scripts\python.exe" (
@@ -17,11 +17,18 @@ if not exist "venv\Scripts\python.exe" (
     pause
     exit /b 1
   )
-  "venv\Scripts\python.exe" -m pip install --quiet --upgrade pip
-  "venv\Scripts\python.exe" -m pip install --quiet fastapi uvicorn pydantic bacpypes3 psutil
+  REM The packages travel in the folder, so a first start works on a site
+  REM with no internet. The versions are the ones NABE was tested with.
+  if exist "pakker\" (
+    "venv\Scripts\python.exe" -m pip install --quiet --no-index --find-links pakker -r requirements.txt
+  ) else (
+    "venv\Scripts\python.exe" -m pip install --quiet -r requirements.txt
+  )
   if errorlevel 1 (
     echo.
     echo   FEIL: Klarte ikke installere avhengigheter.
+    echo   Pakkene i mappen "pakker" er laget for Python 3.14. Har PC-en
+    echo   en annen versjon, trengs nett foerste gang.
     echo.
     pause
     exit /b 1
@@ -29,13 +36,13 @@ if not exist "venv\Scripts\python.exe" (
   echo   Ferdig.
 )
 
-REM Skal notater deles med en felles instans:
-REM   set NOTES_UPSTREAM=http://vertsnavn:8090
 
 echo.
-echo   BACnet Explorer kjoerer paa http://127.0.0.1:8090
+echo   NABE kjoerer paa http://127.0.0.1:8092
 echo   Lukk dette vinduet for aa stoppe.
 echo.
 
-start "" http://127.0.0.1:8090
-"venv\Scripts\python.exe" -m uvicorn server:app --host 127.0.0.1 --port 8090
+REM The browser waits until NABE answers. Opening it straight away raced the
+REM server, and the page came up broken until it was refreshed.
+start "" /b powershell -NoProfile -WindowStyle Hidden -Command "for ($i = 0; $i -lt 100; $i++) { try { Invoke-WebRequest -UseBasicParsing 'http://127.0.0.1:8092/api/status' -TimeoutSec 1 | Out-Null; Start-Process 'http://127.0.0.1:8092'; break } catch { Start-Sleep -Milliseconds 300 } }"
+"venv\Scripts\python.exe" -m uvicorn server:app --host 127.0.0.1 --port 8092

@@ -1,4 +1,8 @@
 'use strict';
+/* One collator, made once. localeCompare with a locale argument builds a new
+   one for every comparison - measured at 22 ms to sort 528 points, most of the
+   time it took to redraw the table. */
+const NORSK = new Intl.Collator('no', {numeric: true});
 
 /* ------------------------------------------------------------------ state */
 const S = {
@@ -110,7 +114,7 @@ const VENDORS = [
   [/viessmann/i,                       'Viessmann',     '#e2001a'],
   [/vaillant/i,                        'Vaillant',      '#00754a'],
   [/oj\s*electronics/i,                'OJ Electronics', VENDOR_GREY],
-  // Funnet paa et hotellanlegg - ventilasjonsaggregater og gatewayer
+  // Funnet paa et hotellanlegg 20.08.2026 - ventilasjonsaggregater og gatewayer
   // som svarer paa BACnet direkte.
   [/komfovent|amalva/i,                'Komfovent',     '#0072bc'],
   [/embedded\s*systems/i,              'Embedded Sys.', VENDOR_GREY],
@@ -236,7 +240,7 @@ function meldBackend(nede, detalj) {
   const el = $('backendWarn');
   if (el) {
     el.hidden = !nede;
-    if (nede) el.innerHTML = 'Mistet kontakt med BACnet Explorer på denne PC-en'
+    if (nede) el.innerHTML = 'Mistet kontakt med NABE på denne PC-en'
       + '<span class="bw-note">Dette er programmet, ikke anlegget. '
       + 'Kjør <b>start.bat</b> igjen — siden kobler seg på av seg selv.</span>';
   }
@@ -264,7 +268,7 @@ async function api(path, body) {
     });
   } catch (e) {
     meldBackend(true);
-    throw new Error('Ingen kontakt med BACnet Explorer på denne PC-en — kjører start.bat?');
+    throw new Error('Ingen kontakt med NABE på denne PC-en — kjører start.bat?');
   }
   meldBackend(false);
   if (!res.ok) {
@@ -374,7 +378,7 @@ function renderRangeSuggestions() {
 }
 
 /* -------------------------------------------------------------- splitters */
-const PANE_DEFAULT = {devices: 250, side: 400};
+const PANE_DEFAULT = {devices: 300, side: 400};
 const PANE_LIMITS = {devices: [160, 460], side: [240, 760]};
 
 function applyPaneWidth(which, px) {
@@ -461,7 +465,7 @@ async function loadInterfaces() {
     const list = d.interfaces || [];
     if (!list.length) { sel.innerHTML = '<option value="">Fant ingen nettverkskort</option>'; return []; }
     sel.innerHTML = list.map(i =>
-      `<option value="${esc(i.cidr)}">${esc(i.interface)} — ${esc(i.cidr)}</option>`).join('');
+      `<option value="${esc(i.cidr)}" title="${esc(i.cidr)}">${esc(i.interface)}</option>`).join('');
     const saved = loadPrefs().iface;
     if (saved && list.some(i => i.cidr === saved)) sel.value = saved;
     return list;
@@ -543,6 +547,31 @@ async function refreshStatus() {
   }
 }
 
+/* Send from the adapter the plant is actually behind.
+
+   The tool used to remember the last adapter, or take the one with internet.
+   Both are wrong on site: last time was the VPN, and the adapter with internet
+   is Wi-Fi or 4G - the cable into the plant is the one that has none. Windows
+   then sends every request out of the wrong adapter and the scan hears
+   nothing, while everything on screen looks connected.
+
+   The routing table already knows the answer, so it is asked about the first
+   address to scan and the tool moves there - saying so, since a silent switch
+   would be its own kind of surprise. */
+async function kortForMaal(maal) {
+  if (!maal || !S.connected) return;
+  let r;
+  try { r = await (await fetch('/api/route?target=' + encodeURIComponent(maal))).json(); }
+  catch { return; }
+  if (!r || r.status !== 'done' || !r.cidr) return;
+  const bundet = String(S.localAddr || '').split(/[\/:]/)[0];
+  if (!bundet || bundet === r.ip) return;
+  await connectTo(r.cidr, {quiet: true});
+  if (S.connected && String(S.localAddr || '').startsWith(r.ip)) {
+    toast(`Byttet til ${r.interface || r.ip} — det er dit ${maal} rutes`);
+  }
+}
+
 /* Switching interface invalidates everything discovered through the old one. */
 function clearDiscovery() {
   S.devices = []; S.activeDev = null; S.points = [];
@@ -569,8 +598,10 @@ function parseRanges(text) {
 }
 
 async function scanOneRange(subnet, mode, thorough, onProgress) {
-  const body = mode === 'broadcast'
-    ? {subnet, mode: 'broadcast', timeout: 4}
+  const body = mode === 'broadcast' || mode === 'bbmd'
+    ? {subnet, mode, timeout: mode === 'bbmd' ? 6 : 4}
+    : mode === 'auto'
+    ? {subnet, mode: 'auto', timeout: 3, per_host_timeout: 0.6, concurrency: 40, thorough: true}
     // A responding device answers in ~90 ms, so 600 ms is already a 6x
     // margin and the wait is almost entirely empty addresses. Measured on a
     // /24 over a hotel VPN: 4.4 s at 0.6 s against 6.6-22.9 s at 1.0 s, for
@@ -583,7 +614,7 @@ async function scanOneRange(subnet, mode, thorough, onProgress) {
   S.scanJob = started.job_id;
 
   for (;;) {
-    await new Promise(r => setTimeout(r, 400));
+    await new Promise(r => setTimeout(r, 250));
     const j = await (await fetch('/api/job/' + started.job_id)).json();
     if (j.status === 'running') {
       onProgress(j);
@@ -623,6 +654,10 @@ async function runScan() {
   const mode = $('modeSel').value;
   const thorough = mode !== 'unicast_fast';
   const b = $('scanBtn');
+  if (mode === 'bbmd' && (omraader.length !== 1 || /[\/-]/.test(omraader[0]))) {
+    toast('BBMD-modus tar én IP: adressen til byggets BBMD (som oftest JACE-en).', true);
+    return;
+  }
   b.disabled = true;
   // Vent til ladningen er sett foer etiketten blir en spinner. Nettverket
   // jobber allerede; dette flytter bare rekkefolgen paa det oyet faar.
@@ -661,12 +696,15 @@ async function runScan() {
   try {
     for (let n = 0; n < omraader.length; n++) {
       const subnet = omraader[n];
+      // Each range goes out of the adapter it is routed through - a cable
+      // range and a VPN range in one scan each get their own.
+      await kortForMaal(subnet);
       const forrige = S.devices.length;
       const merke = omraader.length > 1 ? `[${n + 1}/${omraader.length}] ${subnet} · ` : '';
 
       const d = await scanOneRange(subnet, mode, thorough, (j) => {
         const pct = j.total ? Math.round((j.done / j.total) * 100) : 0;
-        skannFramdrift(pct, !j.total);
+        skannFramdrift(pct, !j.total, j.phase, n, omraader.length);
         status(`${merke}${j.phase || 'søker'} · ${j.done}/${j.total} adresser · ${
           forrige + (j.devices ? j.devices.length : 0)} funnet · ${pct}%`);
         // Devices are published as they answer, so the list fills in while the
@@ -675,15 +713,17 @@ async function runScan() {
           // Something answered - the button says so before the list redraws.
           skannSvar();
           mergeDevices(j.devices, subnet);
+          const foer = synligeGrupper();
           S._flyr = true;
           renderDevices();
           S._flyr = false;
-          flyInnNye();
+          flyInnNye(foer);
         }
       });
 
       if (d && d.cancelled) { status('Skann avbrutt'); break; }
       if (!d || d.status !== 'done') break;
+      if (d.note) toast(d.note, d.bbmd_status !== 0);
       mergeDevices(d.devices, subnet);
       // Record who answered this round so a device kept from an earlier scan
       // is shown as remembered rather than as answering now.
@@ -706,10 +746,15 @@ async function runScan() {
        som hoerer til - ikke enheter paa et helt annet nett. */
     S.sisteOmraader = omraader;
     S.tomtSkann = S.devices.length ? null : {mode, omraader};
+    if (!S.devices.length) nabeTrist();
+    nabeEtterSkann(S.devices.length);
+    tell('skann'); tell('enheter', S.devices.length);
+    if (S.devices.length) visRutere();
     renderDevices();          // varselpanelet skal med en gang
   } catch (e) { toast(e.message, true); status(''); }
   document.body.classList.remove('skanner');
-  skannSlutt();
+  skannSlutt(LINJE.avbrutt);
+  LINJE.avbrutt = false;
   S.scanJob = null;
   // Remembered once the sweep is finished, not while it runs - a half-done
   // scan is not the list you want to come back to next month.
@@ -722,6 +767,7 @@ async function runScan() {
 
 async function cancelScan() {
   if (!S.scanJob) return;
+  LINJE.avbrutt = true;
   await api('/api/job/' + S.scanJob + '/cancel');
 }
 
@@ -1012,6 +1058,22 @@ function devFlagTags(ip) {
   return ut;
 }
 
+/* One word on the right of the card: the worst thing about it, in words.
+   Faults before overrides, because a fault is the thing to go and look at;
+   nothing at all when the device is healthy, so the quiet cards stay quiet. */
+function devStatus(d) {
+  const pts = S.cache[d.address];
+  if (pts) {
+    const c = flagCounts(pts);
+    const feil = (c['in-alarm'] || 0) + (c['fault'] || 0);
+    const over = (c['overridden'] || 0) + (c['out-of-service'] || 0);
+    if (feil) return `<em class="dev-st bad" title="${feil} punkter i alarm eller med feil">${feil} feil</em>`;
+    if (over) return `<em class="dev-st warn" title="${over} punkter overstyrt eller ute av drift">${over} overstyrt</em>`;
+    return '';
+  }
+  return PRE.jobs.has(d.address) ? '<em class="dev-st">leser…</em>' : '';
+}
+
 /* Hvem som var stille sist lista ble tegnet. */
 let BORTE_FOER = new Set();
 let BORTE_NAA = new Set();
@@ -1031,15 +1093,16 @@ function renderDevices() {
     el.innerHTML = `<div class="guide">
       <b>Kom i gang</b>
       <ol>
-        <li>Sjekk at <b>Fra</b> viser nettverkskortet som når anlegget.</li>
-        <li>Skriv IP-området i <b>Skann</b>, f.eks. <b>10.75.1.0/24</b>.</li>
-        <li>Trykk <b>Skann</b> — enhetene dukker opp her.</li>
+        <li>Skriv området i feltet over, f.eks. <b>10.75.1.0/24</b>, én IP eller <b>10.75.1.10-40</b>.</li>
+        <li>Trykk <b>Skann</b>. Nettverkskortet velges selv.</li>
+        <li>Enhetene glir inn her etter hvert som de svarer.</li>
       </ol>
     </div>`;
     return;
   }
   const dupIds = new Set(duplicateInstances().map(([inst]) => String(inst)));
 
+  const gruppert = (loadPrefs().groupBy || (loadPrefs().groupVendor === false ? 'none' : 'vendor')) === 'vendor';
   const kort = (d) => {
     const sel = S.activeDev && S.activeDev.address === d.address ? ' sel' : '';
     const v = vendorOf(d.vendor_name, d.vendor_id);
@@ -1064,16 +1127,20 @@ function renderDevices() {
       ? (BORTE_FOER.has(d.address) ? ' borte' : ' borte nyborte')
       : (BORTE_FOER.has(d.address) ? ' tilbake' : '');
     if (erBorte) BORTE_NAA.add(d.address);
-    return `<button class="dev${sel}${ny}${laster}${borte}${st ? ' st-' + st : ''}" data-ip="${esc(d.address)}" style="--vc:${v.color}${frem}">
-      <div class="dev-top">
-        <span class="dev-id${dup ? ' dup' : ''}"${dup ? ' title="Flere enheter svarer på denne ID-en"' : ''}>${d.device_instance ?? '?'}</span>
+    const lest = S.cache[d.address] ? ' lest' : '';
+    return `<button class="dev${sel}${ny}${laster}${borte}${lest}${st ? ' st-' + st : ''}" data-ip="${esc(d.address)}" style="--vc:${v.color}${frem}">
+      <span class="dev-l1">
+        <span class="dev-name">${esc(d.object_name || '—')}</span>
+        ${devStatus(d)}
+      </span>
+      <span class="dev-l2">
         <span class="dev-ip">${esc(d.address)}</span>
-      </div>
-      <div class="dev-name">${esc(d.object_name || '—')}${
-        noteFor(d) ? `<span class="dev-note" title="${esc(noteFor(d))}">notat</span>` : ''}</div>
-      <div class="dev-meta vendor"><i></i><span class="vendor-name">${esc(v.label)}</span>${presenceTag(d)}${devFlagTags(d.address)}${
-        S.cache[d.address] ? `<em class="dev-cached">${S.cache[d.address].length} pkt</em>`
-        : PRE.jobs.has(d.address) ? '<em class="dev-cached pre">leser…</em>' : ''}</div>
+        <span class="dev-id${dup ? ' dup' : ''}"${dup ? ' title="Flere enheter svarer på denne ID-en"' : ''}>${d.device_instance ?? '?'}</span>
+        ${gruppert ? '' : `<span class="dev-lev">${esc(v.label)}</span>`}
+        ${presenceTag(d)}
+        ${noteFor(d) ? `<span class="dev-note" title="${esc(noteFor(d))}">notat</span>` : ''}
+        ${S.cache[d.address] ? `<em class="dev-pkt">${S.cache[d.address].length} pkt</em>` : ''}
+      </span>
     </button>`;
   };
 
@@ -1100,7 +1167,7 @@ function renderDevices() {
     const skjulte = new Set(loadPrefs().vendorCollapsed || []);
     el.innerHTML = [...grupper.values()]
       .sort((a, b) => verst(b) - verst(a) || b.enheter.length - a.enheter.length
-                      || a.v.label.localeCompare(b.v.label, 'no'))
+                      || NORSK.compare(a.v.label, b.v.label))
       .map(g => {
         const av = skjulte.has(g.v.label);
         const feil = g.enheter.filter(d => devState(d.address) === 'bad').length;
@@ -1136,6 +1203,9 @@ function renderDevices() {
 
   // Kort som er i lufta maa foelge med paa at lista flyttet seg.
   synkFlyvende();
+  // Arrivals still opening carry on where they were, on the new elements.
+  fortsettAnkomster();
+  nabeKortEgg();
 }
 
 /* -------------------------------------------------------------- load points */
@@ -1932,14 +2002,20 @@ function renderCtx() {
   const v = vendorOf(d.vendor_name, d.vendor_id);
   const flagg = flagCounts(S.points);
   const writable = S.points.filter(p => p.writable).length;
+  huskBesok();
   el.style.setProperty('--vc', v.color);
+  if (S.points.length && typeof nabeRentAnlegg === 'function') nabeRentAnlegg(d, S.points);
   el.innerHTML = `
-    <span class="ctx-id">${d.device_instance ?? '?'}</span>
-    <span class="vendor" style="--vc:${v.color};flex:0 0 auto"><i></i><span>${esc(v.label)}</span></span>
-    <span class="ctx-name">${esc(d.object_name || '')}</span>
-    <span class="ctx-ip">${esc(d.address)}</span>
-    ${identBadge(d.address)}
-    ${clockBadge(d.address)}
+    <div class="ctx-tittel">
+      <span class="ctx-name">${esc(d.object_name || String(d.device_instance ?? '?'))}</span>
+      <span class="ctx-under">
+        <span class="vendor" style="--vc:${v.color};flex:0 0 auto"><i></i><span>${esc(v.label)}</span></span>
+        <span class="ctx-id">${d.device_instance ?? '?'}</span>
+        <span class="ctx-ip">${esc(d.address)}</span>
+        ${identBadge(d.address)}
+        ${clockBadge(d.address)}
+      </span>
+    </div>
     ${(S.namePrefix && loadPrefs().shortNames !== false) ? `<span class="ctx-prefix" title="Alle punktnavn på denne enheten starter med dette. Det er utelatt fra tabellen for lesbarhet — hold over et navn for å se det fullt ut.">${esc(S.namePrefix)}…</span>` : ''}
     <div class="spacer"></div>
     ${Object.entries(FLAGS).filter(([f]) => flagg[f]).map(([f, m]) =>
@@ -2546,8 +2622,6 @@ function rgbaAv(hex, alfa) {
    removed the element the other needed. */
 let LOGO_FRA_SERVER = null;
 
-/* With no logo file the slot stays empty and CSS hides it. */
-
 function settMerke(kilde) {
   const merke = $('brandMark');
   if (!merke) return;
@@ -2560,11 +2634,14 @@ function settMerke(kilde) {
     ny.src = kilde;
     merke.appendChild(ny);
     merke.classList.add('eget-bilde');
-  } else if (merke.firstChild) {
-    merke.innerHTML = '';
+  } else if (merke.querySelector('img') || !merke.querySelector('svg.nabe')) {
+    // No logo of your own: NABE goes back on.
+    merke.innerHTML = NABE_SVG;
     merke.classList.remove('eget-bilde');
   }
 }
+// Taken from the page before anything can replace it.
+const NABE_SVG = document.querySelector('#brandMark svg.nabe')?.outerHTML || 'N';
 
 function brukUtseende() {
   const p = loadPrefs();
@@ -2622,7 +2699,7 @@ function brukUtseende() {
     topp.style.backgroundPosition = 'center';
   }
   const tittel = document.querySelector('.brand-text b');
-  if (tittel) tittel.textContent = p.tittel || 'BACnet Explorer';
+  if (tittel) tittel.textContent = p.tittel || 'NABE';
   const under = $('brandSub');
   if (under && p.undertittel !== undefined) under.textContent = p.undertittel;
 }
@@ -2698,158 +2775,185 @@ function synligIListen(el) {
 
    Begge loeses av aa synkronisere klonen mot det ekte kortet etter hver
    omtegning - da lander den der kortet ER, ikke der det var. */
-const FLYVENDE = new Map();
+const FLYVENDE = new Map();          // ip → klon som er i lufta
 
+/* A card in flight keeps its slot reserved but empty. The list is rebuilt from
+   a string, so the mark has to go back on after every rebuild. */
 function synkFlyvende() {
-  if (!FLYVENDE.size) return;
-  for (const [ip, klon] of FLYVENDE) {
-    const el = document.querySelector(`#devList .dev[data-ip="${CSS.escape(ip)}"]`);
-    if (!el) continue;
-    el.classList.add('venter');
-    const r = el.getBoundingClientRect();
-    if (!r.width || !r.height) continue;
-    klon.style.left = r.left + 'px';
-    klon.style.top = r.top + 'px';
-    klon.style.width = r.width + 'px';
-    klon.style.height = r.height + 'px';
+  for (const ip of FLYVENDE.keys()) {
+    document.querySelector(`#devList .dev[data-ip="${CSS.escape(ip)}"]`)?.classList.add('venter');
   }
 }
 
-function flyInnNye() {
-  const nye = [...document.querySelectorAll('.dev.ny')];
-  if (!nye.length) return;
-  /* Both of these clear the class - and both used to leave the flag on the
-     device object, which is what renderDevices reads. With motion switched off
-     that meant every redraw put the class straight back and this ran again,
-     for as long as the list kept redrawing. */
-  const dropp = () => nye.forEach(e => { e.classList.remove('ny'); glemNy(e); });
-  if (bevegelseAv()) { dropp(); return; }
+/* Arrivals: the card glides out of the scan line and down into its place.
 
-  const knapp = $('scanBtn');
+   The earlier flight threw each card in a tumbling, bouncing arc with random
+   spread and spin. It was lively, but every card took a different path, the
+   landing bounced, and the real card stayed hidden for over a second. This one
+   is a single motion on one curve:
+
+   - the slot in the list opens at the same moment, so the cards below glide
+     down instead of jumping when the new one is inserted;
+   - the card leaves from the head of the progress line - where the scan is -
+     grows from 60 % to full size, and settles with no bounce;
+   - it is steered every frame towards wherever its slot is now, so it lands
+     exactly even if another arrival or a list rebuild moved the slot;
+   - several answers in one poll leave 90 ms apart.
+
+   Everything moves by transform and opacity on a fixed layer. */
+const ANKOMST = new Map();          // nøkkel → {t0, innhold}
+const ANKOMST_MS = 420;
+const FLY_MS = 620;
+const ANKOMST_KURVE = 'cubic-bezier(.2,.8,.2,1)';
+
+function ankomstNokkel(el) {
+  return el.classList.contains('vgroup')
+    ? 'g:' + (el.querySelector('[data-vendor]')?.dataset.vendor || '')
+    : 'd:' + el.dataset.ip;
+}
+
+function spillAnkomst(el, t0, innhold) {
+  const h = el.offsetHeight;
+  if (!h) return;
+  const cs = getComputedStyle(el);
+  el.style.overflow = 'hidden';
+  el.style.boxSizing = 'border-box';
+  const fra = {height: '0px', paddingTop: '0px', paddingBottom: '0px'};
+  const til = {height: h + 'px', paddingTop: cs.paddingTop, paddingBottom: cs.paddingBottom};
+  const ramme = innhold
+    ? [{...fra, opacity: 0, transform: 'translateY(-6px)'}, {opacity: 0, offset: 0.35},
+       {...til, opacity: 1, transform: 'none'}]
+    : [fra, til];
+  const anim = el.animate(ramme, {duration: ANKOMST_MS, easing: ANKOMST_KURVE, fill: 'backwards'});
+  anim.id = 'ankomst';
+  anim.currentTime = performance.now() - t0;
+  const rydd = () => { el.style.overflow = ''; el.style.boxSizing = ''; };
+  anim.onfinish = rydd;
+  anim.oncancel = rydd;
+}
+
+function vaskKort(el) {
+  // A new arrival washes in its maker's colour, faintly, when vendor colours are on.
+  const vc = document.documentElement.classList.contains('levfarge') && el.style.getPropertyValue('--vc');
+  const farge = vc ? `color-mix(in srgb, ${vc} 22%, transparent)`
+                   : getComputedStyle(document.documentElement).getPropertyValue('--hover').trim();
+  el.animate([{backgroundColor: farge || 'rgba(127,127,127,.15)'}, {backgroundColor: 'transparent'}],
+             {duration: 1400, easing: 'ease-out'});
+}
+
+function fortsettAnkomster() {
+  if (!ANKOMST.size) return;
+  const naa = performance.now();
+  for (const [k, a] of ANKOMST) {
+    if (naa - a.t0 > ANKOMST_MS + 200) { ANKOMST.delete(k); continue; }
+    const el = k.startsWith('g:')
+      ? document.querySelector(`#devList [data-vendor="${CSS.escape(k.slice(2))}"]`)?.closest('.vgroup')
+      : document.querySelector(`#devList .dev[data-ip="${CSS.escape(k.slice(2))}"]`);
+    if (el && !el.getAnimations().some(x => x.id === 'ankomst')) spillAnkomst(el, a.t0, a.innhold);
+  }
+}
+
+/* Where the scan is right now: the head of the progress line, or the button
+   when there is no line to follow. */
+function skannPunkt() {
+  const linje = document.querySelector('.skann-linje.aktiv');
+  if (linje) {
+    const r = linje.parentElement.getBoundingClientRect();
+    return {x: r.left + r.width * Math.max(0.08, Math.min(0.92, LINJE.vis || 0)), y: r.bottom};
+  }
+  const k = $('scanBtn')?.getBoundingClientRect();
+  return k ? {x: k.left + k.width / 2, y: k.bottom} : null;
+}
+
+/* Velocity starts at zero and ends at zero, so neither the take-off nor the
+   landing has a corner in it. The time warp puts most of the travel in the
+   first half, which keeps it from feeling slow. */
+const myk = t => {
+  const w = 1 - Math.pow(1 - t, 1.6);
+  return w * w * w * (w * (w * 6 - 15) + 10);
+};
+
+function flyKort(el, t0) {
+  const ip = el.dataset.ip;
+  const fra = skannPunkt();
   const lag = $('flylag');
-  if (!knapp || !lag) { dropp(); return; }
-  const kr = knapp.getBoundingClientRect();
-  const fra = {x: kr.left + kr.width / 2, y: kr.top + kr.height / 2};
-
+  if (!fra || !lag || FLYVENDE.has(ip)) return false;
+  const klon = el.cloneNode(true);
+  klon.classList.remove('ny', 'sel', 'venter');
+  klon.classList.add('glid');
+  klon.removeAttribute('id');
+  klon.style.opacity = '0';
+  // Start where it leaves from, so the first frame has nothing to jump from.
+  const r0 = el.getBoundingClientRect();
+  klon.style.width = r0.width + 'px';
+  klon.style.height = r0.height + 'px';
+  klon.style.transform = `translate(${(fra.x - r0.width / 2).toFixed(1)}px, ${(fra.y - r0.height / 2).toFixed(1)}px) scale(.6)`;
   lag.hidden = false;
-  const tall = (min, maks) => min + Math.random() * (maks - min);
+  lag.appendChild(klon);
+  FLYVENDE.set(ip, klon);
+  el.classList.add('venter');
 
-  /* Klassen maa vekk FOER kortene maales.
-
-     .dev.ny kjorer enhet-inn, som skalerer kortet til 94 %. Saa lenge klassen
-     staar paa maaler getBoundingClientRect den nedskalerte boksen: klonen ble
-     237,8 px bred der kortet er 250, den fikk beskjed om aa lande paa x=7,5 der
-     kortet ligger paa x=0 - og i det klonen ble fjernet spratt kortet ut til
-     full bredde. To animasjoner kjempet om den samme ankomsten, og flyvningen
-     tapte fordi den maalte motstanderen sin.
-
-     Alle foerst, saa EN tvungen layout, saa maaling - ikke en layout per kort. */
-  nye.forEach(el => { el.classList.remove('ny'); glemNy(el); });
-  void document.body.offsetWidth;
-
-  nye.forEach((el, i) => {
-    const r = el.getBoundingClientRect();
-    // Ingen flyvning til et sted ingen ser. Flagget er alt ryddet over, saa
-    // kortet tar heller ikke av naar du apner gruppa igjen.
-    if (!synligIListen(el)) return;
-
-    const klon = el.cloneNode(true);
-    klon.classList.remove('ny', 'sel');
-    klon.removeAttribute('id');
-    klon.style.left = r.left + 'px';
-    klon.style.top = r.top + 'px';
+  const land = () => {
+    FLYVENDE.delete(ip);
+    klon.remove();
+    if (!lag.children.length) lag.hidden = true;
+    const naa = document.querySelector(`#devList .dev[data-ip="${CSS.escape(ip)}"]`);
+    if (naa) { naa.classList.remove('venter'); vaskKort(naa); }
+  };
+  const steg = (tid) => {
+    const maal = document.querySelector(`#devList .dev[data-ip="${CSS.escape(ip)}"]`);
+    const r = maal?.getBoundingClientRect();
+    if (!r || !r.width) { land(); return; }
+    const t = Math.max(0, Math.min(1, (tid - t0) / FLY_MS));
+    const e = myk(t);
+    // A quadratic curve: out along the line first, then down into the slot.
+    const sx = r.left + r.width / 2, sy = r.top + r.height / 2;
+    const cx = sx, cy = fra.y;
+    const x = (1 - e) * (1 - e) * fra.x + 2 * (1 - e) * e * cx + e * e * sx;
+    const y = (1 - e) * (1 - e) * fra.y + 2 * (1 - e) * e * cy + e * e * sy;
+    const skala = 0.6 + 0.4 * e;
     klon.style.width = r.width + 'px';
     klon.style.height = r.height + 'px';
-    /* Rolled per card. Without this every controller traced the same line from
-       the same pixel, which after the third one stops reading as things
-       arriving and starts reading as a loop. The spread moves where it leaves
-       the button, the arc decides how high it is thrown, and the tumble gives
-       it a little spin to shed on the way down. */
-    /* Wide enough to see. The previous ranges moved a card by a few percent
-       of a six-hundred-pixel journey, which is a rounding error dressed as
-       variety - the complaint was fair. A card can now leave from anywhere
-       across a fan the width of the top bar, be lobbed high or flung flat,
-       and tumble nearly half a turn on the way down. */
-    const spredX = Math.round(tall(-140, 140));
-    const spredY = Math.round(tall(-18, 26));
-    klon.style.setProperty('--fra-x',
-      Math.round(fra.x - (r.left + r.width / 2)) + spredX + 'px');
-    klon.style.setProperty('--fra-y',
-      Math.round(fra.y - (r.top + r.height / 2)) + spredY + 'px');
+    klon.style.transform = `translate(${(x - r.width / 2).toFixed(1)}px, ${(y - r.height / 2).toFixed(1)}px) scale(${skala.toFixed(3)})`;
+    klon.style.opacity = String(Math.min(1, t / 0.2));
+    // Lifted while it travels, flat by the time it lands.
+    const loft = (1 - e) * 0.38;
+    klon.style.boxShadow = `0 ${(10 * (1 - e)).toFixed(1)}px ${(24 * (1 - e)).toFixed(1)}px rgba(0,0,0,${loft.toFixed(3)})`;
+    if (t >= 1) { land(); return; }
+    requestAnimationFrame(steg);
+  };
+  requestAnimationFrame(steg);
+  return true;
+}
 
-    /* The rise is capped by whatever room is actually above the launch point.
-       The button sits near the top of the window, so an unbounded arc threw
-       the card off the screen - the layer clipped it and the flight simply
-       stopped being visible halfway through. */
-    const takhoyde = Math.max(0, fra.y - 20);
-    klon.style.setProperty('--bue', Math.round(Math.min(takhoyde, tall(0, 34))) + 'px');
+/* foer: the vendor groups on screen before this redraw. A device that brings a
+   new vendor brings its heading with it, so the heading opens first. */
+function flyInnNye(foer) {
+  const nye = [...document.querySelectorAll('.dev.ny')];
+  if (!nye.length) return;
+  nye.forEach(e => { e.classList.remove('ny'); glemNy(e); });
+  if (bevegelseAv()) return;
 
-    /* The variety goes sideways instead, where there is room for it. A wide
-       swing and a direct throw are different arrivals, not two points on one
-       scale - so the swing is drawn from one or the other rather than from the
-       middle of a single range, which is where an even roll spends most of its
-       time and why everything looked alike. */
-    const svinger = Math.random() < 0.55;
-    /* Clamped to the room the card actually has beside it. These land in the
-       leftmost pane, so a two-hundred-pixel swing to the left put them past
-       the window edge and the layer clipped them - twenty-three sample points
-       outside the frame across eight flights. The room is different on each
-       side and different for every card, so it is measured rather than
-       guessed, and the throw goes wherever there is space for it. */
-    const romVenstre = Math.max(0, r.left - 16);
-    const romHoyre = Math.max(0, window.innerWidth - r.right - 16);
-    const retning = romHoyre > romVenstre * 1.6 ? 1
-                  : romVenstre > romHoyre * 1.6 ? -1
-                  : (Math.random() < 0.5 ? -1 : 1);
-    const rom = retning < 0 ? romVenstre : romHoyre;
-    const onsket = svinger ? tall(90, 210) : tall(0, 40);
-    klon.style.setProperty('--sving',
-      Math.round(retning * Math.min(rom, onsket)) + 'px');
-    klon.style.setProperty('--rot', tall(-42, 42).toFixed(1) + 'deg');
-    /* Spretten kappes mot kortets egen hoyde. Kortene er 62-66 px, og et
-       sprett paa 40 px er to tredjedeler av kortet - det leser som en ball,
-       ikke som noe med vekt. Under en tredjedel holder det jordnaert. */
-    const tak = Math.max(10, Math.round(r.height * 0.30));
-    klon.style.setProperty('--sprett', Math.min(tak, Math.round(tall(11, 26))) + 'px');
-    /* Lengre enn foer, fordi landinga naa er nesten halve animasjonen og
-       sprettet trenger aatte-ni bilder for aa lese som en bue. Paa 640 ms fikk
-       det under tre. Kortene overlapper hverandre uansett, saa summen foles
-       ikke tregere - hvert enkelt kort blir bare mulig aa foelge. */
-    /* Kortere enn forrige runde. Landinga trengte flere bilder, og jeg gav den
-       dem ved aa forlenge hele flyvningen - men kortet er ikke ferdig ankommet
-       foer klonen lander, og maalt paa et ekte skann ble hvert kort staaende
-       usynlig i over ett sekund. Landinga eier fortsatt naesten halve
-       animasjonen, saa spretten har det den trenger. */
-    klon.style.setProperty('--varighet',
-      Math.round(svinger ? tall(760, 900) : tall(620, 740)) + 'ms');
-    // Staggered, so eight controllers answering at once read as eight
-    // arrivals rather than one shower - capped, or the last of thirty would
-    // still be in the air long after the sweep ended. Jittered, or the
-    // stagger itself becomes the pattern.
-    // Taket ned fra 400 til 190 ms: med femten enheter var de siste kortene
-    // et halvt sekund bak de foerste, i tillegg til flyvetida.
-    const forsink = Math.min(i * 34, 190) + Math.round(tall(0, 40));
-    klon.style.animationDelay = forsink + 'ms';
-    lag.appendChild(klon);
+  const start = performance.now();
+  let nr = 0;
+  for (const el of nye) {
+    if (!synligIListen(el)) continue;
+    const t0 = start + Math.min(nr++ * 90, 360);
+    const gruppe = el.closest('.vgroup');
+    const navn = gruppe?.querySelector('[data-vendor]')?.dataset.vendor;
+    const ny = gruppe && foer && !foer.has(navn);
+    const flyr = flyKort(el, t0);
+    const maal = ny ? gruppe : el;
+    const k = ankomstNokkel(maal);
+    if (ANKOMST.has(k)) continue;
+    // The slot opens while the card is on its way; the card fills it.
+    ANKOMST.set(k, {t0, innhold: !flyr});
+    spillAnkomst(maal, t0, !flyr);
+  }
+}
 
-    const ip = el.dataset.ip;
-    el.classList.add('venter');
-    FLYVENDE.set(ip, klon);
-    const land = () => {
-      FLYVENDE.delete(ip);
-      // Elementet kan vaere byttet ut siden avgang, saa finn det som staar der
-      // NAA - ellers blir kortet staaende usynlig.
-      const naa = document.querySelector(`#devList .dev[data-ip="${CSS.escape(ip)}"]`);
-      if (naa) naa.classList.remove('venter');
-      el.classList.remove('venter');
-      klon.remove();
-      if (!lag.children.length) lag.hidden = true;
-    };
-    klon.addEventListener('animationend', land, {once: true});
-    // A belt for the case where the animation never reports finishing - a
-    // card left invisible would be worse than one that skipped its flight.
-    setTimeout(land, 1020 + forsink + 300);
-  });
+function synligeGrupper() {
+  return new Set([...document.querySelectorAll('#devList [data-vendor]')].map(b => b.dataset.vendor));
 }
 
 /* ------------------------------------------------------- skanneknappen */
@@ -2878,20 +2982,424 @@ function skannPing() {
   setTimeout(() => b.classList.remove('sender'), 1200);
 }
 
-function skannFramdrift(pst, ukjent) {
-  const b = $('scanBtn');
-  if (!b) return;
-  b.classList.add('skanner');
-  b.classList.toggle('ukjent', !!ukjent);
-  if (!b.querySelector('span.fyll')) {
-    const f = document.createElement('span');
-    f.className = 'fyll';
-    b.appendChild(f);
+/* Progress is a hairline under the scan box, drawn every frame.
+
+   The server reports progress a few times a second, and the old fill eased to
+   each report and then stood still until the next - so it moved in pulls. Here
+   the line runs on its own clock: it heads for the last reported position plus
+   how far the scan has been moving per second, never further than a little
+   ahead, and never backwards. A thorough sweep's second, third and fourth
+   rounds start their count again from zero; they are mapped onto the last
+   quarter of the line instead of sending it back to the start. */
+const LINJE = {maal: 0, vis: 0, fart: 0, sist: 0, runde: 0, fase: '', raf: 0, ferdig: false};
+
+function linjeEl() { return document.querySelector('.skann-linje'); }
+
+function skannFramdrift(pst, ukjent, fase, del = 0, av = 1) {
+  const el = linjeEl();
+  if (!el) return;
+  $('scanBtn')?.classList.add('skanner');
+  el.classList.add('aktiv');
+  el.classList.toggle('ukjent', !!ukjent);
+  if (ukjent) return;
+  const stille = /stille|silent/i.test(fase || '');
+  if (stille && LINJE.fase !== fase + '|' + del) LINJE.runde += 1;
+  LINJE.fase = (fase || '') + '|' + del;
+  const p = Math.max(0, Math.min(1, pst / 100));
+  // First pass is the real work; the re-checks share the last quarter.
+  const iOmraade = stille ? 0.75 + 0.25 * Math.min(1, (LINJE.runde - 1 + p) / 3) : 0.75 * p;
+  const maal = (del + iOmraade) / av;
+  const naa = performance.now();
+  if (maal > LINJE.maal) {
+    if (LINJE.sist) {
+      const v = (maal - LINJE.maal) / Math.max(50, naa - LINJE.sist);
+      LINJE.fart = LINJE.fart ? LINJE.fart * 0.6 + v * 0.4 : v;
+    }
+    LINJE.maal = maal;
+    LINJE.sist = naa;
   }
-  if (!ukjent) b.style.setProperty('--skann', Math.max(0, Math.min(1, pst / 100)));
+  if (!LINJE.raf) {
+    let forrige = naa;
+    const steg = (t) => {
+      const dt = t - forrige; forrige = t;
+      const ahead = Math.min(0.04, LINJE.fart * (t - LINJE.sist));
+      const mot = LINJE.ferdig ? 1 : Math.min(1, LINJE.maal + Math.max(0, ahead));
+      LINJE.vis = Math.max(LINJE.vis, LINJE.vis + (mot - LINJE.vis) * (1 - Math.exp(-dt / 180)));
+      el.style.transform = `scaleX(${LINJE.vis.toFixed(4)})`;
+      if (LINJE.ferdig && LINJE.vis > 0.995) { LINJE.raf = 0; avsluttLinje(el); return; }
+      LINJE.raf = requestAnimationFrame(steg);
+    };
+    LINJE.raf = requestAnimationFrame(steg);
+  }
 }
 
+function avsluttLinje(el) {
+  el.style.transform = 'scaleX(1)';
+  el.classList.add('ut');
+  setTimeout(() => {
+    el.classList.remove('aktiv', 'ut', 'ukjent');
+    el.style.transform = 'scaleX(0)';
+  }, 500);
+}
+
+/* ------------------------------------------------------------- NABE himself
+   One small state machine for the mascot in the top bar. Moods win in this
+   order: asleep, dizzy, scanning, nervous, pleased, watching, bored.
+
+   - Watching: while the pointer moves, the pupils follow it.
+   - Bored: five seconds without a move and the eyes go back to the ceiling.
+   - Asleep: after two minutes. Any movement wakes it with a start.
+   - Blinks every few seconds, at random, never in step with anything.
+   - Dizzy: shake the mouse back and forth fast.
+   - Nervous: the pointer is on a button that writes to the plant.
+   - Pleased for a moment when a device answers; sulks after an empty scan. */
+const NABE = {x: 0, y: 0, sist: Date.now(), raf: 0, snu: [], retning: 0, klikk: 0, klikkT: 0};
+
+function nabeMerke() { return document.querySelector('.nabe-mark'); }
+
+function nabeTegn() {
+  NABE.raf = 0;
+  const m = nabeMerke();
+  const g = m?.querySelector('.nabe-pupiller');
+  if (!g) return;
+  const har = c => m.classList.contains(c);
+  let dx = 0, dy = -2.6;                                  // bored: the ceiling
+  if (har('sover') || har('svimmel')) { g.style.transform = ''; return; }
+  if (document.body.classList.contains('skanner')) { dx = 0; dy = 1.8; }
+  else if (har('fornoyd')) { dx = 0; dy = 0.5; }
+  else if (har('ser') || har('nervos')) {
+    const r = m.getBoundingClientRect();
+    const vx = NABE.x - (r.left + r.width / 2), vy = NABE.y - (r.top + r.height / 2);
+    const len = Math.hypot(vx, vy) || 1;
+    const mag = Math.min(2.2, len / 50);
+    dx = vx / len * mag; dy = vy / len * mag;
+  }
+  g.style.transform = `translate(${dx.toFixed(2)}px, ${dy.toFixed(2)}px)`;
+}
+function nabeOppdater() { if (!NABE.raf) NABE.raf = requestAnimationFrame(nabeTegn); }
+
+function nabeKlasse(k, ms) {
+  const m = nabeMerke();
+  if (!m) return;
+  m.classList.add(k);
+  nabeOppdater();
+  clearTimeout(nabeKlasse['t' + k]);
+  if (ms) nabeKlasse['t' + k] = setTimeout(() => { m.classList.remove(k); nabeOppdater(); }, ms);
+}
+
+function nabeFornoyd() { nabeKlasse('fornoyd', 900); }
+function nabeTrist() { nabeKlasse('trist', 4000); }
+
+document.addEventListener('pointermove', (e) => {
+  const m = nabeMerke();
+  if (!m) return;
+  const naa = Date.now();
+  if (m.classList.contains('sover')) {
+    // Woken up. It was not asleep. It was resting its eyes.
+    m.classList.remove('sover');
+    nabeKlasse('skvatt', 450);
+  }
+  // Shaking: count quick changes of direction across the screen.
+  const dx = e.clientX - NABE.x;
+  if (Math.abs(dx) > 14) {
+    const ret = Math.sign(dx);
+    if (NABE.retning && ret !== NABE.retning) NABE.snu.push(naa);
+    NABE.retning = ret;
+    NABE.snu = NABE.snu.filter(t => naa - t < 900);
+    if (NABE.snu.length >= 7 && !bevegelseAv()) { NABE.snu = []; nabeKlasse('svimmel', 1800); }
+  }
+  NABE.x = e.clientX; NABE.y = e.clientY; NABE.sist = naa;
+  m.classList.add('ser');
+  nabeOppdater();
+}, {passive: true});
+
+// Nervous on anything that writes to the plant.
+const NABE_SKRIV = '#wSend, #selRel, .w-rel, [data-skriv], .rel-btn';
+document.addEventListener('pointerover', (e) => {
+  if (e.target.closest?.(NABE_SKRIV)) nabeKlasse('nervos');
+});
+document.addEventListener('pointerout', (e) => {
+  if (e.target.closest?.(NABE_SKRIV) && !e.relatedTarget?.closest?.(NABE_SKRIV)) {
+    nabeMerke()?.classList.remove('nervos'); nabeOppdater();
+  }
+});
+
+// Bored after five seconds, asleep after two minutes.
+setInterval(() => {
+  const m = nabeMerke();
+  if (!m) return;
+  const stille = Date.now() - NABE.sist;
+  if (stille > 5000 && m.classList.contains('ser')) { m.classList.remove('ser'); nabeOppdater(); }
+  if (stille > 120000 && !m.classList.contains('sover') && !document.body.classList.contains('skanner')) {
+    m.classList.add('sover'); nabeOppdater();
+  }
+}, 1000);
+
+// Blinks, at no particular rhythm.
+(function blunk() {
+  setTimeout(() => {
+    const m = nabeMerke();
+    if (m && !bevegelseAv() && !m.classList.contains('sover')) {
+      m.classList.add('blunk');
+      setTimeout(() => m.classList.remove('blunk'), 130);
+      // Now and then a double blink.
+      if (Math.random() < 0.2) setTimeout(() => { m.classList.add('blunk');
+        setTimeout(() => m.classList.remove('blunk'), 120); }, 260);
+    }
+    blunk();
+  }, 3000 + Math.random() * 6000);
+})();
+
+/* Click it and it talks. What it says depends on what is going on. */
+const NABE_REPLIKKER = [
+  'Ja. Enda en BACnet-explorer.',
+  'YABE var opptatt.',
+  'Har du prøvd å slå den av og på igjen?',
+  'Prioritet 8. Selvfølgelig.',
+  'Who-Is? Jeg er NABE.',
+  'Klokka på den WAGO-en står fortsatt i 2000.',
+  'Husk å frigi før du går hjem.',
+  'Det er aldri BACnet. Bortsett fra når det er BACnet.',
+  'MS/TP: mye styr, til pass.',
+  'Har du sjekket at kabelen står i?',
+  '47808. Fint tall.',
+  'Jeg ser deg.',
+  'Instans 4194303? Det er meg. Det er alle.',
+  'Hvem satte denne på prioritet 1?',
+  'Jeg var også bare en sweep en gang.',
+  'Kaffe først, igangkjøring etterpå.',
+];
+nabeMerke()?.addEventListener('click', (e) => {
+  e.preventDefault();
+  const naa = Date.now();
+  NABE.klikk = naa - NABE.klikkT < 1200 ? NABE.klikk + 1 : 1;
+  NABE.klikkT = naa;
+  const m = nabeMerke();
+  if (NABE.klikk === 10) {
+    nabeSnakk('Ok. Nå holder det.');
+    m.classList.add('sover'); nabeOppdater();
+    setTimeout(() => { m.classList.remove('sover'); nabeOppdater(); }, 2500);
+    NABE.klikk = 0;
+    return;
+  }
+  if (NABE.klikk !== 3) return;
+  let linje;
+  if (document.body.classList.contains('skanner')) linje = 'Ikke nå. Jeg teller.';
+  else if (m.classList.contains('trist')) linje = 'Ingen svarte. Det er ikke personlig.';
+  else if (document.documentElement.getAttribute('data-theme') === 'light') linje = 'Sterkt lys her inne.';
+  else linje = NABE_REPLIKKER[Math.floor(Math.random() * NABE_REPLIKKER.length)];
+  nabeSnakk(linje);
+  nabeKlasse('fornoyd', 700);
+});
+nabeOppdater();
+
+/* ------------------------------------------------------------ easter eggs
+   The rules: an egg never blocks anything, never repeats in the same session,
+   and only fires on something a technician would actually do. It speaks
+   through NABE (a toast plus a face), so there is one voice for all of them,
+   and most of them are about the trade - BACnet numbers, priorities, ports,
+   the WAGO that thinks it is the year 2000. */
+
+/* NABE says it himself.
+
+   Everything the mascot has to say comes out of the mascot: a speech bubble
+   hanging from the logo, typed out while the mouth moves, gone again after
+   about as long as it takes to read. Toasts stay for the tool's own messages -
+   "saved", "exported" - so the joke never looks like a system notice and a
+   system notice never looks like a joke.
+
+   The text is translated before it is typed. Typing it letter by letter in
+   Norwegian and letting the language sweep translate it afterwards would show
+   a half-Norwegian sentence flickering into English. */
+function nabeSnakk(tekst) {
+  const m = nabeMerke();
+  if (!m) { toast(tekst); return; }
+  if (SPRAAK === 'en') tekst = oversettTekst(tekst, true);
+  let b = document.getElementById('nabeBoble');
+  if (!b) {
+    b = document.createElement('div');
+    b.id = 'nabeBoble';
+    b.className = 'nabe-boble';
+    b.setAttribute('role', 'status');
+    b.setAttribute('aria-live', 'polite');
+    b.innerHTML = '<span class="nb-tekst"></span>';
+    b.onclick = () => nabeTie();
+    document.body.appendChild(b);
+  }
+  clearInterval(nabeSnakk.skriv);
+  clearTimeout(nabeSnakk.ferdig);
+  // Beside the name, in the empty top bar, so it never covers the scan box.
+  const navn = m.closest('.brand') || m;
+  const r = navn.getBoundingClientRect();
+  b.style.left = Math.round(r.right + 14) + 'px';
+  b.style.top = Math.round(r.top + r.height / 2) + 'px';
+  const ut = b.querySelector('.nb-tekst');
+  b.classList.remove('ut');
+  b.classList.add('inne');
+  m.classList.add('snakker');
+  // Reduced motion: the whole line at once, no typing, no moving mouth.
+  if (bevegelseAv()) {
+    ut.textContent = tekst;
+    m.classList.remove('snakker');
+  } else {
+    ut.textContent = '';
+    let i = 0;
+    nabeSnakk.skriv = setInterval(() => {
+      i += tekst[i] === ' ' ? 2 : 1;
+      ut.textContent = tekst.slice(0, i);
+      if (i >= tekst.length) { clearInterval(nabeSnakk.skriv); m.classList.remove('snakker'); }
+    }, 26);
+  }
+  const lesetid = Math.min(7500, 2200 + tekst.length * 55);
+  nabeSnakk.ferdig = setTimeout(nabeTie, lesetid);
+}
+
+function nabeTie() {
+  const b = document.getElementById('nabeBoble');
+  clearInterval(nabeSnakk.skriv);
+  nabeMerke()?.classList.remove('snakker');
+  if (!b) return;
+  b.classList.remove('inne');
+  b.classList.add('ut');
+}
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') nabeTie(); });
+
+const NABE_SAGT = new Set();
+
+function nabeSier(tekst, humor, nokkel) {
+  if (nokkel) {
+    if (NABE_SAGT.has(nokkel)) return;
+    NABE_SAGT.add(nokkel);
+  }
+  if (humor) nabeKlasse(humor, 1600);
+  nabeSnakk(tekst);
+}
+
+/* -- dates. Costumes only on the day; nothing is said about them. */
+(function nabeKalender() {
+  const m = nabeMerke();
+  if (!m) return;
+  const d = new Date(), mnd = d.getMonth() + 1, dag = d.getDate();
+  if (mnd === 12 && dag <= 26) m.classList.add('jul');
+  if (mnd === 5 && dag === 17) m.classList.add('mai17');
+  if (mnd === 10 && dag === 31) m.classList.add('halloween');
+  // April fools: it looks the other way.
+  if (mnd === 4 && dag === 1) NABE.april = true;
+  setTimeout(() => {
+    const t = d.getHours();
+    if (d.getDay() === 5 && t >= 14) nabeSier('Fredag etter to. Ingen nye overstyringer nå, ok?', null, 'fredag');
+    else if (t >= 22 || t < 5) nabeSier('Sent igangkjøringskvelds? Jeg holder deg med selskap.', 'fornoyd', 'natt');
+    else if (t < 7) nabeSier('Tidlig ute. Kaffen er ikke ferdig ennå.', null, 'morgen');
+  }, 2500);
+})();
+
+/* -- what you type in the range field */
+const NABE_OMRADE = {
+  '127.0.0.1': 'Det er deg selv. Du svarer ikke på Who-Is.',
+  'localhost': 'Det er deg selv. Du svarer ikke på Who-Is.',
+  '8.8.8.8': 'Google har ingen BACnet. Vi har sjekket.',
+  '1.1.1.1': 'Cloudflare heller ikke.',
+  '192.168.1.1': 'Klassikeren. Ruteren i hvert eneste teknisk rom.',
+  '255.255.255.255': 'Alle sammen nå!',
+  '0.0.0.0': 'Overalt og ingensteds.',
+  '10.0.0.0/8': 'Seksten millioner adresser. Ta med matpakke.',
+};
+$('rangeInput')?.addEventListener('change', (e) => {
+  const v = e.target.value.trim().toLowerCase();
+  if (NABE_OMRADE[v]) nabeSier(NABE_OMRADE[v], 'skvatt', 'omr:' + v);
+});
+
+/* -- what you search for in the point table */
+const NABE_SOK = {
+  '47808': 'Det er en port, ikke et punkt.',
+  'bac0': '47808 i heks. Du kan protokollen.',
+  'yabe': 'Feil app.',
+  'nabe': 'Hei.',
+  'help': 'Prøv F1. Eller ? øverst til høyre.',
+  'hjelp': 'Prøv ? øverst til høyre.',
+  'kaffe': 'Ingen kaffemaskin på dette anlegget. Jeg har sjekket alle objektene.',
+  'coffee': 'Ingen kaffemaskin på dette anlegget. Jeg har sjekket alle objektene.',
+};
+$('q')?.addEventListener('input', (e) => {
+  const v = e.target.value.trim().toLowerCase();
+  if (NABE_SOK[v]) nabeSier(NABE_SOK[v], v === 'nabe' ? 'fornoyd' : 'skvatt', 'sok:' + v);
+});
+
+/* -- writing. Read from the form as it is sent; never changes what is sent. */
+document.addEventListener('click', (e) => {
+  if (!e.target.closest?.('#wSend')) return;
+  tell('skriv');
+  const verdi = ($('wVal')?.value || '').trim().replace(',', '.');
+  const pri = parseInt($('wPri')?.value, 10);
+  if (pri === 1) nabeSier('Prioritet 1. Livsfarlig modig.', 'nervos', 'p1');
+  else if (pri === 16) nabeSier('Prioritet 16. Regulatoren vinner uansett.', null, 'p16');
+  else if (verdi === '42') nabeSier('Svaret på alt. Men hva var spørsmålet?', 'fornoyd', 'v42');
+  else if (verdi === '1337') nabeSier('l33t.', 'fornoyd', 'v1337');
+  else if (Number(verdi) >= 1000 && Number(verdi) < 1e9) nabeSier('Det var et stort tall. Sikker på enheten?', 'skvatt', 'stor');
+}, true);
+
+/* -- what a scan turns up */
+function nabeEtterSkann(n) {
+  if (n === 1) nabeSier('Én regulator. Litt ensomt.', null, 'en');
+  else if (n === 7) nabeSier('Sju. Akkurat som dvergene.', 'fornoyd', 'sju');
+  else if (n >= 100) nabeSier(`${n} enheter. Det var mange.`, 'skvatt', 'mange');
+}
+
+/* -- device numbers with a story. Only a hover title, nothing on screen. */
+const NABE_INSTANS = {
+  '42': 'Svaret på alt.',
+  '1337': 'l33t.',
+  '4194303': 'Jokertegnet. Hvordan fikk du dette?',
+  '0': 'Den første. Eller den som ingen konfigurerte.',
+  '1234': 'Noen hadde det travelt.',
+  '47808': 'Porten og ID-en. Noen har humor.',
+  '69': 'Nice.',
+};
+function nabeKortEgg() {
+  for (const el of document.querySelectorAll('#devList .dev .dev-id')) {
+    const t = NABE_INSTANS[el.textContent.trim()];
+    if (t && !el.title) el.title = t;
+  }
+}
+
+/* -- a device with nothing wrong at all */
+function nabeRentAnlegg(d, pts) {
+  if (!d || !pts || pts.length < 20) return;
+  const c = flagCounts(pts);
+  if (Object.values(c).some(Boolean)) return;
+  nabeSier('Ingen feil. Ingen overstyringer. Hvem igangkjørte denne?', 'fornoyd', 'ren:' + d.address);
+}
+
+/* -- the lights */
+function nabeTemaByttet(lys) {
+  if (lys) nabeSier('Sterkt lys. Godt jeg hadde med solbriller.', null, 'lys');
+}
+
+/* -- ↑ ↑ ↓ ↓ ← → ← → B A. B, A ... cnet. */
+const NABE_KODE = ['ArrowUp', 'ArrowUp', 'ArrowDown', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'ArrowLeft', 'ArrowRight', 'b', 'a'];
+let NABE_KODE_I = 0;
+document.addEventListener('keydown', (e) => {
+  const k = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+  NABE_KODE_I = k === NABE_KODE[NABE_KODE_I] ? NABE_KODE_I + 1 : (k === NABE_KODE[0] ? 1 : 0);
+  if (NABE_KODE_I === NABE_KODE.length) {
+    NABE_KODE_I = 0;
+    nabeKlasse('snurr', 800);
+    nabeSier('B, A … cnet. +30 liv.', 'fornoyd');
+  }
+});
+
+/* -- April fools: the gaze is mirrored. */
+const _nabeTegn = nabeTegn;
+nabeTegn = function () {
+  _nabeTegn();
+  if (!NABE.april) return;
+  const g = nabeMerke()?.querySelector('.nabe-pupiller');
+  const m = /translate\(([-\d.]+)px, ([-\d.]+)px\)/.exec(g?.style.transform || '');
+  if (m) g.style.transform = `translate(${-m[1]}px, ${-m[2]}px)`;
+};
+
 function skannSvar() {
+  nabeFornoyd();
   const b = $('scanBtn');
   if (!b || bevegelseAv()) return;
   b.classList.remove('svar');
@@ -2900,13 +3408,32 @@ function skannSvar() {
   setTimeout(() => b.classList.remove('svar'), 560);
 }
 
-function skannSlutt() {
+function skannSlutt(avbrutt) {
   const b = $('scanBtn');
-  if (!b) return;
-  b.classList.remove('skanner', 'ukjent', 'sender', 'svar');
-  b.style.removeProperty('--skann');
-  const f = b.querySelector('span.fyll');
-  if (f) f.remove();
+  if (b) b.classList.remove('skanner', 'ukjent', 'sender', 'svar');
+  const el = linjeEl();
+  const nullstill = () => Object.assign(LINJE, {maal: 0, vis: 0, fart: 0, sist: 0, runde: 0, fase: '', ferdig: false});
+  if (!el || !el.classList.contains('aktiv') || bevegelseAv()) {
+    cancelAnimationFrame(LINJE.raf); LINJE.raf = 0; nullstill();
+    if (el) { el.classList.remove('aktiv', 'ukjent'); el.style.transform = 'scaleX(0)'; }
+    return;
+  }
+  if (avbrutt) {
+    // Cancelled: the line draws back rather than vanishing.
+    cancelAnimationFrame(LINJE.raf); LINJE.raf = 0;
+    el.animate([{transform: `scaleX(${LINJE.vis})`}, {transform: 'scaleX(0)'}],
+               {duration: 360, easing: ANKOMST_KURVE}).onfinish = () => {
+      el.classList.remove('aktiv', 'ukjent'); el.style.transform = 'scaleX(0)'; };
+    nullstill();
+    return;
+  }
+  // Done: the line finishes its run to the end, then fades.
+  LINJE.ferdig = true;
+  if (!LINJE.raf) skannFramdrift(100, false, LINJE.fase.split('|')[0]);
+  setTimeout(() => {
+    if (LINJE.raf) { cancelAnimationFrame(LINJE.raf); LINJE.raf = 0; avsluttLinje(el); }
+    nullstill();
+  }, 1400);
 }
 
 /* --------------------------------------------------- framdrift paa kortet */
@@ -3017,6 +3544,7 @@ async function husk(omraader, enheter) {
     const d = await api('/api/sites', {
       ranges: omraader,
       local_address: S.localAddr || null,
+      mode: $('modeSel').value,
       devices: (enheter || []).map(x => ({
         address: x.address, device_instance: x.device_instance,
         object_name: x.object_name, // vendor_name, not object_name: the device list looks it up that way, and
@@ -3058,7 +3586,7 @@ function tegnMinne() {
         <div class="mn-tittel${s.navn ? '' : ' uten'}">${esc(s.navn || 'uten navn')}</div>
         <div class="mn-omrade">${esc(key)}</div>
         <div class="mn-under">${merkerHtml(merker)}${
-          s.lokal ? 'fra ' + esc(s.lokal) : ''}</div>
+          s.lokal ? 'fra ' + esc(s.lokal) : ''}${s.modus === 'bbmd' ? ' · via BBMD' : ''}</div>
       </div>
       <div class="mn-tall">${enh.length} enheter<br>${esc(naarTekst(s.sist))}${
         s.ganger > 1 ? `<br>${s.ganger} skann` : ''}</div>
@@ -3072,7 +3600,9 @@ function tegnMinne() {
 
   $('minneBody').querySelectorAll('[data-skann]').forEach(b => b.onclick = () => {
     $('rangeInput').value = b.dataset.skann;
-    savePrefs({range: b.dataset.skann});
+    const modus = (MINNE[b.dataset.skann] || {}).modus;
+    if (modus && [...$('modeSel').options].some(o => o.value === modus)) $('modeSel').value = modus;
+    savePrefs({range: b.dataset.skann, mode: $('modeSel').value});
     closeMinne();
     runScan();
   });
@@ -3218,6 +3748,7 @@ function tegnTagging() {
       <div class="tema-tittel">Slik blir det</div>
       <div class="tg-forhaandsvis">${esc(tagEksempel(t))}</div>
       <div class="tg-foot">
+        <button class="btn primary" id="tgBtg">Lag BTG-fil</button>
         <button class="btn" id="tgKopier">Kopier til BTG</button>
         <button class="btn" id="tgNullstill">Tøm</button>
       </div>
@@ -3285,8 +3816,8 @@ const TEMA_GRUPPER = [
     ['--err', 'Alarm'], ['--err-fg', 'Alarmtekst'], ['--adjust', 'Justerbart settpunkt'],
   ]},
   {navn: 'Merkevare', felt: [
-    ['--merke', 'Topplinje'], ['--merke-lys', 'Topplinje, lysere'],
-    ['--merke-aksent', 'Merkeaksent'],
+    ['--nm-blue', 'Topplinje'], ['--nm-blue-lift', 'Topplinje, lysere'],
+    ['--nm-red', 'Merke'],
   ]},
 ];
 const TEMA_ALLE = TEMA_GRUPPER.flatMap(g => g.felt.map(f => f[0]));
@@ -3297,9 +3828,9 @@ const TEMA_FORVALG = {
   'Standard': null,
   'Indigo': {
     dark: {'--accent': '#4f7bd6', '--accent-dim': '#1b2b4d', '--accent-edge': '#33518f',
-           '--accent-press': '#2a4478', '--on-accent': '#d5e2ff'},
-    light: {'--accent': '#3b3a8f', '--accent-dim': '#dcdcf2', '--accent-edge': '#a9a9d8',
-            '--accent-press': '#c9c9e8', '--on-accent': '#26246b'},
+           '--accent-press': '#2a4478', '--on-accent': '#d5e2ff', '--nm-blue': '#282071'},
+    light: {'--accent': '#282071', '--accent-dim': '#dcdcf2', '--accent-edge': '#a9a9d8',
+            '--accent-press': '#c9c9e8', '--on-accent': '#1a1550'},
   },
   'Høy kontrast': {
     dark: {'--bg': '#000000', '--panel': '#0a0a0a', '--raised': '#141414',
@@ -3472,7 +4003,7 @@ function tegnTema() {
       <div class="tema-tittel">Navn</div>
       <div class="tema-rad"><span class="tema-navn">Tittel</span>
         <input type="text" class="tema-tekst" id="temaTittel"
-               value="${esc(p.tittel || 'BACnet Explorer')}" spellcheck="false"></div>
+               value="${esc(p.tittel || 'NABE')}" spellcheck="false"></div>
       <div class="tema-rad"><span class="tema-navn">Undertittel</span>
         <input type="text" class="tema-tekst" id="temaUnder"
                value="${esc(p.undertittel ?? '')}" spellcheck="false"></div>
@@ -3584,7 +4115,7 @@ function tegnTema() {
   });
 
   const tit = $('temaTittel');
-  if (tit) tit.onchange = () => { savePrefs({tittel: tit.value.trim() || 'BACnet Explorer'}); brukTema(); };
+  if (tit) tit.onchange = () => { savePrefs({tittel: tit.value.trim() || 'NABE'}); brukTema(); };
   const und = $('temaUnder');
   if (und) und.onchange = () => { savePrefs({undertittel: und.value.trim()}); brukTema(); };
 }
@@ -4049,7 +4580,19 @@ function sokTreff(hay, ord) {
 }
 
 /* ---------------------------------------------------------------- filtering */
+
+/* The table and the selection bar both ask for the visible points in the same
+   redraw. The answer cannot change within one task, so the second asker gets
+   the first one's list. */
+let VIS_MEMO = null;
 function visiblePoints() {
+  if (VIS_MEMO) return VIS_MEMO;
+  VIS_MEMO = beregnSynlige();
+  queueMicrotask(() => { VIS_MEMO = null; });
+  return VIS_MEMO;
+}
+
+function beregnSynlige() {
   const {q, type, flag, writable, diff} = S.filters;
   const ord = sokeOrd(q.trim().toLowerCase());
   let out = S.points.filter(p => {
@@ -4074,13 +4617,15 @@ function visiblePoints() {
     const v = p[key];
     return (v === null || v === undefined) ? '' : v;
   };
+  // Keys worked out once per point, not once per comparison.
+  const nokkel = new Map(out.map(p => [p, noekler.map(({key}) => felt(p, key))]));
   out.sort((a, b) => {
-    for (const {key, dir} of noekler) {
-      const x = felt(a, key), y = felt(b, key);
-      let c;
-      if (typeof x === 'number' && typeof y === 'number') c = x - y;
-      else c = String(x).localeCompare(String(y), 'no', {numeric: true});
-      if (c) return c * dir;
+    const ka = nokkel.get(a), kb = nokkel.get(b);
+    for (let i = 0; i < noekler.length; i++) {
+      const x = ka[i], y = kb[i];
+      const c = (typeof x === 'number' && typeof y === 'number') ? x - y
+              : NORSK.compare(String(x), String(y));
+      if (c) return c * noekler[i].dir;
     }
     return 0;
   });
@@ -4100,9 +4645,12 @@ function isDiff(p) {
 const COLS = [
   {k: 'objid', label: 'Objekt', menu: 'Objekt', cls: 'c-obj', col: 'w-obj',
    cell: p => `<span class="type-tag ${TYPE_CLASS[p.type] || ''}">${shortType(p.type)}</span><span class="inst">${p.instance}</span>`},
-  {k: 'name', label: 'Navn', menu: 'Navn', cls: 'c-name', col: '',
+  {k: 'name', label: 'Tag', menu: 'Tag', cls: 'c-name', col: '',
    attrs: p => ` title="${esc(p.name || '')}"`,
    cell: p => esc(shortName(p) || '—')},
+  {k: 'description', label: 'Beskrivelse', menu: 'Beskrivelse', cls: 'c-desc', col: '',
+   attrs: p => ` title="${esc(p.description || '')}"`,
+   cell: p => esc(p.description || '')},
   {k: 'value', label: 'Verdi', menu: 'Verdi', cls: 'c-val', col: 'w-val',
    extraCls: p => fmtVal(p.value).c + (p.unread ? ' unread' : ''),
    attrs: p => p.unread ? ' title="Ingen svar fra enheten på dette punktet"' : '',
@@ -4116,9 +4664,6 @@ const COLS = [
    }},
   {k: '_u', label: '', menu: 'Enhet', cls: 'c-unit', col: 'w-unit', nosort: true,
    cell: p => esc(p.unit_symbol || '')},
-  {k: 'description', label: 'Beskrivelse', menu: 'Beskrivelse', cls: 'c-desc', col: '',
-   attrs: p => ` title="${esc(p.description || '')}"`,
-   cell: p => esc(p.description || '')},
 ];
 const COL_BY_KEY = Object.fromEntries(COLS.map(c => [c.k, c]));
 
@@ -4948,6 +5493,16 @@ function tomtSkannResultat(mode, omraader) {
     grunner.push('Du sender fra <code>' + esc(S.localAddr) + '</code> — et '
       + '/32 uten eget subnett, altså en VPN-tunnel. Kringkasting virker ikke herfra.');
   }
+  if (mode === 'bbmd') {
+    grunner.push('<b>BBMD</b> trenger IP-en til byggets BBMD — som oftest JACE-en '
+      + 'eller hovedsentralen, ikke en vilkårlig regulator. Svarer den ikke på '
+      + 'registreringen, leses adressen alene.');
+  }
+  if (!vpn && mode !== 'bbmd') {
+    grunner.push('På anleggsnettet: Windows merker ukjente nett som <b>offentlige</b>, '
+      + 'og brannmuren stopper da I-Am-svar som kommer som kringkasting. '
+      + 'Sweep går likevel, fordi svarene der er direkte svar på det vi sendte.');
+  }
   grunner.push('At <b>ping</b> svarer betyr bare at IP-en nås. BACnet-oppdagelse '
     + 'er en egen samtale på UDP 47808, og den kan blokkeres selv om ping går.');
 
@@ -5739,6 +6294,8 @@ function tellSammendrag(rot) {
 function renderDeviceSummary() {
   const d = S.activeDev;
   if (!d) return '<div class="empty" style="padding:20px 16px">Velg et punkt</div>';
+  // Filled after the markup is in place: alarms come from the device itself.
+  setTimeout(() => { if (typeof fyllAlarmer === 'function') { fyllAlarmer(); tellPunkter(); } }, 0);
   const v = vendorOf(d.vendor_name, d.vendor_id);
   const flagg = flagCounts(S.points);
   const counts = S.typeCounts || {};
@@ -5752,20 +6309,21 @@ function renderDeviceSummary() {
       <span class="vendor" style="--vc:${v.color}"><i></i><span>${esc(v.label)}</span></span>
       · <code style="font-family:var(--mono);font-size:10px">#${d.device_instance} · ${esc(d.address)}</code>
     </div>
-    <div class="sect"><div class="sect-head">Sammendrag</div>
-      <div class="sum-grid">
-        <div class="sum-card"><b>${S.totalObjects || 0}</b><span>objekter</span></div>
-        <div class="sum-card"><b>${S.points.length}</b><span>punkter</span></div>
-        ${Object.entries(FLAGS).filter(([f]) => flagg[f]).map(([f, m]) =>
-          `<div class="sum-card ${m.cls === 'bad' ? 'alarm' : 'over'}"><b>${flagg[f]}</b><span>${esc(m.label)}</span></div>`).join('')}
-      </div>
-    </div>
+    <div class="sect" id="alarmSect" hidden></div>
     <div class="sect"><div class="sect-head">Notat</div>
       <div class="sect-body">
         <textarea id="devNote" class="note-field" rows="3"
           placeholder="Hva du fant, hva som gjenstår, hva neste mann bør vite…"></textarea>
         <div class="note-foot"><span id="noteState"></span>
           <button id="noteSave" class="btn">Lagre notat</button></div>
+      </div>
+    </div>
+    <div class="sect"><div class="sect-head">Sammendrag</div>
+      <div class="sum-grid">
+        <div class="sum-card"><b>${S.totalObjects || 0}</b><span>objekter</span></div>
+        <div class="sum-card"><b>${S.points.length}</b><span>punkter</span></div>
+        ${Object.entries(FLAGS).filter(([f]) => flagg[f]).map(([f, m]) =>
+          `<div class="sum-card ${m.cls === 'bad' ? 'alarm' : 'over'}"><b>${flagg[f]}</b><span>${esc(m.label)}</span></div>`).join('')}
       </div>
     </div>
     <div class="sect"><div class="sect-head">Objekttyper</div>
@@ -6641,7 +7199,7 @@ function bekreftEffekt(objid) {
    2400 samtidige transformer er ikke gratis. */
 /* Hvem som var i alarm sist vi tegnet.
 
-   Foerste gang en enhet aapnes tenner ingenting: paa en stor sentral var 1236 av 2418
+   Foerste gang en enhet aapnes tenner ingenting: paa 558269 var 1236 av 2418
    punkter flagget, og aa tenne alle sammen paa en gang er ikke en varsling,
    det er et lysshow. Bare overgangen fra frisk til alarm teller. */
 let ALARM_FOER = {ip: null, alarm: new Set(), tvang: new Set(), drift: new Set()};
@@ -6649,7 +7207,7 @@ let ALARM_FOER = {ip: null, alarm: new Set(), tvang: new Set(), drift: new Set()
 /* Hva som er NYTT siden forrige tegning, per kategori.
 
    Alle tre er samme spoersmaal: hvilke punkter gikk over kanten mens du saa
-   paa? Foerste gang en enhet aapnes svarer den ingen - paa en stor sentral var 1236 av
+   paa? Foerste gang en enhet aapnes svarer den ingen - paa 558269 var 1236 av
    2418 flagget, og aa tenne alle paa en gang er ikke en varsling, det er et
    lysshow. */
 function nyeMerker(rows) {
@@ -6707,7 +7265,11 @@ function visRullefelt() {
   const bar = document.getElementById('punktrull');
   const wrap = document.getElementById('pointsWrap');
   if (!bar || !wrap) return;
-  bar.classList.toggle('aktiv', wrap.scrollHeight > wrap.clientHeight + 1);
+  // Read on the next frame, after the browser's own layout, rather than
+  // forcing a second one straight after the table was rebuilt.
+  cancelAnimationFrame(visRullefelt._raf);
+  visRullefelt._raf = requestAnimationFrame(() =>
+    bar.classList.toggle('aktiv', wrap.scrollHeight > wrap.clientHeight + 1));
 }
 // Ruta kan bli hoyere eller lavere uten at tabellen tegnes om - da endrer
 // svaret seg ogsaa.
@@ -7894,7 +8456,7 @@ function exportEDE() {
     pad(['PROJECT_NAME', f(tagInnstillinger().prosjekt || S.prosjektNavn
         || dev.object_name || `Enhet ${dev.device_instance}`)]),
     pad(['TIMESTAMP_OF_LAST_CHANGE', stempel]),
-    pad(['AUTHOR_OF_LAST_CHANGE', 'BACnet Explorer']),
+    pad(['AUTHOR_OF_LAST_CHANGE', 'NABE']),
     pad(['VERSION_OF_LAYOUT', '2.2']),
     ['#mandatory', 'mandatory', 'mandatory', 'mandatory', 'mandatory',
      ...Array.from({length: KOL - 5}, () => 'optional')].join(';'),
@@ -8199,7 +8761,7 @@ $('temaNullstill').onclick = () => {
   if (!confirm('Tilbakestille alle farger og størrelser til standard?')) return;
   savePrefs({tema: {}, uiSkala: 100, radHoyde: 26, radius: 4,
              bgStyrke: 40, bgUskarp: 0, bgMorkne: 0, flateGjennom: 0,
-             bgModus: 'dekk', tittel: 'BACnet Explorer', undertittel: '',
+             bgModus: 'dekk', tittel: 'NABE', undertittel: '',
              bgSnitt: null});
   ['bg', 'logo', 'banner'].forEach(n => lagreBilde(n, null));
   brukTema(); tegnTema();
@@ -8210,6 +8772,13 @@ $('temaNullstill').onclick = () => {
    most of this work is measured on. Light is there for a bright plant room
    or a sunlit van, and the choice is remembered. */
 function applyTheme(lys) {
+  const rot = document.documentElement;
+  const bytter = rot.getAttribute('data-theme') !== (lys ? 'light' : 'dark')
+    && rot.hasAttribute('data-theme') && !bevegelseAv();
+  if (bytter) {
+    // NABE notices the lights change.
+    if (typeof nabeTemaByttet === 'function') nabeTemaByttet(lys);
+  }
   document.documentElement.setAttribute('data-theme', lys ? 'light' : 'dark');
   // The sun and moon are drawn by the stylesheet now, so there is no glyph
   // to swap - and nothing to go wrong if a font lacks the character.
@@ -8326,10 +8895,22 @@ $('zoomClose').onclick = closeZoom;
 $('zoomOverlay').onclick = e => { if (e.target === $('zoomOverlay')) closeZoom(); };
 $('watchExport').onclick = exportWatchHistory;
 
-/* The subtitle under the wordmark. Set it under Settings -> Appearance;
-   with nothing set it reads "lokal", which is what this tool always is. */
-(function undertekst() {
-  $('brandSub').textContent = loadPrefs().undertittel || 'lokal';
+/* Clicking the logo returns to the Portal — but only when this instance is
+   actually served from the server. The local copy runs on 127.0.0.1, where
+   port 8000 is not the Portal, so linking there would just be a dead end. */
+(function portalBackLink() {
+  const el = $('brandLink');
+  const host = location.hostname;
+  const isLocal = ['127.0.0.1', 'localhost', '::1', ''].includes(host);
+  if (isLocal) {
+    el.title = 'Lokal versjon — portalen ligger på serveren';
+    $('brandSub').textContent = '';
+    return;
+  }
+  el.href = `http://${host}:8000/`;
+  el.title = 'Tilbake til portalen';
+  el.classList.add('linked');
+  el.insertAdjacentHTML('beforeend', '<span class="brand-back">← Portal</span>');
 })();
 
 /* Build the image off-DOM with both handlers attached before src is set, so
@@ -8533,11 +9114,26 @@ document.addEventListener('keydown', e => {
 (function restore() {
   const p = loadPrefs();
   if (p.range) $('rangeInput').value = p.range;
-  if (p.mode) $('modeSel').value = p.mode;
+  /* Auto replaced "Sweep - grundig" as the default. A saved grundig from
+     before is just the old default, so it moves over once; anything chosen
+     after that is kept. */
+  if (p.mode && !(p.mode === 'unicast_sweep' && !p.modeV2)) $('modeSel').value = p.mode;
+  if (!p.modeV2) savePrefs({modeV2: true, mode: $('modeSel').value});
   if (p.pollInt) $('pollInt').value = p.pollInt;
   if (p.dense) document.body.classList.add('dense');
 })();
-$('rangeInput').addEventListener('change', e => savePrefs({range: e.target.value.trim()}));
+$('rangeInput').addEventListener('change', e => {
+  savePrefs({range: e.target.value.trim()});
+  // A site scanned before remembers how: a building behind a BBMD is scanned
+  // through it again, a hotel VPN gets the thorough sweep it needed.
+  const nokkel = parseRanges(e.target.value).sort().join(' ');
+  const modus = (MINNE[nokkel] || {}).modus;
+  if (modus && [...$('modeSel').options].some(o => o.value === modus) && $('modeSel').value !== modus) {
+    $('modeSel').value = modus;
+    savePrefs({mode: modus});
+    toast(`Bruker ${$('modeSel').selectedOptions[0].textContent} som sist på dette anlegget`);
+  }
+});
 $('modeSel').addEventListener('change', e => savePrefs({mode: e.target.value}));
 $('pollInt').addEventListener('change', e => savePrefs({pollInt: e.target.value}));
 
@@ -8584,8 +9180,10 @@ renderDevices();
 const DIAG_STEG = [
   ['port',   'UDP-porten',   'Har et annet program tatt 47808?'],
   ['kort',   'Nettverkskortet', 'Når vi adressen herfra?'],
+  ['brannmur', 'Brannmuren',    'Slipper Windows inn svarene?'],
   ['ping',   'Ping',         'Er adressen i live?'],
   ['bacnet', 'BACnet',       'Svarer den på UDP 47808?'],
+  ['tjenester', 'Andre tjenester', 'Svarer adressen på noe i det hele tatt?'],
 ];
 
 function diagTegn(i, tilstand, detalj, forklaring) {
@@ -8873,6 +9471,7 @@ const ORDBOK = {
   'Skann': 'Scan',
   'Avbryt': 'Cancel',
   'Sweep — grundig': 'Sweep — thorough',
+  'BBMD — via én IP': 'BBMD — via one IP',
   'Sweep — rask': 'Sweep — fast',
   'Who-Is (kringkasting)': 'Who-Is (broadcast)',
   'Laster nettverkskort…': 'Loading adapters…',
@@ -8902,6 +9501,66 @@ const ORDBOK = {
      these are the fragments as they actually reach the DOM, not the
      sentences as they read in the source. */
   'Kom i gang': 'Getting started',
+  'Lag BTG-fil': 'Make BTG file',
+  'Andre tjenester': 'Other services',
+  'Svarer adressen på noe i det hele tatt?': 'Does the address answer anything at all?',
+  'Ingenting svarer på denne adressen': 'Nothing answers on this address',
+  'Brannmuren': 'Firewall',
+  'Slipper Windows inn svarene?': 'Does Windows let the answers in?',
+  'Kunne ikke lese brannmuren': 'Could not read the firewall',
+  'Svar som kommer som kringkasting slipper inn.': 'Answers sent as broadcasts get in.',
+  'Fredag etter to. Ingen nye overstyringer nå, ok?': 'Friday after two. No new overrides now, ok?',
+  'Sent igangkjøringskvelds? Jeg holder deg med selskap.': 'Late commissioning night? I will keep you company.',
+  'Tidlig ute. Kaffen er ikke ferdig ennå.': 'Early start. The coffee is not ready yet.',
+  'Det er deg selv. Du svarer ikke på Who-Is.': 'That is you. You do not answer Who-Is.',
+  'Google har ingen BACnet. Vi har sjekket.': 'Google has no BACnet. We checked.',
+  'Cloudflare heller ikke.': 'Neither does Cloudflare.',
+  'Klassikeren. Ruteren i hvert eneste teknisk rom.': 'The classic. The router in every plant room.',
+  'Alle sammen nå!': 'Everybody, now!',
+  'Overalt og ingensteds.': 'Everywhere and nowhere.',
+  'Seksten millioner adresser. Ta med matpakke.': 'Sixteen million addresses. Pack a lunch.',
+  'Det er en port, ikke et punkt.': 'That is a port, not a point.',
+  '47808 i heks. Du kan protokollen.': '47808 in hex. You know your protocol.',
+  'Feil app.': 'Wrong app.',
+  'Hei.': 'Hi.',
+  'Prøv F1. Eller ? øverst til høyre.': 'Try F1. Or the ? top right.',
+  'Prøv ? øverst til høyre.': 'Try the ? top right.',
+  'Ingen kaffemaskin på dette anlegget. Jeg har sjekket alle objektene.': 'No coffee machine on this site. I checked every object.',
+  'Prioritet 1. Livsfarlig modig.': 'Priority 1. Dangerously brave.',
+  'Prioritet 16. Regulatoren vinner uansett.': 'Priority 16. The controller wins anyway.',
+  'Svaret på alt. Men hva var spørsmålet?': 'The answer to everything. But what was the question?',
+  'Det var et stort tall. Sikker på enheten?': 'That is a big number. Sure about the unit?',
+  'Én regulator. Litt ensomt.': 'One controller. A bit lonely.',
+  'Sju. Akkurat som dvergene.': 'Seven. Like the dwarfs.',
+  'Ingen feil. Ingen overstyringer. Hvem igangkjørte denne?': 'No faults. No overrides. Who commissioned this one?',
+  'Sterkt lys. Godt jeg hadde med solbriller.': 'Bright. Good thing I brought sunglasses.',
+  'B, A … cnet. +30 liv.': 'B, A … cnet. +30 lives.',
+  'Det er aldri BACnet. Bortsett fra når det er BACnet.': 'It is never BACnet. Except when it is BACnet.',
+  'MS/TP: mye styr, til pass.': 'MS/TP: Mostly Slow, Terribly Patient.',
+  'Har du sjekket at kabelen står i?': 'Have you checked the cable is plugged in?',
+  '47808. Fint tall.': '47808. Lovely number.',
+  'Jeg ser deg.': 'I see you.',
+  'Instans 4194303? Det er meg. Det er alle.': 'Instance 4194303? That is me. That is everyone.',
+  'Hvem satte denne på prioritet 1?': 'Who put this on priority 1?',
+  'Jeg var også bare en sweep en gang.': 'I was just a sweep once, too.',
+  'Kaffe først, igangkjøring etterpå.': 'Coffee first, commissioning after.',
+  'Ok. Nå holder det.': 'Right. That is enough.',
+  'Ikke nå. Jeg teller.': 'Not now. I am counting.',
+  'Ingen svarte. Det er ikke personlig.': 'Nobody answered. It is not personal.',
+  'Sterkt lys her inne.': 'Bright in here.',
+  'Ja. Enda en BACnet-explorer.': 'Yes. Another BACnet explorer.',
+  'YABE var opptatt.': 'YABE was taken.',
+  'Har du prøvd å slå den av og på igjen?': 'Have you tried turning it off and on again?',
+  'Prioritet 8. Selvfølgelig.': 'Priority 8. Obviously.',
+  'Who-Is? Jeg er NABE.': 'Who-Is? I am NABE.',
+  'Klokka på den WAGO-en står fortsatt i 2000.': 'That WAGO still thinks it is the year 2000.',
+  'Husk å frigi før du går hjem.': 'Remember to release before you go home.',
+  'Skriv': 'Write',
+  'Auto-frigi': 'Auto-release',
+  'Skriv området i feltet over, f.eks.': 'Type the range in the field above, e.g.',
+  ', én IP eller': ', one IP or',
+  '. Nettverkskortet velges selv.': '. The network adapter is picked for you.',
+  'Enhetene glir inn her etter hvert som de svarer.': 'Devices glide in here as they answer.',
   'Sjekk at': 'Check that',
   'Fra': 'From',
   'viser nettverkskortet som når anlegget.': 'shows the adapter that reaches the plant.',
@@ -9070,8 +9729,8 @@ const ORDBOK = {
   'Forbindelsen ble gjenopprettet — sender fra': 'The connection is back — sending from',
   'Kontakt gjenopprettet — sender fra': 'Contact restored — sending from',
   'Kontakt gjenopprettet — velg nettverkskort': 'Contact restored — pick an adapter',
-  'Mistet kontakt med BACnet Explorer på denne PC-en': 'Lost contact with BACnet Explorer on this PC',
-  'Ingen kontakt med BACnet Explorer på denne PC-en — kjører start.bat?': 'No contact with BACnet Explorer on this PC — is start.bat running?',
+  'Mistet kontakt med NABE på denne PC-en': 'Lost contact with NABE on this PC',
+  'Ingen kontakt med NABE på denne PC-en — kjører start.bat?': 'No contact with NABE on this PC — is start.bat running?',
   'Uventet svar fra serveren (ikke JSON)': 'Unexpected reply from the server (not JSON)',
   'Velg nettverkskort øverst til venstre': 'Pick an adapter at the top left',
   'Fant ingen nettverkskort': 'Found no adapters',
@@ -9485,6 +10144,34 @@ const ORDBOK = {
    English shape, and the group order that maps one to the other. Anything
    not listed here stays Norwegian rather than coming out half-translated. */
 const MONSTER = [
+  [/^Svarer på (.+)$/, (m) => `Answers on ${m[1]}`, /^Answers on (.+)$/, (m) => `Svarer på ${m[1]}`],
+  [/^Bruker (.+) som sist på dette anlegget$/, (m) => `Using ${m[1]}, as last time on this site`,
+   /^Using (.+), as last time on this site$/, (m) => `Bruker ${m[1]} som sist på dette anlegget`],
+  [/^Tillatt på (.+)$/, (m) => `Allowed on ${m[1]}`, /^Allowed on (.+)$/, (m) => `Tillatt på ${m[1]}`],
+  [/^(\d+) enheter\. Det var mange\.$/, (m) => `${m[1]} devices. That is a lot.`,
+   /^(\d+) devices\. That is a lot\.$/, (m) => `${m[1]} enheter. Det var mange.`],
+  [/^(\d+) punkter av (\d+) objekter · (.+)$/, (m) => `${m[1]} points of ${m[2]} objects · ${m[3]}`,
+   /^(\d+) points of (\d+) objects · (.+)$/, (m) => `${m[1]} punkter av ${m[2]} objekter · ${m[3]}`],
+  [/^(\d+) av (\d+) objekter · (\d+)%$/, (m) => `${m[1]} of ${m[2]} objects · ${m[3]}%`,
+   /^(\d+) of (\d+) objects · (\d+)%$/, (m) => `${m[1]} av ${m[2]} objekter · ${m[3]}%`],
+  [/^(\d+) objekter$/, (m) => `${m[1]} objects`, /^(\d+) objects$/, (m) => `${m[1]} objekter`],
+  [/^(\d+) objekter skjult na$/, (m) => `${m[1]} objects hidden now`,
+   /^(\d+) objects hidden now$/, (m) => `${m[1]} objekter skjult na`],
+  [/^(\d+) feil$/, (m) => `${m[1]} faults`, /^(\d+) faults$/, (m) => `${m[1]} feil`],
+  [/^(\d+) overstyrt$/, (m) => `${m[1]} overridden`, /^(\d+) overridden$/, (m) => `${m[1]} overstyrt`],
+  [/^(\d+) pkt$/, (m) => `${m[1]} pts`, /^(\d+) pts$/, (m) => `${m[1]} pkt`],
+  // The device count inside this sentence is translated on its own first,
+  // so both the Norwegian and the half-translated form have to match.
+  [/^(\d+) (?:enheter|devices) har feil klokke$/, (m) => `${m[1]} devices have the wrong clock`,
+   /^(\d+) devices have the wrong clock$/, (m) => `${m[1]} enheter har feil klokke`],
+  [/^1 enhet har feil klokke$/, () => '1 device has the wrong clock',
+   /^1 device has the wrong clock$/, () => '1 enhet har feil klokke'],
+  [/^⏱ klokke står på (.+)$/, (m) => `⏱ clock is at ${m[1]}`,
+   /^⏱ clock is at (.+)$/, (m) => `⏱ klokke står på ${m[1]}`],
+  [/^⏱ klokke (.+) etter$/, (m) => `⏱ clock ${m[1]} behind`,
+   /^⏱ clock (.+) behind$/, (m) => `⏱ klokke ${m[1]} etter`],
+  [/^⏱ klokke (.+) foran$/, (m) => `⏱ clock ${m[1]} ahead`,
+   /^⏱ clock (.+) ahead$/, (m) => `⏱ klokke ${m[1]} foran`],
   [/^(\d+) enhet\(er\) i (\d+) områder$/, (m) => `${m[1]} device(s) in ${m[2]} ranges`,
    /^(\d+) device\(s\) in (\d+) ranges$/, (m) => `${m[1]} enhet(er) i ${m[2]} områder`],
   [/^(\d+) enheter$/, (m) => `${m[1]} devices`,
@@ -9667,7 +10354,7 @@ const HOPP_OVER = /^(SCRIPT|STYLE|CODE|SVG|PATH)$/;
    These are the fields that carry the data, not the panes that contain them:
    the device list also holds the getting-started text and the watch pane its
    own empty state, and both of those are the tool talking. */
-const DATA_SONE = 'tbody, .dev-name, .dev-ip, .dev-note, '
+const DATA_SONE = 'tbody, .nabe-boble, .startskjerm, #alarmSect, .ruter-info, .dev-name, .dev-ip, .dev-note, '
   + '.watch-name, .watch-ip, .insp-title, .insp-sub, .insp-val, .data-verdier';
 
 function iDataSone(n) {
@@ -9788,5 +10475,544 @@ function settSprak(kode, lagre) {
   const b = $('langBtn');
   if (b) b.onclick = () => settSprak(SPRAAK === 'en' ? 'nb' : 'en', true);
   const lagret = loadPrefs().sprak;
-  if (lagret === 'en') settSprak('en', false); else settSprak('nb', false);
+  // This edition is English unless Norwegian has been chosen.
+  if (lagret === 'nb') settSprak('nb', false); else settSprak('en', false);
 })();
+
+/* =============================================================== NABE 1.1
+   Alarms, routers, the start screen, and the small things that happen when
+   the tool has been used a lot. New text is written in both languages here
+   with T(), and the containers are left out of the language sweep, so nothing
+   is translated twice. */
+const T = (nb, en) => (SPRAAK === 'en' ? en : nb);
+let NABE_VERSJON = '';
+fetch('/api/status').then(r => r.json()).then(d => { NABE_VERSJON = d.versjon || ''; }).catch(() => {});
+
+/* ------------------------------------------------------------ alarm list */
+const ALARM_CACHE = {};
+
+async function fyllAlarmer() {
+  const boks = document.getElementById('alarmSect');
+  const d = S.activeDev;
+  if (!boks || !d) return;
+  let data = ALARM_CACHE[d.address];
+  if (!data || Date.now() - data.t > 60000) {
+    try {
+      const r = await api('/api/device/alarms', {address: d.address});
+      data = ALARM_CACHE[d.address] = {t: Date.now(), r};
+    } catch { return; }
+  }
+  // The inspector may have moved on while we waited.
+  if (S.activeDev !== d || !document.body.contains(boks)) return;
+  const r = data.r;
+  if (r.status !== 'done') { boks.hidden = true; return; }
+  const liste = r.alarmer || [];
+  boks.hidden = false;
+  if (!liste.length) {
+    boks.innerHTML = `<div class="sect-head">${T('Aktive alarmer', 'Active alarms')} <span class="count">0</span></div>`
+      + `<div class="alarm-tom">${T('Ingen aktive alarmer.', 'No active alarms.')}</div>`;
+    nabeSier(T('Ingen alarmer. Mistenkelig.', 'No alarms. Suspicious.'), 'skvatt', 'ingen-alarm');
+    return;
+  }
+  const navn = oid => (S.pointIndex && S.pointIndex.get(oid)?.name) || oid;
+  boks.innerHTML = `<div class="sect-head">${T('Aktive alarmer', 'Active alarms')} <span class="count">${liste.length}</span></div>
+    <div class="alarm-liste">${liste.map(a => `
+      <button class="alarm-rad" data-o="${esc(a.objid)}">
+        <span class="alarm-navn">${esc(navn(a.objid))}</span>
+        <span class="alarm-til ${/fault/.test(a.tilstand) ? 'bad' : 'warn'}">${esc(a.tilstand)}</span>
+        ${a.ukvittert.length ? `<span class="alarm-ukv" title="${esc(a.ukvittert.join(', '))}">${T('ukvittert', 'unacked')}</span>` : ''}
+      </button>`).join('')}</div>`;
+  boks.querySelectorAll('.alarm-rad').forEach(b => b.onclick = () =>
+    document.querySelector(`#pointsWrap tr[data-o="${CSS.escape(b.dataset.o)}"]`)?.click());
+}
+
+/* ------------------------------------------------------- routers on site */
+async function visRutere() {
+  let r;
+  try { r = await (await fetch('/api/routers')).json(); } catch { return; }
+  const liste = (r && r.rutere) || [];
+  let el = document.getElementById('ruterInfo');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'ruterInfo';
+    el.className = 'ruter-info';
+    $('dupWarn')?.after(el);
+  }
+  if (!liste.length) { el.hidden = true; return; }
+  el.hidden = false;
+  el.innerHTML = liste.map(x =>
+    `<div title="${esc(T('BACnet-nett bak denne ruteren - typisk MS/TP', 'BACnet networks behind this router - usually MS/TP'))}">`
+    + `<span class="ruter-ip">${esc(x.ruter)}</span> → ${T('nett', 'network')} ${x.nett.map(n => esc(String(n))).join(', ')}</div>`).join('');
+}
+
+/* ------------------------------------------------------- usage, and jokes */
+const TELLER_NOKKEL = 'nabe_teller';
+function teller() {
+  try { return JSON.parse(localStorage.getItem(TELLER_NOKKEL)) || {}; } catch { return {}; }
+}
+function tell(hva, n = 1) {
+  const t = teller();
+  t[hva] = (t[hva] || 0) + n;
+  t.sett = t.sett || [];
+  try { localStorage.setItem(TELLER_NOKKEL, JSON.stringify(t)); } catch {}
+  milepaeler(hva, t);
+}
+const MILEPAELER = {
+  aapnet: [[10, 'Tiende gang. Vi begynner å bli venner.', 'Tenth time. We are becoming friends.'],
+           [50, 'Femti åpninger. Du fortjener en NABE-kopp.', 'Fifty opens. You deserve a NABE mug.'],
+           [200, 'To hundre. Jeg tror jeg er favoritten din.', 'Two hundred. I think I am your favourite.']],
+  skann:  [[1, 'Første skann! Jeg skal huske denne dagen.', 'First scan! I will remember this day.'],
+           [25, '25 skann. Du skanner mer enn en flyplass.', '25 scans. You scan more than an airport.'],
+           [100, 'Hundre skann. YABE kunne aldri.', 'A hundred scans. YABE could never.']],
+  enheter:[[100, 'Hundre enheter funnet. Noen var til og med konfigurert riktig.', 'A hundred devices found. Some were even configured properly.'],
+           [1000, 'Tusen enheter. Du har sett ting.', 'A thousand devices. You have seen things.']],
+  skriv:  [[1, 'Første skriving. Husk å frigi.', 'First write. Remember to release.'],
+           [50, 'Femti skrivinger. Driften lurer på hvem du er.', 'Fifty writes. Operations wonders who you are.']],
+  punkter:[[10000, 'Ti tusen punkter lest. Dataene dine er tunge.', 'Ten thousand points read. Your data is heavy.']],
+};
+function milepaeler(hva, t) {
+  for (const [grense, nb, en] of MILEPAELER[hva] || []) {
+    const id = hva + grense;
+    if (t[hva] >= grense && !t.sett.includes(id)) {
+      t.sett.push(id);
+      try { localStorage.setItem(TELLER_NOKKEL, JSON.stringify(t)); } catch {}
+      setTimeout(() => nabeSier(T(nb, en), 'fornoyd'), 800);
+      return;
+    }
+  }
+}
+
+// Points read: counted once per device per visit.
+const LEST_TELT = new Set();
+function tellPunkter() {
+  const d = S.activeDev;
+  if (!d || !S.points.length || LEST_TELT.has(d.address)) return;
+  LEST_TELT.add(d.address);
+  tell('punkter', S.points.length);
+  if (S.points.length > 1500) nabeSier(T('Pratsom regulator, denne.', 'Chatty controller, this one.'), 'skvatt', 'prat');
+}
+
+// Flip-flopping between light and dark.
+let TEMA_KLIKK = [];
+document.addEventListener('click', (e) => {
+  if (!e.target.closest?.('#themeBtn')) return;
+  const naa = Date.now();
+  TEMA_KLIKK = TEMA_KLIKK.filter(t => naa - t < 4000).concat(naa);
+  if (TEMA_KLIKK.length >= 5) { TEMA_KLIKK = []; nabeSier(T('Bestem deg.', 'Make up your mind.'), 'svimmel'); }
+}, true);
+
+// A long session.
+const NABE_OKT_START = Date.now();
+setInterval(() => {
+  if (Date.now() - NABE_OKT_START > 3 * 3600e3)
+    nabeSier(T('Tre timer i strekk. Drikk litt vann.', 'Three hours straight. Drink some water.'), null, 'lang-okt');
+}, 60000);
+
+// Copying rows for Excel.
+document.addEventListener('copy', () => {
+  if (document.activeElement?.closest?.('#pointsWrap'))
+    nabeSier(T('Kopiert. Ikke si det til YABE.', 'Copied. Do not tell YABE.'), 'fornoyd', 'kopi');
+});
+
+/* ------------------------------------------------------------ start screen
+   One screen between opening the tool and using it: who it is, which plants
+   you were on last, and what is new. It never stands in the way - any key,
+   a click on a plant, or Esc goes straight through - and a plant clicked
+   here is scanned the way it was scanned last time. */
+const FAKTA = [
+  ['Instans 4194303 betyr «hvem du enn er». NABE bruker den til å finne deg.', 'Instance 4194303 means "whoever you are". NABE uses it to find you.'],
+  ['47808 er 0xBAC0 i heks. Noen hadde det gøy i 1995.', '47808 is 0xBAC0 in hex. Somebody had fun in 1995.'],
+  ['Prioritet 1 er for livssikkerhet. Prioritet 8 er for deg.', 'Priority 1 is for life safety. Priority 8 is for you.'],
+  ['MS/TP sender en stafettpinne rundt bussen. Den som har den, får snakke.', 'MS/TP passes a token round the bus. Whoever holds it gets to talk.'],
+  ['En BBMD gjentar kringkastinger mellom nett. Uten den hører ingen deg over VPN.', 'A BBMD repeats broadcasts between networks. Without one nobody hears you over VPN.'],
+  ['BACnet ble standard i 1995. Noen av regulatorene du finner, er nesten like gamle.', 'BACnet became a standard in 1995. Some controllers you find are nearly as old.'],
+  ['Relinquish default er verdien som gjelder når ingen prioritet er satt.', 'Relinquish default is the value that applies when no priority is set.'],
+  ['COV betyr at regulatoren sier fra selv. Mindre spørring, mer ro.', 'COV means the controller speaks up itself. Less asking, more peace.'],
+];
+const NYTT = {
+  '1.1': [
+    ['Aktive alarmer per enhet i inspektøren', 'Active alarms per device in the inspector'],
+    ['Live og overvåking bruker COV der regulatoren kan', 'Live and watch use COV where the controller allows'],
+    ['Rutere og nettene bak dem vises etter skann', 'Routers and the networks behind them appear after a scan'],
+    ['Diagnosen sier fra når et anlegg bare nås via fjernskrivebord', 'Diagnostics tell you when a plant is only reachable by remote desktop'],
+    ['Denne skjermen', 'This screen'],
+  ],
+};
+
+function hilsen() {
+  const t = new Date().getHours();
+  const n = teller().aapnet || 0;
+  if (n > 100) return T('Du igjen. Selvfølgelig.', 'You again. Of course.');
+  if (t < 6) return T('Hvorfor er vi våkne?', 'Why are we awake?');
+  if (t < 10) return T('God morgen. Kaffen først.', 'Good morning. Coffee first.');
+  if (t < 17) return T('Klar for enda en BACnet-explorer?', 'Ready for another BACnet explorer?');
+  return T('God kveld. Sen igangkjøring?', 'Good evening. Late commissioning?');
+}
+
+async function visStartskjerm() {
+  tell('aapnet');
+  const lag = document.createElement('div');
+  lag.id = 'startskjerm';
+  lag.className = 'startskjerm';
+  lag.setAttribute('role', 'dialog');
+  lag.setAttribute('aria-label', 'NABE');
+  const fakta = FAKTA[Math.floor(Math.random() * FAKTA.length)];
+  const sistSett = (() => { try { return localStorage.getItem('nabe_sett_versjon'); } catch { return null; } })();
+  lag.innerHTML = `
+    <div class="ss-kort">
+      <div class="ss-logo">${NABE_SVG.replace('width="26" height="26"', 'width="96" height="96"')}</div>
+      <h1 class="ss-navn">NABE</h1>
+      <div class="ss-under">Not Another BACnet Explorer<span class="ss-ver"></span></div>
+      <div class="ss-hilsen">${esc(hilsen())}</div>
+      <div class="ss-anlegg" hidden>
+        <div class="ss-tittel">${T('Fortsett der du slapp', 'Pick up where you left off')}</div>
+        <div class="ss-liste"></div>
+      </div>
+      <form class="ss-nytt">
+        <input class="field" id="ssOmr" placeholder="${T('Nytt område, f.eks. 10.75.1.0/24', 'New range, e.g. 10.75.1.0/24')}" autocomplete="off">
+        <button class="btn primary" type="submit">${T('Skann', 'Scan')}</button>
+      </form>
+      <button class="ss-videre" type="button">${T('Bare åpne', 'Just open it')} <kbd>Esc</kbd></button>
+      <div class="ss-nytt-i" hidden></div>
+      <div class="ss-fakta">${esc(T(fakta[0], fakta[1]))}</div>
+    </div>`;
+  document.body.appendChild(lag);
+
+  const lukk = () => {
+    lag.classList.add('ut');
+    setTimeout(() => lag.remove(), 260);
+    document.removeEventListener('keydown', tast, true);
+    try { localStorage.setItem('nabe_sett_versjon', NABE_VERSJON); } catch {}
+  };
+  const skann = (omr, modus) => {
+    $('rangeInput').value = omr;
+    if (modus && [...$('modeSel').options].some(o => o.value === modus)) $('modeSel').value = modus;
+    savePrefs({range: omr, mode: $('modeSel').value});
+    lukk();
+    setTimeout(() => { if (S.connected) runScan(); }, 300);
+  };
+  const tast = (e) => {
+    if (e.key === 'Escape') { e.preventDefault(); lukk(); }
+  };
+  document.addEventListener('keydown', tast, true);
+  lag.querySelector('.ss-videre').onclick = lukk;
+  lag.addEventListener('click', (e) => { if (e.target === lag) lukk(); });
+  lag.querySelector('.ss-nytt').onsubmit = (e) => {
+    e.preventDefault();
+    const v = $('ssOmr').value.trim();
+    if (v) skann(v); else lukk();
+  };
+  setTimeout(() => $('ssOmr')?.focus(), 50);
+
+  // The big NABE watches the pointer too.
+  const g = lag.querySelector('.nabe-pupiller');
+  lag.addEventListener('pointermove', (e) => {
+    const r = lag.querySelector('.ss-logo').getBoundingClientRect();
+    const vx = e.clientX - (r.left + r.width / 2), vy = e.clientY - (r.top + r.height / 2);
+    const len = Math.hypot(vx, vy) || 1, mag = Math.min(2.2, len / 60);
+    if (g) g.style.transform = `translate(${(vx / len * mag).toFixed(2)}px, ${(vy / len * mag).toFixed(2)}px)`;
+  });
+
+  // Version and what is new - filled once the server has answered.
+  setTimeout(() => {
+    if (NABE_VERSJON) lag.querySelector('.ss-ver').textContent = ' · v' + NABE_VERSJON;
+    const nytt = NYTT[NABE_VERSJON];
+    if (nytt && sistSett !== NABE_VERSJON) {
+      const boks = lag.querySelector('.ss-nytt-i');
+      boks.hidden = false;
+      boks.innerHTML = `<div class="ss-tittel">${T('Nytt i', 'New in')} ${esc(NABE_VERSJON)}</div><ul>`
+        + nytt.map(x => `<li>${esc(T(x[0], x[1]))}</li>`).join('') + '</ul>';
+    }
+  }, 400);
+
+  // The last plants, newest first.
+  try { if (typeof hentMinne === 'function') await hentMinne(); } catch {}
+  const rader = Object.entries(MINNE || {}).sort((a, b) => (b[1].sist || 0) - (a[1].sist || 0)).slice(0, 5);
+  if (rader.length && document.body.contains(lag)) {
+    lag.querySelector('.ss-anlegg').hidden = false;
+    const liste = lag.querySelector('.ss-liste');
+    liste.innerHTML = rader.map(([key, s]) => `
+      <button class="ss-rad" data-k="${esc(key)}">
+        <span class="ss-rad-navn">${esc(s.navn || key)}</span>
+        <span class="ss-rad-meta">${s.navn ? esc(key) + ' · ' : ''}${(s.enheter || []).length} ${(s.enheter || []).length === 1 ? T('enhet', 'device') : T('enheter', 'devices')}${s.modus === 'bbmd' ? ' · BBMD' : ''}${(() => {
+          const b = sisteBesok(key);
+          return b && b.over ? ` · <span class="ss-over">${b.over} ${T('overstyrt da du gikk', 'overridden when you left')}</span>` : '';
+        })()}</span>
+      </button>`).join('');
+    liste.querySelectorAll('.ss-rad').forEach(b => b.onclick = () =>
+      skann(b.dataset.k.split(' ').join(', '), (MINNE[b.dataset.k] || {}).modus));
+  }
+}
+setTimeout(visStartskjerm, 0);
+
+/* ---------------------------------------------------------- gallows humour
+   Requested darker. Aimed at the trade, the plant and the situation - never
+   at a person who is not in the room. */
+const NABE_MORKE = [
+  ['Prioritet 1. Hvis noe brenner, var det ikke meg.', 'Priority 1. If something catches fire, it was not me.'],
+  ['Denne regulatoren ble sist rørt av noen som har sluttet.', 'This controller was last touched by someone who has since left.'],
+  ['Overstyrt i tre år. Midlertidig.', 'Overridden for three years. Temporarily.'],
+  ['Igangkjøring er feilsøking med kaffe og dårlig samvittighet.', 'Commissioning is debugging with coffee and a guilty conscience.'],
+  ['Garantien gikk ut i går. Selvfølgelig gjorde den det.', 'The warranty expired yesterday. Of course it did.'],
+  ['Hvis det ikke står i TFM-lista, finnes det ikke. Som lønnsøkningen din.', 'If it is not in the tag list it does not exist. Like your pay rise.'],
+  ['Dokumentasjon? Vi har mot.', 'Documentation? We have courage.'],
+  ['Jeg er bare en nettside, men selv jeg vet at P1 er en dårlig idé.', 'I am just a web page, and even I know P1 is a bad idea.'],
+  ['Sweep pågår. Skrikene du hører er bare UDP-pakker som ikke kom fram.', 'Sweep running. The screams are just UDP packets that did not make it.'],
+  ['Alarmer forsvinner ikke av at du ser en annen vei. Jeg har prøvd.', 'Alarms do not go away if you look the other way. I have tried.'],
+  ['Denne WAGO-en har sett ting ingen PLS burde se.', 'This WAGO has seen things no PLC should see.'],
+  ['Fredag 15:59. Perfekt tidspunkt å endre settpunkt og forsvinne.', 'Friday 15:59. Perfect time to change a setpoint and vanish.'],
+  ['Kunden sa det «bare var en liten endring». Det er tre måneder siden.', 'The customer said it was "just a small change". That was three months ago.'],
+  ['Vi støtter BACnet. BACnet støtter ikke oss.', 'We support BACnet. BACnet does not support us.'],
+  ['Hver gang noen skriver Null til prioritet 16, dør en regulator litt.', 'Every time someone writes Null to priority 16, a controller dies a little.'],
+  ['Jeg har sett regulatorer gå offline av ren skam.', 'I have seen controllers go offline out of pure shame.'],
+];
+(function blandInnMorkt() {
+  const m = nabeMerke();
+  if (!m) return;
+  // Every other click-line is a dark one, on top of the original set.
+  m.addEventListener('click', () => {
+    if (NABE.klikk !== 3 || Math.random() < 0.5) return;
+    if (document.body.classList.contains('skanner')) return;
+    const [nb, en] = NABE_MORKE[Math.floor(Math.random() * NABE_MORKE.length)];
+    setTimeout(() => nabeSnakk(T(nb, en)), 30);
+  });
+})();
+
+/* What NABE says about the device you just opened. One line, once per
+   device per session, and only when there is something worth saying. */
+const _rentFoer = nabeRentAnlegg;
+nabeRentAnlegg = function (d, pts) {
+  if (!d || !pts || pts.length < 20) return;
+  const c = flagCounts(pts);
+  const feil = (c['in-alarm'] || 0) + (c['fault'] || 0);
+  const over = (c['overridden'] || 0) + (c['out-of-service'] || 0);
+  if (feil >= 20) nabeSier(T(`${feil} feil. Den er ikke ødelagt, den er bare ærlig.`, `${feil} faults. It is not broken, it is just honest.`), 'skvatt', 'feil:' + d.address);
+  else if (over >= 10) nabeSier(T(`${over} overstyrte punkter. Vaktmesteren kommer til å hate noen.`, `${over} overridden points. The caretaker is going to hate someone.`), 'nervos', 'over:' + d.address);
+  else _rentFoer(d, pts);
+};
+
+// The empty scan, said darker.
+const _tomFoer = nabeEtterSkann;
+nabeEtterSkann = function (n) {
+  if (n === 0) {
+    const linjer = [
+      ['Ingen svarte. Som på julebordet.', 'Nobody answered. Like the office party.'],
+      ['Ingen enheter. Enten er nettet tomt, eller så har noen trukket ut kabelen og gått hjem.', 'No devices. Either the network is empty or someone pulled the cable and went home.'],
+      ['Stille. For stille.', 'Quiet. Too quiet.'],
+    ];
+    const [nb, en] = linjer[Math.floor(Math.random() * linjer.length)];
+    setTimeout(() => nabeSnakk(T(nb, en)), 600);
+    return;
+  }
+  _tomFoer(n);
+};
+
+
+/* --------------------------------------------------------- tunnel guard
+   Connecting or dropping WireGuard or FortiClient used to need a restart of
+   NABE, sometimes of the PC. The stack was bound to the address the adapter
+   had at start; when the tunnel went away the socket went with it, and when
+   it came back - often with the very same address - the old socket stayed
+   deaf.
+
+   Every three seconds the adapter list is compared with the last one. When
+   something changed, the dropdown is refreshed, and NABE rebinds if the
+   adapter it was using vanished or came back, or if the range you are
+   working on is now routed through a new one. It waits while a scan runs,
+   and it says what it did. */
+const KORTVAKT = {sig: '', liste: []};
+
+async function kortvakt() {
+  if (S.scanJob || document.hidden) return;
+  let d;
+  try { d = await (await fetch('/api/interfaces', {cache: 'no-store'})).json(); } catch { return; }
+  const liste = (d && d.interfaces) || [];
+  const sig = liste.map(i => i.cidr).sort().join(',');
+  if (!KORTVAKT.sig) { KORTVAKT.sig = sig; KORTVAKT.liste = liste; return; }
+  if (sig === KORTVAKT.sig) return;
+
+  const gamle = KORTVAKT.liste;
+  KORTVAKT.sig = sig; KORTVAKT.liste = liste;
+  const nye = liste.filter(i => !gamle.some(g => g.cidr === i.cidr));
+  const borte = gamle.filter(g => !liste.some(i => i.cidr === g.cidr));
+  await loadInterfaces();
+
+  const bundetIp = String(S.localAddr || '').split(/[/:]/)[0];
+  const bundetBorte = borte.some(g => g.ip === bundetIp);
+  const bundetTilbake = nye.some(i => i.ip === bundetIp);
+  const omr = parseRanges($('rangeInput').value)[0];
+
+  if (bundetBorte || bundetTilbake) {
+    // The socket on that address is dead either way: rebind, preferably to
+    // whatever now carries the range in the field.
+    let maal = null;
+    if (omr) {
+      try {
+        const r = await (await fetch('/api/route?target=' + encodeURIComponent(omr))).json();
+        if (r && r.status === 'done') maal = r.cidr;
+      } catch {}
+    }
+    if (!maal) maal = (liste[0] || {}).cidr;
+    if (maal) {
+      await connectTo(maal, {quiet: true});
+      const navn = (liste.find(i => maal.startsWith(i.ip)) || {}).interface || maal;
+      nabeSier(bundetBorte
+        ? T(`Tunnelen forsvant. Byttet til ${navn}.`, `The tunnel went away. Switched to ${navn}.`)
+        : T(`${navn} er tilbake. Koblet til på nytt.`, `${navn} is back. Reconnected.`), 'skvatt');
+    }
+    return;
+  }
+  if (nye.length) {
+    const navn = nye.map(i => i.interface).join(', ');
+    // A new adapter: take it if the range is routed through it now.
+    const foer = S.localAddr;
+    if (omr) await kortForMaal(omr);
+    nabeSier(S.localAddr !== foer
+      ? T(`Ny forbindelse: ${navn}. Jeg bruker den.`, `New connection: ${navn}. Using it.`)
+      : T(`Ny forbindelse: ${navn}.`, `New connection: ${navn}.`), 'skvatt');
+  }
+}
+setInterval(kortvakt, 3000);
+
+/* ------------------------------------------------------------ BTG file
+   The «Variabel» file BTG makes from an EDE, made straight from what NABE
+   has read - no EDE round trip, and the device field right.
+
+   Format, from BTG's own exports (several real sites):
+   UTF-8 with BOM, CRLF, semicolons, 33 fields per row.
+     1 BacnetNetwork      2 site name        3 <Prefix>.<device>
+     4 tag path, dots      5 object type no.  6 instance
+     7 default (empty)     8 unit in words    9 decimals
+    10 states 0=Av|1=På   11 description, SD code removed
+    12 trend Interval|00:05:00                13 alarm class
+    14 alarm text         15 alarm source <site> <sys>.<sub>-<comp>
+    16-33 empty.
+   SD codes in the description decide trend and alarm: the digit is the
+   alarm class (0 = none), the letter T means trend, 0 means no trend.
+   Without a code every point gets a trend and no alarm, as BTG does.
+
+   The one place BTG gets it wrong is field 3: it takes the device from the
+   EDE file name (Device1234_2026-10-23_EDE becomes ABC.2026_10_23). Here it
+   is the device's own name, so NTI finds the device in the station. */
+const BTG_TYPE = {
+  'analog-input': 0, 'analog-output': 1, 'analog-value': 2,
+  'binary-input': 3, 'binary-output': 4, 'binary-value': 5,
+  'multi-state-input': 13, 'multi-state-output': 14, 'multi-state-value': 19,
+};
+const BTG_HELE = new Set(['percent', 'pascal', 'parts per million', 'volt', 'null', 'percent relative humidity']);
+
+function btgEnhet(units) {
+  if (!units || typeof units !== 'string' || units === 'no-units') return 'null';
+  let u = units.replace(/-/g, ' ').replace(/^degrees /, '');
+  u = u.replace(/^(hours|minutes|seconds|days)$/, m => m.slice(0, -1));
+  return u;
+}
+
+function btgSti(navn, cluster) {
+  const biter = String(navn || '').trim().split(/[-_\s.]+/).filter(Boolean);
+  return (cluster ? cluster + '.' : '') + biter.join('.');
+}
+
+function btgSd(tekst) {
+  const m = /\bSD(\d)([0-9T])\b/i.exec(tekst || '');
+  if (!m) return {klasse: 0, trend: true, rest: (tekst || '').trim()};
+  const rest = (tekst || '').replace(m[0], '').replace(/\s{2,}/g, ' ').replace(/^[\s\-–:]+|[\s\-–:]+$/g, '');
+  return {klasse: Number(m[1]), trend: m[2].toUpperCase() === 'T', rest};
+}
+
+function btgRad(p, t, anlegg, enhetNavn) {
+  const type = BTG_TYPE[p.type];
+  if (type === undefined) return null;
+  const analog = type <= 2;
+  const sti = btgSti(p.name, t.cluster);
+  const sd = btgSd(p.description || '');
+  const beskr = sd.rest || p.name || '';
+  const enhet = analog ? btgEnhet(p.units) : '';
+  const desimaler = analog ? (BTG_HELE.has(enhet) ? 0 : 1) : 0;
+  let tilstander = '';
+  if (Array.isArray(p.state_text) && p.state_text.length) {
+    tilstander = (type >= 3 && type <= 5)
+      ? `0=${p.state_text[0] || 'Av'}|1=${p.state_text[1] || 'På'}`
+      : p.state_text.map((s, i) => `${i + 1}=${s}`).join('|');
+  }
+  const biter = sti.split('.');
+  const kilde = sd.klasse
+    ? `${anlegg} ${biter.length >= 3 ? `${biter[0]}.${biter[1]}-${biter[2]}` : sti}` : '';
+  const f = new Array(33).fill('');
+  f[0] = 'BacnetNetwork'; f[1] = anlegg; f[2] = enhetNavn; f[3] = sti;
+  f[4] = String(type); f[5] = String(p.instance ?? ''); f[7] = enhet;
+  f[8] = String(desimaler); f[9] = tilstander; f[10] = beskr;
+  f[11] = sd.trend ? 'Interval|00:05:00' : '';
+  if (sd.klasse) { f[12] = String(sd.klasse); f[13] = beskr; f[14] = kilde; }
+  // Semicolons inside a description would shift every field after it.
+  return f.map(x => String(x).replace(/[;\r\n]/g, ' ')).join(';');
+}
+
+function lagBtgFil() {
+  const t = tagInnstillinger();
+  const k = tagNokkel();
+  const anlegg = (t.anleggsnavn || (k && MINNE[k] && MINNE[k].navn) || '').trim();
+  if (!t.prefiks || !anlegg) {
+    toast(T('Fyll inn prefiks og anleggsnavn først.', 'Fill in prefix and site name first.'), true);
+    $(t.prefiks ? 'tgAnlegg' : 'tgPrefiks')?.focus();
+    return;
+  }
+  const rader = [];
+  let enheter = 0;
+  for (const d of S.devices) {
+    const pts = S.cache[d.address];
+    if (!pts || !pts.length) continue;
+    enheter++;
+    let dnavn = String(d.object_name || d.device_instance).trim();
+    if (dnavn.toLowerCase().startsWith(t.prefiks.toLowerCase()))
+      dnavn = dnavn.slice(t.prefiks.length).replace(/^[._\-\s]+/, '');
+    const enhetNavn = `${t.prefiks}.${dnavn.replace(/[\s\-.]+/g, '_')}`;
+    for (const p of pts) {
+      const r = btgRad(p, t, anlegg, enhetNavn);
+      if (r) rader.push(r);
+    }
+  }
+  if (!rader.length) {
+    toast(T('Ingen leste enheter ennå. Åpne enhetene du vil ha med.', 'No devices read yet. Open the devices you want included.'), true);
+    return;
+  }
+  const n = new Date(), to = x => String(x).padStart(2, '0');
+  const stempel = `${n.getFullYear()}-${to(n.getMonth() + 1)}-${to(n.getDate())} ${to(n.getHours())}${to(n.getMinutes())}${to(n.getSeconds())}`;
+  const filnavn = `${t.prefiks} Variabel ${anlegg} ${stempel}.csv`.replace(/[\\/:*?"<>|]/g, '_');
+  const blob = new Blob(['﻿' + rader.join('\r\n') + '\r\n'], {type: 'text/csv;charset=utf-8'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = filnavn;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  toast(T(`BTG-fil laget: ${rader.length} punkter fra ${enheter} enheter`, `BTG file made: ${rader.length} points from ${enheter} devices`));
+  nabeSier(T('BTG-fil laget. BTG selv er litt fornærmet.', 'BTG file made. BTG itself is a little offended.'), 'fornoyd', 'btg');
+}
+document.addEventListener('click', (e) => { if (e.target.closest?.('#tgBtg')) lagBtgFil(); });
+
+
+/* ------------------------------------------------------- the last visit
+   The start screen tells you how you left each plant: overridden and faulty
+   points across every device read, kept per site in this browser. "3
+   overridden when you left" is the thing worth knowing before you go back. */
+function huskBesok() {
+  const k = tagNokkel();
+  if (!k) return;
+  let over = 0, feil = 0, enheter = 0;
+  for (const d of S.devices) {
+    const pts = S.cache[d.address];
+    if (!pts) continue;
+    enheter++;
+    const c = flagCounts(pts);
+    over += (c['overridden'] || 0) + (c['out-of-service'] || 0);
+    feil += (c['in-alarm'] || 0) + (c['fault'] || 0);
+  }
+  try {
+    const alle = JSON.parse(localStorage.getItem('nabe_besok') || '{}');
+    alle[k] = {over, feil, enheter, t: Date.now()};
+    localStorage.setItem('nabe_besok', JSON.stringify(alle));
+  } catch {}
+}
+function sisteBesok(k) {
+  try { return (JSON.parse(localStorage.getItem('nabe_besok') || '{}'))[k] || null; } catch { return null; }
+}
