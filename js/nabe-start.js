@@ -158,7 +158,7 @@ const NYTT = {
     ['Ett felt for IP, område eller anleggsnavn. Anleggene står under med grønn prikk når det finnes en vei dit', 'One field for an IP, a range or a site name. Your sites sit below it, with a green dot when there is a way there'],
     ['Kort og modus er én linje. NABE sier fra når Windows ville tatt feil vei, og bruker riktig kort', 'Adapter and mode are one line. NABE tells you when Windows would have taken the wrong way, and uses the right adapter'],
     ['NABE legger merke til en tunnel som kommer opp, et anlegg du lot stå overstyrt og en regulator som mangler siden sist', 'NABE notices a tunnel coming up, a site you left overridden and a controller missing since last time'],
-    ['NABO er NABEs lillebror nå. Han sitter ved tastaturet, taster litt innimellom og svarer storebror på sin måte', 'NABO is NABE's little brother now. He sits at his keyboard, types now and then and answers his big brother in his own way'],
+    ['NABO er NABEs lillebror nå. Han sitter ved tastaturet, taster litt innimellom og svarer storebror på sin måte', 'NABO is NABE’s little brother now. He sits at his keyboard, types now and then and answers his big brother in his own way'],
   ],
   '1.18': [
     ['Designgjennomgang med tre par øyne: flat temabryter, lyse skillelinjer i lys modus, ingen piller eller indigo igjen', 'A design review with three pairs of eyes: a flat theme switch, light hairlines in light mode, no pills or indigo left'],
