@@ -3451,6 +3451,31 @@ body{font-family:var(--sans)}
   border-radius:var(--r-sm);padding:0 3px;margin-right:6px;vertical-align:1px}
 .nabo-rettbar td.sel-c{cursor:default;user-select:none}
 .nabo-mark-skille{font-size:11px;color:var(--fg-3);margin-left:6px}
+
+/* The neighbour's face: cheeks, a chimney that breathes, and sleep. */
+.nabo-fig .nabo-kinn ellipse{fill:#e8838f;stroke:none;opacity:.45}
+.nabo-fig .nabo-roeyk circle{fill:var(--fg-3);stroke:none;opacity:0}
+.nabo-fig .nabo-z{font:700 6px var(--sans);fill:var(--fg-2);stroke:none;opacity:0}
+.nabo-fig .nabo-oyne{transition:transform .35s ease}
+@keyframes nabo-roeyk{0%{opacity:0;transform:translate(0,2px)}25%{opacity:.7}100%{opacity:0;transform:translate(2px,-4px)}}
+@keyframes nabo-zzz{0%{opacity:0;transform:translate(0,3px)}30%{opacity:1}100%{opacity:0;transform:translate(3px,-4px)}}
+@keyframes nabo-banke{0%,100%{transform:none}20%,60%{transform:translateX(-1.2px)}40%,80%{transform:translateX(1.2px)}}
+@keyframes nabo-fange{0%,100%{transform:none}40%{transform:translateY(1px) scale(1.06,.92)}}
+.puff .nabo-fig .nabo-roeyk circle{animation:nabo-roeyk 1.5s ease-out}
+.puff .nabo-fig .nabo-roeyk circle:nth-child(2){animation-delay:.18s}
+.puff .nabo-fig .nabo-roeyk circle:nth-child(3){animation-delay:.36s}
+.sover .nabo-fig .nabo-oyne{transform:scaleY(.18);animation:none}
+.sover .nabo-fig .nabo-z{animation:nabo-zzz 2.6s ease-in-out infinite}
+.sover .nabo-fig .nabo-kinn ellipse{opacity:.3}
+.vekk .nabo-fig{animation:nabo-hopp .6s var(--fjaer)}
+.banke .nabo-fig{animation:nabo-banke .35s linear 2}
+.fange .nabo-fig{animation:nabo-fange .38s ease-out}
+.nabo-hus-knapp.sover{color:var(--fg-3)}
+.nabo-ball{position:fixed;left:0;top:0;width:6px;height:6px;border-radius:50%;background:var(--accent);
+  z-index:9990;pointer-events:none}
+@media (prefers-reduced-motion:reduce){
+  html:not(.med-bevegelse) .nabo-fig *,html:not(.med-bevegelse) .nabo-fig{animation:none!important}
+}
 .nabo-des summary{list-style:none;cursor:pointer;height:30px;display:flex;align-items:center;padding:0 10px;
   font-size:12px;color:var(--fg-2);border:1px solid var(--line);border-radius:var(--radius)}
 .nabo-des summary::-webkit-details-marker{display:none}

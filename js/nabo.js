@@ -750,6 +750,8 @@ function eksporterVariabel(bare) {
           `Variabel file made: ${r.rader.length} points from ${new Set(r.rader.map(x => x.enhetNavn)).size} devices`
           + (feil ? ` · ${feil} with errors` : '') + ` → ${mappeNavn()}`), !!feil);
   naboFigur('vink');
+  const hus = $('naboHus');
+  if (hus) { hus.classList.add('puff'); setTimeout(() => hus.classList.remove('puff'), 1600); }
   if (typeof tell === 'function') tell('nabo');
   if (typeof nabeSier === 'function' && !feil) setTimeout(() => nabeSier(
     T('Naboen har levert. Pent arbeid, egentlig.', 'The neighbour delivered. Decent work, actually.'), 'fornoyd', 'nabo-levert'), 900);
@@ -811,8 +813,11 @@ const NABO_SVG = `<svg class="nabo-fig" viewBox="0 0 32 32" aria-hidden="true">
   <path class="nabo-tak" d="M3.5 14.5 16 4.5l12.5 10"/>
   <rect class="nabo-hus" x="6.5" y="12.5" width="19" height="16.5" rx="3"/>
   <g class="nabo-oyne"><rect x="10.5" y="17" width="3.6" height="3.6" rx=".8"/><rect x="17.9" y="17" width="3.6" height="3.6" rx=".8"/></g>
+  <g class="nabo-kinn"><ellipse cx="9.4" cy="23.6" rx="1.5" ry=".85"/><ellipse cx="22.6" cy="23.6" rx="1.5" ry=".85"/></g>
   <path class="nabo-munn" d="M13.5 24.3q2.5 1.6 5 0"/>
   <path class="nabo-pipe" d="M22 9.2V5.6h2.6v5.7"/>
+  <g class="nabo-roeyk"><circle cx="23.3" cy="3.4" r="1"/><circle cx="24.6" cy="1.6" r=".75"/><circle cx="26.1" cy=".3" r=".55"/></g>
+  <text class="nabo-z" x="26" y="4">z</text>
 </svg>`;
 
 function naboFigur(k) {
@@ -1587,6 +1592,108 @@ function naboHusTittel() {
     aapneNabo();
     leggTilFiler(filer);
   });
+
+  /* ------------------------------------------------- the neighbours at rest
+     When you have been away a while NABE dozes off, and soon after so does
+     the house next door. Some minutes into the nap one of them wakes the
+     other to play: the house tosses a ball over the fence, or NABE knocks on
+     its wall. A few throws, then they are both tired again. Once per nap,
+     and your mouse ends it. With motion off they only sleep. */
+  const LEK = {leker: false, lekt: false, naar: 0, baller: []};
+  const nyNaar = () => { LEK.naar = 120000 + 90000 + Math.random() * 150000; };
+  nyNaar();
+  const vent = (ms) => new Promise(r => setTimeout(r, ms));
+  const midt = (el) => { const r = el.getBoundingClientRect(); return {x: r.left + r.width / 2, y: r.top + r.height / 2}; };
+
+  async function kast(fra, til) {
+    if (!LEK.leker) return;
+    const a = midt(fra), b = midt(til);
+    const ball = document.createElement('span');
+    ball.className = 'nabo-ball';
+    document.body.appendChild(ball);
+    LEK.baller.push(ball);
+    const hoyde = 26 + Math.random() * 10;
+    const steg = Array.from({length: 13}, (_, i) => {
+      const t = i / 12;
+      return {transform: `translate(${a.x + (b.x - a.x) * t - 3}px, ${a.y - 6 + (b.y - a.y) * t - 4 * hoyde * t * (1 - t)}px)`};
+    });
+    if (typeof blikk === 'function') blikk(Math.sign(b.x - a.x) * 2.4, -1, 900);
+    try { await ball.animate(steg, {duration: 820, easing: 'linear'}).finished; } catch {}
+    ball.remove();
+    LEK.baller = LEK.baller.filter(x => x !== ball);
+    if (!LEK.leker) return;
+    // The catch.
+    if (til.id === 'naboHus') { til.classList.add('fange'); setTimeout(() => til.classList.remove('fange'), 380); }
+    else if (typeof figur === 'function') figur('hopp', 550);
+    await vent(260);
+  }
+
+  async function lek() {
+    const m = nabeMerke(), h = $('naboHus');
+    if (!m || !h || LEK.leker || bevegelseAv()) return;
+    LEK.leker = true; LEK.lekt = true;
+    // NABE's own clock would put him straight back to sleep; tell it he just moved.
+    NABE.sist = Date.now() - 60000;
+    const huset = Math.random() < 0.5;
+    if (huset) {
+      h.classList.remove('sover'); h.classList.add('vekk');
+      await vent(700); h.classList.remove('vekk');
+      await kast(h, m);
+      m.classList.remove('sover'); nabeOppdater();
+    } else {
+      m.classList.remove('sover'); nabeOppdater();
+      if (typeof blikk === 'function') blikk(2.4, 0, 2500);
+      if (typeof figur === 'function') figur('hopp', 550);
+      await vent(650); if (!LEK.leker) return;
+      h.classList.add('banke'); await vent(700);
+      h.classList.remove('banke', 'sover'); h.classList.add('vekk');
+      await vent(650); h.classList.remove('vekk');
+    }
+    let fra = huset ? m : h, til = huset ? h : m;
+    const runder = 2 + Math.floor(Math.random() * 3);
+    for (let i = 0; i < runder && LEK.leker; i++) { await kast(fra, til); [fra, til] = [til, fra]; }
+    if (!LEK.leker) return;
+    await vent(900);
+    m.classList.add('sover'); nabeOppdater();
+    await vent(1400);
+    if (LEK.leker) h.classList.add('sover');
+    LEK.leker = false;
+  }
+  window.naboLek = lek;   // to try it without waiting
+
+  setInterval(() => {
+    const m = nabeMerke(), h = $('naboHus');
+    if (!m || !h || LEK.leker) return;
+    const stille = Date.now() - NABE.sist;
+    const nabeSover = m.classList.contains('sover');
+    if (nabeSover && stille > 140000) h.classList.add('sover');
+    if (!nabeSover) h.classList.remove('sover');
+    if (nabeSover && h.classList.contains('sover') && !LEK.lekt && stille > LEK.naar) lek();
+  }, 1000);
+
+  document.addEventListener('pointermove', () => {
+    if (LEK.leker) {
+      LEK.leker = false;
+      LEK.baller.forEach(b => b.remove()); LEK.baller = [];
+    }
+    const h = $('naboHus');
+    if (h && h.classList.contains('sover')) {
+      h.classList.remove('sover'); h.classList.add('vekk');
+      setTimeout(() => h.classList.remove('vekk'), 600);
+    }
+    if (LEK.lekt) { LEK.lekt = false; nyNaar(); }
+  }, {passive: true});
+
+  // Now and then, while awake, a little puff from the chimney.
+  (function pust() {
+    setTimeout(() => {
+      const h = $('naboHus');
+      if (h && !bevegelseAv() && !h.classList.contains('sover') && !LEK.leker && !document.hidden) {
+        h.classList.add('puff'); setTimeout(() => h.classList.remove('puff'), 1600);
+      }
+      pust();
+    }, 40000 + Math.random() * 50000);
+  })();
 
   // On the start screen the neighbour stands beside NABE, and is a way in.
   const paaStart = () => {

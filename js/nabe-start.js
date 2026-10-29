@@ -154,6 +154,10 @@ const FAKTA = [
   ['COV betyr at regulatoren sier fra selv. Mindre spørring, mer ro.', 'COV means the controller speaks up itself. Less asking, more peace.'],
 ];
 const NYTT = {
+  '1.15': [
+    ['Naboen har fått kinn, og pipa puster litt nå og da', 'The neighbour has cheeks, and the chimney breathes now and then'],
+    ['Er du borte en stund, sovner begge to. Så vekker den ene den andre for å leke', 'Away for a while and both fall asleep. Then one wakes the other to play'],
+  ],
   '1.14': [
     ['NABO: lange Niagara-stier brytes etter punktum i stedet for å presse tabellen ut av vinduet', 'NABO: long Niagara paths break after a dot instead of pushing the table out of the window'],
     ['Skråstrek i punktnavn (OS001/FCB) blir mapper, som punktum', 'A slash in a point name (OS001/FCB) becomes a folder, like a dot'],
