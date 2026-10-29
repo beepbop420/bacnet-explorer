@@ -863,18 +863,28 @@ function eksporterEde() {
 }
 
 /* ------------------------------------------------------------ the view */
+/* NABO is NABE's little brother: same factory, rounder model, a visor
+   instead of two eyes, and always at his keyboard. The class names are
+   the ones the house had, so sleeping, waking, knocking and the seasons
+   carry over: nabo-hus is the head, nabo-tak the antenna, nabo-roeyk the
+   sparks off it. */
 const NABO_SVG = `<svg class="nabo-fig" viewBox="0 0 32 32" aria-hidden="true">
-  <path class="nabo-tak" d="M4.4 15.2 14.9 6.5q1.1-.9 2.2 0l10 8.3 2.6.5"/>
-  <path class="nabo-sno" d="M6.4 13.4 14.9 6.5q1.1-.9 2.2 0l3.6 3"/>
-  <g class="nabo-flagg"><path d="M24.6 5.6V.6"/><rect x="24.6" y=".6" width="4.4" height="3"/><path class="kryss" d="M24.6 2.1h4.4M26.1.6v3"/></g>
-  <rect class="nabo-hus" x="7" y="13.4" width="18" height="15.6" rx="4.4"/>
-  <g class="nabo-oyne"><rect x="10.6" y="18.6" width="4" height="2.5" rx=".9"/><rect x="17.6" y="18.6" width="4" height="2.5" rx=".9"/></g>
-  <g class="nabo-glimt"><circle cx="13.7" cy="19.4" r=".5"/><circle cx="20.7" cy="19.4" r=".5"/></g>
-  <g class="nabo-kinn"><ellipse cx="10.2" cy="23.4" rx="1.3" ry=".7"/><ellipse cx="21.8" cy="23.4" rx="1.3" ry=".7"/></g>
-  <path class="nabo-munn" d="M14.2 23.9q2.3.9 4-.8"/>
-  <path class="nabo-pipe" d="M21.8 9.8V6.2h2.6v5.8"/>
-  <g class="nabo-roeyk"><circle cx="23.1" cy="4" r="1"/><circle cx="24.4" cy="2.2" r=".75"/><circle cx="25.9" cy=".9" r=".55"/></g>
-  <text class="nabo-z" x="26" y="4">z</text>
+  <g class="nabo-hode">
+    <path class="nabo-tak" d="M18.6 7.6q1.2-3.4 4.4-4"/>
+    <circle class="nabo-pipe" cx="23.4" cy="3.5" r="1.3"/>
+    <g class="nabo-flagg"><path d="M23.4 3.5V-1.6"/><rect x="23.4" y="-1.6" width="4.4" height="3"/><path class="kryss" d="M23.4 -.1h4.4M24.9-1.6v3"/></g>
+    <path class="nabo-hus" d="M7.6 15.4a8.4 8.4 0 0 1 16.8 0v4.4a3.4 3.4 0 0 1-3.4 3.4H11a3.4 3.4 0 0 1-3.4-3.4z"/>
+    <path class="nabo-sno" d="M8.4 12.6a8.4 8.4 0 0 1 15.2 0"/>
+    <rect class="nabo-visir" x="10" y="12.4" width="12" height="5.2" rx="2.6"/>
+    <g class="nabo-oyne"><rect x="11.8" y="13.8" width="2.6" height="2" rx=".9"/><rect x="17.6" y="13.8" width="2.6" height="2" rx=".9"/></g>
+    <path class="nabo-munn" d="M14.7 20.2h2.6"/>
+  </g>
+  <path class="nabo-tast" d="M3.6 24.6h24.8l1.8 4.6H1.8z"/>
+  <path class="nabo-taster" d="M5.6 26.9h2M9.6 26.9h2M13.6 26.9h4.8M20.4 26.9h2M24.4 26.9h2"/>
+  <rect class="nabo-hv" x="8.6" y="22.4" width="4.2" height="2.8" rx="1.4"/>
+  <rect class="nabo-hh" x="19.2" y="22.4" width="4.2" height="2.8" rx="1.4"/>
+  <g class="nabo-roeyk"><circle cx="25.6" cy="2.4" r=".8"/><circle cx="26.9" cy="1" r=".6"/><circle cx="28.1" cy="-.2" r=".45"/></g>
+  <text class="nabo-z" x="25" y="10">z</text>
 </svg>`;
 
 function naboFigur(k) {
