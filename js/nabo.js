@@ -152,25 +152,58 @@ function naboSkilleRe(o) {
 }
 /* The point name as a Niagara path: split where you have said it should be,
    joined with dots. A dot left in a name is still a folder to Niagara. */
+/* Measured against 7516 points BTG itself wrote, from the EDE files they came
+   from (five real sites):
+   - _ always starts a new part.
+   - A part with a space in it is text and stays whole, dots and hyphens and
+     all: "XS Akk. tank temp." and "Drift fra SD-anlegg" are one part each.
+   - A code part (no spaces) splits on . and - as well.
+   - A slash is kept: JP41/JP42 means both pumps, not a folder.
+   This gives what BTG gave for 80 % of those points; the rest are SYSTEM
+   (deliberately at the top here), names BTG left with a trailing space,
+   and tags someone edited by hand in BTG. */
 function naboSti(navn, cluster, o) {
-  const re = naboSkilleRe(o);
-  const n = String(navn || '').trim();
-  const biter = delSystemnummer((re ? n.split(re) : [n]).filter(Boolean));
+  const deler = [];
+  for (const rå of String(navn || '').trim().split('_')) {
+    const d = rå.trim();
+    if (!d) continue;
+    if (/\s/.test(d)) deler.push(d);
+    else deler.push(...d.split(/[.\-]+/).filter(Boolean));
+  }
+  const biter = romkoder(delSystemnummer(deler));
   return (cluster ? cluster + '.' : '') + biter.join('.');
 }
 
+/* Room codes as BTG writes them: floor, underscore, room in four digits.
+   R00_0004 stays together, and R000004 or R99999 becomes R00_0004 or R99_9999. */
+function romkoder(biter) {
+  const ut = [];
+  for (const d of biter) {
+    const m = /^R(\d{5,6})$/i.exec(d);
+    if (m) ut.push(`${d[0]}${m[1].slice(0, 2)}_${m[1].slice(-4)}`);
+    else if (ut.length && /^R\d{2}$/i.test(ut[ut.length - 1]) && /^\d{4}$/.test(d)) ut[ut.length - 1] += '_' + d;
+    else ut.push(d);
+  }
+  return ut;
+}
+
 /* A system number written in one piece is split the way BTG writes it:
-   360001 -> 360.001, 31002 -> 310.02, 3600001 -> 360.0001. Only the first
+   360001 -> 360.001, 3600001 -> 360.0001. Five digits stay, as BTG leaves
+   31002 (HK Kommunehuset). Only the first
    number in the name, and only when the next part is not a number too -
    360_001 is already split, and in 360.360013 the 360 comes first. */
 function delSystemnummer(biter) {
-  // The first number, counting BTG's +PRE= in front of it and the s some
-  // plants put before the system (s31002, which BTG drops).
+  // An s marks the system (s432_001, s360001). Whatever stands before it is a
+  // program's namespace - Mod_TCP in a Beckhoff - and BTG leaves it out.
+  const s = biter.findIndex(b => /^s\d+$/i.test(b));
+  if (s > 0) biter = biter.slice(s);
+  // The first number, counting BTG's +PRE= in front of it; the s goes.
   const i = biter.findIndex(b => /^(\+[^=]*=)?s?\d+$/i.test(b));
   if (i < 0) return biter;
   const m = /^(\+[^=]*=)?s?(\d+)$/i.exec(biter[i]);
   const tall = m[2], foran = m[1] || '';
-  if (tall.length < 5 || tall.length > 7 || /^\d+$/.test(biter[i + 1] || '')) return biter;
+  if (tall.length < 6 || tall.length > 7 || /^\d+$/.test(biter[i + 1] || ''))
+    return [...biter.slice(0, i), foran + tall, ...biter.slice(i + 1)];
   return [...biter.slice(0, i), foran + tall.slice(0, 3), tall.slice(3), ...biter.slice(i + 1)];
 }
 
@@ -437,7 +470,8 @@ function lesEdeFil(tekst, filnavn, tilstander) {
   return {kilder: [...enheter].map(([dev, punkter]) => {
     const n = devicenavnFor(dev, !flere && prosjekt.trim());
     return {id: `e:${filnavn}:${dev}`, type: 'ede', fil: filnavn, instans: dev || null, punkter,
-            auto: n.navn || (dev ? `Device${dev}` : filnavn.replace(/\.csv$/i, '')), usikker: !n.navn, hvor: n.hvor};
+            auto: n.navn || navnFraFil(filnavn) || (dev ? `Device${dev}` : filnavn.replace(/\.csv$/i, '')),
+            usikker: !n.navn, hvor: n.hvor || (navnFraFil(filnavn) ? T('fra filnavnet', 'from the file name') : '')};
   })};
 }
 
@@ -464,6 +498,18 @@ function devicenavnFor(inst, prosjekt) {
 function lesVariabel(tekst, fil) {
   const rader = tekst.replace(/^\uFEFF/, '').split(/\r?\n/).filter(l => l.startsWith('BacnetNetwork;')).map(l => l.split(';'));
   return rader.length ? {fil, rader} : null;
+}
+
+/* What a file name says about the device once the EDE and the dates are
+   gone: GR.1A.04_EDE -> GR.1A.04, ABC1_434001OU001_EDE -> ABC1_434001OU001.
+   Device1234_2026-10-23_EDE says nothing, and BTG's ABC.2026_10_23 shows why
+   that must not become the name. */
+function navnFraFil(filnavn) {
+  // Whole parts only: EDE, dates, versions and copies go; what is left is the name.
+  const bort = /^(EDE|v\d+|\(\d+\)|utdatert|fixed|ny|gammel|kopi|Device\d*|\d{4}-?\d{2}-?\d{2}|\d{8})$/i;
+  const deler = String(filnavn || '').replace(/\.(csv|txt)$/i, '').split(/[_\s]+/).filter(d => d && !bort.test(d));
+  // Nothing but numbers left is an instance or a system, not a device name.
+  return deler.length && !deler.every(d => /^[\d.]+$/.test(d)) ? deler.join('_') : '';
 }
 
 async function leggTilFiler(filer) {

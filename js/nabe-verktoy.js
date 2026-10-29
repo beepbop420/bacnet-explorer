@@ -84,7 +84,8 @@ setInterval(kortvakt, 3000);
     16-33 empty.
    SD codes in the description decide trend and alarm: the digit is the
    alarm class (0 = none), the letter T means trend, 0 means no trend.
-   Without a code every point gets a trend and no alarm, as BTG does.
+   Without a code a point gets neither trend nor alarm - measured on 1350
+   such points in BTG's own exports.
 
    The one place BTG gets it wrong is field 3: it takes the device from the
    EDE file name (Device1234_2026-10-23_EDE becomes ABC.2026_10_23). Here it
@@ -116,7 +117,7 @@ function btgSti(navn, cluster) {
 const BTG_SD_RE = /(?<![A-Za-z0-9])SD(\d)([0-9T])(?![A-Za-z0-9])/i;
 function btgSd(tekst) {
   const m = BTG_SD_RE.exec(tekst || '');
-  if (!m) return {klasse: 0, trend: true, rest: (tekst || '').trim()};
+  if (!m) return {klasse: 0, trend: false, rest: (tekst || '').trim()};
   // Every code goes, not just the first, so none is left to be doubled.
   const rest = btgUtenSd(tekst);
   return {klasse: Number(m[1]), trend: m[2].toUpperCase() === 'T', rest};

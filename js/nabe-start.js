@@ -154,6 +154,13 @@ const FAKTA = [
   ['COV betyr at regulatoren sier fra selv. Mindre spørring, mer ro.', 'COV means the controller speaks up itself. Less asking, more peace.'],
 ];
 const NYTT = {
+  '1.16': [
+    ['NABO er målt mot 7516 punkter BTG har laget fra ekte EDE-filer, og gjør nå som BTG der BTG har rett', 'NABO is measured against 7516 points BTG made from real EDE files, and now does as BTG where BTG is right'],
+    ['Tekst med mellomrom er ett ledd (Drift fra SD-anlegg), romkoder blir R00_0004, og skråstrek beholdes', 'Text with spaces is one part (Drift fra SD-anlegg), room codes become R00_0004, and a slash is kept'],
+    ['Et s foran systemnummeret (s360001) markerer hvor taggen starter, som i BTG', 'An s before the system number (s360001) marks where the tag starts, as in BTG'],
+    ['Punkter uten SD-kode får ikke trend, slik BTG gjør', 'Points without an SD code get no trend, as BTG does'],
+    ['Finnes ikke noe device-navn, brukes filnavnet uten EDE og datoer', 'With no device name to be found, the file name without EDE and dates is used'],
+  ],
   '1.15': [
     ['Naboen har fått kinn, og pipa puster litt nå og da', 'The neighbour has cheeks, and the chimney breathes now and then'],
     ['Er du borte en stund, sovner begge to. Så vekker den ene den andre for å leke', 'Away for a while and both fall asleep. Then one wakes the other to play'],
