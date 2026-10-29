@@ -3908,16 +3908,16 @@ td.h .nabo-rett-inn{min-width:44px;text-align:right}
 .knock .nabo-fig .nabo-hode{transform:translateY(3.4px) rotate(-4deg)}
 @keyframes nabo-tap{0%{transform:translateY(1.1px)}50%{transform:none}}
 @keyframes nabo-tap1{0%{transform:translateY(1.1px)}100%{transform:none}}
-/* the terminal line beside him: green text, a block cursor, no glow */
+/* the terminal line beside him: grey mono, a thin cursor */
 .nabo-hus-knapp{position:relative}
 .nabo-term{position:absolute;left:calc(100% + 8px);top:50%;transform:translateY(-50%);white-space:nowrap;pointer-events:none;
-  font:11px/1 var(--mono);color:color-mix(in srgb,var(--ok) 70%,var(--fg-2));letter-spacing:.02em;z-index:4}
-.nabo-term::after{content:'';display:inline-block;width:.55em;height:1em;margin-left:1px;vertical-align:-2px;background:currentColor;
+  font:11px/1 var(--mono);color:var(--fg-3);z-index:4}
+.nabo-term::after{content:'';display:inline-block;width:1.5px;height:1.05em;margin-left:2px;vertical-align:-2px;background:var(--accent);
   animation:nabo-markor 1s steps(1) infinite}
 .nabo-term.ut{opacity:0;transition:opacity .5s}
 @keyframes nabo-markor{50%{opacity:0}}
 .nabo-pakke{position:fixed;left:0;top:0;z-index:9990;pointer-events:none;font:9px/1 var(--mono);color:var(--fg-3);white-space:nowrap}
-.nabo-regn{position:fixed;z-index:9990;pointer-events:none;font:10px/1 var(--mono);color:color-mix(in srgb,var(--ok) 70%,transparent)}
+.nabo-regn{position:fixed;z-index:9990;pointer-events:none;font:10px/1 var(--mono);color:var(--fg-3)}
 body.uten-bevegelse .nabo-term,body.uten-bevegelse .nabo-pakke,body.uten-bevegelse .nabo-regn{display:none}
 @media (prefers-reduced-motion:reduce){
   html:not(.med-bevegelse) .nabo-fig,html:not(.med-bevegelse) .nabo-fig *{animation:none}

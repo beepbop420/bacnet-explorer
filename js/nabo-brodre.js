@@ -1,8 +1,8 @@
 /* NABO - the little brother at his keyboard.
 
    NABE does the talking; his little brother types. Now and then a few keys,
-   now and then a line on his terminal beside him: green text, a block
-   cursor, the way computers used to answer. Most of what he types is about
+   now and then a line on his terminal beside him: plain mono text and a
+   thin cursor. Most of what he types is about
    his big brother - he pings him, answers his Morse, types "<3" when NABE
    sulks and "lol" when NABE is dizzy - and some of it is about you: he
    types along when you type, looks up when you point at him, and puts his
@@ -81,12 +81,11 @@ function nesteLinje() {
 
 /* -------------------------------------------------- left to himself */
 const LINJER = [
-  '10 PRINT "HEI NABE"', '20 GOTO 10', 'READY.', 'LOAD "*",8,1', 'POKE 53280,0', 'SYS 64738',
-  'C:\\> dir /w', ':wq', 'ping nabe', 'while(1) nabe.poke();', '01001110 01000001 01000010 01000101',
-  'ede2btg --stille', 'git commit -m "fikset"', 'echo $NABO', 'sudo lag kaffe', 'tail -f nabe.log',
-  'who-is 0-4194303', '0x47808? nei, 0xBAC0', 'cat /dev/naboer',
-];
-const NATT = ['// TODO: legg deg', 'sleep(28800)', 'echo "god natt"'];
+  'ping nabe', 'git commit -m "fikset"', 'tail -f nabe.log', 'echo $NABO', 'who-is 0-4194303',
+  'ede2btg --stille', ':wq', 'sudo lag kaffe', 'grep -r RT401 .', 'ls ~/anlegg', 'cat /dev/naboer',
+  'top -o nabe', 'git push --force # tuller',
+]
+const NATT = ['// TODO: legg deg', 'sleep 28800', 'echo "god natt"'];
 
 (function selv() {
   const plan = () => setTimeout(() => {
@@ -136,8 +135,8 @@ document.addEventListener('keydown', (e) => {
     if ($('startskjerm') || !bror()) return;
     clearInterval(vent);
     setTimeout(() => {
-      brorSkriv('LOAD "NABE",8,1', {holde: 700});
-      brorSkriv('READY.', {holde: 1600});
+      brorSkriv('nabo --start', {holde: 600});
+      brorSkriv('✓ klar', {holde: 1600});
     }, 1400);
   }, 500);
 })();
@@ -153,7 +152,7 @@ document.addEventListener('keydown', (e) => {
     const ny = (k) => naa.has(k) && !for_.has(k);
     if (ny('trist')) { brorKlasse('ser', 1800); setTimeout(() => brorSkriv('<3', {holde: 1600}), 500); }
     else if (ny('svimmel')) brorSkriv('lol', {holde: 1400});
-    else if (ny('snurr')) brorSkriv('IDDQD', {holde: 1600});
+    else if (ny('snurr')) brorSkriv('sudo !!', {holde: 1600});
     else if (ny('snakker')) { const h = bror(); h?.querySelector('.nabo-term')?.remove(); h?.classList.remove('taster'); brorKlasse('ser', 2600); }
     for_ = naa;
   }).observe(m, {attributes: true, attributeFilter: ['class']});
@@ -221,9 +220,9 @@ if (typeof morse === 'function') {
       h.querySelector('.nabo-term')?.remove();
       BROR.ko = []; BROR.skriver = false;
       const n = S.devices.length;
-      if (typeof SK !== 'undefined' && SK.avbrutt) brorSkriv('BREAK IN 20', {holde: 1600});
-      else if (n) brorSkriv(n >= 5 ? `${n} I-Am. GG` : `${n} I-Am`, {holde: 1800});
-      else brorSkriv('?DEVICE NOT PRESENT  ERROR', {fart: 35, holde: 2200});
+      if (typeof SK !== 'undefined' && SK.avbrutt) brorSkriv('^C', {holde: 1400});
+      else if (n) brorSkriv(n >= 5 ? `✓ ${n} I-Am · gg` : `✓ ${n} I-Am`, {holde: 1800});
+      else brorSkriv('0 I-Am · timeout', {fart: 35, holde: 2200});
     }
   }).observe(document.body, {attributes: true, attributeFilter: ['class']});
   // Every answer is a key under his hands.
@@ -240,19 +239,18 @@ if (typeof naboLagre === 'function') {
     const r = _lagre.apply(this, arguments);
     const kort = String(navn || 'VARIABEL').replace(/\.csv$/i, '').slice(0, 18).toUpperCase();
     brorKlasse('fort', 1400);
-    brorSkriv(`SAVE "${kort}",8`, {fart: 30, holde: 600, tvang: true});
-    brorSkriv('OK', {holde: 1600, tvang: true});
+    brorSkriv(`save ${kort.toLowerCase()}.csv`, {fart: 30, holde: 600, tvang: true});
+    brorSkriv('✓ lagret', {holde: 1600, tvang: true});
     return r;
   };
 }
 
-/* Errors get the error message everyone over forty remembers. Once a
-   minute at most, and never for a warning. */
+/* Errors: he notes the exit code. Once a minute at most, never for a warning. */
 if (typeof toast === 'function') {
   const _toast = toast;
   toast = function (msg, isErr) {
     const r = _toast.apply(this, arguments);
-    if (isErr && Date.now() - BROR.sistFeil > 60000) { BROR.sistFeil = Date.now(); brorSkriv('?SYNTAX  ERROR', {holde: 1800}); }
+    if (isErr && Date.now() - BROR.sistFeil > 60000) { BROR.sistFeil = Date.now(); brorSkriv('exit 1', {holde: 1600}); }
     return r;
   };
 }
@@ -267,7 +265,7 @@ setInterval(() => {
     BROR.sovT = 0; BROR.sovLinje = false;
     if (h.classList.contains('knock')) {
       h.classList.remove('knock');
-      setTimeout(() => brorSkriv('READY.', {holde: 1400}), 500);
+      setTimeout(() => brorSkriv('✓ våken', {holde: 1400}), 500);
     }
     return;
   }
@@ -286,7 +284,7 @@ function regn() {
   const h = bror();
   if (!h || bevegelseAv()) return;
   const r = h.getBoundingClientRect();
-  const tegn = 'ｱｲｳｴｵｶｷｸｹｺ0123456789BACNET';
+  const tegn = '0123456789ABCDEF';
   for (let k = 0; k < 14; k++) {
     const el = document.createElement('span');
     el.className = 'nabo-regn';
@@ -299,7 +297,7 @@ function regn() {
       {duration: 1600 + Math.random() * 900, delay: Math.random() * 600, easing: 'steps(16, end)', fill: 'backwards'})
       .finished.then(() => el.remove(), () => el.remove());
   }
-  brorSkriv('wake up, NABE...', {fart: 90, holde: 1800, tvang: true});
+  brorSkriv('wake up, NABE…', {fart: 90, holde: 1800, tvang: true});
 }
 document.addEventListener('input', (e) => {
   if (!['rangeInput', 'naboSok'].includes(e.target.id)) return;
