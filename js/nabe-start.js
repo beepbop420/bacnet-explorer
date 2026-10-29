@@ -154,6 +154,12 @@ const FAKTA = [
   ['COV betyr at regulatoren sier fra selv. Mindre spørring, mer ro.', 'COV means the controller speaks up itself. Less asking, more peace.'],
 ];
 const NYTT = {
+  '1.13': [
+    ['NABO: systemnummer skrevet i ett deles som i BTG, 360001 blir 360.001', 'NABO: system numbers written in one piece are split as in BTG, 360001 becomes 360.001'],
+    ['Anlegg og prefiks er valgfrie, og du velger selv om de skal stå i taggen', 'Site and prefix are optional, and you choose whether they go in the tag'],
+    ['Ingenting stopper eksporten lenger fordi et felt er tomt', 'Nothing stops the export any more because a field is empty'],
+    ['Normalisering ligger under Avansert, og SD-koden leses fra beskrivelsen som før', 'Normalisation sits under Advanced, and the SD code is read from the description as before'],
+  ],
   '1.12': [
     ['NABO: punktene står gruppert per enhet, og klikk på enheten markerer alle punktene', 'NABO: points are grouped per device, and clicking the device ticks all of them'],
     ['Hele tabellen får plass uten sidescroll, og verktøylinja bryter pent i smale vinduer', 'The whole table fits without sideways scrolling, and the toolbar wraps neatly in narrow windows'],

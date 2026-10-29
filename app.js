@@ -3765,7 +3765,7 @@ function tegnTagging() {
       <div class="tema-tittel">Slik blir det</div>
       <div class="tg-forhaandsvis">${esc(tagEksempel(t))}</div>
       <div class="tg-foot">
-        <button class="btn primary" id="tgBtg">Lag BTG-fil</button>
+        <button class="btn primary" id="tgBtg">Åpne NABO</button>
         <button class="btn" id="tgKopier">Kopier til BTG</button>
         <button class="btn" id="tgNullstill">Tøm</button>
       </div>
@@ -10243,6 +10243,7 @@ const ORDBOK = {
   // Status bar fragments - the number sits in its own <b>, so these have none
   'enheter lest': 'devices read',
   'Finn enhet': 'Find device',
+  'Åpne NABO': 'Open NABO',
   'NABO - tagger og Variabel-fil...': 'NABO - tags and the Variabel file...',
   'NABO · tagger og BTG-fil…': 'NABO · tags and BTG file…',
   'Tagger og Variabel-fil for NTI-import i Niagara, fra anlegget og EDE-filer':

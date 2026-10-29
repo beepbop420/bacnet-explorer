@@ -102,7 +102,8 @@ function naboInnst() {
   return {trend: p.trend || '00:05:00', eu: Object.assign({}, EU_STD, p.eu || {}),
           ini: p.ini || '', navn: her.navn || {}, perEnhet: !!p.perEnhet,
           prefMod: PREF_MOD.includes(p.prefMod) ? p.prefMod : (p.foran === 'prefiks' ? 'tag' : 'device'),
-          foranAnlegg: p.foranAnlegg !== undefined ? !!p.foranAnlegg : p.foran === 'anlegg',
+          // The site name is always there for the file; in the tag only if you say so.
+          foranAnlegg: !!p.foranAnlegg,
           norm: Object.assign({}, NORM_STD, p.norm || {}),
           // Every separator in a point name starts a new folder in the path:
           // a dot is a folder to Niagara, so dots all the way is the rule.
@@ -115,7 +116,7 @@ function naboInnst() {
           mappe: p.mappe || '', mapper: p.mapper || [],
           // Write the SD code (alarm class, then T for trend or 0) in front
           // of the description, for tools that read it from there.
-          sdBeskr: !!p.sdBeskr};
+          sdBeskr: false};
 }
 function lagreNabo(patch) {
   savePrefs({nabo: Object.assign({}, loadPrefs().nabo || {}, patch)});
@@ -153,8 +154,23 @@ function naboSkilleRe(o) {
 function naboSti(navn, cluster, o) {
   const re = naboSkilleRe(o);
   const n = String(navn || '').trim();
-  const biter = (re ? n.split(re) : [n]).filter(Boolean);
+  const biter = delSystemnummer((re ? n.split(re) : [n]).filter(Boolean));
   return (cluster ? cluster + '.' : '') + biter.join('.');
+}
+
+/* A system number written in one piece is split the way BTG writes it:
+   360001 -> 360.001, 31002 -> 310.02, 3600001 -> 360.0001. Only the first
+   number in the name, and only when the next part is not a number too -
+   360_001 is already split, and in 360.360013 the 360 comes first. */
+function delSystemnummer(biter) {
+  // The first number, counting BTG's +PRE= in front of it and the s some
+  // plants put before the system (s31002, which BTG drops).
+  const i = biter.findIndex(b => /^(\+[^=]*=)?s?\d+$/i.test(b));
+  if (i < 0) return biter;
+  const m = /^(\+[^=]*=)?s?(\d+)$/i.exec(biter[i]);
+  const tall = m[2], foran = m[1] || '';
+  if (tall.length < 5 || tall.length > 7 || /^\d+$/.test(biter[i + 1] || '')) return biter;
+  return [...biter.slice(0, i), foran + tall.slice(0, 3), tall.slice(3), ...biter.slice(i + 1)];
 }
 
 /* What stands in front of the systems in every tag: the prefix as a folder
@@ -247,7 +263,7 @@ function naboRad(p, t, o, anlegg, enhetNavn, rett) {
   const del = fra >= 0 ? biter.slice(fra) : biter;
   if (del[0]) del[0] = del[0].replace(/^\+[^=]*=/, '');
   const kilde = klasse
-    ? `${anlegg} ${del.length >= 3 ? `${del[0]}.${del[1]}-${del[2]}` : sti}` : '';
+    ? [anlegg, del.length >= 3 ? `${del[0]}.${del[1]}-${del[2]}` : sti].filter(Boolean).join(' ') : '';
   const trend = (rett.trend ?? sd.trend) ? `Interval|${o.trend}` : '';
   const sdKode = `SD${klasse || 0}${trend ? 'T' : '0'}`;
   // The code is written once, from Trend and Alarm; any code already in the
@@ -330,7 +346,6 @@ function naboResultat() {
     }
   }
   const globalt = [];
-  if (!anlegg) globalt.push(T('Anleggsnavn mangler', 'Site name missing'));
   if (t.prefiks && t.prefiks.length > PREFIKS_MAKS)
     globalt.push(T(`Prefikset er over ${PREFIKS_MAKS} tegn`, `The prefix is over ${PREFIKS_MAKS} characters`));
   const usikre = NABO.kilder.filter(k => !k.av && k.usikker && !o.navn[devNokkel(k)]).length;
@@ -694,11 +709,6 @@ function stempel() {
 
 function eksporterVariabel(bare) {
   const r = naboResultat();
-  if (!r.t.prefiks || !r.anlegg) {
-    toast(r.globalt.join(' · '), true);
-    $(r.t.prefiks ? 'naboAnlegg' : 'naboPrefiks')?.focus();
-    return;
-  }
   if (bare) r.rader = bare;
   const feil = r.rader.filter(x => x.feil.length).length;
   if (!r.rader.length) { toast(T('Ingen punkter å eksportere', 'No points to export'), true); return; }
@@ -730,7 +740,8 @@ function eksporterVariabel(bare) {
     ? [...new Set(r.rader.map(x => x.enhetNavn))].map(e => [e, r.rader.filter(x => x.enhetNavn === e)])
     : [['', r.rader]];
   grupper.forEach(([e, rader]) => {
-    const navn = ren(`${r.t.prefiks} Variabel ${r.anlegg} ${tid}${e ? ' ' + e.split('.').slice(1).join('.') : ''}${bare ? ' endringer' : ''}.csv`);
+    const dev = e ? (e.includes('.') ? e.split('.').slice(1).join('.') : e) : '';
+    const navn = ren([r.t.prefiks, 'Variabel', r.anlegg, tid, dev, bare ? 'endringer' : ''].filter(Boolean).join(' ') + '.csv');
     naboLagre(navn, '\uFEFF' + rader.map(x => x.linje).join('\r\n') + '\r\n', 'text/csv;charset=utf-8');
   });
   toast(T(`Variabel-fil laget: ${r.rader.length} punkter fra ${new Set(r.rader.map(x => x.enhetNavn)).size} enheter`
@@ -852,7 +863,14 @@ function tegnNabo(helt) {
         </div>
       </header>
       <section class="nabo-oppsett">
-        <label><span>${T('Anlegg', 'Site')}</span><input class="field" id="naboAnlegg" autocomplete="off"></label>
+        <div class="nabo-pref" title="${T('Står i Variabel-fila og filnavnet, og holder rettingene dine samlet per anlegg', 'Goes in the Variabel file and its name, and keeps your edits together per site')}">
+          <span>${T('Anlegg', 'Site')} <i>${T('valgfritt', 'optional')}</i></span>
+          <div class="nabo-pref-felt bred">
+            <input class="field" id="naboAnlegg" autocomplete="off" placeholder="${T('ingen', 'none')}">
+            <select class="field" id="naboAnleggMod" title="${T('Om anleggsnavnet skal stå først i taggen', 'Whether the site name goes first in the tag')}">
+              <option value="">${T('ikke i taggen', 'not in the tag')}</option>
+              <option value="tag">${T('først i taggen', 'first in the tag')}</option>
+            </select></div></div>
         <div class="nabo-pref"><span>${T('Prefiks', 'Prefix')} <i>${T('valgfritt', 'optional')}</i></span>
           <div class="nabo-pref-felt">
             <input class="field" id="naboPrefiks" autocomplete="off" spellcheck="false" placeholder="${T('ingen', 'none')}">
@@ -866,11 +884,8 @@ function tegnNabo(helt) {
         <details class="nabo-des"><summary>${T('Avansert', 'Advanced')}</summary>
           <div class="nabo-avansert">
             <label class="kort" title="${T('Citect-cluster fra BTG. Brukes ikke i Niagara-taggene, bare lagret i HeaderBTG.ini.', 'Citect cluster from BTG. Not used in the Niagara tags, only kept in HeaderBTG.ini.')}"><span>Cluster <i>(Citect)</i></span><input class="field" id="naboCluster" autocomplete="off" spellcheck="false"></label>
-            <label class="nabo-sd-valg"><span>${T('Først i taggen', 'First in the tag')}</span>
-              <span class="nabo-sd-boks"><input type="checkbox" id="naboForanAnlegg"> ${T('Anleggsnavnet', 'The site name')}</span></label>
-            <label class="nabo-sd-valg" title="${T('SD + alarmklasse + T for trend eller 0 uten, f.eks. SD1T. Hentes fra Trend og Alarm i tabellen.', 'SD + alarm class + T for trend or 0 without, e.g. SD1T. Taken from Trend and Alarm in the table.')}">
-              <span>${T('SD-kode', 'SD code')}</span>
-              <span class="nabo-sd-boks"><input type="checkbox" id="naboSd"> ${T('Legg SD-koden først i beskrivelsen', 'Put the SD code first in the description')}</span></label>
+            <label class="nabo-sd-valg"><span>${T('Normalisering', 'Normalisation')}</span>
+              <button type="button" class="btn" id="naboNormKnapp" title="${T('BTGs regex, mal og TC2-koder. Trengs sjelden: punktum hele veien og unntakene dekker det meste.', 'BTG\u2019s regex, template and TC2 codes. Rarely needed: dots all the way and the exceptions cover most.')}">${T('Åpne normalisering…', 'Open normalisation…')}</button></label>
           </div>
           <div class="nabo-des-tittel">${T('Desimaler', 'Decimals')}</div>
           <div class="nabo-des-grid"></div></details>
@@ -889,7 +904,7 @@ function tegnNabo(helt) {
         <main class="nabo-forh">
           <div class="nabo-verktoy">
             <div class="nabo-visning" role="tablist">
-              ${[['var', T('Variabler', 'Variables')], ['diff', T('Sammenlign', 'Compare')], ['norm', T('Normalisering', 'Normalisation')]]
+              ${[['var', T('Variabler', 'Variables')], ['diff', T('Sammenlign', 'Compare')]]
                 .map(([k, l]) => `<button data-v="${k}" role="tab">${l}</button>`).join('')}
             </div>
             <input class="field" id="naboSok" type="search" placeholder="${T('Søk i tag, navn eller beskrivelse', 'Search tag, name or description')}" autocomplete="off" spellcheck="false">
@@ -942,11 +957,10 @@ function tegnNabo(helt) {
   const sett = (id, v) => { const el = $(id); if (el && document.activeElement !== el) el.value = v; };
   sett('naboAnlegg', t.anleggsnavn || ''); sett('naboPrefiks', t.prefiks || '');
   sett('naboCluster', t.cluster || ''); sett('naboTrend', o.trend); sett('naboPrefMod', o.prefMod);
-  $('naboForanAnlegg').checked = o.foranAnlegg;
   $('naboPrefMod').disabled = !t.prefiks;
-  $('naboSd').checked = o.sdBeskr;
+  sett('naboAnleggMod', o.foranAnlegg ? 'tag' : '');
+  $('naboAnleggMod').disabled = !(t.anleggsnavn || '').trim();
   $('naboPer').checked = NABO.perEnhet;
-  $('naboAnlegg').classList.toggle('mangler', !(t.anleggsnavn || '').trim());
 
   const grid = ov.querySelector('.nabo-des-grid');
   if (grid && !grid.childElementCount) {
@@ -1386,9 +1400,9 @@ function koblNabo(ov) {
   for (const [id, nokkel] of Object.entries(felt)) {
     $(id).addEventListener('input', (e) => senere(() => lagreTagging({[nokkel]: e.target.value.trim()}).then(() => tegnNabo()), id));
   }
-  $('naboSd').onchange = (e) => { lagreNabo({sdBeskr: e.target.checked}); tegnNabo(); };
+  $('naboNormKnapp').onclick = () => { NABO.visning = 'norm'; ov.querySelector('.nabo-des').open = false; tegnNabo(); };
   $('naboPrefMod').onchange = (e) => { lagreNabo({prefMod: e.target.value}); tegnNabo(); };
-  $('naboForanAnlegg').onchange = (e) => { lagreNabo({foranAnlegg: e.target.checked}); tegnNabo(); };
+  $('naboAnleggMod').onchange = (e) => { lagreNabo({foranAnlegg: e.target.value === 'tag'}); tegnNabo(); };
   $('naboTrend').addEventListener('change', (e) => {
     const v = e.target.value.trim();
     if (!/^\d\d:\d\d:\d\d$/.test(v)) { toast(T('Skriv tiden som tt:mm:ss', 'Write the time as hh:mm:ss'), true); e.target.value = naboInnst().trend; return; }
