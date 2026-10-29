@@ -16,6 +16,6 @@ NABE – Brukervilkår (som ingen leser)
 
 8. Garantien varer like lenge som en uskjermet MS/TP-buss i et fuktig teknisk rom.
 
-9. Alle rettigheter tilhører Martin Lillebø. Klager sendes til YABE.
+9. NABE er MIT-lisensiert, © Martin Lillebø. Du kan gjøre nesten hva du vil med koden. Klager sendes fortsatt til YABE.
 
 10. Ved å trykke «Godta» bekrefter du at du har lest dette. Vi vet begge at du ikke har det.

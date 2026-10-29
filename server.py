@@ -2215,7 +2215,7 @@ def _save_notes() -> bool:
 # itself so it does not try to sync with itself.
 NOTES_UPSTREAM = _env("NOTES_UPSTREAM", "").rstrip("/")
 NOTES_SYNC: Dict[str, Any] = {"state": "av", "detail": "", "ts": 0.0, "pending": 0}
-# Sites like Oslobygg and Statsbygg close the network completely - no route to
+# Some public-sector sites close the network completely - no route to
 # the office at all. A note written there must not be lost and must not need
 # remembering: the key is queued on disk, and the queue is flushed the moment
 # the shared server answers again, which is usually when the laptop is back on

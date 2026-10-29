@@ -114,7 +114,7 @@ const VENDORS = [
   [/viessmann/i,                       'Viessmann',     '#e2001a'],
   [/vaillant/i,                        'Vaillant',      '#00754a'],
   [/oj\s*electronics/i,                'OJ Electronics', VENDOR_GREY],
-  // Funnet paa ComfortHotell 20.08.2026 - ventilasjonsaggregater og gatewayer
+  // Funnet paa et hotellanlegg 20.08.2026 - ventilasjonsaggregater og gatewayer
   // som svarer paa BACnet direkte.
   [/komfovent|amalva/i,                'Komfovent',     '#0072bc'],
   [/embedded\s*systems/i,              'Embedded Sys.', VENDOR_GREY],
@@ -3631,7 +3631,7 @@ function merkerHtml(merker) {
    type in prefix, cluster, site name and the rest before it will do anything.
    Those answers do not change between visits - they belong to the building,
    not to the session - so they are kept with the site, next to the ranges and
-   the controllers that answered. Come back to Karl Johans gate 12 next month
+   the controllers that answered. Come back to the same building next month
    and they are already filled in.
 
    Field names follow BTG's own: prefix, cluster, anleggsnavn, prosjekt,
@@ -5455,7 +5455,7 @@ function koblePing(boks, omraader) {
 /* ------------------------------------------- naar skannet ikke fant noe */
 /* "Ingen BACnet-enheter i omraadet" er sjelden sant, og aldri nyttig.
 
-   Maalt paa ComfortHotell-VPN (10.252.254.139/32), samme omraade, tre modi:
+   Maalt paa et hotell-VPN (en /32-tunnel), samme omraade, tre modi:
    Who-Is fant 0, Sweep-rask fant 0, Sweep-grundig fant 4. Samtidig svarte alle
    fire paa ping. At ping gaar sier bare at IP-en naas - BACnet-oppdagelse er
    noe annet:
@@ -10892,7 +10892,7 @@ setInterval(kortvakt, 3000);
    Without a code every point gets a trend and no alarm, as BTG does.
 
    The one place BTG gets it wrong is field 3: it takes the device from the
-   EDE file name (Device125021_2026-10-23_EDE becomes HoSp.2026_10_23). Here it
+   EDE file name (Device1234_2026-10-23_EDE becomes ABC.2026_10_23). Here it
    is the device's own name, so NTI finds the device in the station. */
 const BTG_TYPE = {
   'analog-input': 0, 'analog-output': 1, 'analog-value': 2,
