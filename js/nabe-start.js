@@ -154,6 +154,13 @@ const FAKTA = [
   ['COV betyr at regulatoren sier fra selv. Mindre spørring, mer ro.', 'COV means the controller speaks up itself. Less asking, more peace.'],
 ];
 const NYTT = {
+  '1.10': [
+    ['NABO: punktum mellom alle ledd er fast standard, slik Niagara lager mapper, og «Del navnet på» er borte', 'NABO: dots between all parts is the fixed standard, the way Niagara makes folders, and "Split the name on" is gone'],
+    ['Marker rader (Shift for flere) og velg «Siste ledd med _» for punkter som SYSTEM.OU001.HB_KV, eller «Marker alle som slutter likt»', 'Tick rows (Shift for a range) and choose "Last part with _" for points like SYSTEM.OU001.HB_KV, or "Tick all that end the same"'],
+    ['Velg om prefikset eller anleggsnavnet skal stå først i taggen', 'Choose whether the prefix or the site name goes first in the tag'],
+    ['Cluster og desimaler ligger under Avansert, og SYSTEM-punkter får ikke lenger advarsel om kort sti', 'Cluster and decimals are under Advanced, and SYSTEM points no longer warn about a short path'],
+    ['Filene havner i Nedlastinger også i app-vinduet, der de før kunne forsvinne uten beskjed', 'Files land in Downloads in the app window too, where they could vanish without a word before'],
+  ],
   '1.9.1': [
     ['NABO: velg hvor filene lagres - Nedlastinger, BTG-Export eller en mappe du velger selv', 'NABO: choose where files are saved - Downloads, BTG-Export or a folder of your own'],
     ['«Åpne mappa» viser fila du nettopp lagret i Utforsker', '"Open folder" shows the file you just saved in Explorer'],

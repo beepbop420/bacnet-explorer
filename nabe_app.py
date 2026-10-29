@@ -164,6 +164,9 @@ def main():
     vindu.events.closing += lukker
     vindu.events.closed += lambda: setattr(server, "should_exit", True)
     vindu.events.shown += lambda: sett_ikon("NABE", HER / "nabe.ico")
+    # Without this, WebView2 in pywebview drops every download from the page
+    # without a word - the EDE and CSV exports would go nowhere.
+    webview.settings["ALLOW_DOWNLOADS"] = True
     # The page keeps its settings, site memory in the browser and theme
     # between runs only if WebView2 is told where to keep them.
     webview.start(gui="edgechromium", private_mode=False,

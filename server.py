@@ -170,7 +170,7 @@ async def guard_and_cors(request, call_next):
         response.headers["Vary"] = "Origin"
     return response
 
-VERSJON = "1.9.1"
+VERSJON = "1.10"
 
 state = {"app": None, "local_address": None, "read_only": False, "bbmd": None}
 
@@ -508,9 +508,32 @@ def _btg_mappe() -> Optional[str]:
     return None
 
 
+def _nedlastinger() -> Optional[str]:
+    """The Downloads folder Windows actually uses - often moved, sometimes
+    into OneDrive, so home/Downloads is only the guess when asking fails."""
+    if os.name == "nt":
+        try:
+            import ctypes
+            from ctypes import wintypes
+
+            class GUID(ctypes.Structure):
+                _fields_ = [("a", wintypes.DWORD), ("b", wintypes.WORD), ("c", wintypes.WORD), ("d", ctypes.c_ubyte * 8)]
+            fid = GUID(0x374DE290, 0x123F, 0x4565, (ctypes.c_ubyte * 8)(0x91, 0x64, 0x39, 0xC4, 0x92, 0x5E, 0x46, 0x7B))
+            p = ctypes.c_wchar_p()
+            if ctypes.windll.shell32.SHGetKnownFolderPath(ctypes.byref(fid), 0, None, ctypes.byref(p)) == 0:
+                sti = p.value
+                ctypes.windll.ole32.CoTaskMemFree(p)
+                if sti and Path(sti).is_dir():
+                    return sti
+        except Exception:
+            pass
+    d = Path.home() / "Downloads"
+    return str(d) if d.is_dir() else None
+
+
 @app.get("/api/mapper")
 def mapper():
-    return {"status": "done", "nedlastinger": str(Path.home() / "Downloads"), "btg": _btg_mappe()}
+    return {"status": "done", "nedlastinger": _nedlastinger(), "btg": _btg_mappe()}
 
 
 class LagreBody(BaseModel):

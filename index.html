@@ -3435,12 +3435,15 @@ body{font-family:var(--sans)}
 .nabo-oppsett .field{height:30px;width:230px;font-size:13px}
 .nabo-oppsett .kort .field{width:116px;font-family:var(--mono)}
 .nabo-oppsett .field.mangler{border-color:var(--warn)}
+.nabo-oppsett select.field{width:136px;padding-right:24px}
 .nabo-des summary{list-style:none;cursor:pointer;height:30px;display:flex;align-items:center;padding:0 10px;
   font-size:12px;color:var(--fg-2);border:1px solid var(--line);border-radius:var(--radius)}
 .nabo-des summary::-webkit-details-marker{display:none}
 .nabo-des summary::after{content:'▾';margin-left:6px;color:var(--fg-3);font-size:10px}
 .nabo-des[open]{flex-basis:100%;order:9}
 .nabo-des[open] summary{display:inline-flex}
+.nabo-avansert{display:flex;gap:14px;margin-top:10px}
+.nabo-des-tittel{font-size:11px;color:var(--fg-3);margin-top:12px}
 .nabo-des-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:6px 18px;margin-top:10px}
 .nabo-des-grid label{flex-direction:row;align-items:center;justify-content:space-between;font-size:12px;color:var(--fg-2)}
 .nabo-des-grid .field{width:52px;height:26px;text-align:right;font-family:var(--mono)}
@@ -3491,6 +3494,16 @@ body{font-family:var(--sans)}
 .nabo-globalt{display:flex;flex-wrap:wrap;gap:6px 16px;padding:7px 14px;border-bottom:1px solid var(--line);
   font-size:12px;color:var(--warn);background:color-mix(in srgb,var(--warn) 7%,transparent)}
 .nabo-globalt[hidden]{display:none}
+.nabo-markert{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:7px 14px;border-bottom:1px solid var(--line);
+  background:color-mix(in srgb,var(--accent) 7%,var(--raised))}
+.nabo-markert[hidden]{display:none}
+.nabo-markert .btn{height:28px;font-size:12px}
+.nabo-mark-tall{font-size:12px;color:var(--fg-2);margin-right:4px}
+.nabo-mark-tall b{font-family:var(--mono);color:var(--fg)}
+.nabo-markert .gs-close{margin-left:auto;padding:0 6px}
+.nabo-tabell th.velg,.nabo-tabell td.velg{width:26px;padding-right:0!important}
+.nabo-tabell .velg input{margin:0;cursor:pointer;accent-color:var(--accent)}
+.nabo-tabell tr.valgt td{background:color-mix(in srgb,var(--accent) 9%,transparent)}
 .nabo-tabell{flex:1;overflow:auto;min-height:0}
 .nabo-tabell table{width:100%;border-collapse:collapse;font-size:12px;table-layout:auto}
 /* The points table's fixed columns and ellipsis are for live values; a tag is
@@ -3532,13 +3545,6 @@ body{font-family:var(--sans)}
 .nabo-vis[hidden]{display:none}
 
 /* Hand edits: the table is the spreadsheet now. */
-.nabo-skille{display:flex;flex-direction:column;gap:4px;font-size:11px;color:var(--fg-3)}
-.nabo-skille div{display:flex;border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;height:30px}
-.nabo-skille button{background:none;border:0;border-right:1px solid var(--line);padding:0 10px;min-width:30px;
-  font-family:var(--mono);font-size:12px;color:var(--fg-3);cursor:pointer}
-.nabo-skille button:last-child{border-right:0;font-family:inherit;font-size:11px}
-.nabo-skille button.paa{background:var(--raised);color:var(--fg);box-shadow:inset 0 -2px 0 var(--accent)}
-.nabo-skille button:hover{color:var(--fg)}
 .nabo-rettbar td[data-felt]{cursor:text}
 .nabo-rettbar td[data-felt]:hover{box-shadow:inset 0 0 0 1px var(--line-2)}
 .nabo-rettbar td.bryter{cursor:pointer;text-align:center}
