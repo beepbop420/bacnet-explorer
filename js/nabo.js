@@ -538,6 +538,8 @@ function eksporterVariabel(bare) {
           + (feil ? ` · ${feil} with errors` : '')), !!feil);
   naboFigur('vink');
   if (typeof tell === 'function') tell('nabo');
+  if (typeof nabeSier === 'function' && !feil) setTimeout(() => nabeSier(
+    T('Naboen har levert. Pent arbeid, egentlig.', 'The neighbour delivered. Decent work, actually.'), 'fornoyd', 'nabo-levert'), 900);
 }
 
 /* EDE out for each included device, in the layout NABE's own export uses. */
@@ -610,8 +612,19 @@ function aapneNabo() {
   ov.hidden = false;
   tegnNabo(true);
   setTimeout(() => $(tagInnstillinger().prefiks ? 'naboSok' : 'naboPrefiks')?.focus(), 60);
+  // NABE looks over at the neighbour's when you go next door.
+  if (typeof blikk === 'function') blikk(2.2, -0.4, 1600);
+  if (typeof figur === 'function') figur('hopp', 550);
+  if (typeof nabeSier === 'function' && Math.random() < 0.35)
+    nabeSier(T('Hils på naboen. Han tagger alt.', 'Say hi to the neighbour. He tags everything.'), 'fornoyd', 'nabo-hei');
 }
-function lukkNabo() { const ov = $('naboOverlay'); if (ov) ov.hidden = true; }
+function lukkNabo() {
+  const ov = $('naboOverlay');
+  if (!ov || ov.hidden) return;
+  ov.hidden = true;
+  // And waves when you come back.
+  if (typeof nabeKlasse === 'function') setTimeout(() => nabeKlasse('vink', 1100), 180);
+}
 
 function tegnNabo(helt) {
   const ov = $('naboOverlay');
@@ -622,8 +635,8 @@ function tegnNabo(helt) {
     ov.innerHTML = `<div class="gs-modal nabo-modal" role="document">
       <header class="nabo-topp">
         <div class="nabo-merke">${NABO_SVG}<div><div class="nabo-ord">NABO</div>
-          <div class="nabo-under">Not Another BACnet Object-namer</div></div></div>
-        <div class="nabo-gjerde" aria-hidden="true"></div>
+          <div class="nabo-under">Not Another BACnet Object-namer · ${T('naboen til NABE', 'NABE\u2019s neighbour')}</div></div></div>
+        <div class="nabo-gjerde" aria-hidden="true"><button class="nabo-titt" id="naboTitt" title="${T('Tilbake til NABE', 'Back to NABE')}">${NABE_SVG}</button></div>
         <div class="nabo-topp-knapper">
           <button class="btn" id="naboIniInn" title="${T('Hent prefiks, anlegg, trend og desimaler fra BTG', 'Take prefix, site, trend and decimals from BTG')}">${T('Hent HeaderBTG.ini', 'Load HeaderBTG.ini')}</button>
           <button class="btn" id="naboIniUt" title="${T('Lagre innstillingene i BTGs format, så BTG kan bruke dem', 'Save the settings in BTG\u2019s format, for BTG to use')}">${T('Lagre .ini', 'Save .ini')}</button>
@@ -868,6 +881,7 @@ function koblNabo(ov) {
   let tid;
   const senere = (fn) => { clearTimeout(tid); tid = setTimeout(fn, 160); };
   $('naboLukk').onclick = lukkNabo;
+  $('naboTitt').onclick = lukkNabo;
   $('naboIniInn').onclick = () => {
     const i = document.createElement('input');
     i.type = 'file'; i.accept = '.ini';
@@ -938,5 +952,67 @@ function koblNabo(ov) {
   const b = $('btgBtn');
   if (b) b.onclick = aapneNabo;
   const _sprak = settSprak;
-  settSprak = function () { const r = _sprak.apply(this, arguments); if (!ov.hidden) tegnNabo(true); return r; };
+  settSprak = function () {
+    const r = _sprak.apply(this, arguments);
+    if (!ov.hidden) tegnNabo(true);
+    naboHusTittel();
+    return r;
+  };
+})();
+
+/* ---------------------------------------------------------- the family
+   NABE and NABO live next door to each other. The house sits beside NABE's
+   name in the top bar, behind a hairline fence; NABE glances at it when you
+   point there, it stands beside him on the start screen, and N goes next
+   door from anywhere. */
+function naboHusTittel() {
+  const b = $('naboHus');
+  if (b) b.title = T('NABO, naboen: tagger og Variabel-fil (N)', 'NABO, the neighbour: tags and the Variabel file (N)');
+}
+
+(function familien() {
+  const merke = document.querySelector('.topbar .brand-text');
+  if (merke && !$('naboHus')) {
+    const b = document.createElement('button');
+    b.id = 'naboHus';
+    b.className = 'nabo-hus-knapp';
+    b.type = 'button';
+    b.innerHTML = `${NABO_SVG}<span>NABO</span>`;
+    // Beside the brand link, not in it: a button inside a link would navigate.
+    (merke.closest('a') || merke).insertAdjacentElement('afterend', b);
+    b.onclick = aapneNabo;
+    b.addEventListener('mouseenter', () => { if (typeof blikk === 'function') blikk(2.4, 0, 1200); });
+    naboHusTittel();
+  }
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key.toLowerCase() !== 'n' || e.ctrlKey || e.metaKey || e.altKey) return;
+    const el = document.activeElement;
+    if (el && (/^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName) || el.isContentEditable)) return;
+    if (document.querySelector('.gs-overlay:not([hidden])') || $('startskjerm')) return;
+    e.preventDefault();
+    aapneNabo();
+  });
+
+  // On the start screen the neighbour stands beside NABE, and is a way in.
+  const paaStart = () => {
+    const l = $('startskjerm');
+    const logo = l && l.querySelector('.ss-logo');
+    if (!logo || logo.querySelector('.ss-nabo')) return;
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'ss-nabo';
+    b.title = T('NABO, naboen: tagger og Variabel-fil', 'NABO, the neighbour: tags and the Variabel file');
+    b.innerHTML = NABO_SVG;
+    b.onclick = () => { l.querySelector('.ss-videre')?.click(); setTimeout(aapneNabo, 280); };
+    logo.appendChild(b);
+  };
+  const _start = visStartskjerm;
+  visStartskjerm = function () {
+    const r = _start.apply(this, arguments);
+    paaStart();
+    return r;
+  };
+  paaStart();
+  setTimeout(paaStart, 300);
 })();

@@ -154,6 +154,10 @@ const FAKTA = [
   ['COV betyr at regulatoren sier fra selv. Mindre spørring, mer ro.', 'COV means the controller speaks up itself. Less asking, more peace.'],
 ];
 const NYTT = {
+  '1.8.1': [
+    ['NABE har fått en nabo: huset ved navnet øverst, eller tasten N, går rett til NABO', 'NABE has a neighbour: the house by the name at the top, or the N key, goes straight to NABO'],
+    ['På startskjermen står naboen ved siden av NABE, og i NABO titter NABE over gjerdet', 'On the start screen the neighbour stands beside NABE, and in NABO, NABE peeks over the fence'],
+  ],
   '1.8': [
     ['NABO › Sammenlign: les inn Variabel-fila Niagara fikk, og se hva som er nytt, endret og borte', 'NABO › Compare: read in the Variabel file Niagara got, and see what is new, changed and gone'],
     ['Lag en fil med bare nye og endrede rader til NTI', 'Make a file with only the new and changed rows for NTI'],

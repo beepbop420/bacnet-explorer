@@ -4290,6 +4290,7 @@ function commands() {
                               .reduce((n,[,v]) => n+v, 0);
          return skjult ? skjult + ' objekter skjult na' : ''; }});
   add('Visning', 'Innstillinger...', () => { closeCmd(); openTema(); });
+  add('Eksport', 'NABO - tagger og Variabel-fil...', () => { closeCmd(); aapneNabo(); }, {hint: 'N'});
   add('Eksport', 'Taggeinnstillinger for dette anlegget...',
       () => { closeCmd(); openTema('tagging'); });
   add('Visning', 'Utseende — farger, bilder og størrelse...',
@@ -10242,6 +10243,7 @@ const ORDBOK = {
   // Status bar fragments - the number sits in its own <b>, so these have none
   'enheter lest': 'devices read',
   'Finn enhet': 'Find device',
+  'NABO - tagger og Variabel-fil...': 'NABO - tags and the Variabel file...',
   'NABO · tagger og BTG-fil…': 'NABO · tags and BTG file…',
   'Tagger og Variabel-fil for NTI-import i Niagara, fra anlegget og EDE-filer':
     'Tags and the Variabel file for NTI import into Niagara, from the plant and EDE files',
