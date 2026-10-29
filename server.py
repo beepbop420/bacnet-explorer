@@ -26,6 +26,7 @@ import asyncio
 import errno
 import datetime
 import ipaddress
+import re
 import subprocess
 import json
 import os
@@ -169,7 +170,7 @@ async def guard_and_cors(request, call_next):
         response.headers["Vary"] = "Origin"
     return response
 
-VERSJON = "1.5"
+VERSJON = "1.6"
 
 state = {"app": None, "local_address": None, "read_only": False, "bbmd": None}
 
@@ -408,6 +409,79 @@ def route(target: str):
             return {"status": "done", "target": first, **e}
     return {"status": "done", "target": first, "ip": ip, "cidr": f"{ip}/32",
             "interface": None, "prefix": 32}
+
+
+_RUTE_LINJE = re.compile(
+    r"^\s*(\d+\.\d+\.\d+\.\d+)\s+(\d+\.\d+\.\d+\.\d+)\s+(.+?)\s+(\d+\.\d+\.\d+\.\d+)\s+(\d+)\s*$")
+
+
+def ruter_via(ip: str) -> List[Dict[str, Any]]:
+    """
+    The networks Windows sends out through the adapter that has `ip`.
+
+    This is where the plant usually is. A WireGuard tunnel's AllowedIPs and a
+    FortiClient split tunnel both end up here as routes, so the building's own
+    range is in the routing table before anyone has typed it. Headers are
+    localised, so lines are matched on their shape instead.
+    """
+    try:
+        ut = subprocess.run(["route", "print", "-4"], capture_output=True, timeout=4,
+                            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+        tekst = ut.stdout.decode("oem" if os.name == "nt" else "utf-8", errors="replace")
+    except Exception:
+        return []
+    egen = ipaddress.IPv4Address(ip)
+    sett, ut_liste = set(), []
+    for linje in tekst.splitlines():
+        m = _RUTE_LINJE.match(linje)
+        if not m or m.group(4) != ip:
+            continue
+        try:
+            net = ipaddress.IPv4Network(f"{m.group(1)}/{m.group(2)}", strict=False)
+        except ValueError:
+            continue
+        # Hosts, the default route, multicast, loopback and link-local say
+        # nothing about where a building is; a /8 is a whole company.
+        if not 9 <= net.prefixlen <= 30 or net.is_multicast or net.is_loopback or net.is_link_local:
+            continue
+        if str(net) in sett:
+            continue
+        sett.add(str(net))
+        ut_liste.append({"cidr": str(net), "egen": egen in net})
+    # Behind the tunnel first: the adapter's own subnet is the tunnel itself
+    # on a VPN, and only on a cable is it the plant.
+    ut_liste.sort(key=lambda r: (r["egen"], -ipaddress.IPv4Network(r["cidr"]).prefixlen))
+    return ut_liste[:8]
+
+
+@app.get("/api/forslag")
+def forslag(ip: str):
+    """Ranges worth scanning from this adapter: its routes, and the sites
+    remembered here that Windows would reach through it."""
+    try:
+        ipaddress.IPv4Address(ip)
+    except ValueError:
+        return {"status": "error", "error": "Ugyldig IP"}
+    ruter = ruter_via(ip)
+    nett = [ipaddress.IPv4Network(r["cidr"]) for r in ruter]
+    anlegg = []
+    for key, s in sorted(SITES.items(), key=lambda kv: -(kv[1].get("sist") or 0)):
+        # Through a route of this adapter, or scanned from this address before.
+        # Not via the default route: that would put every site of every VPN
+        # under Wi-Fi as soon as the tunnel is down.
+        try:
+            hosts, net = parse_target((s.get("ranges") or key.split(" "))[0])
+            forste = ipaddress.IPv4Address(hosts[0] if hosts else str(net.network_address + 1))
+        except Exception:
+            continue
+        lokal = str(s.get("lokal") or "").split("/")[0]
+        if lokal != ip and not any(forste in n for n in nett):
+            continue
+        anlegg.append({"key": key, "navn": s.get("navn") or "",
+                       "enheter": len(s.get("enheter") or []), "sist": s.get("sist")})
+        if len(anlegg) >= 4:
+            break
+    return {"status": "done", "ruter": ruter, "anlegg": anlegg}
 
 
 

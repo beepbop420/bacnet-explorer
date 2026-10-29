@@ -3372,6 +3372,26 @@ body{font-family:var(--sans)}
 .scanbox #modeSel{grid-column:2 / 4;grid-row:2;min-width:0;font-size:12px}
 .scanbox .diag-kjapp{grid-column:1 / -1;grid-row:3;max-width:none;margin:0}
 .scanbox .diag-kjapp:not(.vis){display:none}
+/* Ranges behind the chosen adapter: its routes and the sites scanned through it */
+.scanbox .omr-forslag{grid-column:1 / -1;grid-row:4;display:flex;flex-wrap:wrap;gap:4px;min-width:0}
+.scanbox .omr-forslag[hidden]{display:none}
+.omr-brikke{display:inline-flex;align-items:baseline;gap:5px;max-width:100%;min-width:0;padding:2px 7px;
+  border:1px solid var(--line);border-radius:var(--r-sm);background:transparent;color:var(--fg-2);font-size:11px;cursor:pointer}
+.omr-brikke:hover,.omr-brikke:focus-visible{border-color:var(--line-2);color:var(--fg);background:var(--hover)}
+.omr-brikke.valgt{border-color:var(--accent-edge);color:var(--fg)}
+.omr-ip{font-family:var(--mono);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.omr-merke{color:var(--fg-3);font-size:10px;white-space:nowrap}
+/* Find a device in the list */
+.dev-sok{margin-left:auto;flex:0 1 130px;min-width:0;height:22px;padding:0 6px;font:inherit;font-size:11px;
+  text-transform:none;letter-spacing:0;font-weight:400;color:var(--fg);background:var(--sunken);
+  border:1px solid var(--line);border-radius:var(--r-sm)}
+.dev-sok:focus{outline:none;border-color:var(--accent-edge)}
+.dev-sok[hidden]{display:none}
+#devList .dev[hidden],#devList .vgroup[hidden]{display:none!important}
+#devList.sok-aktiv .vgroup.av .vgroup-body{grid-template-rows:1fr}
+/* "40 shown of 2378" clears the filter */
+.sb-vist.kan-nullstilles{cursor:pointer}
+.sb-vist.kan-nullstilles:hover{color:var(--fg);text-decoration:underline dotted}
 .scanbox{position:relative}
 /* Progress: a hairline along the bottom edge of the scan box. Only transform
    and opacity change, so it never triggers layout. */
@@ -4351,8 +4371,7 @@ button:focus:not(:focus-visible){outline:none;box-shadow:none}
       </select>
       <datalist id="kjenteOmrader"></datalist>
       <input id="rangeInput" class="field" list="kjenteOmrader" style="width:148px" placeholder="10.75.1.0/24, …" title="Ett eller flere IP-områder: 10.75.1.0/24, én IP, eller 10.75.1.10-40. Skill dem med komma, semikolon eller mellomrom — de skannes etter tur inn i én liste. I BBMD-modus: IP-en til byggets BBMD."
-             list="recentRanges" autocomplete="off">
-      <datalist id="recentRanges"></datalist>
+             autocomplete="off">
       <button id="diagKjapp" class="btn diag-kjapp" type="button" tabindex="-1">Sjekk én</button>
       <select id="modeSel" class="field" title="Auto: Who-Is på eget subnett, grundig sweep over VPN og rutet nett. BBMD: skriv IP-en til byggets BBMD og få hele bygget - også MS/TP bak rutere - uten å treffe nabobyggene på samme VPN.">
         <option value="auto">Auto</option>
@@ -4362,9 +4381,12 @@ button:focus:not(:focus-visible){outline:none;box-shadow:none}
         <option value="broadcast">Who-Is</option>
       </select>
       <button id="scanBtn" class="btn primary" disabled>Skann</button>
+      <div id="omrForslag" class="omr-forslag" hidden></div>
       <div class="skann-linje" aria-hidden="true"></div>
     </div>
-      <div class="pane-head">Enheter <span id="devCount" class="count">0</span></div>
+      <div class="pane-head">Enheter <span id="devCount" class="count">0</span>
+        <input id="devSok" class="dev-sok" type="search" placeholder="Finn enhet" autocomplete="off" spellcheck="false"
+               title="Navn, IP eller instans. Enter åpner den første." hidden></div>
       <div id="dupWarn" class="dup-warn" hidden></div>
       <div id="devList" tabindex="-1" class="pane-body">
         <div class="empty">
@@ -4492,5 +4514,6 @@ button:focus:not(:focus-visible){outline:none;box-shadow:none}
 <script src="/js/nabe-felt.js"></script>
 <script src="/js/nabe-moro.js"></script>
 <script src="/js/nabe-figur.js"></script>
+<script src="/js/nabe-finn.js"></script>
 </body>
 </html>

@@ -154,6 +154,14 @@ const FAKTA = [
   ['COV betyr at regulatoren sier fra selv. Mindre spørring, mer ro.', 'COV means the controller speaks up itself. Less asking, more peace.'],
 ];
 const NYTT = {
+  '1.6': [
+    ['Velg nettverkskort, så foreslår NABE nettene bak det - fra rutetabellen og anlegg du har skannet derfra', 'Pick an adapter and NABE suggests the networks behind it - from the routing table and sites scanned through it'],
+    ['Lim inn tekst med IP-er i, porter og ord rundt - feltet tar bare adressene', 'Paste text with IPs in it, ports and words around them - the field keeps just the addresses'],
+    ['Finn enhet: filtrer enhetslista på navn, IP eller instans', 'Find device: filter the device list by name, IP or instance'],
+    ['Skriv i enhetslista for å hoppe, pil opp i søkefeltet for forrige søk', 'Type in the device list to jump, arrow up in search for earlier searches'],
+    ['Pek på AV, BI, MSV … for hva objekttypen er', 'Point at AV, BI, MSV … to see what the object type is'],
+    ['Klikk «vist av» i statuslinja for å nullstille filteret', 'Click "shown of" in the status bar to clear the filter'],
+  ],
   '1.5': [
     ['BTG-fil ligger nå i Eksport-menyen', 'The BTG file is now in the Export menu'],
     ['Enhetslista hopper ikke lenger under musa mens anlegget leses', 'The device list no longer jumps under the pointer while the site is read'],

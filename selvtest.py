@@ -127,7 +127,7 @@ def kjor_tester():
     sjekk("BBMD-modus registrerer og finner", r.get("bbmd_status") == 0 and r.get("count", 0) >= 1,
           f"status {r.get('bbmd_status')}, {r.get('count')} enheter, tabell {r.get('bdt')}")
 
-    for fil in ("nabe-start", "nabe-verktoy", "nabe-felt", "nabe-moro"):
+    for fil in ("nabe-start", "nabe-verktoy", "nabe-felt", "nabe-moro", "nabe-finn"):
         try:
             with urllib.request.urlopen(f"{BASE}/js/{fil}.js", timeout=5) as rr:
                 ok = rr.status == 200

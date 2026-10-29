@@ -371,10 +371,10 @@ function rememberRange(range) {
   renderRangeSuggestions();
 }
 
+// The field had two list attributes and only the first counts, so these
+// recent ranges never showed. They now share the site list's datalist.
 function renderRangeSuggestions() {
-  const dl = $('recentRanges');
-  if (!dl) return;
-  dl.innerHTML = (loadPrefs().ranges || []).map(r => `<option value="${esc(r)}">`).join('');
+  if (typeof fyllOmradeliste === 'function') fyllOmradeliste();
 }
 
 /* -------------------------------------------------------------- splitters */
@@ -3546,10 +3546,11 @@ function fyllOmradeliste() {
   const rader = Object.entries(MINNE)
     .sort((a, b) => (b[1].sist || 0) - (a[1].sist || 0))
     .slice(0, 25);
+  const nylige = (loadPrefs().ranges || []).filter(r => !rader.some(([key]) => key === r));
   dl.innerHTML = rader.map(([key, s]) => {
     const merke = s.navn || `${(s.enheter || []).length} enheter`;
     return `<option value="${esc(key)}">${esc(merke)}</option>`;
-  }).join('');
+  }).join('') + nylige.map(r => `<option value="${esc(r)}">`).join('');
 }
 
 /* Recorded after a scan finishes, not while it runs: a half-finished sweep is
@@ -10240,6 +10241,8 @@ const ORDBOK = {
   'Merke': 'Mark',
   // Status bar fragments - the number sits in its own <b>, so these have none
   'enheter lest': 'devices read',
+  'Finn enhet': 'Find device',
+  'Navn, IP eller instans. Enter åpner den første.': 'Name, IP or instance. Enter opens the first.',
   /* Deliberately absent: Av, På, Ja, Nei. Those are state texts, and a
      controller supplies them - translating one would be editing what the
      plant reports, not what the tool says. */
@@ -10473,7 +10476,7 @@ const HOPP_OVER = /^(SCRIPT|STYLE|CODE|SVG|PATH)$/;
    the device list also holds the getting-started text and the watch pane its
    own empty state, and both of those are the tool talking. */
 const DATA_SONE = 'tbody, .nabe-boble, .startskjerm, #alarmSect, .ruter-info, .dev-name, .dev-ip, .dev-note, '
-  + '.watch-name, .watch-ip, .insp-title, .insp-sub, .insp-val, .data-verdier, .cmp-navn, .cmp-v';
+  + '.watch-name, .watch-ip, .insp-title, .insp-sub, .insp-val, .data-verdier, .cmp-navn, .cmp-v, .omr-forslag';
 
 function iDataSone(n) {
   const el = n.nodeType === 1 ? n : n.parentElement;
