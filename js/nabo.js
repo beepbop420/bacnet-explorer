@@ -88,7 +88,10 @@ function naboInnst() {
           // folder the server writes into.
           mappe: p.mappe || '', mapper: p.mapper || [],
           // What goes first in the tag itself: nothing, the prefix or the site.
-          foran: ['prefiks', 'anlegg'].includes(p.foran) ? p.foran : ''};
+          foran: ['prefiks', 'anlegg'].includes(p.foran) ? p.foran : '',
+          // Write the SD code (alarm class, then T for trend or 0) in front
+          // of the description, for tools that read it from there.
+          sdBeskr: !!p.sdBeskr};
 }
 function lagreNabo(patch) {
   savePrefs({nabo: Object.assign({}, loadPrefs().nabo || {}, patch)});
@@ -201,10 +204,11 @@ function naboRad(p, t, o, anlegg, enhetNavn, rett) {
   const kilde = klasse
     ? `${anlegg} ${biter.length >= 3 ? `${biter[0]}.${biter[1]}-${biter[2]}` : sti}` : '';
   const trend = (rett.trend ?? sd.trend) ? `Interval|${o.trend}` : '';
+  const sdKode = `SD${klasse || 0}${trend ? 'T' : '0'}`;
   const f = new Array(34).fill('');
   f[0] = 'BacnetNetwork'; f[1] = anlegg; f[2] = enhetNavn; f[3] = sti;
   f[4] = String(type); f[5] = String(p.instance ?? ''); f[6] = naboVerdi(p.value); f[7] = enhet;
-  f[8] = String(des); f[9] = tilstander; f[10] = beskr; f[11] = trend;
+  f[8] = String(des); f[9] = tilstander; f[10] = o.sdBeskr ? `${sdKode} ${beskr}` : beskr; f[11] = trend;
   if (klasse) { f[12] = String(klasse); f[13] = beskr; f[14] = kilde; }
   f[30] = p.name || '';
   if (norm) { f[29] = norm.g.komponent || ''; f[33] = norm.g.funksjonskode || ''; }
@@ -213,7 +217,7 @@ function naboRad(p, t, o, anlegg, enhetNavn, rett) {
     linje: f.map(x => String(x).replace(/[;\r\n]/g, ' ')).join(';'),
     sti, type, typeNavn: shortType(p.type), inst: p.instance, enhet, des,
     trend: !!trend, klasse, beskr, navn: p.name || '', harSd: sd.rest !== (p.description || '').trim(),
-    hale: !!rett.hale, stiRen,
+    hale: !!rett.hale, stiRen, sdKode,
     auto: {sti: stiAuto, beskr: beskrAuto, enhet: enhetAuto, des: desAuto, trend: sd.trend, klasse: sd.klasse},
     rett,
   };
@@ -697,6 +701,13 @@ function eksporterEde() {
   const tid = `${to(n.getDate())}.${to(n.getMonth() + 1)}.${n.getFullYear()} ${to(n.getHours())}:${to(n.getMinutes())}`;
   const dato = n.toISOString().slice(0, 10);
   const t = tagInnstillinger();
+  const o = naboInnst();
+  // With SD codes on, the description is the one in the table, code in front.
+  const rader = o.sdBeskr ? new Map(naboResultat().rader.map(x => [x.key, x])) : null;
+  const beskrivelse = (k, p) => {
+    const x = rader && rader.get(`${k.id}|${p.type},${p.instance}`);
+    return x ? `${x.sdKode} ${x.beskr}` : p.description;
+  };
   let i = 0;
   for (const k of kilder) {
     const st = buildStateTexts(k.punkter);
@@ -714,7 +725,7 @@ function eksporterEde() {
     ];
     for (const p of k.punkter) {
       linjer.push(pad([`OBJECT_${String(p.type).toUpperCase().replace(/-/g, '_')}:${p.instance}`,
-        k.instans ?? '', f(p.name), EDE_OBJ_TYPE[p.type] ?? '', p.instance ?? '', f(p.description),
+        k.instans ?? '', f(p.name), EDE_OBJ_TYPE[p.type] ?? '', p.instance ?? '', f(beskrivelse(k, p)),
         '', '', '', p.writable ? 'Y' : 'N', '', '', '', st.ref.get(p.objid) ?? '', EDE_UNIT[p.units] ?? '']));
     }
     const basis = `Device${k.instans ?? 'x'}_${dato}`;
@@ -798,6 +809,9 @@ function tegnNabo(helt) {
         <details class="nabo-des"><summary>${T('Avansert', 'Advanced')}</summary>
           <div class="nabo-avansert">
             <label class="kort"><span>Cluster</span><input class="field" id="naboCluster" autocomplete="off" spellcheck="false"></label>
+            <label class="nabo-sd-valg" title="${T('SD + alarmklasse + T for trend eller 0 uten, f.eks. SD1T. Hentes fra Trend og Alarm i tabellen.', 'SD + alarm class + T for trend or 0 without, e.g. SD1T. Taken from Trend and Alarm in the table.')}">
+              <span>${T('SD-kode', 'SD code')}</span>
+              <span class="nabo-sd-boks"><input type="checkbox" id="naboSd"> ${T('Legg SD-koden først i beskrivelsen', 'Put the SD code first in the description')}</span></label>
           </div>
           <div class="nabo-des-tittel">${T('Desimaler', 'Decimals')}</div>
           <div class="nabo-des-grid"></div></details>
@@ -867,6 +881,7 @@ function tegnNabo(helt) {
   const sett = (id, v) => { const el = $(id); if (el && document.activeElement !== el) el.value = v; };
   sett('naboAnlegg', t.anleggsnavn || ''); sett('naboPrefiks', t.prefiks || '');
   sett('naboCluster', t.cluster || ''); sett('naboTrend', o.trend); sett('naboForan', o.foran);
+  $('naboSd').checked = o.sdBeskr;
   $('naboPer').checked = NABO.perEnhet;
   $('naboPrefiks').classList.toggle('mangler', !t.prefiks);
   $('naboAnlegg').classList.toggle('mangler', !(t.anleggsnavn || '').trim());
@@ -944,11 +959,11 @@ function tegnNabo(helt) {
     NABO.vist = vis.map(x => x.key);
     const er = NABO.erstatt;
     let forslag = 0;
-    const celle = (x, felt, cls, tekst) => {
+    const celle = (x, felt, cls, tekst, foran = '') => {
       const egen = x.rett[felt] !== undefined || (felt === 'sti' && x.hale);
       const ny = er && er.felt === felt ? erstattVerdi(x[felt], er) : null;
       if (ny !== null) forslag++;
-      const innhold = ny !== null ? `<span class="gml">${esc(tekst)}</span><span class="ny">${esc(ny)}</span>` : esc(tekst);
+      const innhold = foran + (ny !== null ? `<span class="gml">${esc(tekst)}</span><span class="ny">${esc(ny)}</span>` : esc(tekst));
       return `<td class="${cls}${egen ? ' egen' : ''}" data-felt="${felt}" data-k="${esc(x.key)}"
         title="${egen ? esc(T('Rettet for hånd. Automatisk: ', 'Edited by hand. Automatic: ') + (felt === 'sti' ? x.stiRen : x.auto[felt])) : T('Klikk for å rette', 'Click to edit')}">${innhold}</td>`;
     };
@@ -969,7 +984,7 @@ function tegnNabo(helt) {
         ${x.type <= 2 ? celle(x, 'des', 'h', String(x.des)) : '<td></td>'}
         <td class="bryter${x.rett.trend !== undefined ? ' egen' : ''}" data-bryter="trend" data-k="${esc(x.key)}" title="${T('Klikk for å slå trend av eller på', 'Click to switch trend on or off')}">${x.trend ? '<span class="nabo-prikk tr"></span>' : '<span class="nabo-av"></span>'}</td>
         <td class="bryter${x.rett.klasse !== undefined ? ' egen' : ''}" data-bryter="klasse" data-k="${esc(x.key)}" title="${T('Klikk for å bytte alarmklasse: ingen, 1, 2, 3', 'Click to change the alarm class: none, 1, 2, 3')}">${x.klasse ? `<span class="nabo-kl">${x.klasse}</span>` : '<span class="nabo-av"></span>'}</td>
-        ${celle(x, 'beskr', 'b', x.beskr).replace('</td>', `${hvorfor ? `<span class="nabo-hvorfor">${esc(hvorfor)}</span>` : ''}</td>`)}
+        ${celle(x, 'beskr', 'b', x.beskr, o.sdBeskr ? `<span class="nabo-sd">${x.sdKode}</span>` : '').replace('</td>', `${hvorfor ? `<span class="nabo-hvorfor">${esc(hvorfor)}</span>` : ''}</td>`)}
         <td class="nabo-angre-c">${rettet ? `<button class="nabo-angre" data-k="${esc(x.key)}" title="${T('Tilbake til det automatiske', 'Back to the automatic value')}">↺</button>` : ''}</td></tr>`;
     }).join('')}</tbody></table>${vis.length > MAKS ? `<div class="nabo-mer">${T(`Viser ${MAKS} av ${vis.length}. Søk for å snevre inn.`, `Showing ${MAKS} of ${vis.length}. Search to narrow it down.`)}</div>` : ''}
     ${!vis.length ? `<div class="nabo-tom">${T('Ingen rader passer.', 'No rows match.')}</div>` : ''}`
@@ -1261,6 +1276,7 @@ function koblNabo(ov) {
   for (const [id, nokkel] of Object.entries(felt)) {
     $(id).addEventListener('input', (e) => senere(() => lagreTagging({[nokkel]: e.target.value.trim()}).then(() => tegnNabo()), id));
   }
+  $('naboSd').onchange = (e) => { lagreNabo({sdBeskr: e.target.checked}); tegnNabo(); };
   $('naboForan').onchange = (e) => { lagreNabo({foran: e.target.value}); tegnNabo(); };
   $('naboTrend').addEventListener('change', (e) => {
     const v = e.target.value.trim();

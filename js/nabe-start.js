@@ -157,6 +157,7 @@ const NYTT = {
   '1.10': [
     ['NABO: punktum mellom alle ledd er fast standard, slik Niagara lager mapper, og «Del navnet på» er borte', 'NABO: dots between all parts is the fixed standard, the way Niagara makes folders, and "Split the name on" is gone'],
     ['Marker rader (Shift for flere) og velg «Siste ledd med _» for punkter som SYSTEM.OU001.HB_KV, eller «Marker alle som slutter likt»', 'Tick rows (Shift for a range) and choose "Last part with _" for points like SYSTEM.OU001.HB_KV, or "Tick all that end the same"'],
+    ['Avansert › SD-kode: legg SD1T, SD00 osv. først i beskrivelsen, ut fra trend og alarm i tabellen', 'Advanced › SD code: put SD1T, SD00 and so on first in the description, from trend and alarm in the table'],
     ['Velg om prefikset eller anleggsnavnet skal stå først i taggen', 'Choose whether the prefix or the site name goes first in the tag'],
     ['Cluster og desimaler ligger under Avansert, og SYSTEM-punkter får ikke lenger advarsel om kort sti', 'Cluster and decimals are under Advanced, and SYSTEM points no longer warn about a short path'],
     ['Filene havner i Nedlastinger også i app-vinduet, der de før kunne forsvinne uten beskjed', 'Files land in Downloads in the app window too, where they could vanish without a word before'],
