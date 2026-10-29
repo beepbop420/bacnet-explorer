@@ -10242,6 +10242,9 @@ const ORDBOK = {
   // Status bar fragments - the number sits in its own <b>, so these have none
   'enheter lest': 'devices read',
   'Finn enhet': 'Find device',
+  'NABO · tagger og BTG-fil…': 'NABO · tags and BTG file…',
+  'Tagger og Variabel-fil for NTI-import i Niagara, fra anlegget og EDE-filer':
+    'Tags and the Variabel file for NTI import into Niagara, from the plant and EDE files',
   'Navn, IP eller instans. Enter åpner den første.': 'Name, IP or instance. Enter opens the first.',
   /* Deliberately absent: Av, På, Ja, Nei. Those are state texts, and a
      controller supplies them - translating one would be editing what the
@@ -10477,7 +10480,7 @@ const HOPP_OVER = /^(SCRIPT|STYLE|CODE|SVG|PATH)$/;
    the device list also holds the getting-started text and the watch pane its
    own empty state, and both of those are the tool talking. */
 const DATA_SONE = 'tbody, .nabe-boble, .startskjerm, #alarmSect, .ruter-info, .dev-name, .dev-ip, .dev-note, '
-  + '.watch-name, .watch-ip, .insp-title, .insp-sub, .insp-val, .data-verdier, .cmp-navn, .cmp-v, .omr-forslag';
+  + '.watch-name, .watch-ip, .insp-title, .insp-sub, .insp-val, .data-verdier, .cmp-navn, .cmp-v, .omr-forslag, #naboOverlay';
 
 function iDataSone(n) {
   const el = n.nodeType === 1 ? n : n.parentElement;

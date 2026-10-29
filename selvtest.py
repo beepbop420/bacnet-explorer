@@ -129,7 +129,7 @@ def kjor_tester():
     uten = [d.get("address") for d in r.get("devices") or [] if not d.get("object_name")]
     sjekk("Who-Is-funn får navn", bool(r.get("devices")) and not uten, f"uten navn: {uten}")
 
-    for fil in ("nabe-start", "nabe-verktoy", "nabe-felt", "nabe-moro", "nabe-finn"):
+    for fil in ("nabe-start", "nabe-verktoy", "nabe-felt", "nabe-moro", "nabe-finn", "nabo"):
         try:
             with urllib.request.urlopen(f"{BASE}/js/{fil}.js", timeout=5) as rr:
                 ok = rr.status == 200

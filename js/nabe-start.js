@@ -154,6 +154,12 @@ const FAKTA = [
   ['COV betyr at regulatoren sier fra selv. Mindre spørring, mer ro.', 'COV means the controller speaks up itself. Less asking, more peace.'],
 ];
 const NYTT = {
+  '1.7': [
+    ['NABO - Not Another BACnet Object-namer: tagger og Variabel-fil til Niagara, under Eksport', 'NABO - Not Another BACnet Object-namer: tags and the Variabel file for Niagara, under Export'],
+    ['Enheter fra anlegget og EDE-filer side om side, med device-navnet riktig', 'Devices from the plant and EDE files side by side, with the device name right'],
+    ['Leser og lagrer HeaderBTG.ini, så oppsettet går begge veier mellom BTG og NABO', 'Reads and saves HeaderBTG.ini, so settings go both ways between BTG and NABO'],
+    ['Desimaler per enhetstype og trendintervall som i BTG, og varsel om like tagger', 'Decimals per unit type and trend interval as in BTG, and a warning on duplicate tags'],
+  ],
   '1.6.4': [
     ['Startskjermen viser kortene dine med IP og nettene bak dem - klikk for å skanne derfra', 'The start screen shows your adapters with their IP and the networks behind them - click to scan from there'],
     ['Anleggene står med kontrollernavn, leverandør og hvilket kort de nås via', 'Sites are listed by controller name, vendor and the adapter that reaches them'],
