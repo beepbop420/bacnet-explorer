@@ -864,14 +864,14 @@ function eksporterEde() {
 
 /* ------------------------------------------------------------ the view */
 const NABO_SVG = `<svg class="nabo-fig" viewBox="0 0 32 32" aria-hidden="true">
-  <path class="nabo-tak" d="M4.4 15.2 14.9 6.5q1.1-.9 2.2 0l10.5 8.7"/>
+  <path class="nabo-tak" d="M4.4 15.2 14.9 6.5q1.1-.9 2.2 0l10 8.3 2.6.5"/>
   <path class="nabo-sno" d="M6.4 13.4 14.9 6.5q1.1-.9 2.2 0l3.6 3"/>
   <g class="nabo-flagg"><path d="M24.6 5.6V.6"/><rect x="24.6" y=".6" width="4.4" height="3"/><path class="kryss" d="M24.6 2.1h4.4M26.1.6v3"/></g>
-  <rect class="nabo-hus" x="7" y="13.4" width="18" height="15.6" rx="5.2"/>
-  <g class="nabo-oyne"><circle cx="12.5" cy="19.8" r="1.9"/><circle cx="19.5" cy="19.8" r="1.9"/></g>
-  <g class="nabo-glimt"><circle cx="13.15" cy="19.1" r=".6"/><circle cx="20.15" cy="19.1" r=".6"/></g>
-  <g class="nabo-kinn"><ellipse cx="10.1" cy="23" rx="1.6" ry="1"/><ellipse cx="21.9" cy="23" rx="1.6" ry="1"/></g>
-  <path class="nabo-munn" d="M14.7 23.1q1.3 1.2 2.6 0"/>
+  <rect class="nabo-hus" x="7" y="13.4" width="18" height="15.6" rx="4.4"/>
+  <g class="nabo-oyne"><rect x="10.6" y="18.6" width="4" height="2.5" rx=".9"/><rect x="17.6" y="18.6" width="4" height="2.5" rx=".9"/></g>
+  <g class="nabo-glimt"><circle cx="13.7" cy="19.4" r=".5"/><circle cx="20.7" cy="19.4" r=".5"/></g>
+  <g class="nabo-kinn"><ellipse cx="10.2" cy="23.4" rx="1.3" ry=".7"/><ellipse cx="21.8" cy="23.4" rx="1.3" ry=".7"/></g>
+  <path class="nabo-munn" d="M14.2 23.9q2.3.9 4-.8"/>
   <path class="nabo-pipe" d="M21.8 9.8V6.2h2.6v5.8"/>
   <g class="nabo-roeyk"><circle cx="23.1" cy="4" r="1"/><circle cx="24.4" cy="2.2" r=".75"/><circle cx="25.9" cy=".9" r=".55"/></g>
   <text class="nabo-z" x="26" y="4">z</text>
