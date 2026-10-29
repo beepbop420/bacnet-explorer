@@ -154,6 +154,9 @@ const FAKTA = [
   ['COV betyr at regulatoren sier fra selv. Mindre spørring, mer ro.', 'COV means the controller speaks up itself. Less asking, more peace.'],
 ];
 const NYTT = {
+  '1.6.3': [
+    ['Siste rad i en kort punktliste er ikke lenger tonet ned', 'The last row of a short point list is no longer faded'],
+  ],
   '1.6.2': [
     ['Enheter funnet med Who-Is - på eget nett og via BBMD - får navn og leverandør', 'Devices found by Who-Is - on your own subnet and through a BBMD - get their name and vendor'],
   ],
