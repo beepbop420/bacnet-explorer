@@ -154,6 +154,11 @@ const FAKTA = [
   ['COV betyr at regulatoren sier fra selv. Mindre spørring, mer ro.', 'COV means the controller speaks up itself. Less asking, more peace.'],
 ];
 const NYTT = {
+  '1.14': [
+    ['NABO: lange Niagara-stier brytes etter punktum i stedet for å presse tabellen ut av vinduet', 'NABO: long Niagara paths break after a dot instead of pushing the table out of the window'],
+    ['Skråstrek i punktnavn (OS001/FCB) blir mapper, som punktum', 'A slash in a point name (OS001/FCB) becomes a folder, like a dot'],
+    ['Advarselen om kort sti er borte: den slo ut på hundrevis av leverandørpunkter og druknet de som betyr noe', 'The short path warning is gone: it hit hundreds of vendor points and drowned the ones that matter'],
+  ],
   '1.13': [
     ['NABO: systemnummer skrevet i ett deles som i BTG, 360001 blir 360.001', 'NABO: system numbers written in one piece are split as in BTG, 360001 becomes 360.001'],
     ['Anlegg og prefiks er valgfrie, og du velger selv om de skal stå i taggen', 'Site and prefix are optional, and you choose whether they go in the tag'],

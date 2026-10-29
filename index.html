@@ -3460,7 +3460,7 @@ body{font-family:var(--sans)}
 .nabo-avansert{display:flex;gap:14px;margin-top:10px}
 .nabo-sd-boks{display:flex;align-items:center;gap:6px;height:30px;font-size:12px;color:var(--fg-2);cursor:pointer}
 .nabo-sd-boks input{accent-color:var(--accent);margin:0}
-.nabo-sd{font-family:var(--mono);font-size:10.5px;color:var(--accent);border:1px solid var(--accent-edge);
+.nabo-sd{font-family:var(--mono);font-size:11px;color:var(--accent);border:1px solid var(--accent-edge);
   border-radius:var(--r-sm);padding:0 4px;margin-right:6px}
 .nabo-des-tittel{font-size:11px;color:var(--fg-3);margin-top:12px}
 .nabo-des-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:6px 18px;margin-top:10px}
@@ -3482,7 +3482,7 @@ body{font-family:var(--sans)}
   color:var(--fg);font-family:var(--mono);font-size:12px;font-weight:500;padding:2px 5px}
 .nabo-k-navn:hover{border-color:var(--line)}
 .nabo-k-navn:focus{border-color:var(--accent-edge);outline:none;background:var(--sunken)}
-.nabo-k-meta{font-size:10.5px;color:var(--fg-3);padding:1px 6px 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.nabo-k-meta{font-size:11px;color:var(--fg-3);padding:1px 6px 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .nabo-kilde-anlegg,.nabo-kilde-ede{font-size:9px;letter-spacing:.06em;text-transform:uppercase;padding:0 4px;
   border:1px solid var(--line-2);border-radius:var(--r-sm);margin-right:5px;color:var(--fg-2)}
 .nabo-kilde-anlegg{border-color:color-mix(in srgb,var(--ok) 55%,var(--line))}
@@ -3532,17 +3532,20 @@ body{font-family:var(--sans)}
 .nabo-tabell thead th{position:sticky;top:0;z-index:1;background:var(--panel);text-align:left;font-weight:500;
   font-size:11px;color:var(--fg-3);padding:7px 8px;border-bottom:1px solid var(--line);white-space:nowrap}
 .nabo-tabell td{padding:5px 8px;border-bottom:1px solid var(--line-soft);white-space:nowrap;vertical-align:top}
-.nabo-tabell td.t,.nabo-tabell td.d{font-family:var(--mono);font-size:11.5px}
+.nabo-tabell td.t,.nabo-tabell td.d{font-family:var(--mono);font-size:12px}
 .nabo-tabell td.t{color:var(--fg)}
+/* A tag breaks after a dot, never inside a part: long Niagara paths wrap instead of
+   pushing the table out of the window. */
+.nabo-tabell td.t{white-space:normal;min-width:150px}
 .nabo-tabell td.d{color:var(--fg-3)}
 .nabo-tabell .h{text-align:right;font-family:var(--mono)}
-.nabo-tabell td.u{color:var(--fg-2)}
+.nabo-tabell td.u{color:var(--fg-2);white-space:normal;min-width:64px;max-width:110px}
 .nabo-tabell td.b{color:var(--fg-2);white-space:normal;min-width:170px}
 .nabo-tabell tbody tr:hover td{background:var(--hover)}
 .nabo-tabell tr.feil td{background:color-mix(in srgb,var(--err) 7%,transparent)}
 .nabo-tabell tr.feil td.t{color:var(--err-fg)}
 .nabo-tabell tr.adv td.t{text-decoration:underline dotted color-mix(in srgb,var(--warn) 80%,transparent);text-underline-offset:3px}
-.nabo-hvorfor{display:block;font-size:10.5px;color:var(--warn);margin-top:1px}
+.nabo-hvorfor{display:block;font-size:11px;color:var(--warn);margin-top:1px}
 .nabo-tabell tr.feil .nabo-hvorfor{color:var(--err-fg)}
 .nabo-prikk.tr{display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--live);vertical-align:middle}
 .nabo-kl{font-family:var(--mono);font-size:10px;padding:0 5px;border:1px solid color-mix(in srgb,var(--err) 50%,var(--line));
@@ -3671,7 +3674,7 @@ td.h .nabo-rett-inn{min-width:44px;text-align:right}
 .nabo-diff-rad{display:grid;grid-template-columns:minmax(220px,auto) minmax(120px,200px) 1fr;gap:4px 14px;align-items:baseline;
   padding:5px 14px;border-bottom:1px solid var(--line-soft);font-size:12px}
 .nabo-diff-rad:hover{background:var(--hover)}
-.nabo-diff-rad code{font-family:var(--mono);font-size:11.5px;color:var(--fg)}
+.nabo-diff-rad code{font-family:var(--mono);font-size:12px;color:var(--fg)}
 .nabo-diff-rad .d{font-family:var(--mono);font-size:11px;color:var(--fg-3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .nabo-diff-rad .b{color:var(--fg-2)}
 .nabo-diff-felt{display:flex;flex-direction:column;gap:2px;color:var(--fg-2)}
@@ -3681,8 +3684,8 @@ td.h .nabo-rett-inn{min-width:44px;text-align:right}
 .nabo-norm{display:grid;grid-template-columns:minmax(300px,380px) minmax(0,1fr);min-height:100%}
 .nabo-norm-oppsett{display:flex;flex-direction:column;gap:12px;padding:14px;border-right:1px solid var(--line)}
 .nabo-norm-oppsett label{display:flex;flex-direction:column;gap:5px;font-size:11px;color:var(--fg-3)}
-.nabo-norm-oppsett textarea,.nabo-norm-oppsett input.field{font-family:var(--mono);font-size:11.5px;width:100%;resize:vertical;line-height:1.45;padding:6px 8px}
-.nabo-norm-oppsett small{font-family:var(--mono);font-size:10.5px;color:var(--fg-3)}
+.nabo-norm-oppsett textarea,.nabo-norm-oppsett input.field{font-family:var(--mono);font-size:12px;width:100%;resize:vertical;line-height:1.45;padding:6px 8px}
+.nabo-norm-oppsett small{font-family:var(--mono);font-size:11px;color:var(--fg-3)}
 #naboNormFeil{color:var(--err-fg);font-family:inherit}
 .nabo-bryter{flex-direction:row!important;flex-wrap:wrap;align-items:center;gap:6px 8px!important;padding:10px 12px;
   border:1px solid var(--line);border-radius:var(--radius);cursor:pointer}
@@ -3693,8 +3696,8 @@ td.h .nabo-rett-inn{min-width:44px;text-align:right}
 .nabo-norm-sum{padding:12px 14px;font-size:12px;color:var(--fg-2);border-bottom:1px solid var(--line)}
 .nabo-norm-sum b{font-family:var(--mono);color:var(--fg)}
 .nabo-norm-sum span{color:var(--warn)}
-.nabo-norm-test table{width:100%;border-collapse:collapse;font-size:11.5px;table-layout:auto}
-.nabo-norm-test th{position:sticky;top:0;background:var(--panel);text-align:left;font-weight:500;font-size:10.5px;color:var(--fg-3);padding:6px 8px;border-bottom:1px solid var(--line)}
+.nabo-norm-test table{width:100%;border-collapse:collapse;font-size:12px;table-layout:auto}
+.nabo-norm-test th{position:sticky;top:0;background:var(--panel);text-align:left;font-weight:500;font-size:11px;color:var(--fg-3);padding:6px 8px;border-bottom:1px solid var(--line)}
 .nabo-norm-test tbody td{padding:4px 8px;border-bottom:1px solid var(--line-soft);white-space:nowrap;overflow:visible;text-overflow:clip;font-family:var(--mono);color:var(--fg-2);height:auto}
 .nabo-norm-test td.t{color:var(--fg)}
 .nabo-norm-test td.blir{color:var(--ok)}

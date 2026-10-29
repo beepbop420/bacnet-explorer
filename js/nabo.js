@@ -108,7 +108,8 @@ function naboInnst() {
           // Every separator in a point name starts a new folder in the path:
           // a dot is a folder to Niagara, so dots all the way is the rule.
           // Names that keep an underscore at the end are set per row (hale).
-          skille: '_.- ',
+          // A slash is a folder in names copied from Niagara (OS001/FCB/...).
+          skille: '_.- /',
           // Hand edits, per device and object: what used to be done in Excel.
           rett: her.rett || {},
           // Where files go: '' is the browser's Downloads, anything else a
@@ -335,8 +336,8 @@ function naboResultat() {
       if (objekter.has(ob)) r.feil.push(T('Samme objekt (type og instans) finnes to ganger', 'The same object (type and instance) appears twice'));
       objekter.add(ob);
       if (navnBrukt.get(enhetNavn) > 1) r.feil.push(T('En annen enhet får samme device-navn', 'Another device gets the same device name'));
-      if (r.sti.split('.').length < 3 && !r.system)
-        r.adv.push(T('Kort sti, følger ikke system.nummer.komponent', 'Short path, not system.number.component'));
+      // No warning for a short path: a controller's own points (.avDTempHeat01)
+      // never follow the plant's naming, and nothing can be done about them here.
       if (r.normert === false) r.adv.push(T('Passer ikke normaliseringen, vanlig sti brukt', 'Does not fit the normalisation, plain path used'));
       // + and = are BTG's own +01=360.001 format; Niagara escapes them and NTI expects it.
       const rare = [...new Set((r.sti.match(/[^A-Za-z0-9_.$+=]/g) || []))];
@@ -1042,7 +1043,8 @@ function tegnNabo(helt) {
       const egen = x.rett[felt] !== undefined || (felt === 'sti' && x.hale);
       const ny = er && er.felt === felt ? erstattVerdi(x[felt], er) : null;
       if (ny !== null) forslag++;
-      const innhold = foran + (ny !== null ? `<span class="gml">${esc(tekst)}</span><span class="ny">${esc(ny)}</span>` : esc(tekst));
+      const somTag = v => felt === 'sti' ? esc(v).replace(/\./g, '.<wbr>') : esc(v);
+      const innhold = foran + (ny !== null ? `<span class="gml">${somTag(tekst)}</span><span class="ny">${somTag(ny)}</span>` : somTag(tekst));
       return `<td class="${cls}${egen ? ' egen' : ''}" data-felt="${felt}" data-k="${esc(x.key)}"
         title="${egen ? esc(T('Rettet for hånd. Automatisk: ', 'Edited by hand. Automatic: ') + (felt === 'sti' ? x.stiRen : x.auto[felt])) : T('Klikk for å rette', 'Click to edit')}">${innhold}</td>`;
     };
