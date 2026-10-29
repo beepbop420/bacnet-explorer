@@ -3245,7 +3245,7 @@ function nabeSnakk(tekst) {
   clearInterval(nabeSnakk.skriv);
   clearTimeout(nabeSnakk.ferdig);
   // Beside the name, in the empty top bar, so it never covers the scan box.
-  const navn = m.closest('.brand') || m;
+  const navn = document.getElementById('naboHus') || m.closest('.brand') || m;
   const r = navn.getBoundingClientRect();
   b.style.left = Math.round(r.right + 14) + 'px';
   b.style.top = Math.round(r.top + r.height / 2) + 'px';
@@ -3304,7 +3304,7 @@ function nabeSier(tekst, humor, nokkel) {
   setTimeout(() => {
     const t = d.getHours();
     if (d.getDay() === 5 && t >= 14) nabeSier('Fredag etter to. Ingen nye overstyringer nå, ok?', null, 'fredag');
-    else if (t >= 22 || t < 5) nabeSier('Sent igangkjøringskvelds? Jeg holder deg med selskap.', 'fornoyd', 'natt');
+    else if (t >= 22 || t < 5) nabeSier('Sen kveld med igangkjøring? Jeg holder deg med selskap.', 'fornoyd', 'natt');
     else if (t < 7) nabeSier('Tidlig ute. Kaffen er ikke ferdig ennå.', null, 'morgen');
   }, 2500);
 })();
@@ -3316,7 +3316,7 @@ const NABE_OMRADE = {
   '8.8.8.8': 'Google har ingen BACnet. Vi har sjekket.',
   '1.1.1.1': 'Cloudflare heller ikke.',
   '192.168.1.1': 'Klassikeren. Ruteren i hvert eneste teknisk rom.',
-  '255.255.255.255': 'Alle sammen nå!',
+  '255.255.255.255': 'Alle sammen, ja.',
   '0.0.0.0': 'Overalt og ingensteds.',
   '10.0.0.0/8': 'Seksten millioner adresser. Ta med matpakke.',
 };
@@ -6483,7 +6483,7 @@ function renderInspector() {
   }
 
   const alarmHtml = p.status && p.status.length
-    ? `<div class="sect-body"><div class="warn-box" style="color:var(--err);background:rgba(240,83,63,.08);border-color:rgba(240,83,63,.25)">${esc(p.status.join(', '))}</div></div>`
+    ? `<div class="sect-body"><div class="warn-box" style="color:var(--err);background:color-mix(in srgb,var(--err) 8%,transparent);border-color:color-mix(in srgb,var(--err) 25%,transparent)">${esc(p.status.join(', '))}</div></div>`
     : '';
 
   el.innerHTML = `
@@ -7682,7 +7682,7 @@ function schedTekst(p) {
 
 /* Colour by meaning where the value says something ("Høy"/"On"/1), otherwise
    a stable colour per distinct value so the week still reads as a pattern. */
-const SCHED_PALETTE = ['#3f6f8e', '#6b5b95', '#8e6f3f', '#4f7a6a', '#7a4f6a'];
+const SCHED_PALETTE = ['#3f6f8e', '#5b7a8c', '#8e6f3f', '#4f7a6a', '#7a7458'];
 /* The words are Norwegian on these controllers - "På" and "Av" - and neither
    was recognised, so a schedule that is plainly on and off drew in two
    arbitrary palette colours instead of green and red. The state texts read
@@ -9568,13 +9568,14 @@ const ORDBOK = {
   'Kunne ikke lese brannmuren': 'Could not read the firewall',
   'Svar som kommer som kringkasting slipper inn.': 'Answers sent as broadcasts get in.',
   'Fredag etter to. Ingen nye overstyringer nå, ok?': 'Friday after two. No new overrides now, ok?',
-  'Sent igangkjøringskvelds? Jeg holder deg med selskap.': 'Late commissioning night? I will keep you company.',
+  'Sen kveld med igangkjøring? Jeg holder deg med selskap.': 'Late commissioning night? I will keep you company.',
+  'Hvem banker?': 'Who is knocking?',
   'Tidlig ute. Kaffen er ikke ferdig ennå.': 'Early start. The coffee is not ready yet.',
   'Det er deg selv. Du svarer ikke på Who-Is.': 'That is you. You do not answer Who-Is.',
   'Google har ingen BACnet. Vi har sjekket.': 'Google has no BACnet. We checked.',
   'Cloudflare heller ikke.': 'Neither does Cloudflare.',
   'Klassikeren. Ruteren i hvert eneste teknisk rom.': 'The classic. The router in every plant room.',
-  'Alle sammen nå!': 'Everybody, now!',
+  'Alle sammen, ja.': 'Everybody, yes.',
   'Overalt og ingensteds.': 'Everywhere and nowhere.',
   'Seksten millioner adresser. Ta med matpakke.': 'Sixteen million addresses. Pack a lunch.',
   'Det er en port, ikke et punkt.': 'That is a port, not a point.',

@@ -704,7 +704,7 @@ function lastNedBytes(data, navn, type) {
 /* What changed between the file Niagara got and what NABO would write now.
    Devices are paired by the objects they share, not by name: a device that
    was named after the EDE file last time is still the same controller. */
-const DIFF_FELT = [[3, ['Tag', 'Tag']], [7, ['Enhet', 'Unit']], [8, ['Desimaler', 'Decimals']],
+const DIFF_FELT = [[3, ['Tag', 'Tag']], [7, ['Måleenhet', 'Unit']], [8, ['Desimaler', 'Decimals']],
   [9, ['Tilstander', 'States']], [10, ['Beskrivelse', 'Description']], [11, ['Trend', 'Trend']],
   [12, ['Alarmklasse', 'Alarm class']]];
 
@@ -805,6 +805,7 @@ function eksporterVariabel(bare) {
     naboSier(T('Lys i vinduet hos naboen. Legg deg snart.', 'Lights on next door. Go to bed soon.'));
   }
   if (!feil && !loadPrefs().nabo?.forsteFil) { lagreNabo({forsteFil: Date.now()}); naboKonfetti(); }
+  if (typeof blikk === 'function') blikk(2.4, 0, 1200);
   if (typeof tell === 'function') tell('nabo');
   if (typeof nabeSier === 'function' && !feil) setTimeout(() => nabeSier(
     T('Naboen har levert. Pent arbeid, egentlig.', 'The neighbour delivered. Decent work, actually.'), 'fornoyd', 'nabo-levert'), 900);
@@ -918,8 +919,6 @@ function tegnNabo(helt) {
           <div class="nabo-under">Not Another BACnet Object-namer · ${T('naboen til NABE', 'NABE\u2019s neighbour')}</div></div></div>
         <div class="nabo-gjerde" aria-hidden="true"><button class="nabo-titt" id="naboTitt" title="${T('Tilbake til NABE', 'Back to NABE')}">${NABE_SVG}</button></div>
         <div class="nabo-topp-knapper">
-          <button class="btn" id="naboIniInn" title="${T('Hent prefiks, anlegg, trend og desimaler fra BTG', 'Take prefix, site, trend and decimals from BTG')}">${T('Hent HeaderBTG.ini', 'Load HeaderBTG.ini')}</button>
-          <button class="btn" id="naboIniUt" title="${T('Lagre innstillingene i BTGs format, så BTG kan bruke dem', 'Save the settings in BTG\u2019s format, for BTG to use')}">${T('Lagre .ini', 'Save .ini')}</button>
           <button class="gs-close" id="naboLukk">${T('Lukk', 'Close')} ✕</button>
         </div>
       </header>
@@ -936,15 +935,18 @@ function tegnNabo(helt) {
           <div class="nabo-pref-felt">
             <input class="field" id="naboPrefiks" autocomplete="off" spellcheck="false" placeholder="${T('ingen', 'none')}">
             <select class="field" id="naboPrefMod" title="${T('Hvor prefikset brukes, som Format i BTG', 'Where the prefix is used, like Format in BTG')}">
-              <option value="device">${T('foran device', 'before the device')}</option>
-              <option value="tag">${T('foran device og tag', 'before device and tag')}</option>
+              <option value="device">${T('foran enhetsnavnet', 'before the device')}</option>
+              <option value="tag">${T('foran enhetsnavn og tag', 'before device and tag')}</option>
               <option value="btg">${T('BTG-format +PRE=360.001', 'BTG format +PRE=360.001')}</option>
               <option value="ingen">${T('ikke i bruk', 'not used')}</option>
             </select></div></div>
-        <label class="kort"><span>${T('Trend hvert', 'Trend every')}</span><input class="field" id="naboTrend" autocomplete="off" spellcheck="false"></label>
+        <label class="kort"><span>${T('Trend hvert', 'Trend every')}</span><input class="field" id="naboTrend" autocomplete="off" spellcheck="false" placeholder="tt:mm:ss"></label>
         <details class="nabo-des"><summary>${T('Avansert', 'Advanced')}</summary>
           <div class="nabo-avansert">
             <label class="kort" title="${T('Citect-cluster fra BTG. Brukes ikke i Niagara-taggene, bare lagret i HeaderBTG.ini.', 'Citect cluster from BTG. Not used in the Niagara tags, only kept in HeaderBTG.ini.')}"><span>Cluster <i>(Citect)</i></span><input class="field" id="naboCluster" autocomplete="off" spellcheck="false"></label>
+            <label class="nabo-sd-valg"><span>HeaderBTG.ini</span><span class="nabo-ini">
+              <button type="button" class="btn" id="naboIniInn" title="${T('Hent prefiks, anlegg, trend og desimaler fra BTG', 'Take prefix, site, trend and decimals from BTG')}">${T('Hent…', 'Load…')}</button>
+              <button type="button" class="btn" id="naboIniUt" title="${T('Lagre innstillingene i BTGs format, så BTG kan bruke dem', 'Save the settings in BTG\u2019s format, for BTG to use')}">${T('Lagre', 'Save')}</button></span></label>
             <label class="nabo-sd-valg"><span>${T('Normalisering', 'Normalisation')}</span>
               <button type="button" class="btn" id="naboNormKnapp" title="${T('BTGs regex, mal og TC2-koder. Trengs sjelden: punktum hele veien og unntakene dekker det meste.', 'BTG\u2019s regex, template and TC2 codes. Rarely needed: dots all the way and the exceptions cover most.')}">${T('Åpne normalisering…', 'Open normalisation…')}</button></label>
           </div>
@@ -956,7 +958,7 @@ function tegnNabo(helt) {
         <aside class="nabo-kilder">
           <div class="nabo-h">${T('Enheter', 'Devices')} <span id="naboAntK"></span></div>
           <div class="nabo-kliste" id="naboKliste"></div>
-          <label class="nabo-slipp" id="naboSlipp">
+          <label class="nabo-slipp" id="naboSlipp" tabindex="0">
             <input type="file" id="naboFil" accept=".csv,.txt,.ini" multiple hidden>
             <b>${T('Legg til EDE-filer', 'Add EDE files')}</b>
             <span>${T('eller slipp dem her, gjerne med _StateTexts og HeaderBTG.ini', 'or drop them here, with _StateTexts and HeaderBTG.ini if you have them')}</span>
@@ -970,7 +972,7 @@ function tegnNabo(helt) {
             </div>
             <input class="field" id="naboSok" type="search" placeholder="${T('Søk i tag, navn eller beskrivelse', 'Search tag, name or description')}" autocomplete="off" spellcheck="false">
             <div class="nabo-filter" role="tablist">
-              ${[['alle', T('Alle', 'All')], ['adv', T('Advarsler', 'Warnings')], ['rettet', T('Rettet', 'Edited')], ['alarm', 'Alarm'], ['trend', 'Trend']]
+              ${[['alle', T('Alle', 'All')], ['adv', T('Feil og advarsler', 'Problems')], ['rettet', T('Rettet', 'Edited')], ['alarm', 'Alarm'], ['trend', 'Trend']]
                 .map(([k, l]) => `<button data-f="${k}" role="tab">${l}<em></em></button>`).join('')}
             </div>
             <button class="btn" id="naboErstattKnapp" title="${T('Søk og erstatt i tagger eller beskrivelser (Ctrl+H)', 'Find and replace in tags or descriptions (Ctrl+H)')}">${T('Erstatt…', 'Replace…')}</button>
@@ -989,17 +991,17 @@ function tegnNabo(helt) {
             <span class="nabo-er-tall" id="naboErTall"></span>
             <button class="btn primary" id="naboErBruk">${T('Bruk', 'Apply')}</button>
             <button class="btn" id="naboErAngre" hidden>${T('Angre', 'Undo')}</button>
-            <button class="gs-close" id="naboErLukk" title="${T('Lukk', 'Close')}">✕</button>
+            <button class="nabo-x" id="naboErLukk" title="${T('Lukk', 'Close')}" aria-label="${T('Lukk', 'Close')}">✕</button>
           </div>
           <div class="nabo-globalt" id="naboGlobalt"></div>
           <div class="nabo-markert" id="naboMarkert" hidden>
             <span class="nabo-mark-tall" id="naboMarkTall"></span>
-            <button class="btn primary" id="naboHale" title="${T('Slå sammen de to siste leddene med understrek, f.eks. SYSTEM.OU001.HB_KV', 'Join the last two parts with an underscore, e.g. SYSTEM.OU001.HB_KV')}">${T('Siste med understrek', 'Last with underscore')}</button>
+            <button class="btn" id="naboHale" title="${T('Slå sammen de to siste leddene med understrek, f.eks. SYSTEM.OU001.HB_KV', 'Join the last two parts with an underscore, e.g. SYSTEM.OU001.HB_KV')}">${T('Siste med understrek', 'Last with underscore')}</button>
             <button class="btn" id="naboPunktum" title="${T('Tilbake til standard: punktum mellom alle leddene', 'Back to the standard: dots between all parts')}">${T('Punktum hele veien', 'Dots all the way')}</button>
-            <span class="nabo-mark-skille">${T('marker også', 'also tick')}</span>
+            <span class="nabo-mark-skille">${T('marker også', 'also select')}</span>
             <button class="btn" id="naboLike" title="${T('Alle punkter med samme navnemønster, f.eks. alle *_HB_KV', 'Every point with the same name pattern, e.g. every *_HB_KV')}">${T('samme navnemønster', 'same name pattern')}</button>
             <button class="btn" id="naboType" title="${T('Alle punkter av samme punkttype', 'Every point of the same point type')}">${T('samme type', 'same type')}</button>
-            <button class="gs-close" id="naboMarkLukk" title="${T('Fjern markeringen', 'Clear the selection')}">✕</button>
+            <button class="nabo-x" id="naboMarkLukk" title="${T('Fjern markeringen', 'Clear the selection')}" aria-label="${T('Fjern markeringen', 'Clear the selection')}">✕</button>
           </div>
           <div class="nabo-tabell" id="naboTabell"></div>
         </main>
@@ -1008,8 +1010,8 @@ function tegnNabo(helt) {
         <div class="nabo-sum" id="naboSum"></div>
         <label class="nabo-mappe"><span>${T('Lagre i', 'Save in')}</span><select class="field" id="naboMappe"></select></label>
         <button class="nabo-vis" id="naboVis" hidden>${T('Åpne mappa', 'Open folder')}</button>
-        <label class="nabo-per"><input type="checkbox" id="naboPer"> ${T('Én fil per enhet', 'One file per device')}</label>
-        <button class="btn" id="naboEde">${T('EDE-filer', 'EDE files')}</button>
+        <label class="nabo-per" title="${T('Gjelder Variabel-fila. EDE lagres alltid én per enhet.', 'Applies to the Variabel file. EDE is always one per device.')}"><input type="checkbox" id="naboPer"> ${T('Én fil per enhet', 'One file per device')}</label>
+        <button class="btn" id="naboEde">${T('Lagre EDE-filer', 'Save EDE files')}</button>
         <button class="btn primary" id="naboVar">${T('Lag Variabel-fil', 'Make Variabel file')}</button>
       </footer>
     </div>`;
@@ -1055,8 +1057,8 @@ function tegnNabo(helt) {
     return `<div class="nabo-k${k.av ? ' av' : ''}" data-id="${esc(k.id)}">
       <input type="checkbox" class="nabo-k-med" ${k.av ? '' : 'checked'} title="${T('Ta med', 'Include')}">
       <div class="nabo-k-tekst">
-        <input class="nabo-k-navn" value="${esc(navn)}" spellcheck="false" title="${T('Navnet devicen har i Niagara. Prefikset settes foran.', 'The device\u2019s name in Niagara. The prefix goes in front.')}">
-        <div class="nabo-k-meta"><span class="nabo-kilde-${k.type}">${k.type === 'ede' ? 'EDE' : T('Anlegg', 'Plant')}</span>${
+        <input class="nabo-k-navn" value="${esc(navn)}" spellcheck="false" title="${T('Navnet enheten har i Niagara. Prefikset settes foran.', 'The device\u2019s name in Niagara. The prefix goes in front.')}">
+        <div class="nabo-k-meta"><span class="nabo-kilde-${k.type}">${k.type === 'ede' ? 'EDE' : T('Anlegg', 'Live')}</span>${
           k.usikker && !(naboInnst().navn[devNokkel(k)]) ? `<span class="nabo-sjekk">${T('sjekk navnet', 'check the name')}</span>` : ''}
           ${esc(k.type === 'ede' ? k.fil : k.fil)}${k.instans != null && k.instans !== '' ? ` · #${esc(k.instans)}` : ''}</div>
       </div>
@@ -1077,6 +1079,7 @@ function tegnNabo(helt) {
                 alarm: r.rader.filter(x => x.klasse).length, trend: r.rader.filter(x => x.trend).length};
   ov.querySelectorAll('.nabo-visning button').forEach(b => b.classList.toggle('sel', b.dataset.v === NABO.visning));
   ov.querySelector('.nabo-verktoy').hidden = !NABO.kilder.length;
+  ov.querySelector('.nabo-kropp').classList.toggle('tom', !NABO.kilder.length);
   ov.querySelector('.nabo-slipp').hidden = !NABO.kilder.length;
   ov.querySelector('.nabo-filter').hidden = NABO.visning !== 'var';
   $('naboErstattKnapp').hidden = NABO.visning !== 'var';
@@ -1109,8 +1112,8 @@ function tegnNabo(helt) {
         title="${egen ? esc(T('Rettet for hånd. Automatisk: ', 'Edited by hand. Automatic: ') + (felt === 'sti' ? x.stiRen : x.auto[felt])) : T('Klikk for å rette', 'Click to edit')}">${innhold}</td>`;
     };
     $('naboTabell').innerHTML = r.rader.length ? `<table class="nabo-rettbar">
-    <thead><tr><th class="velg"><input type="checkbox" id="naboVelgAlle" title="${T('Marker alle viste rader (Shift-klikk en rad markerer alt mellom)', 'Tick every row shown (Shift-click a row ticks everything between)')}"${vis.length && vis.every(x => NABO.valgt.has(x.key)) ? ' checked' : ''}></th><th>Tag</th><th>${T('Navn i anlegget', 'Name in the plant')}</th><th>${T('Type', 'Type')}</th><th class="h">Inst</th><th>${T('Enhet', 'Unit')}</th>
-      <th class="h">Des</th><th>Trend</th><th>Alarm</th><th>${T('Beskrivelse', 'Description')}</th><th></th></tr></thead>
+    <thead><tr><th class="velg"><input type="checkbox" id="naboVelgAlle" title="${T('Marker alle viste rader (Shift-klikk en rad markerer alt mellom)', 'Select every row shown (Shift-click a row selects everything between)')}"${vis.length && vis.every(x => NABO.valgt.has(x.key)) ? ' checked' : ''}></th><th>Tag</th><th>${T('Navn i anlegget', 'Name in the plant')}</th><th>${T('Type', 'Type')}</th><th class="h">Inst</th><th>${T('Måleenhet', 'Unit')}</th>
+      <th class="h" title="${T('Desimaler', 'Decimals')}">Des</th><th>Trend</th><th>Alarm</th><th>${T('Beskrivelse', 'Description')}</th><th></th></tr></thead>
     <tbody>${vis.slice(0, MAKS).map((x, i, a) => {
       // A heading where the device changes: the device field is said once,
       // not on every row, and clicking it ticks the whole device.
@@ -1135,7 +1138,7 @@ function tegnNabo(helt) {
         <td class="nabo-angre-c">${rettet ? `<button class="nabo-angre" data-k="${esc(x.key)}" title="${T('Tilbake til det automatiske', 'Back to the automatic value')}">↺</button>` : ''}</td></tr>`;
     }).join('')}</tbody></table>${vis.length > MAKS ? `<div class="nabo-mer">${T(`Viser ${MAKS} av ${vis.length}. Søk for å snevre inn.`, `Showing ${MAKS} of ${vis.length}. Search to narrow it down.`)}</div>` : ''}
     ${!vis.length ? `<div class="nabo-tom">${T('Ingen rader passer.', 'No rows match.')}</div>` : ''}`
-    : `<label class="nabo-start">${NABO_SVG}
+    : `<label class="nabo-start" tabindex="0">${NABO_SVG}
         <b>${T('Slipp EDE-filene her', 'Drop the EDE files here')}</b>
         <span>${T('eller', 'or')} <u>${T('velg filer', 'choose files')}</u> · ${T('_StateTexts og HeaderBTG.ini kan være med', '_StateTexts and HeaderBTG.ini may come along')}</span>
         <small>${T('Enheter du har åpnet i NABE kommer med av seg selv.', 'Devices you have opened in NABE come along by themselves.')}</small>
@@ -1181,11 +1184,11 @@ function tegnDiff(r, q) {
           · <b class="borte">${d.borte.length}</b> ${T('borte', 'gone')}
           · <b>${d.like}</b> ${T('like', 'unchanged')}</span></div>
       <button class="btn" id="naboFasitVelg">${T('Annen fil', 'Another file')}</button>
-      <button class="btn primary" id="naboBareEndr" ${d.nye.length + d.endret.length ? '' : 'disabled'}
+      <button class="btn" id="naboBareEndr" ${d.nye.length + d.endret.length ? '' : 'disabled'}
         title="${T('Bare radene NTI må importere på nytt', 'Only the rows NTI needs to import again')}">${T('Fil med bare nye og endrede', 'File with only new and changed')}</button>
     </div>
     ${d.omdopt.length ? `<div class="nabo-diff-omdopt">${d.omdopt.map(([a, b]) =>
-      `<span>${T('Device-navn', 'Device name')} <s>${esc(a)}</s> → <b>${esc(b)}</b></span>`).join('')}</div>` : ''}
+      `<span>${T('Enhetsnavn', 'Device name')} <s>${esc(a)}</s> → <b>${esc(b)}</b></span>`).join('')}</div>` : ''}
     ${endret.length ? `<div class="nabo-diff-sek"><div class="nabo-diff-h endr">${T('Endret', 'Changed')} <em>${endret.length}</em></div>
       ${vis(endret, 400).map(e => `<div class="nabo-diff-rad"><code>${esc(e.x.sti)}</code><span class="d">${esc(e.x.enhetNavn)}</span>
         <div class="nabo-diff-felt">${e.diff.map(x => `<span><i>${esc(x.navn)}</i> <s>${esc(x.fra) || '–'}</s> → <b>${esc(x.til) || '–'}</b></span>`).join('')}</div></div>`).join('')}</div>` : ''}
@@ -1217,6 +1220,7 @@ function tegnNorm(r) {
   if (!el.querySelector('.nabo-norm')) {
     el.innerHTML = `<div class="nabo-norm">
       <div class="nabo-norm-oppsett">
+        <button type="button" class="btn nabo-tilbake" id="naboNormTilbake">← ${T('Variabler', 'Variables')}</button>
         <label class="nabo-bryter"><input type="checkbox" id="naboNormPaa"> <b>${T('Bruk normalisering', 'Use normalisation')}</b>
           <span>${T('Stien bygges fra regex-gruppene i stedet for å deles på _ og .', 'The path is built from the regex groups instead of splitting on _ and .')}</span></label>
         <label><span>Regex</span><textarea class="field" id="naboNormRe" rows="3" spellcheck="false"></textarea>
@@ -1237,6 +1241,7 @@ function tegnNorm(r) {
     let tid;
     const senere = () => { clearTimeout(tid); tid = setTimeout(lagre, 250); };
     $('naboNormPaa').onchange = lagre;
+    $('naboNormTilbake').onclick = () => { NABO.visning = 'var'; tegnNabo(); };
     ['naboNormRe', 'naboNormMal', 'naboNormKoder'].forEach(id => $(id).addEventListener('input', senere));
     $('naboNormStd').onclick = () => { lagreNabo({norm: Object.assign({}, NORM_STD, {paa: naboInnst().norm.paa})}); el.innerHTML = ''; tegnNabo(); };
     $('naboNormPaa').checked = o.norm.paa;
@@ -1557,6 +1562,10 @@ function koblNabo(ov) {
     NABO.kilder = NABO.kilder.filter(x => x.id !== id); tegnNabo();
   });
   $('naboFil').addEventListener('change', (e) => { leggTilFiler(e.target.files); e.target.value = ''; });
+  ov.addEventListener('keydown', (e) => {
+    const z = e.target.closest && e.target.closest('.nabo-slipp, .nabo-start');
+    if (z && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); z.querySelector('input[type=file]')?.click(); }
+  });
   $('naboTabell').addEventListener('change', (e) => {
     if (!e.target.classList.contains('nabo-start-fil')) return;
     leggTilFiler(e.target.files); e.target.value = '';
@@ -1577,10 +1586,16 @@ function koblNabo(ov) {
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape' && !ov.hidden) {
       if (document.activeElement?.classList.contains('nabo-rett-inn')) return;
-      if (NABO.erstatt && ov.contains(document.activeElement) && document.activeElement.closest('.nabo-erstatt')) {
-        e.preventDefault(); e.stopPropagation(); lukkErstatt(); return;
-      }
-      e.preventDefault(); e.stopPropagation(); lukkNabo();
+      e.preventDefault(); e.stopPropagation();
+      // One step back at a time: replace bar, selection, a side view, the
+      // search, Advanced - and only then NABO itself.
+      const avansert = ov.querySelector('.nabo-des[open]');
+      if (NABO.erstatt) lukkErstatt();
+      else if (NABO.valgt.size) { NABO.valgt.clear(); tegnNabo(); }
+      else if (NABO.visning !== 'var') { NABO.visning = 'var'; tegnNabo(); }
+      else if (NABO.sok) { NABO.sok = ''; $('naboSok').value = ''; tegnNabo(); }
+      else if (avansert) avansert.open = false;
+      else lukkNabo();
     }
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'h' && !ov.hidden && NABO.visning === 'var') {
       e.preventDefault(); e.stopPropagation(); aapneErstatt();
@@ -1699,7 +1714,7 @@ function naboHusTittel() {
     const a = midt(fra), b = midt(til);
     const ball = document.createElement('span');
     ball.className = 'nabo-ball';
-    ball.title = T('Ta den!', 'Catch it!');
+    ball.title = T('Ta den.', 'Catch it.');
     ball.addEventListener('pointerdown', (e) => {
       e.stopPropagation();
       LEK.leker = false;
@@ -1730,7 +1745,8 @@ function naboHusTittel() {
 
   async function lek() {
     const m = nabeMerke(), h = $('naboHus');
-    if (!m || !h || LEK.leker || bevegelseAv()) return;
+    if (!m || !h || LEK.leker || bevegelseAv() || document.hidden
+        || document.querySelector('.gs-overlay:not([hidden])') || $('startskjerm')) return;
     LEK.leker = true; LEK.lekt = true; LEK.avbrutt = false;
     // NABE's own clock would put him straight back to sleep; tell it he just moved.
     NABE.sist = Date.now() - 60000;
@@ -1755,8 +1771,10 @@ function naboHusTittel() {
     if (!LEK.leker) return;
     if (LEK.avbrutt) { LEK.leker = false; LEK.avbrutt = false; h.classList.remove('sover'); return; }
     await vent(900);
+    if (LEK.avbrutt) { LEK.leker = false; LEK.avbrutt = false; return; }
     m.classList.add('sover'); nabeOppdater();
     await vent(1400);
+    if (LEK.avbrutt) { LEK.leker = false; LEK.avbrutt = false; m.classList.remove('sover'); nabeOppdater(); return; }
     if (LEK.leker) h.classList.add('sover');
     LEK.leker = false;
   }
@@ -1784,6 +1802,18 @@ function naboHusTittel() {
     if (LEK.lekt) { LEK.lekt = false; nyNaar(); }
   }, {passive: true});
 
+  // A scan that found something: a puff from next door. A file made: NABE
+  // glances at the house.
+  if (typeof nabeEtterSkann === 'function') {
+    const _skann = nabeEtterSkann;
+    nabeEtterSkann = function (n) {
+      const r = _skann.apply(this, arguments);
+      const h = $('naboHus');
+      if (n > 0 && h && !bevegelseAv()) { h.classList.add('puff'); setTimeout(() => h.classList.remove('puff'), 1600); }
+      return r;
+    };
+  }
+
   // Now and then, while awake, a little puff from the chimney.
   (function pust() {
     setTimeout(() => {
@@ -1799,7 +1829,7 @@ function naboHusTittel() {
      The house dresses for the season; a few words typed in NABO's search get
      an answer; five knocks on the house in NABO and NABE asks who it is. */
   const d = new Date(), md = (d.getMonth() + 1) * 100 + d.getDate();
-  const sesong = d.getMonth() === 11 ? 'jul' : md === 517 ? 'mai17' : md === 1031 ? 'halloween' : '';
+  const sesong = d.getMonth() === 11 && d.getDate() <= 26 ? 'jul' : md === 517 ? 'mai17' : md === 1031 ? 'halloween' : '';
   if (sesong) document.documentElement.classList.add('nabo-' + sesong);
 
   const SOK_SVAR = {
@@ -1822,12 +1852,14 @@ function naboHusTittel() {
     const naa = Date.now();
     bank = bank.filter(t => naa - t < 2000); bank.push(naa);
     const h = $('naboHusStor');
-    h.classList.add('banke'); setTimeout(() => h.classList.remove('banke'), 380);
+    h.classList.remove('banke'); void h.offsetWidth; h.classList.add('banke');
+    clearTimeout(h._bank); h._bank = setTimeout(() => h.classList.remove('banke'), 380);
     if (bank.length >= 5) {
       bank = [];
       const titt = $('naboTitt');
       if (titt) { titt.classList.add('opp'); setTimeout(() => titt.classList.remove('opp'), 2600); }
-      naboSier(T('NABE: «Hvem banker?» – Det er naboen.', 'NABE: "Who is knocking?" - It is the neighbour.'));
+      if (typeof nabeSier === 'function') nabeSier('Hvem banker?', 'skvatt');
+      setTimeout(() => naboSier(T('Naboen.', 'The neighbour.')), 900);
     }
   });
 

@@ -23,7 +23,7 @@
      one control and 5px on the next. Nothing was wrong with any single value;
      what was wrong was that there was no scale, only a decision per element.
      A tool people use all day should look like it was measured once. */
-  --radius:4px; --r-sm:2px; --r-lg:6px; --r-pill:999px;
+  --radius:4px; --r-sm:2px; --r-lg:6px; --r-pill:var(--r-sm);
   --t-1:9px; --t-2:10px; --t-3:11px; --t-4:12px; --t-5:13px;
   /* Small uppercase labels are the one place tracking earns its keep: it is
      what makes a label read as a panel heading rather than shrunken text. */
@@ -147,25 +147,25 @@
    Everything moves on transform and opacity, and the whole thing is one
    button 52px wide - it costs nothing to have it be nice. */
 .theme-tgl{
-  position:relative;flex:0 0 auto;width:52px;height:24px;border-radius:var(--r-pill);
-  background:linear-gradient(90deg,#101a33,#1b2a4d);
-  border:1px solid rgba(255,255,255,.22);
+  position:relative;flex:0 0 auto;width:52px;height:24px;border-radius:var(--radius);
+  background:var(--sunken);
+  border:1px solid var(--line-2);
   cursor:pointer;padding:0;overflow:hidden;
   transition:background 480ms ease, border-color 480ms ease;
 }
-.theme-tgl:hover{border-color:rgba(255,255,255,.42)}
-.theme-tgl:focus-visible{outline:2px solid #fff;outline-offset:2px}
+.theme-tgl:hover{border-color:var(--fg-3)}
+.theme-tgl:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 :root[data-theme="light"] .theme-tgl{
-  background:linear-gradient(90deg,#7cc4f5,#bfe4ff);border-color:rgba(255,255,255,.55);
+  background:var(--sunken);border-color:var(--line-2);
 }
 
 /* Stars: three dots on the night side, gone by day. */
 .theme-tgl::before{
   content:'';position:absolute;inset:0;pointer-events:none;
   background:
-    radial-gradient(circle at 32px 7px, rgba(255,255,255,.9) 0 1px, transparent 1.6px),
-    radial-gradient(circle at 40px 15px, rgba(255,255,255,.7) 0 .9px, transparent 1.4px),
-    radial-gradient(circle at 25px 16px, rgba(255,255,255,.55) 0 .8px, transparent 1.3px);
+    radial-gradient(circle at 32px 7px, var(--fg-3) 0 1px, transparent 1.6px),
+    radial-gradient(circle at 40px 15px, var(--fg-3) 0 .9px, transparent 1.4px),
+    radial-gradient(circle at 25px 16px, var(--fg-3) 0 .8px, transparent 1.3px);
   opacity:1;transition:opacity 380ms ease;
 }
 :root[data-theme="light"] .theme-tgl::before{opacity:0}
@@ -173,8 +173,8 @@
 /* The moon: on the left in the dark, gone out the right in daylight. */
 .theme-tgl i{
   position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:50%;
-  background:radial-gradient(circle at 35% 32%, #ffffff, #d7dced 70%);
-  box-shadow:0 0 8px rgba(200,220,255,.55), inset -3px -1px 0 -1px #b9c2d8;
+  background:var(--fg-2);
+  box-shadow:inset -4px -1px 0 -1px var(--sunken);
   font-size:0;
   transition:transform 520ms cubic-bezier(.5,.05,.2,1), opacity 300ms ease;
 }
@@ -186,8 +186,7 @@
 .theme-tgl::after{
   content:'';position:absolute;top:3px;left:3px;width:18px;height:18px;
   border-radius:50%;pointer-events:none;
-  background:radial-gradient(circle at 38% 34%, #fff6c8, #ffb020 72%);
-  box-shadow:0 0 10px rgba(255,190,60,.75);
+  background:var(--warn);
   transform:translateX(-30px) scale(.55);opacity:0;
   transition:transform 520ms cubic-bezier(.5,.05,.2,1), opacity 320ms ease 90ms;
 }
@@ -339,7 +338,7 @@ button{background:none;border:none;cursor:pointer}
    list with, and WebView2 falls back to a white menu carrying the field's
    grey text. The options get the theme's own surface and ink. */
 select option,select optgroup{background-color:var(--raised);color:var(--fg)}
-.topbar .field option{background:#1a1550;color:#fff}
+.topbar .field option{background:var(--panel);color:var(--fg)}
 .topbar .btn{background:rgba(255,255,255,.12);border-color:rgba(255,255,255,.22);color:#fff}
 .topbar .btn:hover:not(:disabled){background:rgba(255,255,255,.20)}
 .topbar .btn.primary{background:var(--nm-red);border-color:var(--nm-red);color:#fff;font-weight:500}
@@ -366,7 +365,7 @@ select.field{font-family:var(--sans);cursor:pointer}
   border:1px solid var(--line-2);border-radius:var(--radius);padding:4px 10px;font-size:12px;
   color:var(--fg);background:var(--raised);transition:.12s;white-space:nowrap;
 }
-.btn:hover:not(:disabled){background:var(--hover);border-color:#3a444f}
+.btn:hover:not(:disabled){background:var(--hover);border-color:var(--fg-3)}
 .btn:disabled{opacity:.35;cursor:not-allowed}
 .btn.primary{background:var(--accent-dim);border-color:var(--accent-edge);color:var(--on-accent)}
 .btn.primary:hover:not(:disabled){background:var(--accent-press)}
@@ -647,7 +646,7 @@ body.resizing iframe{pointer-events:none}
 /* ---------- device list ---------- */
 .dev{
   display:block;width:100%;text-align:left;padding:7px 10px;
-  border-bottom:1px solid #14181e;cursor:pointer;transition:background .1s;
+  border-bottom:1px solid var(--line-soft);cursor:pointer;transition:background .1s;
 }
 .dev:hover{background:var(--raised)}
 .dev.sel{background:var(--accent-dim);box-shadow:inset 2px 0 0 var(--accent)}
@@ -675,7 +674,7 @@ body.resizing iframe{pointer-events:none}
 }
 /* dodgerBlue on the selection fill is only 4.1:1 — on the highlighted row the
    badge needs a lighter tint of the same hue. */
-.dev.sel .dev-cached{color:#8ec5ff}
+.dev.sel .dev-cached{color:var(--accent)}
 /* Secondary text has to lift on the highlighted row: --fg-3 reads at 5.8:1 on
    the panel but only 3.4:1 on the selection fill, and that was true of the old
    palette too. Measured, not assumed. */
@@ -773,14 +772,14 @@ body.resizing iframe{pointer-events:none}
    expanded pushed the device list off screen. The accent bar follows the
    language already used for vendor colour: a thin vertical rule, not a dot. */
 .dup-warn{
-  flex:0 0 auto;background:rgba(255,201,0,.09);
-  border-bottom:1px solid rgba(255,201,0,.28);
+  flex:0 0 auto;background:color-mix(in srgb,var(--warn) 9%,transparent);
+  border-bottom:1px solid color-mix(in srgb,var(--warn) 28%,transparent);
   box-shadow:inset 2px 0 0 var(--warn);
 }
 .dup-warn[hidden]{display:none}
 .dup-warn.severe{
-  background:rgba(255,107,87,.09);
-  border-bottom-color:rgba(255,107,87,.30);
+  background:color-mix(in srgb,var(--err) 9%,transparent);
+  border-bottom-color:color-mix(in srgb,var(--err) 30%,transparent);
   box-shadow:inset 2px 0 0 var(--err);
 }
 .warn-head{
@@ -793,7 +792,7 @@ body.resizing iframe{pointer-events:none}
 .warn-title{flex:1 1 auto;min-width:0}
 .warn-chev{flex:0 0 auto;color:var(--fg-3);font-size:11px}
 .warn-body{padding:0 9px 8px 11px}
-.warn-sect + .warn-sect{margin-top:8px;padding-top:8px;border-top:1px solid rgba(255,201,0,.20)}
+.warn-sect + .warn-sect{margin-top:8px;padding-top:8px;border-top:1px solid color-mix(in srgb,var(--warn) 20%,transparent)}
 /* Only the fault is coloured. The instance and address stay neutral so the
    eye lands on what is wrong instead of on the whole block. */
 .warn-row{
@@ -851,11 +850,11 @@ body.resizing iframe{pointer-events:none}
   font-family:var(--mono);font-size:10px;color:var(--fg-2);
   background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:2px 6px;
 }
-.ctx-stat.bad{color:var(--err);border-color:rgba(255,107,87,.35);background:rgba(255,107,87,.10)}
+.ctx-stat.bad{color:var(--err);border-color:color-mix(in srgb,var(--err) 35%,transparent);background:color-mix(in srgb,var(--err) 10%,transparent)}
 /* Overridden and out-of-service are not faults - someone did that on purpose.
    They are still the first thing you want to see before handing a plant back,
    so they get their own colour rather than being hidden or shown as errors. */
-.ctx-stat.warn{color:var(--warn);border-color:rgba(255,201,0,.35);background:rgba(255,201,0,.10)}
+.ctx-stat.warn{color:var(--warn);border-color:color-mix(in srgb,var(--warn) 35%,transparent);background:color-mix(in srgb,var(--warn) 10%,transparent)}
 .ctx-stat[data-flag]{cursor:pointer}
 .ctx-stat[data-flag]:hover{filter:brightness(1.25)}
 
@@ -879,7 +878,7 @@ body.resizing iframe{pointer-events:none}
 .chip.on{background:var(--accent-dim);border-color:var(--accent);color:var(--on-accent)}
 /* Read-only is a safety state, so it reads as a warning rather than as
    just another toggled button. */
-.btn.ro-on{background:rgba(255,201,0,.18);border-color:var(--warn);color:var(--warn)}
+.btn.ro-on{background:color-mix(in srgb,var(--warn) 18%,transparent);border-color:var(--warn);color:var(--warn)}
 
 /* ---------- points table ---------- */
 /* Fixed layout keeps the value column on screen no matter how long the
@@ -901,7 +900,7 @@ thead th .arr{font-size:9px;color:var(--accent);margin-left:3px}
   font-size:9px;font-weight:700;vertical-align:super;margin-left:1px;
   color:var(--accent);
 }
-tbody tr{height:var(--row);border-bottom:1px solid #151a20;cursor:pointer}
+tbody tr{height:var(--row);border-bottom:1px solid var(--line-soft);cursor:pointer}
 /* Faint banding makes it far easier to follow one row across to the value
    column on a wide table. Kept under 2% so it never reads as a colour. */
 tbody tr:nth-child(even){background:rgba(255,255,255,.017)}
@@ -1414,8 +1413,8 @@ body.dense table{font-size:11px}
 .wf-row{display:flex;gap:6px;align-items:center}
 .wf-row .field{flex:1;min-width:0}
 .warn-box{
-  font-size:10px;color:var(--warn);background:rgba(255,201,0,.08);
-  border:1px solid rgba(255,201,0,.25);border-radius:var(--radius);padding:5px 7px;line-height:1.4;
+  font-size:10px;color:var(--warn);background:color-mix(in srgb,var(--warn) 8%,transparent);
+  border:1px solid color-mix(in srgb,var(--warn) 25%,transparent);border-radius:var(--radius);padding:5px 7px;line-height:1.4;
 }
 
 /* ---------- status bar ---------- */
@@ -1436,7 +1435,7 @@ body.dense table{font-size:11px}
   padding:0 4px;border-radius:var(--r-sm);line-height:15px;
   color:var(--fg-3);background:var(--raised);
 }
-.dev-seen.borte{color:var(--warn);background:rgba(255,201,0,.14)}
+.dev-seen.borte{color:var(--warn);background:color-mix(in srgb,var(--warn) 14%,transparent)}
 .dev-seen + .dev-flag{margin-left:5px}
 .statusbar b{color:var(--fg-2);font-weight:600}
 
@@ -2009,8 +2008,8 @@ body.uten-bevegelse #himmel{display:none}
   background:var(--line-2);
 }
 .diag-rad.ok    .diag-ikon{background:var(--ok)}
-.diag-rad.advarsel .diag-ikon{background:var(--warn);color:#241c00}
-.diag-rad.feil  .diag-ikon{background:var(--err);color:#2a0700}
+.diag-rad.advarsel .diag-ikon{background:var(--warn);color:var(--panel)}
+.diag-rad.feil  .diag-ikon{background:var(--err);color:var(--panel)}
 .diag-rad.gaar  .diag-ikon{background:none;border:2px solid var(--line-2);
   border-top-color:var(--accent);animation:sp .7s linear infinite}
 .diag-navn{font-weight:600;font-size:var(--t-3)}
@@ -2993,8 +2992,8 @@ tbody tr.picked > td:first-child::before{
 }
 .tema-hjelp{font-size:10px;color:var(--fg-3);padding:2px 0 6px}
 .tema-advarsel{
-  font-size:10px;color:var(--warn);background:rgba(255,201,0,.08);
-  border:1px solid rgba(255,201,0,.25);border-radius:var(--radius);
+  font-size:10px;color:var(--warn);background:color-mix(in srgb,var(--warn) 8%,transparent);
+  border:1px solid color-mix(in srgb,var(--warn) 25%,transparent);border-radius:var(--radius);
   padding:6px 9px;margin:4px 0 8px;line-height:1.45;
 }
 .bilde-rad{gap:10px}
@@ -3045,10 +3044,10 @@ body.drar,body.drar .wk-blk.redigerbar{cursor:grabbing;user-select:none}
 }
 .gs-chip:hover{background:var(--hover)}
 .gs-chip.on{border-color:var(--accent);color:var(--on-accent);background:var(--accent-dim)}
-.gs-chip.warn{border-color:rgba(255,201,0,.40);color:var(--warn)}
-.gs-chip.warn.on{background:rgba(255,201,0,.18);border-color:var(--warn)}
-.gs-chip.bad{border-color:rgba(255,107,87,.40);color:var(--err)}
-.gs-chip.bad.on{background:rgba(255,107,87,.16);border-color:var(--err)}
+.gs-chip.warn{border-color:color-mix(in srgb,var(--warn) 40%,transparent);color:var(--warn)}
+.gs-chip.warn.on{background:color-mix(in srgb,var(--warn) 18%,transparent);border-color:var(--warn)}
+.gs-chip.bad{border-color:color-mix(in srgb,var(--err) 40%,transparent);color:var(--err)}
+.gs-chip.bad.on{background:color-mix(in srgb,var(--err) 16%,transparent);border-color:var(--err)}
 /* One keyboard-first entry point to everything. The features live behind three
    menus and a set of shortcuts, which is fine once you know them and a wall
    otherwise — this is the path for people who do not use the tool daily. */
@@ -3065,7 +3064,7 @@ body.drar,body.drar .wk-blk.redigerbar{cursor:grabbing;user-select:none}
 .cmd-item:hover{background:var(--hover)}
 .cmd-label{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .cmd-sub{color:var(--fg-3);font-size:11px;margin-left:7px}
-.cmd-item[aria-selected="true"] .cmd-sub{color:#9dc0f0}
+.cmd-item[aria-selected="true"] .cmd-sub{color:var(--fg-2)}
 .cmd-hint{flex:0 0 auto;font-family:var(--mono);font-size:10px;color:var(--fg-3)}
 .cmd-state{flex:0 0 auto;font-size:10px;color:var(--accent);font-family:var(--mono)}
 .cmd-foot{
@@ -3266,8 +3265,8 @@ body.drar,body.drar .wk-blk.redigerbar{cursor:grabbing;user-select:none}
 .wk-blk.carried b::after{content:" ·";opacity:.7}
 .wk-empty{padding:8px;font-size:10px;color:var(--fg-3);text-align:center}
 .wk-note{
-  font-size:11px;color:var(--warn);background:rgba(255,201,0,.08);
-  border:1px solid rgba(255,201,0,.25);border-radius:var(--radius);padding:7px 10px;margin-bottom:12px;
+  font-size:11px;color:var(--warn);background:color-mix(in srgb,var(--warn) 8%,transparent);
+  border:1px solid color-mix(in srgb,var(--warn) 25%,transparent);border-radius:var(--radius);padding:7px 10px;margin-bottom:12px;
 }
 /* ---------- zoom display ---------- */
 .zoom-overlay{
@@ -3319,7 +3318,7 @@ body.drar,body.drar .wk-blk.redigerbar{cursor:grabbing;user-select:none}
   background:var(--raised);border:1px solid var(--line-2);border-radius:var(--radius);
   padding:7px 14px;font-size:12px;box-shadow:0 6px 24px rgba(0,0,0,.5);z-index:50;
 }
-.toast.err{border-color:#5c2b26;color:var(--err-fg)}
+.toast.err{border-color:color-mix(in srgb,var(--err) 40%,var(--line));color:var(--err-fg)}
 
 /* ================================================================ Lillebø
    This edition's own look, kept in one block at the end so it wins over the
@@ -3452,6 +3451,37 @@ body{font-family:var(--sans)}
 .nabo-rettbar td.sel-c{cursor:default;user-select:none}
 .nabo-mark-skille{font-size:11px;color:var(--fg-3);margin-left:6px}
 
+/* Review round: one control height, one segmented style, flat bubbles,
+   motion that follows the app's setting, the house drawn as solidly as NABE. */
+:root{--nabo-kinn:#e8838f}
+.nabo-modal .btn,.nabo-modal .field,.nabo-modal select.field,.nabo-modal .gs-close{height:28px;min-height:28px}
+.nabo-visning,.nabo-filter{border-color:var(--line-2)}
+.nabo-visning button,.nabo-filter button{height:26px;border-right-color:var(--line-2)}
+.nabo-visning button.sel,.nabo-filter button.sel{background:var(--raised);color:var(--fg);box-shadow:inset 0 -2px 0 var(--accent)}
+.nabo-x{width:28px;height:28px;flex:0 0 28px;display:inline-flex;align-items:center;justify-content:center;
+  background:none;border:1px solid transparent;border-radius:var(--radius);color:var(--fg-3);cursor:pointer;font-size:12px;margin-left:auto}
+.nabo-x:hover,.nabo-x:focus-visible{color:var(--fg);border-color:var(--line-2)}
+.nabo-ini{display:flex;gap:6px}
+.nabo-tilbake{align-self:flex-start}
+.nabo-tabell thead th{cursor:default;font-size:12px;font-weight:500}
+.nabo-tabell thead th:hover{color:var(--fg-3)}
+.nabo-kropp.tom{grid-template-columns:1fr}
+.nabo-kropp.tom .nabo-kilder{display:none}
+.nabo-slipp:focus-visible,.nabo-start:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.nabo-topp{padding:10px 16px 8px}
+.nabo-topp .nabo-fig{width:32px;height:32px}
+.nabo-ord{font-size:15px;font-weight:600;letter-spacing:var(--spor)}
+.nabo-diff-h,.nabo-gruppe-knapp b{font-weight:500}
+.nabo-sys,.nabo-kilde-anlegg,.nabo-kilde-ede{font-size:var(--t-1);text-transform:none;letter-spacing:0}
+.nabo-hus-knapp .nabo-fig{width:19px;height:19px;stroke-width:2.4}
+html[data-theme="light"].nabo-jul .nabo-fig .nabo-sno{stroke:var(--fg-3)}
+html.nabo-halloween .nabo-fig .nabo-oyne rect,.lys .nabo-fig .nabo-oyne rect{fill:var(--warn)}
+.sover .nabo-fig .nabo-z{animation-iteration-count:6}
+body.uten-bevegelse .nabo-fig,body.uten-bevegelse .nabo-fig *,body.uten-bevegelse .nabo-boble,body.uten-bevegelse .nabo-titt svg{transition:none!important;animation:none!important}
+@media (prefers-reduced-motion:reduce){
+  html:not(.med-bevegelse) .nabo-fig,html:not(.med-bevegelse) .nabo-fig *,html:not(.med-bevegelse) .nabo-boble{transition:none!important}
+}
+
 /* Small surprises: seasons on the house, NABO's bubble, the lights on late. */
 .nabo-fig .nabo-sno,.nabo-fig .nabo-flagg{display:none}
 html.nabo-jul .nabo-fig .nabo-sno{display:block;stroke:#fff;stroke-width:2.4;opacity:.9}
@@ -3463,16 +3493,16 @@ html.nabo-halloween .nabo-fig .nabo-oyne rect,.lys .nabo-fig .nabo-oyne rect{fil
 .nabo-merke{position:relative}
 #naboHusStor{display:inline-flex;cursor:pointer}
 #naboHusStor.banke .nabo-fig{animation:nabo-banke .35s linear}
-.nabo-boble{position:absolute;left:46px;top:-6px;z-index:5;white-space:nowrap;padding:4px 10px;border-radius:10px;
+.nabo-boble{position:absolute;left:40px;top:-6px;z-index:5;white-space:nowrap;max-width:min(420px,40vw);overflow:hidden;text-overflow:ellipsis;padding:4px 10px;border-radius:var(--radius);
   background:var(--panel);color:var(--fg);border:1px solid var(--line-2);font:400 12px/1.4 var(--sans);
-  box-shadow:0 8px 24px rgba(0,0,0,.25);opacity:0;transform:translateY(4px) scale(.96);pointer-events:none;
+  opacity:0;transform:translateY(4px) scale(.96);pointer-events:none;
   transition:opacity .18s ease,transform .25s var(--fjaer)}
 .nabo-boble.inne{opacity:1;transform:none}
 .nabo-titt.opp svg.nabe{transform:translateY(-1px)!important;animation:none}
 .nabo-konfetti{position:fixed;width:5px;height:5px;border-radius:1px;z-index:9991;pointer-events:none}
 
 /* The neighbour's face: cheeks, a chimney that breathes, and sleep. */
-.nabo-fig .nabo-kinn ellipse{fill:#e8838f;stroke:none;opacity:.45}
+.nabo-fig .nabo-kinn ellipse{fill:var(--nabo-kinn);stroke:none;opacity:.45}
 .nabo-fig .nabo-roeyk circle{fill:var(--fg-3);stroke:none;opacity:0}
 .nabo-fig .nabo-z{font:700 6px var(--sans);fill:var(--fg-2);stroke:none;opacity:0}
 .nabo-fig .nabo-oyne{transition:transform .35s ease}
@@ -3547,7 +3577,7 @@ html.nabo-halloween .nabo-fig .nabo-oyne rect,.lys .nabo-fig .nabo-oyne rect{fil
 
 .nabo-forh{display:flex;flex-direction:column;min-height:0;min-width:0}
 .nabo-verktoy{display:flex;flex-wrap:wrap;gap:8px 10px;align-items:center;padding:10px 14px;border-bottom:1px solid var(--line)}
-.nabo-verktoy #naboSok{flex:1 1 180px;height:30px;min-width:180px}
+.nabo-verktoy #naboSok{flex:1 1 180px;height:28px;min-width:180px}
 .nabo-filter{display:flex;border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;flex:0 0 auto}
 .nabo-filter button{background:none;border:0;border-right:1px solid var(--line);padding:0 11px;height:28px;
   font:inherit;font-size:12px;color:var(--fg-2);cursor:pointer;display:flex;gap:7px;align-items:center}
@@ -3698,7 +3728,7 @@ td.h .nabo-rett-inn{min-width:44px;text-align:right}
 .nabo-visning button.sel{background:var(--fg);color:var(--panel)}
 .nabo-filter[hidden],#naboSok[hidden]{display:none}
 .btn.fare{border-color:var(--warn);color:var(--warn);background:color-mix(in srgb,var(--warn) 10%,transparent)}
-.nabo-fot .btn.primary.fare{background:var(--warn);border-color:var(--warn);color:#000}
+.nabo-fot .btn.primary.fare{background:var(--warn);border-color:var(--warn);color:var(--bg)}
 .nabo-tom.stor .btn{margin-top:4px}
 
 .nabo-diff{padding:0 0 18px}
@@ -3907,13 +3937,13 @@ thead th{color:var(--fg-3);font-size:12px;background:var(--panel)}
 .statusbar .conn.down{color:var(--err)}
 
 /* Dialogs: one surface, one border, one shadow, sentence case. */
-.gs-modal{background:var(--panel);border:1px solid var(--line-2);border-radius:10px;
+.gs-modal{background:var(--panel);border:1px solid var(--line-2);border-radius:var(--r-lg);
   box-shadow:0 24px 64px rgba(0,0,0,.45)}
 .gs-head{padding:12px 16px}
 .gs-head span[style*="font-weight:600"]{font-size:14px!important}
 .gs-overlay{backdrop-filter:none;background:rgba(0,0,0,.45)}
 :root[data-theme="light"] .gs-overlay{background:rgba(20,20,22,.25)}
-.menu-pop{background:var(--panel);border:1px solid var(--line-2);border-radius:8px;box-shadow:0 12px 32px rgba(0,0,0,.35)}
+.menu-pop{background:var(--panel);border:1px solid var(--line-2);border-radius:var(--r-lg);box-shadow:0 12px 32px rgba(0,0,0,.35)}
 .menu-gruppe{text-transform:none!important;letter-spacing:0!important;font-size:11px}
 
 
@@ -4044,7 +4074,7 @@ td.c-val.ned{animation:verdi-lb-ned 700ms var(--mot-kurve)}
    Hangs from the logo with a little tail pointing up at him. Plain panel
    surface, the same border and shadow as menus, so it belongs to the window. */
 .nabe-boble{position:fixed;z-index:9990;max-width:min(460px,50vw);min-height:18px;white-space:nowrap;
-  overflow:hidden;text-overflow:ellipsis;padding:6px 12px;border-radius:10px;background:var(--panel);color:var(--fg);
+  overflow:hidden;text-overflow:ellipsis;padding:6px 12px;border-radius:var(--r-lg);background:var(--panel);color:var(--fg);
   border:1px solid var(--line-2);box-shadow:0 12px 32px rgba(0,0,0,.35);
   font:400 13px/1.45 var(--sans);cursor:pointer;
   opacity:0;transform:translate(-6px,-50%) scale(.96);transform-origin:-6px 50%;pointer-events:none;
@@ -4117,7 +4147,7 @@ td.c-val.ned{animation:verdi-lb-ned 700ms var(--mot-kurve)}
 .ss-tittel{font-size:12px;color:var(--fg-3);text-align:left;margin:0 0 6px}
 .ss-liste{display:flex;flex-direction:column;gap:2px;margin-bottom:14px}
 .ss-rad{display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding:8px 10px;
-  border-radius:8px;text-align:left;background:transparent;border:0;color:var(--fg);cursor:pointer}
+  border-radius:var(--radius);text-align:left;background:transparent;border:0;color:var(--fg);cursor:pointer}
 .ss-rad:hover,.ss-rad:focus-visible{background:var(--hover)}
 .ss-rad-navn{font-size:13px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .ss-rad-meta{font-size:11px;color:var(--fg-3);white-space:nowrap;font-family:var(--mono)}
