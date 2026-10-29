@@ -3951,6 +3951,38 @@ body.uten-bevegelse .nabe-mark,body.uten-bevegelse .nabe-mark *{animation:none!i
 @keyframes nabe-stjerner{to{transform:rotate(360deg)}}
 .nabe-mark.svimmel .nabe-stjerner{opacity:1;animation:nabe-stjerner .8s linear infinite}
 .nabe-mark.paaske .nabe-bit,.nabe-mark.nyttaar .nabe-bit{display:none}
+
+/* ---- review pass ----
+   Found by going through the whole app. */
+/* A live update is not news: the row stays quiet and only the value moves
+   (its own neutral flash). The teal row flash was from before the redesign. */
+tr.flash td:not(.c-val){animation:none}
+@keyframes flash{0%{background:color-mix(in srgb,var(--fg) 12%,transparent)}100%{background:transparent}}
+tbody tr.flash:not(.sender):not(.tvang):not(.tenn){animation:none}
+/* Compare: a point only one side has is a fact, not an error. Only a value
+   that differs keeps its tint. */
+.cmp-rad.bare-a,.cmp-rad.bare-b{background:none}
+.cmp-rad.bare-a .cmp-merke,.cmp-rad.bare-b .cmp-merke{color:var(--fg-3)}
+/* A mouse click leaves no ring; the keyboard still gets one. */
+button:focus:not(:focus-visible){outline:none;box-shadow:none}
+/* Narrow windows: the side panes give way so the table keeps its columns,
+   the tool row wraps instead of running under the inspector, and the
+   status line cuts its long message instead of growing a second line. */
+@media (max-width:1300px){
+  .pane-devices{flex-basis:min(var(--w-devices,300px),250px)}
+  .pane-side{flex-basis:min(var(--w-side,400px),320px)}
+}
+@media (max-width:1100px){
+  .pane-devices{flex-basis:236px}
+  .pane-devices #rangeInput{flex:1 1 auto;width:auto!important;min-width:0}
+  .pane-side{flex-basis:250px;min-width:220px}
+}
+.filterbar{flex-wrap:wrap;row-gap:6px}
+.filterbar #q{min-width:140px}
+.statusbar{overflow:hidden;white-space:nowrap}
+.statusbar .sb-item{flex:0 0 auto}
+#sbMsg{flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis}
+#sbMsg *{white-space:nowrap}
 </style>
 </head>
 <body>
@@ -4385,6 +4417,7 @@ body.uten-bevegelse .nabe-mark,body.uten-bevegelse .nabe-mark *{animation:none!i
             <div class="menu-sep"></div>
             <button id="csvBtn" class="menu-item">CSV…</button>
             <button id="edeBtn" class="menu-item">EDE 2.3…</button>
+            <button id="btgBtn" class="menu-item" title="Variabel-fil for NTI-import i Niagara, med taggingen fra Innstillinger">BTG-fil…</button>
             <div class="menu-sep"></div>
             <button id="edeCmpBtn" class="menu-item">Sammenlign med EDE-fil…</button>
             <div class="menu-sep"></div>

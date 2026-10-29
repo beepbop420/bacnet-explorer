@@ -154,10 +154,16 @@ const FAKTA = [
   ['COV betyr at regulatoren sier fra selv. Mindre spørring, mer ro.', 'COV means the controller speaks up itself. Less asking, more peace.'],
 ];
 const NYTT = {
+  '1.5': [
+    ['BTG-fil ligger nå i Eksport-menyen', 'The BTG file is now in the Export menu'],
+    ['Enhetslista hopper ikke lenger under musa mens anlegget leses', 'The device list no longer jumps under the pointer while the site is read'],
+    ['Smale vinduer: tabellen beholder kolonnene sine', 'Narrow windows: the table keeps its columns'],
+    ['Live blinker rolig, og Escape lukker alle dialoger', 'Live flashes quietly, and Escape closes every dialog'],
+  ],
   '1.4': [
     ['NABE ser etter musa når den forlater vinduet, og dukker når den kommer for fort', 'NABE watches the pointer leave the window, and ducks when it comes too fast'],
     ['Åpne et varmt eller kaldt temperaturpunkt', 'Open a hot or a cold temperature point'],
-    ['Han husker om du klapper ham - eller drar i ham', 'He remembers whether you pet him - or drag him'],
+    ['Han husker om du klapper ham – eller drar i ham', 'He remembers whether you pet him – or drag him'],
     ['Han snakker ferdig før han sier noe nytt', 'He finishes a line before starting the next'],
   ],
   '1.3': [

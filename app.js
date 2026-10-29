@@ -1165,9 +1165,21 @@ function renderDevices() {
     const verst = (g) => g.enheter.reduce((n, d) =>
       Math.max(n, devState(d.address) === 'bad' ? 2 : devState(d.address) === 'warn' ? 1 : 0), 0);
     const skjulte = new Set(loadPrefs().vendorCollapsed || []);
-    el.innerHTML = [...grupper.values()]
+    /* Faults first - but not while the pointer is in the list. Background
+       reading turns sections red one by one, and a section that jumps up
+       under the cursor turns a click on a device into a click on a heading.
+       The new order is applied when the pointer leaves. */
+    let rekke = [...grupper.values()]
       .sort((a, b) => verst(b) - verst(a) || b.enheter.length - a.enheter.length
-                      || NORSK.compare(a.v.label, b.v.label))
+                      || NORSK.compare(a.v.label, b.v.label));
+    if (el.matches(':hover') && S._grpRekke) {
+      const plass = (g) => { const i = S._grpRekke.indexOf(g.v.label); return i < 0 ? 1e6 : i; };
+      rekke = rekke.slice().sort((a, b) => plass(a) - plass(b));
+      if (!el._ventOrden) { el._ventOrden = true;
+        el.addEventListener('mouseleave', () => { el._ventOrden = false; renderDevices(); }, {once: true}); }
+    }
+    S._grpRekke = rekke.map(g => g.v.label);
+    el.innerHTML = rekke
       .map(g => {
         const av = skjulte.has(g.v.label);
         const feil = g.enheter.filter(d => devState(d.address) === 'bad').length;
@@ -1978,8 +1990,9 @@ function clockBadge(ip) {
   if (sek === null || Math.abs(sek) < CLOCK_WARN) return '';
   const id = S.identity[ip] || {};
   const alvorlig = Math.abs(sek) > CLOCK_SEVERE;
-  return `<button class="ctx-stat ${alvorlig ? 'bad' : 'warn'}" data-klokke="${esc(ip)}" title="Enheten sier ${
-    esc(String(id['device-time'] || '?'))} — ukeprogram og trendlogger følger denne klokka. Klikk for å stille den.">⏱ klokke ${
+  return `<button class="ctx-stat ${alvorlig ? 'bad' : 'warn'}" data-klokke="${esc(ip)}" title="${T('Enheten sier ', 'The device says ')}${
+    esc(String(id['device-time'] || '?'))} ${T('— ukeprogram og trendlogger følger denne klokka. Klikk for å stille den.',
+    '- weekly schedules and trend logs follow this clock. Click to set it.')}">⏱ klokke ${
     esc(driftText(sek, id['device-time']))}</button>`;
 }
 
@@ -2019,7 +2032,7 @@ function renderCtx() {
     ${(S.namePrefix && loadPrefs().shortNames !== false) ? `<span class="ctx-prefix" title="Alle punktnavn på denne enheten starter med dette. Det er utelatt fra tabellen for lesbarhet — hold over et navn for å se det fullt ut.">${esc(S.namePrefix)}…</span>` : ''}
     <div class="spacer"></div>
     ${Object.entries(FLAGS).filter(([f]) => flagg[f]).map(([f, m]) =>
-      `<button class="ctx-stat ${m.cls}" data-flag="${f}" title="Vis kun punkter ${esc(m.label)}">${flagg[f]} ${esc(m.label)}</button>`).join('')}
+      `<button class="ctx-stat ${m.cls}" data-flag="${f}" title="${T('Vis kun punkter ' + esc(m.label), 'Show only points ' + esc(oversettTekst(m.label, true)))}">${flagg[f]} ${esc(m.label)}</button>`).join('')}
     <span class="ctx-stat">${writable} skrivbare</span>
     <span class="ctx-stat">${S.points.length} punkter</span>`;
 
@@ -8714,6 +8727,7 @@ $('snapBtn').onclick = takeSnapshot;
 $('csvBtn').onclick = exportCSV;
 $('watchClear').onclick = () => { S.watch = []; renderWatch(); renderPoints(); };
 $('edeBtn').onclick = exportEDE;
+$('btgBtn').onclick = () => { closeMenus(); lagBtgFil(); };
 document.querySelectorAll('.cmd-segk').forEach(b =>
   b.onclick = () => settCmdSeg(b.dataset.seg));
 
@@ -8932,23 +8946,8 @@ $('zoomClose').onclick = closeZoom;
 $('zoomOverlay').onclick = e => { if (e.target === $('zoomOverlay')) closeZoom(); };
 $('watchExport').onclick = exportWatchHistory;
 
-/* Clicking the logo returns to the Portal — but only when this instance is
-   actually served from the server. The local copy runs on 127.0.0.1, where
-   port 8000 is not the Portal, so linking there would just be a dead end. */
-(function portalBackLink() {
-  const el = $('brandLink');
-  const host = location.hostname;
-  const isLocal = ['127.0.0.1', 'localhost', '::1', ''].includes(host);
-  if (isLocal) {
-    el.title = 'Lokal versjon — portalen ligger på serveren';
-    $('brandSub').textContent = '';
-    return;
-  }
-  el.href = `http://${host}:8000/`;
-  el.title = 'Tilbake til portalen';
-  el.classList.add('linked');
-  el.insertAdjacentHTML('beforeend', '<span class="brand-back">← Portal</span>');
-})();
+/* The logo is a mascot, not a way out: there is no portal to go back to. */
+$('brandLink')?.removeAttribute('title');
 
 /* Build the image off-DOM with both handlers attached before src is set, so
    the load cannot fire before we are listening. It is only inserted once it
@@ -9124,6 +9123,8 @@ document.addEventListener('keydown', e => {
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'f') { e.preventDefault(); openGlobal(); return; }
   if (e.key === 'Escape') {
     if (!$('diagOverlay').hidden) { diagLukk(); return; }
+    if (!$('cmpOverlay').hidden) { closeSammenlign(); return; }
+    if (!$('raportOverlay').hidden) { closeRapport(); return; }
     if (!$('minneOverlay').hidden) { closeMinne(); return; }
     if (!$('temaOverlay').hidden) { closeTema(); return; }
     if (!$('schOverlay').hidden) { closeSchedules(); return; }
@@ -9504,6 +9505,16 @@ function diagLukk() { const o = $('diagOverlay'); if (o) { o.hidden = true; DIAG
    out half-translated. */
 
 const ORDBOK = {
+  'med feil': 'with a fault',
+  'Prioritetsarray': 'Priority array',
+  'BTG-fil…': 'BTG file…',
+  'Variabel-fil for NTI-import i Niagara, med taggingen fra Innstillinger': 'Variabel file for NTI import into Niagara, with the tagging from Settings',
+  'Punkt': 'Point',
+  'avvik': 'difference',
+  'Ett eller flere IP-områder: 10.75.1.0/24, én IP, eller 10.75.1.10-40. Skill dem med komma, semikolon eller mellomrom — de skannes etter tur inn i én liste. I BBMD-modus: IP-en til byggets BBMD.':
+    'One or more IP ranges: 10.75.1.0/24, one IP, or 10.75.1.10-40. Separate them with commas, semicolons or spaces - they are scanned in turn into one list. In BBMD mode: the IP of the building’s BBMD.',
+  'Auto: Who-Is på eget subnett, grundig sweep over VPN og rutet nett. BBMD: skriv IP-en til byggets BBMD og få hele bygget - også MS/TP bak rutere - uten å treffe nabobyggene på samme VPN.':
+    'Auto: Who-Is on your own subnet, a thorough sweep over VPN and routed networks. BBMD: type the IP of the building’s BBMD and get the whole building - MS/TP behind routers too - without touching the neighbours on the same VPN.',
   /* --- top bar and scanning --- */
   'Skann': 'Scan',
   'Avbryt': 'Cancel',
@@ -10264,6 +10275,11 @@ const MONSTER = [
    Order matters: longer phrases first, so "søker i" is taken before "søker",
    and each side is applied to text the other side has not touched. */
 const FRASER = [
+  ['uendret på', 'unchanged at'],
+  ['trykk ⟳ for å lese på nytt', 'press ⟳ to read again'],
+  ['nå nettopp', 'just now'],
+  ['Live av', 'Live off'],
+  ['Live på', 'Live on'],
   ['åpne en enhet for å ta den med', 'open a device to include it'],
   ['er ikke lest ennå', 'has not been read yet'],
   ['punkter overstyrt eller ute av drift', 'points overridden or out of service'],
@@ -10399,7 +10415,7 @@ const HOPP_OVER = /^(SCRIPT|STYLE|CODE|SVG|PATH)$/;
    the device list also holds the getting-started text and the watch pane its
    own empty state, and both of those are the tool talking. */
 const DATA_SONE = 'tbody, .nabe-boble, .startskjerm, #alarmSect, .ruter-info, .dev-name, .dev-ip, .dev-note, '
-  + '.watch-name, .watch-ip, .insp-title, .insp-sub, .insp-val, .data-verdier';
+  + '.watch-name, .watch-ip, .insp-title, .insp-sub, .insp-val, .data-verdier, .cmp-navn, .cmp-v';
 
 function iDataSone(n) {
   const el = n.nodeType === 1 ? n : n.parentElement;
