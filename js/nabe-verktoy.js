@@ -111,11 +111,20 @@ function btgSti(navn, cluster) {
   return (cluster ? cluster + '.' : '') + biter.join('.');
 }
 
+// An SD code stands on its own, but an underscore may join it to the text:
+// SD1T_Romtemp is as much a code as SD1T Romtemp.
+const BTG_SD_RE = /(?<![A-Za-z0-9])SD(\d)([0-9T])(?![A-Za-z0-9])/i;
 function btgSd(tekst) {
-  const m = /\bSD(\d)([0-9T])\b/i.exec(tekst || '');
+  const m = BTG_SD_RE.exec(tekst || '');
   if (!m) return {klasse: 0, trend: true, rest: (tekst || '').trim()};
-  const rest = (tekst || '').replace(m[0], '').replace(/\s{2,}/g, ' ').replace(/^[\s\-–:]+|[\s\-–:]+$/g, '');
+  // Every code goes, not just the first, so none is left to be doubled.
+  const rest = btgUtenSd(tekst);
   return {klasse: Number(m[1]), trend: m[2].toUpperCase() === 'T', rest};
+}
+
+function btgUtenSd(tekst) {
+  return String(tekst || '').replace(new RegExp(BTG_SD_RE.source, 'gi'), ' ')
+    .replace(/\s{2,}/g, ' ').replace(/^[\s\-–:_]+|[\s\-–:_]+$/g, '');
 }
 
 function btgRad(p, t, anlegg, enhetNavn) {

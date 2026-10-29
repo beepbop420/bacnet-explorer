@@ -205,10 +205,13 @@ function naboRad(p, t, o, anlegg, enhetNavn, rett) {
     ? `${anlegg} ${biter.length >= 3 ? `${biter[0]}.${biter[1]}-${biter[2]}` : sti}` : '';
   const trend = (rett.trend ?? sd.trend) ? `Interval|${o.trend}` : '';
   const sdKode = `SD${klasse || 0}${trend ? 'T' : '0'}`;
+  // The code is written once, from Trend and Alarm; any code already in the
+  // text, typed by hand or left in the plant, is taken out first.
+  const beskrSd = `${sdKode} ${btgUtenSd(beskr)}`.trim();
   const f = new Array(34).fill('');
   f[0] = 'BacnetNetwork'; f[1] = anlegg; f[2] = enhetNavn; f[3] = sti;
   f[4] = String(type); f[5] = String(p.instance ?? ''); f[6] = naboVerdi(p.value); f[7] = enhet;
-  f[8] = String(des); f[9] = tilstander; f[10] = o.sdBeskr ? `${sdKode} ${beskr}` : beskr; f[11] = trend;
+  f[8] = String(des); f[9] = tilstander; f[10] = o.sdBeskr ? beskrSd : beskr; f[11] = trend;
   if (klasse) { f[12] = String(klasse); f[13] = beskr; f[14] = kilde; }
   f[30] = p.name || '';
   if (norm) { f[29] = norm.g.komponent || ''; f[33] = norm.g.funksjonskode || ''; }
@@ -217,7 +220,7 @@ function naboRad(p, t, o, anlegg, enhetNavn, rett) {
     linje: f.map(x => String(x).replace(/[;\r\n]/g, ' ')).join(';'),
     sti, type, typeNavn: shortType(p.type), inst: p.instance, enhet, des,
     trend: !!trend, klasse, beskr, navn: p.name || '', harSd: sd.rest !== (p.description || '').trim(),
-    hale: !!rett.hale, stiRen, sdKode,
+    hale: !!rett.hale, stiRen, sdKode, beskrSd,
     auto: {sti: stiAuto, beskr: beskrAuto, enhet: enhetAuto, des: desAuto, trend: sd.trend, klasse: sd.klasse},
     rett,
   };
@@ -706,7 +709,7 @@ function eksporterEde() {
   const rader = o.sdBeskr ? new Map(naboResultat().rader.map(x => [x.key, x])) : null;
   const beskrivelse = (k, p) => {
     const x = rader && rader.get(`${k.id}|${p.type},${p.instance}`);
-    return x ? `${x.sdKode} ${x.beskr}` : p.description;
+    return x ? x.beskrSd : p.description;
   };
   let i = 0;
   for (const k of kilder) {
@@ -1146,7 +1149,15 @@ function rettCelle(td) {
     if (felt === 'des') v = Math.max(0, Math.min(6, parseInt(v, 10) || 0));
     if (felt === 'enhet' && v === '') v = 'null';
     const auto = x.auto[felt];
-    settRett([[key, felt, String(v) === String(auto) ? undefined : v]]);
+    const sd = felt === 'beskr' ? btgSd(v) : null;
+    if (sd && sd.rest !== v) {
+      // A code typed into the description is an order for Alarm and Trend,
+      // and the text keeps only the words - so it is never written twice.
+      v = sd.rest;
+      settRett([[key, 'beskr', v === String(auto) ? undefined : v],
+                [key, 'klasse', sd.klasse === (x.auto.klasse || 0) ? undefined : sd.klasse],
+                [key, 'trend', sd.trend === !!x.auto.trend ? undefined : sd.trend]]);
+    } else settRett([[key, felt, String(v) === String(auto) ? undefined : v]]);
     tegnNabo();
     if (flytt) {
       const i = NABO.vist.indexOf(key) + flytt;
