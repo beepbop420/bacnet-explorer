@@ -3661,6 +3661,8 @@ html.nabo-halloween .nabo-fig .nabo-oyne rect,.lys .nabo-fig .nabo-oyne rect{fil
 .kutt-ord textarea{width:100%;font:12px var(--mono);color:var(--fg);background:var(--sunken);border:1px solid var(--line-2);
   border-radius:var(--radius);padding:6px 8px;resize:vertical}
 .kutt-ord .lite{font-size:11px;color:var(--fg-3);display:flex;gap:10px;align-items:baseline}
+.kutt-modul{margin:0;font:11.5px var(--mono);color:var(--fg-2);white-space:pre-wrap;padding:6px 8px;border:1px dashed var(--line-2);border-radius:var(--radius)}
+.kutt-px{height:24px;font-size:12px;margin-left:4px;background:var(--sunken);color:var(--fg);border:1px solid var(--line-2);border-radius:6px}
 /* After a tag edit: the same change on the tags that share its path. */
 .nabo-like{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:8px 14px;border-bottom:1px solid var(--line);
   background:color-mix(in srgb,var(--accent) 10%,var(--panel));font-size:12px;color:var(--fg);animation:sk-inn .25s ease-out}
@@ -3669,6 +3671,14 @@ html.nabo-halloween .nabo-fig .nabo-oyne rect,.lys .nabo-fig .nabo-oyne rect{fil
 .nabo-like .like-eks{font:11px var(--mono);color:var(--fg-3);margin-right:auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .nabo-like .like-eks i{font-style:normal;color:var(--accent);padding:0 4px}
 .nabo-like .btn{height:26px}
+/* A suggested tag under the tag, from the description. */
+.nabo-fs{display:flex;flex-direction:column;gap:1px;margin-top:3px;font-family:var(--sans)}
+.nabo-fs button{align-self:flex-start;background:none;border:0;padding:1px 4px;margin-left:-4px;border-radius:var(--r-sm);
+  font:500 12px var(--mono);cursor:pointer;text-align:left}
+.nabo-fs.sikker button{color:var(--ok)}
+.nabo-fs.mulig button{color:var(--warn)}
+.nabo-fs button:hover{background:var(--hover);text-decoration:underline}
+.nabo-fs span{font-size:10.5px;color:var(--fg-3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:320px}
 .nabo-kropp{display:grid;grid-template-columns:260px minmax(0,1fr);min-height:0}
 .nabo-kilder{border-right:1px solid var(--line);display:flex;flex-direction:column;min-height:0}
 .nabo-h{font-size:11px;color:var(--fg-3);padding:10px 14px 6px;display:flex;gap:6px}
@@ -5199,5 +5209,6 @@ button:focus:not(:focus-visible){outline:none;box-shadow:none}
 <script src="/js/nabe-skann.js"></script>
 <script src="/js/nabo.js"></script>
 <script src="/js/nabo-brodre.js"></script>
+<script src="/js/nabo-fasit.js"></script>
 </body>
 </html>

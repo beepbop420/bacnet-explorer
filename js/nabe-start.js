@@ -178,6 +178,10 @@ const FAKTA = [
   ['COV betyr at regulatoren sier fra selv. Mindre spørring, mer ro.', 'COV means the controller speaks up itself. Less asking, more peace.'],
 ];
 const NYTT = {
+  '1.27': [
+    ['NABO foreslår tagger fra beskrivelsen, lært av BTG-eksportene dine: «Temperatur tilluft» blir RT401, «Pådrag tilluftsvifte» blir JV401 … Gn. Bare på punkter uten komponentkode', 'NABO suggests tags from the description, learnt from your BTG exports: “Temperatur tilluft” becomes RT401, “Pådrag tilluftsvifte” becomes JV401 … Gn. Only on points without a component code'],
+    ['Velg PX-familie per anlegg (freeTag, nordomatic/statsbygg, Beckhoff TC2), så følger signalnavnene malene i nmNxFiles: Gn blir C, Err blir A, Drift blir D', 'Pick the PX family per site (freeTag, nordomatic/statsbygg, Beckhoff TC2) and the signal names follow the templates in nmNxFiles: Gn becomes C, Err becomes A, Drift becomes D'],
+  ],
   '1.26': [
     ['NABO har en ordliste for endelser per komponenttype. Energimålere (OE) er fylt inn fra BTG-eksportene: Energy blir kWh, Power kW, Flow m3, FT RT4, RT RT5', 'NABO has a word list for endings per kind of component. Energy meters (OE) are filled in from the BTG exports: Energy becomes kWh, Power kW, Flow m3, FT RT4, RT RT5'],
     ['Retter du en endelse på én komponent, kan du velge «Husk for alle OE», så skjer det av seg selv på alle anlegg', 'Correct an ending on one component and choose “Remember for every OE”, and it happens by itself on every site'],

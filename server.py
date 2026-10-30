@@ -106,7 +106,7 @@ ALLOWED_ORIGINS = {
 READ_ONLY_PATHS = {"/api/sites",
                    
     "/api/status", "/api/interfaces", "/api/readonly", "/api/mine", "/api/ny-versjon",
-    "/api/anlegg", "/api/route",
+    "/api/anlegg", "/api/route", "/api/btg-fasit",
     "/api/writelog", "/api/notes", "/download", "/logo",
 }
 
@@ -171,7 +171,7 @@ async def guard_and_cors(request, call_next):
         response.headers["Vary"] = "Origin"
     return response
 
-VERSJON = "1.26"
+VERSJON = "1.27"
 
 state = {"app": None, "local_address": None, "read_only": False, "bbmd": None}
 
@@ -537,6 +537,51 @@ def _nedlastinger() -> Optional[str]:
             pass
     d = Path.home() / "Downloads"
     return str(d) if d.is_dir() else None
+
+
+_FASIT: Dict[str, Any] = {"nokkel": None, "punkter": [], "filer": 0}
+
+
+@app.get("/api/btg-fasit")
+def btg_fasit():
+    """
+    Every tag BTG has written, with its description: the Variabel files in
+    BTG's export folder and under Downloads. NABO compares a point's
+    description with these to suggest a tag the way this company writes
+    them. Read only, and cached until a file changes.
+    """
+    filer: List[Path] = []
+    for rot in [_btg_mappe(), _nedlastinger()]:
+        if not rot:
+            continue
+        try:
+            # Not NABO's own test exports: a file NABO made is no key to learn from.
+            filer += [f for f in Path(rot).rglob("*Variabel*.csv")
+                      if f.is_file() and "fra NABO" not in str(f.parent)][:400]
+        except Exception:
+            pass
+    filer = sorted(set(filer))
+    nokkel = tuple((str(f), f.stat().st_mtime) for f in filer)
+    if nokkel != _FASIT["nokkel"]:
+        sett: Dict[tuple, list] = {}
+        for f in filer:
+            try:
+                rå = f.read_bytes()
+            except Exception:
+                continue
+            # BTG writes UTF-8 now; older exports are Windows-1252.
+            try:
+                tekst = rå.decode("utf-8-sig")
+            except UnicodeDecodeError:
+                tekst = rå.decode("cp1252", errors="replace")
+            if not tekst.startswith("BacnetNetwork"):
+                continue
+            for linje in tekst.splitlines():
+                d = linje.split(";")
+                if len(d) > 10 and d[3].strip() and d[10].strip():
+                    sett[(d[3].strip(), d[10].strip())] = [d[3].strip(), d[10].strip(), d[4].strip(), d[7].strip()]
+        _FASIT.update(nokkel=nokkel, punkter=list(sett.values()), filer=len(filer))
+    return {"status": "done", "filer": _FASIT["filer"], "punkter": _FASIT["punkter"]}
 
 
 @app.get("/api/mapper")

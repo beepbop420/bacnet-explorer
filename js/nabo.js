@@ -92,7 +92,7 @@ function lagreAnlegg(patch) {
   // The tag rules are also kept as the last ones used: typing a site name
   // makes a new site, and the rules you just chose should come along to it.
   const valg = {};
-  for (const k of ['smart', 'haleAuto', 'kuttN']) if (k in patch) valg[k] = patch[k];
+  for (const k of ['smart', 'haleAuto', 'kuttN', 'pxModul']) if (k in patch) valg[k] = patch[k];
   lagreNabo(Object.keys(valg).length
     ? {anlegg: alle, sistValg: Object.assign({}, p.sistValg || {}, valg)} : {anlegg: alle});
 }
@@ -127,7 +127,11 @@ function naboInnst() {
           // RT401_K, SB500_Gn, RD001_SP. Per site, since sites differ.
           haleAuto: !!(her.haleAuto ?? (p.sistValg || {}).haleAuto),
           // What an ending is called in the station, per kind of component.
-          ordliste: typeof p.ordliste === 'string' ? p.ordliste : ORDLISTE_STD,
+          // Which family of PX templates in nmNxFiles the site is drawn with.
+          // Its word list comes first; your own lines are added after it.
+          pxModul: PX_MODULER[her.pxModul ?? (p.sistValg || {}).pxModul] ? (her.pxModul ?? (p.sistValg || {}).pxModul) : 'freeTag',
+          ordlisteEgen: typeof p.ordliste === 'string' && p.ordliste !== ORDLISTE_STD ? p.ordliste : '',
+          get ordliste() { return (PX_MODULER[this.pxModul]?.liste || '') + '\n' + this.ordlisteEgen; },
           // Where files go: '' is the browser's Downloads, anything else a
           // folder the server writes into.
           mappe: p.mappe || '', mapper: p.mapper || [],
@@ -288,20 +292,38 @@ function kompHale(sti, navn) {
    The energy meter line is read off 43 BTG exports: kWh, kW and Err on 76
    meters each, RT4 and RT5 for supply and return, DT for the difference,
    Volume in cubic metres and m3 for the flow in cubic metres per hour. */
-const ORDLISTE_STD = 'OE: Energy=kWh, Power=kW, Flow=m3, FT=RT4, RT=RT5, TurTemp=RT4, ReturTemp=RT5, DiffTemp=DT, Volum=Volume';
+const ORDLISTE_STD = 'OE: Energy=kWh, Power=kW, Flow=m3, FT=RT4, RT=RT5, TurTemp=RT4, ReturTemp=RT5, DiffTemp=DT, Volum=Volume, Err=Err';
+
+/* The PX templates in nmNxFiles bind to fixed signal names, and each family
+   has its own. Read off the module's 608 PX files:
+   - freeTag: the TFM signal codes - A alarm, C output, D running, S start,
+     KMD command, XS switch - and an energy meter linked freely (the station
+     here has kWh, kW, m3, Volume, RT4, RT5, DT, Err).
+   - nordomatic and statsbygg: the same codes; meters as MV1..MV6.
+   - Beckhoff TC2: words - Drift, Feil, Start, Auto, AO; Energy, Power,
+     TurTemp, ReturTemp, Flow on a meter.
+   A line starting with * applies to every kind of component. */
+const PX_MODULER = {
+  freeTag: {navn: 'freeTag', liste: ORDLISTE_STD + '\n*: Gn=C, Err=A, Feil=A, Alm=A, Alarm=A, Drift=D, Start=S, Kmd=KMD'},
+  nordomatic: {navn: 'nordomatic / statsbygg', liste: '*: Gn=C, Err=A, Feil=A, Alm=A, Alarm=A, Drift=D, Start=S, Kmd=KMD'},
+  tc2: {navn: 'Beckhoff TC2', liste: 'OE: kWh=Energy, kW=Power, RT4=TurTemp, RT5=ReturTemp, FT=TurTemp, RT=ReturTemp, DT=DiffTemp, m3=Flow\n*: D=Drift, Err=Feil, A=Feil, S=Start, Gn=AO, C=AO'},
+  ingen: {navn: T('ingen', 'none'), liste: ''},
+};
 let ORD_CACHE = {k: null, kart: null};
 function ordKart(tekst) {
   if (ORD_CACHE.k === tekst) return ORD_CACHE.kart;
   const kart = new Map();
   for (const linje of String(tekst || '').split(/\r?\n/)) {
-    const m = /^\s*([\p{L}]+)\s*:(.*)$/u.exec(linje);
+    const m = /^\s*([\p{L}]+|\*)\s*:(.*)$/u.exec(linje);
     if (!m) continue;
     const par = new Map();
     for (const p of m[2].split(',')) {
       const [fra, til] = p.split('=').map(s => (s || '').trim());
       if (fra && til) par.set(fra.toLowerCase(), til);
     }
-    if (par.size) kart.set(m[1].toUpperCase(), par);
+    // A later line for the same kind adds to it and wins: your own lines
+    // come after the module's.
+    if (par.size) kart.set(m[1].toUpperCase(), new Map([...(kart.get(m[1].toUpperCase()) || []), ...par]));
   }
   ORD_CACHE = {k: tekst, kart};
   return kart;
@@ -312,7 +334,9 @@ function brukOrdliste(sti, o) {
   const d = sti.split('.');
   const i = d.findLastIndex((x, j) => j > 0 && KOMPONENT.test(x) && !/^O[US]\d+$/i.test(x));
   if (i < 0 || i === d.length - 1) return sti;
-  const par = kart.get(d[i].replace(/\d/g, '').toUpperCase());
+  // The kind's own pairs win over the ones for every kind (*).
+  const egen = kart.get(d[i].replace(/\d/g, '').toUpperCase()), alle = kart.get('*');
+  const par = egen || alle ? new Map([...(alle || []), ...(egen || [])]) : null;
   if (!par) return sti;
   return [...d.slice(0, i + 1), ...d.slice(i + 1).map(x => par.get(x.toLowerCase()) ?? x)].join('.');
 }
@@ -515,6 +539,8 @@ function naboResultat() {
       const rare = [...new Set((r.sti.match(/[^A-Za-z0-9_.$+=]/g) || []))];
       if (rare.length) r.adv.push(T(`Niagara må escape ${rare.map(c => c === ' ' ? 'mellomrom' : c).join(' ')}`,
                                     `Niagara has to escape ${rare.map(c => c === ' ' ? 'space' : c).join(' ')}`));
+      // A tag suggested from the description (nabo-fasit.js), when there is one.
+      r.forslag = typeof naboForslag === 'function' && !r.rett.sti ? naboForslag(r) : null;
       rader.push(r);
     }
   }
@@ -1071,11 +1097,17 @@ function tegnKutt(r, o) {
     ? ` <button type="button" class="kutt-lenke" data-nullstill="1" title="${esc(T('Tar bort håndrettinger av taggen, så regelen virker. Beskrivelse, enhet, trend og alarm beholdes.', 'Takes off hand edits of the tag, so the rule applies. Description, unit, trend and alarm stay.'))}">${T(`Nullstill ${haandTag} håndrettede tagger`, `Reset ${haandTag} hand-edited tags`)}</button>` : '';
   const kanHale = vanlige.filter(x => kompHale(x.stiRen, x.navn) !== x.stiRen).length;
   const ordAnt = ordKart(o.ordliste).size;
-  const ordLenke = ` <button type="button" class="kutt-lenke" data-ordliste title="${esc(T('Hva endelsene heter i stasjonen, per komponenttype. Energimålere (OE) er fylt inn.', 'What the endings are called in the station, per kind of component. Energy meters (OE) are filled in.'))}">${T(`Ordliste (${ordAnt})`, `Word list (${ordAnt})`)}</button>`;
+  // The PX family the site is drawn with decides the signal names.
+  const pxValg = `<label class="kutt-valg" title="${esc(T('PX-malene i nmNxFiles binder mot faste signalnavn, og hver familie har sine. Taggene følger familien du velger.', 'The PX templates in nmNxFiles bind to fixed signal names, and each family has its own. The tags follow the family you pick.'))}">PX
+      <select data-px class="kutt-px">${Object.entries(PX_MODULER).map(([k, m]) => `<option value="${k}"${k === o.pxModul ? ' selected' : ''}>${esc(m.navn)}</option>`).join('')}</select></label>`;
+  const ordLenke = `${pxValg} <button type="button" class="kutt-lenke" data-ordliste title="${esc(T('Hva endelsene heter i stasjonen, per komponenttype.', 'What the endings are called in the station, per kind of component.'))}">${T(`Ordliste (${ordAnt})`, `Word list (${ordAnt})`)}</button>`;
   const ordPanel = NABO.ordApen ? `<div class="kutt-ord">
-      <textarea id="naboOrd" spellcheck="false" rows="3">${esc(o.ordliste)}</textarea>
-      <span class="lite">${T('Én linje per komponenttype: bokstavene i koden, kolon, og fra=til. OE: Energy=kWh, Power=kW', 'One line per kind of component: the letters of the code, a colon, and from=to. OE: Energy=kWh, Power=kW')}
-        <button type="button" class="kutt-lenke" data-ordstd>${T('Tilbake til standard', 'Back to the default')}</button></span></div>` : '';
+      <span class="lite">${T(`Fra PX-familien ${esc(PX_MODULER[o.pxModul]?.navn || '')}:`, `From the PX family ${esc(PX_MODULER[o.pxModul]?.navn || '')}:`)}</span>
+      <pre class="kutt-modul">${esc(PX_MODULER[o.pxModul]?.liste || T('(ingenting)', '(nothing)'))}</pre>
+      <span class="lite">${T('Dine egne linjer, som kommer i tillegg og vinner:', 'Your own lines, added after and winning:')}</span>
+      <textarea id="naboOrd" spellcheck="false" rows="2" placeholder="JV: Feil=A, Drift=D">${esc(o.ordlisteEgen)}</textarea>
+      <span class="lite">${T('Én linje per komponenttype: bokstavene i koden (eller * for alle), kolon, og fra=til.', 'One line per kind of component: the letters of the code (or * for all), a colon, and from=to.')}
+        <button type="button" class="kutt-lenke" data-ordstd>${T('Tøm mine linjer', 'Clear my lines')}</button></span></div>` : '';
   const haleValg = kanHale
     ? `<label class="kutt-valg" title="${esc(T('Etter komponentkoden (RT601, JP400, OE500) står resten med understrek: RT601.SP_ADJ, JP400.TW_AUTO, SB500.I_tid.', 'After the component code (RT601, JP400, OE500) the rest goes with underscores: RT601.SP_ADJ, JP400.TW_AUTO, SB500.I_tid.'))}"><input type="checkbox" data-hale ${o.haleAuto ? 'checked' : ''}> ${T(`_ etter komponentkoden, som RT601.SP_ADJ (${kanHale})`, `_ after the component code, as in RT601.SP_ADJ (${kanHale})`)}</label>` : '';
   if (o.smart) {
@@ -1177,7 +1209,7 @@ function tegnNabo(helt) {
             </div>
             <input class="field" id="naboSok" type="search" placeholder="${T('Søk i tag, navn eller beskrivelse', 'Search tag, name or description')}" autocomplete="off" spellcheck="false">
             <div class="nabo-filter" role="tablist">
-              ${[['alle', T('Alle', 'All')], ['adv', T('Feil og advarsler', 'Problems')], ['rettet', T('Rettet', 'Edited')], ['alarm', 'Alarm'], ['trend', 'Trend']]
+              ${[['alle', T('Alle', 'All')], ['adv', T('Feil og advarsler', 'Problems')], ['rettet', T('Rettet', 'Edited')], ['forslag', T('Forslag', 'Suggestions')], ['alarm', 'Alarm'], ['trend', 'Trend']]
                 .map(([k, l]) => `<button data-f="${k}" role="tab">${l}<em></em></button>`).join('')}
             </div>
             <button class="btn" id="naboErstattKnapp" title="${T('Søk og erstatt i tagger eller beskrivelser (Ctrl+H)', 'Find and replace in tags or descriptions (Ctrl+H)')}">${T('Erstatt…', 'Replace…')}</button>
@@ -1283,11 +1315,13 @@ function tegnNabo(helt) {
   const q = NABO.sok.trim().toLowerCase().split(/\s+/).filter(Boolean);
   const passer = x => (NABO.filter === 'alle' || (NABO.filter === 'adv' && (x.feil.length || x.adv.length))
     || (NABO.filter === 'rettet' && Object.keys(x.rett).length)
+    || (NABO.filter === 'forslag' && x.forslag)
     || (NABO.filter === 'alarm' && x.klasse) || (NABO.filter === 'trend' && x.trend))
     && q.every(w => (x.sti + ' ' + x.navn + ' ' + x.beskr + ' ' + x.enhetNavn).toLowerCase().includes(w));
   const vis = r.rader.filter(passer);
   const tall = {alle: r.rader.length, adv: r.rader.filter(x => x.feil.length || x.adv.length).length,
                 rettet: r.rader.filter(x => Object.keys(x.rett).length).length,
+                forslag: r.rader.filter(x => x.forslag).length,
                 alarm: r.rader.filter(x => x.klasse).length, trend: r.rader.filter(x => x.trend).length};
   ov.querySelectorAll('.nabo-visning button').forEach(b => b.classList.toggle('sel', b.dataset.v === NABO.visning));
   ov.querySelector('.nabo-verktoy').hidden = !NABO.kilder.length;
@@ -1302,6 +1336,7 @@ function tegnNabo(helt) {
     b.querySelector('em').textContent = tall[b.dataset.f];
   });
   for (const k of [...NABO.valgt]) if (!r.rader.some(x => x.key === k)) NABO.valgt.delete(k);
+  if (typeof tegnForslagBar === 'function') tegnForslagBar(r);
   const nValgt = NABO.valgt.size;
   $('naboMarkert').hidden = NABO.visning !== 'var' || !nValgt;
   $('naboMarkTall').innerHTML = T(`<b>${nValgt}</b> markert`, `<b>${nValgt}</b> ticked`);
@@ -1319,7 +1354,12 @@ function tegnNabo(helt) {
       const ny = er && er.felt === felt ? erstattVerdi(x[felt], er) : null;
       if (ny !== null) forslag++;
       const somTag = v => felt === 'sti' ? esc(v).replace(/\./g, '.<wbr>') : esc(v);
-      const innhold = foran + (ny !== null ? `<span class="gml">${somTag(tekst)}</span><span class="ny">${somTag(ny)}</span>` : somTag(tekst));
+      // In the Suggestions view the suggested tag stands under the tag, to click.
+      const fs = felt === 'sti' && NABO.filter === 'forslag' && x.forslag
+        ? `<div class="nabo-fs ${x.forslag.sikker ? 'sikker' : 'mulig'}"><button type="button" data-bruk="${esc(x.key)}"
+            title="${esc(T('Klikk for å bruke', 'Click to use'))}">→ ${somTag(x.forslag.tag)}</button>
+            <span>${Math.round(x.forslag.s * 100)} % · «${esc(x.forslag.b)}»</span></div>` : '';
+      const innhold = foran + (ny !== null ? `<span class="gml">${somTag(tekst)}</span><span class="ny">${somTag(ny)}</span>` : somTag(tekst)) + fs;
       return `<td class="${cls}${egen ? ' egen' : ''}" data-felt="${felt}" data-k="${esc(x.key)}"
         title="${egen ? esc(T('Rettet for hånd. Automatisk: ', 'Edited by hand. Automatic: ') + (felt === 'sti' ? x.stiRen : x.auto[felt])) : T('Klikk for å rette', 'Click to edit')}">${innhold}</td>`;
     };
@@ -1647,7 +1687,7 @@ function foreslaLike(key, fra, til) {
 function koblHusk(bar, key, e, laer) {
   $('naboLikeHusk').onclick = () => {
     const fra = e.xo[0], til = e.xn[0];
-    const linjer = String(naboInnst().ordliste || '').split(/\r?\n/).filter(l => l.trim());
+    const linjer = String(naboInnst().ordlisteEgen || '').split(/\r?\n/).filter(l => l.trim());
     const i = linjer.findIndex(l => l.trim().toUpperCase().startsWith(laer + ':'));
     if (i >= 0) {
       const [hode, ...rest] = linjer[i].split(':');
@@ -1855,7 +1895,7 @@ function koblNabo(ov) {
   const kutt = $('naboKutt');
   kutt.addEventListener('click', (e) => {
     if (e.target.closest('[data-ordliste]')) { NABO.ordApen = !NABO.ordApen; tegnNabo(); if (NABO.ordApen) $('naboOrd')?.focus(); return; }
-    if (e.target.closest('[data-ordstd]')) { lagreNabo({ordliste: ORDLISTE_STD}); tegnNabo(); return; }
+    if (e.target.closest('[data-ordstd]')) { lagreNabo({ordliste: ''}); tegnNabo(); return; }
     const ha = e.target.closest('[data-hale]');
     if (ha) { lagreAnlegg({haleAuto: ha.checked}); tegnNabo(); return; }
     const sm = e.target.closest('[data-smart]');
@@ -1879,6 +1919,7 @@ function koblNabo(ov) {
   });
   kutt.addEventListener('change', (e) => {
     if (e.target.id === 'naboOrd') { lagreNabo({ordliste: e.target.value}); tegnNabo(); }
+    if (e.target.matches('[data-px]')) { lagreAnlegg({pxModul: e.target.value}); tegnNabo(); }
   });
   kutt.addEventListener('mouseover', (e) => {
     const b = e.target.closest('.kutt-del');
