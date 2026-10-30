@@ -3493,7 +3493,7 @@ body.uten-bevegelse .scanbox *,body.uten-bevegelse .nabe-mark.nikk{animation:non
 .nabo-overlay{padding-top:4vh}
 .gs-modal.nabo-modal{
   width:min(1320px,calc(100vw - 40px));height:min(880px,90vh);max-height:none;
-  display:grid;grid-template-rows:auto auto minmax(0,1fr) auto;
+  display:grid;grid-template-rows:auto auto auto minmax(0,1fr) auto;
 }
 .nabo-topp{display:flex;align-items:center;gap:18px;padding:14px 18px 12px;border-bottom:1px solid var(--line)}
 .nabo-merke{display:flex;align-items:center;gap:12px;flex:0 0 auto}
@@ -3634,6 +3634,26 @@ html.nabo-halloween .nabo-fig .nabo-oyne rect,.lys .nabo-fig .nabo-oyne rect{fil
 .nabo-eks code{font-family:var(--mono);font-size:12px;color:var(--fg);padding:6px 10px;border:1px solid var(--line);
   border-radius:var(--radius);background:var(--sunken);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:46vw}
 
+/* Remove from the start: the tag's first parts as buttons. */
+.nabo-kutt{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:8px 16px;border-bottom:1px solid var(--line);
+  font-size:12px;color:var(--fg-3);min-width:0}
+.nabo-kutt[hidden]{display:none}
+.nabo-pref-felt select[hidden]{display:none}
+.nabo-pref-felt:has(select[hidden]) .field{border-radius:var(--radius)}
+/* Fixed rows, so the body keeps the stretching row when this line is hidden. */
+.nabo-modal>.nabo-topp{grid-row:1}.nabo-modal>.nabo-oppsett{grid-row:2}.nabo-modal>.nabo-kutt{grid-row:3}
+.nabo-modal>.nabo-kropp{grid-row:4}.nabo-modal>.nabo-fot{grid-row:5}
+.kutt-tittel{color:var(--fg-2);flex:0 0 auto}
+.kutt-deler{display:flex;align-items:center;flex-wrap:wrap;min-width:0;font:12px var(--mono);color:var(--fg)}
+.kutt-deler i{font-style:normal;color:var(--fg-3);padding:0 1px}
+.kutt-del{background:none;border:1px solid transparent;border-radius:var(--r-sm);padding:2px 4px;font:inherit;color:var(--fg);cursor:pointer}
+.kutt-del.felles{border-bottom-color:var(--line-2)}
+.kutt-del:hover,.kutt-del.til{background:color-mix(in srgb,var(--err) 14%,transparent);color:var(--fg)}
+.kutt-del.bort{color:var(--fg-3);text-decoration:line-through;text-decoration-color:var(--err)}
+.kutt-rest{color:var(--fg-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.kutt-info{margin-left:auto;display:flex;gap:10px;align-items:baseline}
+.kutt-lenke{background:none;border:0;padding:0;font:inherit;color:var(--accent);cursor:pointer}
+.kutt-lenke:hover{text-decoration:underline}
 .nabo-kropp{display:grid;grid-template-columns:260px minmax(0,1fr);min-height:0}
 .nabo-kilder{border-right:1px solid var(--line);display:flex;flex-direction:column;min-height:0}
 .nabo-h{font-size:11px;color:var(--fg-3);padding:10px 14px 6px;display:flex;gap:6px}

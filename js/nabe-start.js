@@ -154,6 +154,11 @@ const FAKTA = [
   ['COV betyr at regulatoren sier fra selv. Mindre spørring, mer ro.', 'COV means the controller speaks up itself. Less asking, more peace.'],
 ];
 const NYTT = {
+  '1.22': [
+    ['NABO: «Fjern fra starten». Klikk leddet du vil kutte til, så forsvinner f.eks. 564.001.OS001/FCB fra alle tagger. Huskes per anlegg', 'NABO: “Remove from the start”. Click the part to cut to and 564.001.OS001/FCB, say, goes from every tag. Remembered per site'],
+    ['Etter kuttet blir 320002 til 320.002, og samme systemnummer to-tre ganger på rad står bare én gang', 'After the cut 320002 becomes 320.002, and the same system number two or three times in a row is kept once'],
+    ['Roligere topp i NABO: valgene for anlegg og prefiks vises først når feltet har noe i seg', 'A calmer top in NABO: the site and prefix choices appear only once the field has something in it'],
+  ],
   '1.21': [
     ['NABE sier «ingen feil» bare etter en full, fersk lesing der hvert punkts status faktisk ble lest, og bare om den ene regulatoren', 'NABE says “no faults” only after a full, fresh read where every point’s status was actually read, and only about that one controller'],
     ['Ryddigere statuslinje og enhetshode: antall punkter står under navnet, «vist» bare når et filter skjuler noe', 'A tidier status bar and device header: the point count sits under the name, “shown” only when a filter hides something'],

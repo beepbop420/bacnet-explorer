@@ -112,6 +112,10 @@ function naboInnst() {
           skille: '_.- /',
           // Hand edits, per device and object: what used to be done in Excel.
           rett: her.rett || {},
+          // How many parts to take off the start of every tag, per site: the
+          // controller's own path (564.001.OS001/FCB) that a Niagara station
+          // already has as its folders.
+          kuttN: Number(her.kuttN) || 0,
           // Where files go: '' is the browser's Downloads, anything else a
           // folder the server writes into.
           mappe: p.mappe || '', mapper: p.mapper || [],
@@ -207,6 +211,46 @@ function delSystemnummer(biter) {
   return [...biter.slice(0, i), foran + tall.slice(0, 3), tall.slice(3), ...biter.slice(i + 1)];
 }
 
+/* The start of a tag taken off: the first n parts, on every point that has
+   more than that. By count and not by text, because the start differs from
+   controller to controller - 564.001.OS001 on one, 564.002.OS002 on the next.
+   What is left gets its system number tidied: 320002 becomes 320.002, and
+   the same system number written two or three times in a row (as in
+   320002.320002.320.002) is kept once. */
+function kuttStart(sti, n) {
+  const biter = String(sti || '').split('.');
+  if (!n || biter.length <= n) return sti;
+  return ryddSystem(biter.slice(n)).join('.');
+}
+function ryddSystem(biter) {
+  let i = 0;
+  const tall = [];
+  while (i < biter.length && /^\d+$/.test(biter[i])) {
+    const x = biter[i++];
+    if (x.length >= 6 && x.length <= 7) tall.push(x.slice(0, 3), x.slice(3));
+    else tall.push(x);
+  }
+  while (tall.length >= 4 && tall[0] === tall[2] && tall[1] === tall[3]) tall.splice(0, 2);
+  return [...tall, ...biter.slice(i)];
+}
+
+/* How many leading parts every tag on a device shares with the others on it,
+   taking the smallest over the devices: what can be cut everywhere without
+   reaching into what makes two points different. */
+function felleStart(rader) {
+  const perEnhet = new Map();
+  for (const x of rader) if (!x.system) {
+    const b = x.grunn.split('.');
+    const f = perEnhet.get(x.kilde);
+    if (!f) { perEnhet.set(x.kilde, b); continue; }
+    let i = 0;
+    while (i < f.length && i < b.length - 1 && f[i] === b[i]) i++;
+    f.length = i;
+  }
+  if (!perEnhet.size) return 0;
+  return Math.min(...[...perEnhet.values()].map(f => f.length));
+}
+
 /* What stands in front of the systems in every tag: the prefix as a folder
    if you chose that, and the site name if you want it there. Cluster is not
    here: in BTG it is the Citect cluster and has never been part of a Niagara
@@ -262,6 +306,8 @@ function naboRad(p, t, o, anlegg, enhetNavn, rett) {
   const norm = o.norm.paa && !system ? normaliser(p.name, o) : null;
   const topp = naboTopp(t, o);
   let stiRen = norm ? norm.sti : naboSti(p.name, '', o);
+  const grunn = stiRen;
+  if (o.kuttN && !system) stiRen = kuttStart(stiRen, o.kuttN);
   // BTG's +PRE=360.001: the prefix glued to the system number. A SYSTEM
   // point has no system number and sits outside them all, so it goes bare.
   // It goes on the system number - the first part that is a number - so a
@@ -315,7 +361,7 @@ function naboRad(p, t, o, anlegg, enhetNavn, rett) {
     linje: f.map(x => String(x).replace(/[;\r\n]/g, ' ')).join(';'),
     sti, type, typeNavn: shortType(p.type), inst: p.instance, enhet, des,
     trend: !!trend, klasse, beskr, navn: p.name || '', harSd: sd.rest !== (p.description || '').trim(),
-    hale: !!rett.hale, stiRen, sdKode, beskrSd,
+    hale: !!rett.hale, stiRen, grunn, sdKode, beskrSd,
     auto: {sti: stiAuto, beskr: beskrAuto, enhet: enhetAuto, des: desAuto, trend: sd.trend, klasse: sd.klasse},
     rett,
   };
@@ -918,6 +964,37 @@ function lukkNabo() {
   if (typeof nabeKlasse === 'function') setTimeout(() => nabeKlasse('vink', 1100), 180);
 }
 
+/* The start of the tags as parts you click: everything up to and including
+   the part you click is taken off every tag. NABO marks the parts all tags
+   share, and suggests them, but you decide. Saved per site. */
+function tegnKutt(r, o) {
+  const el = $('naboKutt');
+  if (!el) return;
+  const vanlige = r.rader.filter(x => !x.system);
+  if (!vanlige.length) { el.hidden = true; return; }
+  const eks = vanlige[0];
+  const deler = eks.grunn.split('.');
+  // What all tags share, but the suggestion stops after the controller's own
+  // path (the part with a slash, OS001/FCB) - the system number after it is
+  // the same on every point of a controller too, and must stay.
+  const felles = felleStart(vanlige);
+  const skr = deler.slice(0, felles).map(d => d.includes('/')).lastIndexOf(true);
+  const forslag = skr >= 0 ? skr + 1 : 0;
+  const n = Math.min(o.kuttN, deler.length - 1);
+  const berort = n ? vanlige.filter(x => x.grunn.split('.').length > n).length : 0;
+  el.hidden = false;
+  const vis = deler.slice(0, Math.min(deler.length - 1, Math.max(felles + 2, n + 2, 4)));
+  el.innerHTML = `<span class="kutt-tittel">${T('Fjern fra starten', 'Remove from the start')}</span>
+    <span class="kutt-deler" title="${esc(T('Klikk der du vil kutte. Alt til og med det leddet tas bort fra hver tagg.', 'Click where to cut. Everything up to and including that part is taken off every tag.'))}">${
+      vis.map((d, i) => `<button type="button" class="kutt-del${i < n ? ' bort' : ''}${i < forslag ? ' felles' : ''}" data-kutt="${i + 1}">${esc(d)}</button>`).join('<i>.</i>')
+    }<i>.</i><span class="kutt-rest">${esc(deler.slice(vis.length).join('.'))}</span></span>
+    <span class="kutt-info">${n
+      ? `${T(`${n} ledd tas bort fra ${berort} tagger`, `${n} parts taken off ${berort} tags`)} <button type="button" class="kutt-lenke" data-kutt="0">${T('Ikke fjern noe', 'Remove nothing')}</button>`
+      : forslag
+        ? `<button type="button" class="kutt-lenke" data-kutt="${forslag}">${T(`Fjern ${deler.slice(0, forslag).join('.')}.`, `Remove ${deler.slice(0, forslag).join('.')}.`)}</button>`
+        : T('Klikk et ledd for å kutte der', 'Click a part to cut there')}</span>`;
+}
+
 function tegnNabo(helt) {
   const ov = $('naboOverlay');
   if (!ov || ov.hidden) return;
@@ -937,14 +1014,14 @@ function tegnNabo(helt) {
         <div class="nabo-pref" title="${T('Står i Variabel-fila og filnavnet, og holder rettingene dine samlet per anlegg', 'Goes in the Variabel file and its name, and keeps your edits together per site')}">
           <span>${T('Anlegg', 'Site')} <i>${T('valgfritt', 'optional')}</i></span>
           <div class="nabo-pref-felt bred">
-            <input class="field" id="naboAnlegg" autocomplete="off" placeholder="${T('ingen', 'none')}">
+            <input class="field" id="naboAnlegg" autocomplete="off" placeholder="${T('Navn på anlegget', 'Name of the site')}">
             <select class="field" id="naboAnleggMod" title="${T('Om anleggsnavnet skal stå først i taggen', 'Whether the site name goes first in the tag')}">
               <option value="">${T('ikke i taggen', 'not in the tag')}</option>
               <option value="tag">${T('først i taggen', 'first in the tag')}</option>
             </select></div></div>
         <div class="nabo-pref"><span>${T('Prefiks', 'Prefix')} <i>${T('valgfritt', 'optional')}</i></span>
           <div class="nabo-pref-felt">
-            <input class="field" id="naboPrefiks" autocomplete="off" spellcheck="false" placeholder="${T('ingen', 'none')}">
+            <input class="field" id="naboPrefiks" autocomplete="off" spellcheck="false" placeholder="${T('f.eks. 01', 'e.g. 01')}">
             <select class="field" id="naboPrefMod" title="${T('Hvor prefikset brukes, som Format i BTG', 'Where the prefix is used, like Format in BTG')}">
               <option value="device">${T('foran enhetsnavnet', 'before the device')}</option>
               <option value="tag">${T('foran enhetsnavn og tag', 'before device and tag')}</option>
@@ -965,6 +1042,7 @@ function tegnNabo(helt) {
           <div class="nabo-des-grid"></div></details>
         <div class="nabo-eks"><span>${T('Slik blir det', 'What it becomes')}</span><code id="naboEks"></code></div>
       </section>
+      <div class="nabo-kutt" id="naboKutt" hidden></div>
       <div class="nabo-kropp">
         <aside class="nabo-kilder">
           <div class="nabo-h">${T('Enheter', 'Devices')} <span id="naboAntK"></span></div>
@@ -1031,9 +1109,13 @@ function tegnNabo(helt) {
   const sett = (id, v) => { const el = $(id); if (el && document.activeElement !== el) el.value = v; };
   sett('naboAnlegg', t.anleggsnavn || ''); sett('naboPrefiks', t.prefiks || '');
   sett('naboCluster', t.cluster || ''); sett('naboTrend', o.trend); sett('naboPrefMod', o.prefMod);
+  // The how-to-use choice only once there is something to use: a greyed-out
+  // list beside an empty field read as something you had to fill in.
   $('naboPrefMod').disabled = !t.prefiks;
+  $('naboPrefMod').hidden = !t.prefiks;
   sett('naboAnleggMod', o.foranAnlegg ? 'tag' : '');
   $('naboAnleggMod').disabled = !(t.anleggsnavn || '').trim();
+  $('naboAnleggMod').hidden = !(t.anleggsnavn || '').trim();
   $('naboPer').checked = NABO.perEnhet;
 
   const grid = ov.querySelector('.nabo-des-grid');
@@ -1042,6 +1124,8 @@ function tegnNabo(helt) {
       <input class="field" type="number" min="0" max="6" data-eu="${k}"></label>`).join('');
   }
   grid?.querySelectorAll('[data-eu]').forEach(i => { if (document.activeElement !== i) i.value = o.eu[i.dataset.eu]; });
+
+  tegnKutt(r, o);
 
   // One ordinary point and one SYSTEM point, so both halves of the tree show.
   const topp = naboTopp(t, o);
@@ -1481,6 +1565,20 @@ function koblNabo(ov) {
   $('naboNormKnapp').onclick = () => { NABO.visning = 'norm'; ov.querySelector('.nabo-des').open = false; tegnNabo(); };
   $('naboPrefMod').onchange = (e) => { lagreNabo({prefMod: e.target.value}); tegnNabo(); };
   $('naboAnleggMod').onchange = (e) => { lagreNabo({foranAnlegg: e.target.value === 'tag'}); tegnNabo(); };
+  const kutt = $('naboKutt');
+  kutt.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-kutt]');
+    if (!b) return;
+    const n = Number(b.dataset.kutt);
+    // Clicking the last part already cut steps back one.
+    lagreAnlegg({kuttN: n === naboInnst().kuttN ? n - 1 : n});
+    tegnNabo();
+  });
+  kutt.addEventListener('mouseover', (e) => {
+    const b = e.target.closest('.kutt-del');
+    kutt.querySelectorAll('.kutt-del').forEach(x => x.classList.toggle('til', !!b && Number(x.dataset.kutt) <= Number(b.dataset.kutt)));
+  });
+  kutt.addEventListener('mouseleave', () => kutt.querySelectorAll('.kutt-del').forEach(x => x.classList.remove('til')));
   $('naboTrend').addEventListener('change', (e) => {
     const v = e.target.value.trim();
     if (!/^\d\d:\d\d:\d\d$/.test(v)) { toast(T('Skriv tiden som tt:mm:ss', 'Write the time as hh:mm:ss'), true); e.target.value = naboInnst().trend; return; }
