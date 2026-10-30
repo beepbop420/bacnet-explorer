@@ -126,6 +126,8 @@ function naboInnst() {
           // Short endings the name writes with an underscore stay that way:
           // RT401_K, SB500_Gn, RD001_SP. Per site, since sites differ.
           haleAuto: !!(her.haleAuto ?? (p.sistValg || {}).haleAuto),
+          // What an ending is called in the station, per kind of component.
+          ordliste: typeof p.ordliste === 'string' ? p.ordliste : ORDLISTE_STD,
           // Where files go: '' is the browser's Downloads, anything else a
           // folder the server writes into.
           mappe: p.mappe || '', mapper: p.mapper || [],
@@ -281,6 +283,40 @@ function kompHale(sti, navn) {
   return haleINavn(navn) ? naboHale(sti) : sti;
 }
 
+/* Endings renamed per kind of component, as the station names them. One
+   line per kind: the letters of the component code, then from=to pairs.
+   The energy meter line is read off 43 BTG exports: kWh, kW and Err on 76
+   meters each, RT4 and RT5 for supply and return, DT for the difference,
+   Volume in cubic metres and m3 for the flow in cubic metres per hour. */
+const ORDLISTE_STD = 'OE: Energy=kWh, Power=kW, Flow=m3, FT=RT4, RT=RT5, TurTemp=RT4, ReturTemp=RT5, DiffTemp=DT, Volum=Volume';
+let ORD_CACHE = {k: null, kart: null};
+function ordKart(tekst) {
+  if (ORD_CACHE.k === tekst) return ORD_CACHE.kart;
+  const kart = new Map();
+  for (const linje of String(tekst || '').split(/\r?\n/)) {
+    const m = /^\s*([\p{L}]+)\s*:(.*)$/u.exec(linje);
+    if (!m) continue;
+    const par = new Map();
+    for (const p of m[2].split(',')) {
+      const [fra, til] = p.split('=').map(s => (s || '').trim());
+      if (fra && til) par.set(fra.toLowerCase(), til);
+    }
+    if (par.size) kart.set(m[1].toUpperCase(), par);
+  }
+  ORD_CACHE = {k: tekst, kart};
+  return kart;
+}
+function brukOrdliste(sti, o) {
+  const kart = ordKart(o.ordliste);
+  if (!kart.size) return sti;
+  const d = sti.split('.');
+  const i = d.findLastIndex((x, j) => j > 0 && KOMPONENT.test(x) && !/^O[US]\d+$/i.test(x));
+  if (i < 0 || i === d.length - 1) return sti;
+  const par = kart.get(d[i].replace(/\d/g, '').toUpperCase());
+  if (!par) return sti;
+  return [...d.slice(0, i + 1), ...d.slice(i + 1).map(x => par.get(x.toLowerCase()) ?? x)].join('.');
+}
+
 /* The name ends in a short code after an underscore: _K, _Gn, _SP, _Err. */
 function haleINavn(navn) {
   return /_[\p{L}\d]{1,3}\s*$/u.test(String(navn || ''));
@@ -361,6 +397,7 @@ function naboRad(p, t, o, anlegg, enhetNavn, rett) {
   let stiRen = norm ? norm.sti : naboSti(smart ?? p.name, '', o);
   const grunn = stiRen;
   if (o.kuttN && !system && !smart) stiRen = kuttStart(stiRen, o.kuttN);
+  if (!system && !norm) stiRen = brukOrdliste(stiRen, o);
   // BTG's +PRE=360.001: the prefix glued to the system number. A SYSTEM
   // point has no system number and sits outside them all, so it goes bare.
   // It goes on the system number - the first part that is a number - so a
@@ -1033,6 +1070,12 @@ function tegnKutt(r, o) {
   const haandLenke = haandTag
     ? ` <button type="button" class="kutt-lenke" data-nullstill="1" title="${esc(T('Tar bort håndrettinger av taggen, så regelen virker. Beskrivelse, enhet, trend og alarm beholdes.', 'Takes off hand edits of the tag, so the rule applies. Description, unit, trend and alarm stay.'))}">${T(`Nullstill ${haandTag} håndrettede tagger`, `Reset ${haandTag} hand-edited tags`)}</button>` : '';
   const kanHale = vanlige.filter(x => kompHale(x.stiRen, x.navn) !== x.stiRen).length;
+  const ordAnt = ordKart(o.ordliste).size;
+  const ordLenke = ` <button type="button" class="kutt-lenke" data-ordliste title="${esc(T('Hva endelsene heter i stasjonen, per komponenttype. Energimålere (OE) er fylt inn.', 'What the endings are called in the station, per kind of component. Energy meters (OE) are filled in.'))}">${T(`Ordliste (${ordAnt})`, `Word list (${ordAnt})`)}</button>`;
+  const ordPanel = NABO.ordApen ? `<div class="kutt-ord">
+      <textarea id="naboOrd" spellcheck="false" rows="3">${esc(o.ordliste)}</textarea>
+      <span class="lite">${T('Én linje per komponenttype: bokstavene i koden, kolon, og fra=til. OE: Energy=kWh, Power=kW', 'One line per kind of component: the letters of the code, a colon, and from=to. OE: Energy=kWh, Power=kW')}
+        <button type="button" class="kutt-lenke" data-ordstd>${T('Tilbake til standard', 'Back to the default')}</button></span></div>` : '';
   const haleValg = kanHale
     ? `<label class="kutt-valg" title="${esc(T('Etter komponentkoden (RT601, JP400, OE500) står resten med understrek: RT601.SP_ADJ, JP400.TW_AUTO, SB500.I_tid.', 'After the component code (RT601, JP400, OE500) the rest goes with underscores: RT601.SP_ADJ, JP400.TW_AUTO, SB500.I_tid.'))}"><input type="checkbox" data-hale ${o.haleAuto ? 'checked' : ''}> ${T(`_ etter komponentkoden, som RT601.SP_ADJ (${kanHale})`, `_ after the component code, as in RT601.SP_ADJ (${kanHale})`)}</label>` : '';
   if (o.smart) {
@@ -1041,7 +1084,7 @@ function tegnKutt(r, o) {
     el.innerHTML = `<span class="kutt-tittel">${T('Taggen starter ved systemnummeret', 'Tags start at the system number')}</span>
       <span class="kutt-info" style="margin-left:0">${T(`${treff} av ${vanlige.length} tagger`, `${treff} of ${vanlige.length} tags`)}${
         treff < vanlige.length ? T(` · resten som før`, ` · the rest as before`) : ''}</span>
-      <span class="kutt-info">${haleValg}<button type="button" class="kutt-lenke" data-smart="0">${T('Slå av', 'Turn off')}</button>${haandLenke}</span>`;
+      <span class="kutt-info">${haleValg}${ordLenke}<button type="button" class="kutt-lenke" data-smart="0">${T('Slå av', 'Turn off')}</button>${haandLenke}</span>${ordPanel}`;
     return;
   }
   const eks = vanlige[0];
@@ -1065,7 +1108,7 @@ function tegnKutt(r, o) {
       ? `${T(`${n} ledd tas bort fra ${berort} tagger`, `${n} parts taken off ${berort} tags`)} <button type="button" class="kutt-lenke" data-kutt="0">${T('Ikke fjern noe', 'Remove nothing')}</button>`
       : forslag
         ? `<button type="button" class="kutt-lenke" data-kutt="${forslag}">${T(`Fjern ${deler.slice(0, forslag).join('.')}.`, `Remove ${deler.slice(0, forslag).join('.')}.`)}</button>`
-        : T('Klikk et ledd for å kutte der', 'Click a part to cut there')}${haleValg}${haandLenke}</span>`;
+        : T('Klikk et ledd for å kutte der', 'Click a part to cut there')}${haleValg}${ordLenke}${haandLenke}</span>${ordPanel}`;
 }
 
 function tegnNabo(helt) {
@@ -1546,7 +1589,22 @@ function foreslaLike(key, fra, til) {
     const bredt = andre.map(x => [x, brukEndring(e, x.sti, 'form2')]).filter(([x, ny]) => ny && ny !== x.sti);
     if (bredt.length > treff.length * 2) treff = bredt;
   }
-  if (!treff.length) { bar.hidden = true; return; }
+  // The last part renamed right after a component code is worth remembering
+  // for that kind of component (OE: FT=RT4), even with no other tag to change.
+  const sist = e.foran[e.foran.length - 1] || '';
+  const laer = e.xo.length === 1 && e.xn.length === 1 && KOMPONENT.test(sist) && !/^O[US]\d+$/i.test(sist)
+    && String(fra).split('.').length === e.foran.length + 1 ? sist.replace(/\d/g, '').toUpperCase() : '';
+  if (!treff.length && !laer) { bar.hidden = true; return; }
+  if (!treff.length) {
+    bar.innerHTML = `<span class="like-tekst">${esc(T(`Husk ${e.xo[0]} = ${e.xn[0]} for alle ${laer}?`, `Remember ${e.xo[0]} = ${e.xn[0]} for every ${laer}?`))}</span>
+      <span class="like-eks">${esc(fra)} <i>→</i> ${esc(til)}</span>
+      <button type="button" class="btn primary" id="naboLikeHusk">${T(`Husk for alle ${laer}`, `Remember for every ${laer}`)}</button>
+      <button type="button" class="btn" id="naboLikeNei">${T('Nei', 'No')}</button>`;
+    bar.hidden = false;
+    koblHusk(bar, key, e, laer);
+    $('naboLikeNei').onclick = () => { bar.hidden = true; };
+    return;
+  }
   const vis = (deler) => deler.join('.') || T('ingenting', 'nothing');
   const tekst = modus === 'start'
     ? (e.xn.length
@@ -1568,8 +1626,10 @@ function foreslaLike(key, fra, til) {
   bar.innerHTML = `<span class="like-tekst" title="${esc(eks)}">${esc(tekst)}</span>
     <span class="like-eks">${esc(treff[0][0].sti)} <i>→</i> ${esc(treff[0][1])}</span>
     <button type="button" class="btn primary" id="naboLikeJa">${T(`Endre ${treff.length}`, `Change ${treff.length}`)}</button>
+    ${laer ? `<button type="button" class="btn" id="naboLikeHusk">${T(`Husk for alle ${laer}`, `Remember for every ${laer}`)}</button>` : ''}
     <button type="button" class="btn" id="naboLikeNei">${T('Nei', 'No')}</button>`;
   bar.hidden = false;
+  if (laer) koblHusk(bar, key, e, laer);
   $('naboLikeJa').onclick = () => {
     NABO.angre = naboInnst().rett;
     settRett(treff.map(([x, ny]) => [x.key, 'sti', ny === x.auto.sti ? undefined : ny]));
@@ -1579,6 +1639,27 @@ function foreslaLike(key, fra, til) {
     if (typeof brorKlasse === 'function') { brorKlasse('taster', 900); brorKlasse('fort', 900); }
   };
   $('naboLikeNei').onclick = () => { bar.hidden = true; };
+}
+
+/* "Remember for every OE": the renamed ending goes into the word list, so it
+   happens by itself on every site from now on, and the hand edit that taught
+   it is no longer needed. */
+function koblHusk(bar, key, e, laer) {
+  $('naboLikeHusk').onclick = () => {
+    const fra = e.xo[0], til = e.xn[0];
+    const linjer = String(naboInnst().ordliste || '').split(/\r?\n/).filter(l => l.trim());
+    const i = linjer.findIndex(l => l.trim().toUpperCase().startsWith(laer + ':'));
+    if (i >= 0) {
+      const [hode, ...rest] = linjer[i].split(':');
+      const par = rest.join(':').split(',').map(s => s.trim()).filter(s => s && s.split('=')[0].trim().toLowerCase() !== fra.toLowerCase());
+      linjer[i] = `${hode.trim()}: ${[...par, `${fra}=${til}`].join(', ')}`;
+    } else linjer.push(`${laer}: ${fra}=${til}`);
+    lagreNabo({ordliste: linjer.join('\n')});
+    settRett([[key, 'sti', undefined]]);
+    bar.hidden = true;
+    tegnNabo();
+    toast(T(`${fra}=${til} gjelder nå for alle ${laer}`, `${fra}=${til} now applies to every ${laer}`));
+  };
 }
 
 function rettCelle(td) {
@@ -1773,6 +1854,8 @@ function koblNabo(ov) {
   $('naboAnleggMod').onchange = (e) => { lagreNabo({foranAnlegg: e.target.value === 'tag'}); tegnNabo(); };
   const kutt = $('naboKutt');
   kutt.addEventListener('click', (e) => {
+    if (e.target.closest('[data-ordliste]')) { NABO.ordApen = !NABO.ordApen; tegnNabo(); if (NABO.ordApen) $('naboOrd')?.focus(); return; }
+    if (e.target.closest('[data-ordstd]')) { lagreNabo({ordliste: ORDLISTE_STD}); tegnNabo(); return; }
     const ha = e.target.closest('[data-hale]');
     if (ha) { lagreAnlegg({haleAuto: ha.checked}); tegnNabo(); return; }
     const sm = e.target.closest('[data-smart]');
@@ -1793,6 +1876,9 @@ function koblNabo(ov) {
     // Clicking the last part already cut steps back one.
     lagreAnlegg({kuttN: n === naboInnst().kuttN ? n - 1 : n});
     tegnNabo();
+  });
+  kutt.addEventListener('change', (e) => {
+    if (e.target.id === 'naboOrd') { lagreNabo({ordliste: e.target.value}); tegnNabo(); }
   });
   kutt.addEventListener('mouseover', (e) => {
     const b = e.target.closest('.kutt-del');

@@ -178,6 +178,10 @@ const FAKTA = [
   ['COV betyr at regulatoren sier fra selv. Mindre spørring, mer ro.', 'COV means the controller speaks up itself. Less asking, more peace.'],
 ];
 const NYTT = {
+  '1.26': [
+    ['NABO har en ordliste for endelser per komponenttype. Energimålere (OE) er fylt inn fra BTG-eksportene: Energy blir kWh, Power kW, Flow m3, FT RT4, RT RT5', 'NABO has a word list for endings per kind of component. Energy meters (OE) are filled in from the BTG exports: Energy becomes kWh, Power kW, Flow m3, FT RT4, RT RT5'],
+    ['Retter du en endelse på én komponent, kan du velge «Husk for alle OE», så skjer det av seg selv på alle anlegg', 'Correct an ending on one component and choose “Remember for every OE”, and it happens by itself on every site'],
+  ],
   '1.25': [
     ['NABO: «_ etter komponentkoden». RT601.SP.ADJ blir RT601.SP_ADJ, JP400.TW.AUTO blir JP400.TW_AUTO', 'NABO: “_ after the component code”. RT601.SP.ADJ becomes RT601.SP_ADJ, JP400.TW.AUTO becomes JP400.TW_AUTO'],
     ['Valgene for taggene blir med når du skriver inn et anleggsnavn, i stedet for å forsvinne', 'The tag choices come along when you type a site name, instead of disappearing'],
