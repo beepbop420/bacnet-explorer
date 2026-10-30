@@ -178,6 +178,10 @@ const FAKTA = [
   ['COV betyr at regulatoren sier fra selv. Mindre spørring, mer ro.', 'COV means the controller speaks up itself. Less asking, more peace.'],
 ];
 const NYTT = {
+  '1.28': [
+    ['Romtagger starter med systemnummer og rom: 564.001.288.RT601.WSP, uten OU001 og Plan2', 'Room tags start with system number and room: 564.001.288.RT601.WSP, without OU001 and Plan2'],
+    ['Forslag fra beskrivelsen kjenner Børverdi som Settpunkt, og X3 eller Y3 i et kurvepunkt følger med til taggen (RT401.K.X3)', 'Suggestions from the description know Børverdi as Settpunkt, and X3 or Y3 in a curve point comes along to the tag (RT401.K.X3)'],
+  ],
   '1.27': [
     ['NABO foreslår tagger fra beskrivelsen, lært av BTG-eksportene dine: «Temperatur tilluft» blir RT401, «Pådrag tilluftsvifte» blir JV401 … Gn. Bare på punkter uten komponentkode', 'NABO suggests tags from the description, learnt from your BTG exports: “Temperatur tilluft” becomes RT401, “Pådrag tilluftsvifte” becomes JV401 … Gn. Only on points without a component code'],
     ['Velg PX-familie per anlegg (freeTag, nordomatic/statsbygg, Beckhoff TC2), så følger signalnavnene malene i nmNxFiles: Gn blir C, Err blir A, Drift blir D', 'Pick the PX family per site (freeTag, nordomatic/statsbygg, Beckhoff TC2) and the signal names follow the templates in nmNxFiles: Gn becomes C, Err becomes A, Drift becomes D'],

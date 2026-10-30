@@ -346,6 +346,17 @@ function haleINavn(navn) {
   return /_[\p{L}\d]{1,3}\s*$/u.test(String(navn || ''));
 }
 
+/* After the system number, the station's own folders go: the controller
+   (OU001, OS001) and the floor (Plan1, Plan 2). A room point is then
+   564.001.288.RT601.WSP - system, room, component - as Martin writes it. */
+function utenMapper(sti) {
+  const d = String(sti).split('.');
+  const i = d.findIndex((p, j) => /^(\+[^=]*=)?\d{3}$/.test(p) && /^\d{3,4}$/.test(d[j + 1] || ''));
+  if (i < 0) return sti;
+  const rest = d.slice(i + 2).filter(p => !/^O[US]\d+$/i.test(p) && !/^Plan\s?\d+$/i.test(p));
+  return rest.length ? [...d.slice(0, i + 2), ...rest].join('.') : sti;
+}
+
 /* How many leading parts every tag on a device shares with the others on it,
    taking the smallest over the devices: what can be cut everywhere without
    reaching into what makes two points different. */
@@ -436,7 +447,10 @@ function naboRad(p, t, o, anlegg, enhetNavn, rett) {
   // A row's own choice wins; otherwise the site's rule, from the name.
   // A row's own choice wins; otherwise the site's rule.
   const hale = rett.hale ?? (o.haleAuto && !system);
-  const stiAuto = rett.hale === true ? naboHale(stiRen) : hale ? kompHale(stiRen, p.name) : stiRen;
+  const stiHale = rett.hale === true ? naboHale(stiRen) : hale ? kompHale(stiRen, p.name) : stiRen;
+  // The controller and floor folders go last, so the underscore rule above
+  // could still see OU001 and find RT in OU001.RT.SP.DIFF.NATT.
+  const stiAuto = smart ? utenMapper(stiHale) : stiHale;
   const sti = rett.sti ?? stiAuto;
   const sd = btgSd(p.description || '');
   const beskrAuto = sd.rest || p.name || '';

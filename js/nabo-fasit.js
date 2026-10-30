@@ -22,9 +22,23 @@ const FS_STOPP = new Set(['i', 'på', 'til', 'for', 'av', 'og', 'fra', 'med', 'v
 const FS_NOKKEL = ['feil', 'alarm', 'status', 'drift', 'settpunkt', 'pådrag', 'kvitter', 'brann', 'tilbakemeld',
   'vender', 'hand', 'auto', 'start', 'stopp', 'maks', 'min', 'offset', 'grense'];
 
+// The same thing said two ways. «Børverdi» in one plant is «Settpunkt» in
+// the exports; «Temp» is «Temperatur».
+const FS_SYNONYM = {
+  børverdi: 'settpunkt', borverdi: 'settpunkt', sp: 'settpunkt', setpunkt: 'settpunkt',
+  temp: 'temperatur', utekompensert: 'utekomp', utekompensering: 'utekomp', utekompensert_: 'utekomp',
+  knekkpunkt: 'kurvepunkt', avtrekkstemp: 'avtrekkstemperatur', tilluftstemp: 'tilluftstemperatur',
+  utetemp: 'utetemperatur', vifte: 'vifte', miaks: 'maks', maksimal: 'maks', minimal: 'min',
+};
 function fsRen(s) {
   return (String(s || '').toLowerCase().replace(/\./g, ' ').match(/[a-zæøå0-9]+/g) || [])
+    .map(w => FS_SYNONYM[w] || w)
     .filter(w => !FS_STOPP.has(w) && !/^\d+$/.test(w)).join(' ');
+}
+// A curve point or a stage: X3, Y2. It has to come along to the tag.
+function fsIndeks(s) {
+  const m = /\b([XY])\s?(\d{1,2})\b/i.exec(String(s || ''));
+  return m ? m[1].toUpperCase() + m[2] : '';
 }
 function fsTri(s) {
   s = s.replace(/ /g, '');
@@ -34,6 +48,8 @@ function fsTri(s) {
 }
 function fsNokler(ren) {
   const ord = ren.split(' ');
+  // A curve point of an outdoor compensation is a setpoint, said or not.
+  if (ord.some(w => w.startsWith('kurvepunkt') || w.startsWith('utekomp'))) ord.push('settpunkt');
   return FS_NOKKEL.filter(k => ord.some(w => w.startsWith(k)));
 }
 function fsKlasse(t) {
@@ -57,7 +73,8 @@ async function hentFasit() {
       const f = fsForm(tag);
       if (!f) return null;
       const ren = fsRen(btgUtenSd(beskr));
-      return {f, b: beskr, kl: fsKlasse(type), tri: fsTri(ren), n: fsNokler(ren)};
+      const ix = fsIndeks(f) || fsIndeks(beskr);
+      return {f, b: beskr, kl: fsKlasse(type), tri: fsTri(ren), n: fsNokler(ren), ix};
     }).filter(x => x && x.tri.size >= 3);
     FASIT.klar = true;
     FASIT.cache.clear();
@@ -74,7 +91,7 @@ function naboForslag(x) {
   let best = FASIT.cache.get(nokkel);
   if (best === undefined) {
     const ren = fsRen(btgUtenSd(x.beskr));
-    const t = fsTri(ren), n = fsNokler(ren);
+    const t = fsTri(ren), n = fsNokler(ren), ix = fsIndeks(x.beskr);
     best = null;
     if (t.size >= 3) {
       for (const f of FASIT.liste) {
@@ -82,11 +99,16 @@ function naboForslag(x) {
         let felles = 0;
         for (const g of t) if (f.tri.has(g)) felles++;
         let s = 2 * felles / (t.size + f.tri.size);
-        for (const k of FS_NOKKEL) if (n.includes(k) !== f.n.includes(k)) s -= 0.12;
-        if (!best || s > best.s) best = {s, f: f.f, b: f.b};
+        for (const k of FS_NOKKEL) if (n.includes(k) !== f.n.includes(k)) s -= 0.2;
+        // A curve point wants a curve point of the same letter (X with X).
+        if (ix) s += f.ix && f.ix[0] === ix[0] ? 0.25 : -0.15;
+        else if (f.ix) s -= 0.1;
+        if (!best || s > best.s) best = {s, f: f.f, b: f.b, ix: f.ix};
       }
     }
-    if (best && best.s < 0.6) best = null;
+    if (best && best.s < 0.55) best = null;
+    // The number of the curve point is the point's own: X3 stays X3.
+    if (best && ix && best.ix) best = Object.assign({}, best, {f: best.f.replace(new RegExp(`\\b${best.ix}\\b`, 'i'), ix)});
     FASIT.cache.set(nokkel, best);
   }
   if (!best) return null;
@@ -98,9 +120,11 @@ function naboForslag(x) {
   // controller, the plant's own RT601 and SQ401 were right every time and
   // the description ("Lokalt settpunkt") said too little. Codes inside a
   // joined part count too (CAV_110_563101_SK401_FLOW).
-  if (d.slice(i + 2).some(p => p.split('_').some(q => KOMPONENT.test(q) && !/^O[US]\d+$/i.test(q)))) return null;
+  // SK4xx counts as a code too: a number not yet given.
+  const kode = q => (KOMPONENT.test(q) || /^\p{L}{1,4}\d[\dx]{1,3}$/iu.test(q)) && !/^O[US]\d+$/i.test(q);
+  if (d.slice(i + 2).some(p => p.split('_').some(kode))) return null;
   const tag = [...d.slice(0, i + 2), best.f].join('.');
-  return tag === x.sti ? null : {tag, s: best.s, b: best.b, sikker: best.s >= 0.8};
+  return tag === x.sti ? null : {tag, s: Math.min(1, best.s), b: best.b, sikker: best.s >= 0.8};
 }
 
 /* Applying: one, every sure one, or all. A suggestion that would give a
