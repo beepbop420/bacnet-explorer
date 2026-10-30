@@ -118,6 +118,9 @@ function naboInnst() {
           kuttN: Number(her.kuttN) || 0,
           // Start every tag at the last system number in the name.
           smart: !!her.smart,
+          // Short endings the name writes with an underscore stay that way:
+          // RT401_K, SB500_Gn, RD001_SP. Per site, since sites differ.
+          haleAuto: !!her.haleAuto,
           // Where files go: '' is the browser's Downloads, anything else a
           // folder the server writes into.
           mappe: p.mappe || '', mapper: p.mapper || [],
@@ -256,6 +259,11 @@ function smartNavn(navn) {
   return null;
 }
 
+/* The name ends in a short code after an underscore: _K, _Gn, _SP, _Err. */
+function haleINavn(navn) {
+  return /_[\p{L}\d]{1,3}\s*$/u.test(String(navn || ''));
+}
+
 /* How many leading parts every tag on a device shares with the others on it,
    taking the smallest over the devices: what can be cut everywhere without
    reaching into what makes two points different. */
@@ -342,7 +350,9 @@ function naboRad(p, t, o, anlegg, enhetNavn, rett) {
     stiRen = biter.join('.');
   }
   stiRen = (topp ? topp + '.' : '') + stiRen;
-  const stiAuto = rett.hale ? naboHale(stiRen) : stiRen;
+  // A row's own choice wins; otherwise the site's rule, from the name.
+  const hale = rett.hale ?? (o.haleAuto && !system && haleINavn(p.name));
+  const stiAuto = hale ? naboHale(stiRen) : stiRen;
   const sti = rett.sti ?? stiAuto;
   const sd = btgSd(p.description || '');
   const beskrAuto = sd.rest || p.name || '';
@@ -384,7 +394,7 @@ function naboRad(p, t, o, anlegg, enhetNavn, rett) {
     linje: f.map(x => String(x).replace(/[;\r\n]/g, ' ')).join(';'),
     sti, type, typeNavn: shortType(p.type), inst: p.instance, enhet, des,
     trend: !!trend, klasse, beskr, navn: p.name || '', harSd: sd.rest !== (p.description || '').trim(),
-    hale: !!rett.hale, stiRen, grunn, smart: !!smart, sdKode, beskrSd,
+    hale: !!hale, stiRen, grunn, smart: !!smart, sdKode, beskrSd,
     auto: {sti: stiAuto, beskr: beskrAuto, enhet: enhetAuto, des: desAuto, trend: sd.trend, klasse: sd.klasse},
     rett,
   };
@@ -999,13 +1009,16 @@ function tegnKutt(r, o) {
   const haandTag = vanlige.filter(x => x.rett.sti !== undefined || x.rett.hale).length;
   const haandLenke = haandTag
     ? ` <button type="button" class="kutt-lenke" data-nullstill="1" title="${esc(T('Tar bort håndrettinger av taggen, så regelen virker. Beskrivelse, enhet, trend og alarm beholdes.', 'Takes off hand edits of the tag, so the rule applies. Description, unit, trend and alarm stay.'))}">${T(`Nullstill ${haandTag} håndrettede tagger`, `Reset ${haandTag} hand-edited tags`)}</button>` : '';
+  const kanHale = vanlige.filter(x => haleINavn(x.navn)).length;
+  const haleValg = kanHale
+    ? `<label class="kutt-valg" title="${esc(T('Når navnet slutter på _ og en kort kode (RT401_K, SB500_Gn), slutter taggen likt, selv med punktum hele veien.', 'When the name ends in _ and a short code (RT401_K, SB500_Gn), the tag ends the same way, even with dots all the way.'))}"><input type="checkbox" data-hale ${o.haleAuto ? 'checked' : ''}> ${T(`Behold _K, _Gn … som i navnet (${kanHale})`, `Keep _K, _Gn … as in the name (${kanHale})`)}</label>` : '';
   if (o.smart) {
     const treff = vanlige.filter(x => x.smart).length;
     el.hidden = false;
     el.innerHTML = `<span class="kutt-tittel">${T('Taggen starter ved systemnummeret', 'Tags start at the system number')}</span>
       <span class="kutt-info" style="margin-left:0">${T(`${treff} av ${vanlige.length} tagger`, `${treff} of ${vanlige.length} tags`)}${
         treff < vanlige.length ? T(` · resten som før`, ` · the rest as before`) : ''}</span>
-      <span class="kutt-info"><button type="button" class="kutt-lenke" data-smart="0">${T('Slå av', 'Turn off')}</button>${haandLenke}</span>`;
+      <span class="kutt-info">${haleValg}<button type="button" class="kutt-lenke" data-smart="0">${T('Slå av', 'Turn off')}</button>${haandLenke}</span>`;
     return;
   }
   const eks = vanlige[0];
@@ -1029,7 +1042,7 @@ function tegnKutt(r, o) {
       ? `${T(`${n} ledd tas bort fra ${berort} tagger`, `${n} parts taken off ${berort} tags`)} <button type="button" class="kutt-lenke" data-kutt="0">${T('Ikke fjern noe', 'Remove nothing')}</button>`
       : forslag
         ? `<button type="button" class="kutt-lenke" data-kutt="${forslag}">${T(`Fjern ${deler.slice(0, forslag).join('.')}.`, `Remove ${deler.slice(0, forslag).join('.')}.`)}</button>`
-        : T('Klikk et ledd for å kutte der', 'Click a part to cut there')}${haandLenke}</span>`;
+        : T('Klikk et ledd for å kutte der', 'Click a part to cut there')}${haleValg}${haandLenke}</span>`;
 }
 
 function tegnNabo(helt) {
@@ -1103,6 +1116,7 @@ function tegnNabo(helt) {
             </div>
             <button class="btn" id="naboErstattKnapp" title="${T('Søk og erstatt i tagger eller beskrivelser (Ctrl+H)', 'Find and replace in tags or descriptions (Ctrl+H)')}">${T('Erstatt…', 'Replace…')}</button>
           </div>
+          <div class="nabo-like" id="naboLike" hidden></div>
           <div class="nabo-erstatt" id="naboErstatt" hidden>
             <select class="field" id="naboErFelt"><option value="sti">Tag</option><option value="beskr">${T('Beskrivelse', 'Description')}</option></select>
             <input class="field" id="naboErFinn" placeholder="${T('Finn', 'Find')}" spellcheck="false" autocomplete="off">
@@ -1414,6 +1428,136 @@ function settRett(endringer) {
 
 function radFor(key) { return naboResultat().rader.find(x => x.key === key); }
 
+/* One tag edited by hand, read as a rule for the rest. The old and the new
+   tag are compared part by part: what stands the same at the start and at
+   the end is kept, and what changed in between is the edit.
+     564.001.OU001.Plan1.100.RT601 -> Plan1.100.RT601   takes 564.001.OU001 off
+   Tags that start the same way get the same change. When nothing else starts
+   that way, the changed parts are looked for anywhere in a tag instead:
+     ...SB500.I.tid -> ...SB500.Itid   swaps I.tid for Itid where it occurs. */
+function stiEndring(fra, til) {
+  const a = String(fra).split('.'), b = String(til).split('.');
+  let p = 0;
+  while (p < a.length && p < b.length && a[p] === b[p]) p++;
+  let s = 0;
+  while (s < a.length - p && s < b.length - p && a[a.length - 1 - s] === b[b.length - 1 - s]) s++;
+  const xo = a.slice(p, a.length - s), xn = b.slice(p, b.length - s);
+  return {foran: a.slice(0, p), xo, xn};
+}
+function brukEndring(e, sti, modus) {
+  const d = sti.split('.');
+  if (modus === 'start') {
+    const m = [...e.foran, ...e.xo];
+    if (!m.length || d.length <= m.length || m.some((x, i) => d[i] !== x)) return null;
+    return [...e.foran, ...e.xn, ...d.slice(m.length)].join('.');
+  }
+  if (!e.xo.length) return null;
+  if (modus === 'liknende') {
+    const mal = e.xo.map(x => new RegExp('^' + x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\d+/g, '\\d+') + '$'));
+    for (let s = 0; s + mal.length <= d.length; s++) {
+      if (!mal.every((r, j) => r.test(d[s + j]))) continue;
+      const ny = [...d.slice(0, s), ...e.xn, ...d.slice(s + mal.length)];
+      return ny.length ? ny.join('.') : null;
+    }
+    return null;
+  }
+  if (modus === 'form' || modus === 'form2') {
+    // Only dots moved (AV.40128 -> AV40128): the same joining wherever parts
+    // have that shape, any number standing for any number.
+    // Wider (form2): in a component code the letters may differ too, so SB500
+    // stands for JP400 as well; a part without a number stays as written.
+    const bred = modus === 'form2';
+    const mal = e.xo.map(x => new RegExp('^' + x.split(/(\p{L}+|\d+)/u).map(t =>
+      /^\d+$/.test(t) ? '\\d+'
+      : bred && /\d/.test(x) && /^\p{L}+$/u.test(t) ? '\\p{L}+'
+      : t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('') + '$', 'u'));
+    const grupper = [];
+    let i = 0;
+    for (const n of e.xn) {
+      let funnet = null;
+      for (let k = 1; i + k <= e.xo.length && !funnet; k++) {
+        const del = e.xo.slice(i, i + k);
+        if (del.join('') === n) funnet = [k, ''];
+        else if (del.join('_') === n) funnet = [k, '_'];
+      }
+      if (!funnet) return null;
+      grupper.push(funnet); i += funnet[0];
+    }
+    if (i !== e.xo.length) return null;
+    for (let s = 0; s + mal.length <= d.length; s++) {
+      if (!mal.every((r, j) => r.test(d[s + j]))) continue;
+      const biter = d.slice(s, s + mal.length), ny = [];
+      let j = 0;
+      for (const [k, skille] of grupper) { ny.push(biter.slice(j, j + k).join(skille)); j += k; }
+      return [...d.slice(0, s), ...ny, ...d.slice(s + mal.length)].join('.');
+    }
+    return null;
+  }
+  for (let i = 0; i + e.xo.length <= d.length; i++) {
+    if (e.xo.every((x, j) => d[i + j] === x)) {
+      const ny = [...d.slice(0, i), ...e.xn, ...d.slice(i + e.xo.length)];
+      return ny.length ? ny.join('.') : null;
+    }
+  }
+  return null;
+}
+function foreslaLike(key, fra, til) {
+  const bar = $('naboLike');
+  if (!bar || fra === til) return;
+  const e = stiEndring(fra, til);
+  const andre = naboResultat().rader.filter(x => x.key !== key && !x.system);
+  let modus = 'start';
+  let treff = andre.map(x => [x, brukEndring(e, x.sti, 'start')]).filter(([, ny]) => ny && ny !== '');
+  if (!treff.length) { modus = 'inni'; treff = andre.map(x => [x, brukEndring(e, x.sti, 'inni')]).filter(([, ny]) => ny); }
+  treff = treff.filter(([x, ny]) => ny !== x.sti);
+  // Taking a part out: parts of the same shape go too, if there are more of
+  // them (Plan1 out, and Plan2 and Plan3 with it).
+  if (!e.xn.length && /\d/.test(e.xo.join(''))) {
+    const lik = andre.map(x => [x, brukEndring(e, x.sti, 'liknende')]).filter(([x, ny]) => ny && ny !== x.sti);
+    if (lik.length > treff.length) { modus = 'liknende'; treff = lik; }
+  }
+  if (!treff.length && e.xo.join('').replace(/_/g, '') === e.xn.join('').replace(/_/g, '')) {
+    modus = 'form';
+    treff = andre.map(x => [x, brukEndring(e, x.sti, 'form')]).filter(([x, ny]) => ny && ny !== x.sti);
+    // Hardly anything of the very same shape: try any component code.
+    const bredt = andre.map(x => [x, brukEndring(e, x.sti, 'form2')]).filter(([x, ny]) => ny && ny !== x.sti);
+    if (bredt.length > treff.length * 2) treff = bredt;
+  }
+  if (!treff.length) { bar.hidden = true; return; }
+  const vis = (deler) => deler.join('.') || T('ingenting', 'nothing');
+  const tekst = modus === 'start'
+    ? (e.xn.length
+        ? T(`Samme endring på ${treff.length} andre tagger som starter med «${vis([...e.foran, ...e.xo])}»?`,
+            `The same change on ${treff.length} other tags starting with “${vis([...e.foran, ...e.xo])}”?`)
+        : T(`Ta bort «${vis(e.xo)}» fra ${treff.length} andre tagger som starter slik?`,
+            `Take “${vis(e.xo)}” off ${treff.length} other tags that start that way?`))
+    : modus === 'form'
+      ? T(`Samme sammenslåing (${vis(e.xo)} → ${vis(e.xn)}) i ${treff.length} andre tagger med samme form?`,
+          `The same joining (${vis(e.xo)} → ${vis(e.xn)}) in ${treff.length} other tags of the same shape?`)
+      : modus === 'liknende'
+        ? T(`Ta bort «${vis(e.xo)}» og ledd av samme form (som ${vis(e.xo).replace(/\d+/g, 'N')}) fra ${treff.length} andre tagger?`,
+            `Take \u201c${vis(e.xo)}\u201d and parts of the same shape (like ${vis(e.xo).replace(/\d+/g, 'N')}) off ${treff.length} other tags?`)
+      : !e.xn.length
+        ? T(`Ta bort «${vis(e.xo)}» fra ${treff.length} andre tagger?`, `Take \u201c${vis(e.xo)}\u201d off ${treff.length} other tags?`)
+      : T(`Bytt «${vis(e.xo)}» med «${vis(e.xn)}» i ${treff.length} andre tagger?`,
+          `Swap “${vis(e.xo)}” for “${vis(e.xn)}” in ${treff.length} other tags?`);
+  const eks = treff.slice(0, 3).map(([x, ny]) => `${x.sti}  →  ${ny}`).join('\n');
+  bar.innerHTML = `<span class="like-tekst" title="${esc(eks)}">${esc(tekst)}</span>
+    <span class="like-eks">${esc(treff[0][0].sti)} <i>→</i> ${esc(treff[0][1])}</span>
+    <button type="button" class="btn primary" id="naboLikeJa">${T(`Endre ${treff.length}`, `Change ${treff.length}`)}</button>
+    <button type="button" class="btn" id="naboLikeNei">${T('Nei', 'No')}</button>`;
+  bar.hidden = false;
+  $('naboLikeJa').onclick = () => {
+    NABO.angre = naboInnst().rett;
+    settRett(treff.map(([x, ny]) => [x.key, 'sti', ny === x.auto.sti ? undefined : ny]));
+    bar.hidden = true;
+    tegnNabo();
+    toast(T(`${treff.length} tagger endret. Ctrl+Z angrer.`, `${treff.length} tags changed. Ctrl+Z undoes it.`));
+    if (typeof brorKlasse === 'function') { brorKlasse('taster', 900); brorKlasse('fort', 900); }
+  };
+  $('naboLikeNei').onclick = () => { bar.hidden = true; };
+}
+
 function rettCelle(td) {
   const key = td.dataset.k, felt = td.dataset.felt;
   const x = radFor(key);
@@ -1444,6 +1588,7 @@ function rettCelle(td) {
                 [key, 'trend', sd.trend === !!x.auto.trend ? undefined : sd.trend]]);
     } else settRett([[key, felt, String(v) === String(auto) ? undefined : v]]);
     tegnNabo();
+    if (felt === 'sti' && v && String(v) !== gammel) foreslaLike(key, gammel, String(v));
     if (flytt) {
       const i = NABO.vist.indexOf(key) + flytt;
       const neste = NABO.vist[i];
@@ -1530,7 +1675,8 @@ function settHale(paa) {
   const keys = [...NABO.valgt];
   if (!keys.length) return;
   // A hand-written tag would hide the change, so it goes back to automatic.
-  settRett(keys.flatMap(k => [[k, 'hale', paa ? true : undefined], [k, 'sti', undefined]]));
+  const auto = naboInnst().haleAuto;
+  settRett(keys.flatMap(k => [[k, 'hale', paa ? true : (auto ? false : undefined)], [k, 'sti', undefined]]));
   toast(paa ? T(`${keys.length} med understrek i siste ledd`, `${keys.length} with an underscore in the last part`)
             : T(`${keys.length} tilbake til punktum hele veien`, `${keys.length} back to dots all the way`));
   tegnNabo();
@@ -1604,6 +1750,8 @@ function koblNabo(ov) {
   $('naboAnleggMod').onchange = (e) => { lagreNabo({foranAnlegg: e.target.value === 'tag'}); tegnNabo(); };
   const kutt = $('naboKutt');
   kutt.addEventListener('click', (e) => {
+    const ha = e.target.closest('[data-hale]');
+    if (ha) { lagreAnlegg({haleAuto: ha.checked}); tegnNabo(); return; }
     const sm = e.target.closest('[data-smart]');
     if (sm) { lagreAnlegg({smart: sm.dataset.smart === '1'}); tegnNabo(); return; }
     if (e.target.closest('[data-nullstill]')) {

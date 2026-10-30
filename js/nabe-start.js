@@ -178,6 +178,11 @@ const FAKTA = [
   ['COV betyr at regulatoren sier fra selv. Mindre spørring, mer ro.', 'COV means the controller speaks up itself. Less asking, more peace.'],
 ];
 const NYTT = {
+  '1.24': [
+    ['Endrer du én tagg, tilbyr NABO det samme på de andre med lik sti: tatt bort foran, byttet midt inni, eller ledd slått sammen. Ctrl+Z angrer', 'Edit one tag and NABO offers the same on the others with the same path: taken off the front, swapped in the middle, or parts joined. Ctrl+Z undoes it'],
+    ['Tar du bort et navn midt i en tagg, går ledd av samme form også (Plan1, Plan2, Plan3)', 'Take a name out of the middle of a tag and parts of the same shape go too (Plan1, Plan2, Plan3)'],
+    ['Valg per anlegg: behold _K, _Gn og andre korte endelser som i navnet, også med punktum hele veien', 'Per site: keep _K, _Gn and other short endings as in the name, even with dots all the way'],
+  ],
   '1.23': [
     ['NABO: «Start ved systemnummeret». Navn kopiert fra en Niagara-stasjon blir til ekte tagger: 564001-OS001/BACnet IP.360003.AV-40128 blir 360.003.AV.40128', 'NABO: “Start at the system number”. Names copied from a Niagara station become real tags: 564001-OS001/BACnet IP.360003.AV-40128 becomes 360.003.AV.40128'],
     ['Knapp for å nullstille håndrettede tagger, så regelen kan virke på dem også', 'A button to reset hand-edited tags, so the rule applies to them too'],

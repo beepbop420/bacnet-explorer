@@ -3655,6 +3655,16 @@ html.nabo-halloween .nabo-fig .nabo-oyne rect,.lys .nabo-fig .nabo-oyne rect{fil
 .kutt-lenke{background:none;border:0;padding:0;font:inherit;color:var(--accent);cursor:pointer}
 .kutt-lenke:hover{text-decoration:underline}
 .kutt-smart{height:26px;padding:0 10px;font-size:12px}
+.kutt-valg{display:inline-flex;align-items:center;gap:6px;color:var(--fg-2);cursor:pointer;white-space:nowrap}
+.kutt-valg input{accent-color:var(--accent);margin:0}
+/* After a tag edit: the same change on the tags that share its path. */
+.nabo-like{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:8px 14px;border-bottom:1px solid var(--line);
+  background:color-mix(in srgb,var(--accent) 10%,var(--panel));font-size:12px;color:var(--fg);animation:sk-inn .25s ease-out}
+.nabo-like[hidden]{display:none}
+.nabo-like .like-tekst{font-weight:500}
+.nabo-like .like-eks{font:11px var(--mono);color:var(--fg-3);margin-right:auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.nabo-like .like-eks i{font-style:normal;color:var(--accent);padding:0 4px}
+.nabo-like .btn{height:26px}
 .nabo-kropp{display:grid;grid-template-columns:260px minmax(0,1fr);min-height:0}
 .nabo-kilder{border-right:1px solid var(--line);display:flex;flex-direction:column;min-height:0}
 .nabo-h{font-size:11px;color:var(--fg-3);padding:10px 14px 6px;display:flex;gap:6px}
