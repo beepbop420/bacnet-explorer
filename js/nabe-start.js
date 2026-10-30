@@ -178,6 +178,10 @@ const FAKTA = [
   ['COV betyr at regulatoren sier fra selv. Mindre spørring, mer ro.', 'COV means the controller speaks up itself. Less asking, more peace.'],
 ];
 const NYTT = {
+  '1.25': [
+    ['NABO: «_ etter komponentkoden». RT601.SP.ADJ blir RT601.SP_ADJ, JP400.TW.AUTO blir JP400.TW_AUTO', 'NABO: “_ after the component code”. RT601.SP.ADJ becomes RT601.SP_ADJ, JP400.TW.AUTO becomes JP400.TW_AUTO'],
+    ['Valgene for taggene blir med når du skriver inn et anleggsnavn, i stedet for å forsvinne', 'The tag choices come along when you type a site name, instead of disappearing'],
+  ],
   '1.24': [
     ['Endrer du én tagg, tilbyr NABO det samme på de andre med lik sti: tatt bort foran, byttet midt inni, eller ledd slått sammen. Ctrl+Z angrer', 'Edit one tag and NABO offers the same on the others with the same path: taken off the front, swapped in the middle, or parts joined. Ctrl+Z undoes it'],
     ['Tar du bort et navn midt i en tagg, går ledd av samme form også (Plan1, Plan2, Plan3)', 'Take a name out of the middle of a tag and parts of the same shape go too (Plan1, Plan2, Plan3)'],

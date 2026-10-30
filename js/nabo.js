@@ -89,7 +89,12 @@ function lagreAnlegg(patch) {
   const p = loadPrefs().nabo || {};
   const alle = Object.assign({}, p.anlegg || {});
   alle[anleggNokkel()] = Object.assign({}, alle[anleggNokkel()] || {}, patch);
-  lagreNabo({anlegg: alle});
+  // The tag rules are also kept as the last ones used: typing a site name
+  // makes a new site, and the rules you just chose should come along to it.
+  const valg = {};
+  for (const k of ['smart', 'haleAuto', 'kuttN']) if (k in patch) valg[k] = patch[k];
+  lagreNabo(Object.keys(valg).length
+    ? {anlegg: alle, sistValg: Object.assign({}, p.sistValg || {}, valg)} : {anlegg: alle});
 }
 
 /* How the prefix is used. BTG asks the same in its Format list; here it is
@@ -115,12 +120,12 @@ function naboInnst() {
           // How many parts to take off the start of every tag, per site: the
           // controller's own path (564.001.OS001/FCB) that a Niagara station
           // already has as its folders.
-          kuttN: Number(her.kuttN) || 0,
+          kuttN: Number(her.kuttN ?? (p.sistValg || {}).kuttN) || 0,
           // Start every tag at the last system number in the name.
-          smart: !!her.smart,
+          smart: !!(her.smart ?? (p.sistValg || {}).smart),
           // Short endings the name writes with an underscore stay that way:
           // RT401_K, SB500_Gn, RD001_SP. Per site, since sites differ.
-          haleAuto: !!her.haleAuto,
+          haleAuto: !!(her.haleAuto ?? (p.sistValg || {}).haleAuto),
           // Where files go: '' is the browser's Downloads, anything else a
           // folder the server writes into.
           mappe: p.mappe || '', mapper: p.mapper || [],
@@ -259,6 +264,23 @@ function smartNavn(navn) {
   return null;
 }
 
+/* After the component code - RT601, JP400, SB500, OE500, 1QE01 - the rest
+   of the tag is one part with underscores, as TFM writes it:
+     RT601.SP.ADJ -> RT601.SP_ADJ    JP400.TW.AUTO -> JP400.TW_AUTO
+   Without a component code it falls back to a short ending (_K, _Gn). */
+const KOMPONENT = /^\d?\p{L}{1,4}\d{2,4}$/u;
+function kompHale(sti, navn) {
+  const d = sti.split('.');
+  // The last code that is not the controller itself (OU001, OS001); with
+  // none, the part right after the controller (RT in OU001.RT.SP.ADJ).
+  const styring = x => /^O[US]\d+$/i.test(x);
+  let i = d.findLastIndex((x, j) => j > 0 && KOMPONENT.test(x) && !styring(x));
+  if (i < 0) { const c = d.findLastIndex(styring); if (c >= 0 && c + 1 < d.length) i = c + 1; }
+  if (i >= 0 && d.length - i > 2) return [...d.slice(0, i + 1), d.slice(i + 1).join('_')].join('.');
+  if (i >= 0) return sti;
+  return haleINavn(navn) ? naboHale(sti) : sti;
+}
+
 /* The name ends in a short code after an underscore: _K, _Gn, _SP, _Err. */
 function haleINavn(navn) {
   return /_[\p{L}\d]{1,3}\s*$/u.test(String(navn || ''));
@@ -351,8 +373,9 @@ function naboRad(p, t, o, anlegg, enhetNavn, rett) {
   }
   stiRen = (topp ? topp + '.' : '') + stiRen;
   // A row's own choice wins; otherwise the site's rule, from the name.
-  const hale = rett.hale ?? (o.haleAuto && !system && haleINavn(p.name));
-  const stiAuto = hale ? naboHale(stiRen) : stiRen;
+  // A row's own choice wins; otherwise the site's rule.
+  const hale = rett.hale ?? (o.haleAuto && !system);
+  const stiAuto = rett.hale === true ? naboHale(stiRen) : hale ? kompHale(stiRen, p.name) : stiRen;
   const sti = rett.sti ?? stiAuto;
   const sd = btgSd(p.description || '');
   const beskrAuto = sd.rest || p.name || '';
@@ -1009,9 +1032,9 @@ function tegnKutt(r, o) {
   const haandTag = vanlige.filter(x => x.rett.sti !== undefined || x.rett.hale).length;
   const haandLenke = haandTag
     ? ` <button type="button" class="kutt-lenke" data-nullstill="1" title="${esc(T('Tar bort håndrettinger av taggen, så regelen virker. Beskrivelse, enhet, trend og alarm beholdes.', 'Takes off hand edits of the tag, so the rule applies. Description, unit, trend and alarm stay.'))}">${T(`Nullstill ${haandTag} håndrettede tagger`, `Reset ${haandTag} hand-edited tags`)}</button>` : '';
-  const kanHale = vanlige.filter(x => haleINavn(x.navn)).length;
+  const kanHale = vanlige.filter(x => kompHale(x.stiRen, x.navn) !== x.stiRen).length;
   const haleValg = kanHale
-    ? `<label class="kutt-valg" title="${esc(T('Når navnet slutter på _ og en kort kode (RT401_K, SB500_Gn), slutter taggen likt, selv med punktum hele veien.', 'When the name ends in _ and a short code (RT401_K, SB500_Gn), the tag ends the same way, even with dots all the way.'))}"><input type="checkbox" data-hale ${o.haleAuto ? 'checked' : ''}> ${T(`Behold _K, _Gn … som i navnet (${kanHale})`, `Keep _K, _Gn … as in the name (${kanHale})`)}</label>` : '';
+    ? `<label class="kutt-valg" title="${esc(T('Etter komponentkoden (RT601, JP400, OE500) står resten med understrek: RT601.SP_ADJ, JP400.TW_AUTO, SB500.I_tid.', 'After the component code (RT601, JP400, OE500) the rest goes with underscores: RT601.SP_ADJ, JP400.TW_AUTO, SB500.I_tid.'))}"><input type="checkbox" data-hale ${o.haleAuto ? 'checked' : ''}> ${T(`_ etter komponentkoden, som RT601.SP_ADJ (${kanHale})`, `_ after the component code, as in RT601.SP_ADJ (${kanHale})`)}</label>` : '';
   if (o.smart) {
     const treff = vanlige.filter(x => x.smart).length;
     el.hidden = false;
