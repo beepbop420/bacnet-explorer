@@ -566,6 +566,9 @@ def shape_point(objid: str, values: Dict[str, Any]) -> Dict[str, Any]:
         "units": units_name,
         "unit_symbol": unit_symbol(units_name if isinstance(units_name, str) else None),
         "status": status_flags_to_list(values.get("status-flags")),
+        # An unread status and a clean one both come out as []. This says
+        # which it was, so nothing claims "no faults" from a flag it never saw.
+        "status_lest": values.get("status-flags") is not None and not is_error(values.get("status-flags")),
         "writable": otype in (
             "analog-output", "analog-value",
             "binary-output", "binary-value",

@@ -155,6 +155,7 @@ const FAKTA = [
 ];
 const NYTT = {
   '1.21': [
+    ['NABE sier «ingen feil» bare etter en full, fersk lesing der hvert punkts status faktisk ble lest, og bare om den ene regulatoren', 'NABE says “no faults” only after a full, fresh read where every point’s status was actually read, and only about that one controller'],
     ['Ryddigere statuslinje og enhetshode: antall punkter står under navnet, «vist» bare når et filter skjuler noe', 'A tidier status bar and device header: the point count sits under the name, “shown” only when a filter hides something'],
     ['Anlegg jeg har vært på er en liste: klikk skanner, dobbeltklikk gir navn, søk når de blir mange', 'Sites I have visited is a list: a click scans, a double-click renames, a search when there are many'],
     ['Ctrl+S, Ctrl+O og Ctrl+, som i andre programmer, og en knapp som slår på Live der trenden skal være', 'Ctrl+S, Ctrl+O and Ctrl+, as in other programs, and a button that turns Live on where the trend goes'],

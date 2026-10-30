@@ -1761,6 +1761,8 @@ async function selectDevice(ip, opts = {}) {
       return;
     }
     applyResult(d);
+    if (gjelder() && !d.unread && (!d.total_objects || d.count >= d.total_objects)
+        && typeof nabeRentAnlegg === 'function') nabeRentAnlegg(dev, S.points);
     const secs = ((performance.now() - t0) / 1000).toFixed(1);
     const extra = (d.rpm === false ? ' · uten RPM' : '')
                 + (d.unread ? ` · ${d.unread} uleste` : '');
@@ -2019,7 +2021,6 @@ function renderCtx() {
   const writable = S.points.filter(p => p.writable).length;
   if (typeof huskBesok === 'function') huskBesok();
   el.style.setProperty('--vc', v.color);
-  if (S.points.length && typeof nabeRentAnlegg === 'function') nabeRentAnlegg(d, S.points);
   el.innerHTML = `
     <div class="ctx-tittel">
       <span class="ctx-name">${esc(d.object_name || String(d.device_instance ?? '?'))}</span>
@@ -3381,11 +3382,19 @@ function nabeKortEgg() {
 }
 
 /* -- a device with nothing wrong at all */
+/* Said only when it is known: every point's status was actually read on
+   this pass, nothing is left unread, and the device itself has nothing
+   flagged in the list (duplicate instance, clock, missing). And it is said
+   about this controller, never about the whole plant. */
 function nabeRentAnlegg(d, pts) {
   if (!d || !pts || pts.length < 20) return;
+  if (!pts.every(p => p.status_lest === true)) return;
+  if (pts.some(p => p.value === null || p.value === undefined)) return;
   const c = flagCounts(pts);
   if (Object.values(c).some(Boolean)) return;
-  nabeSier('Ingen feil. Ingen overstyringer. Hvem igangkjørte denne?', 'fornoyd', 'ren:' + d.address);
+  const kort = [...document.querySelectorAll('#devList .dev')].find(b => b.dataset.ip === d.address || b.textContent.includes(d.address));
+  if (kort && kort.querySelector('.dev-st.bad, .dev-st.warn, .dev-id.dup')) return;
+  nabeSier('Ingen feil på denne regulatoren. Hvem igangkjørte den?', 'fornoyd', 'ren:' + d.address);
 }
 
 /* -- the lights */
@@ -9623,7 +9632,7 @@ const ORDBOK = {
   'Det var et stort tall. Sikker på enheten?': 'That is a big number. Sure about the unit?',
   'Én regulator. Litt ensomt.': 'One controller. A bit lonely.',
   'Sju. Akkurat som dvergene.': 'Seven. Like the dwarfs.',
-  'Ingen feil. Ingen overstyringer. Hvem igangkjørte denne?': 'No faults. No overrides. Who commissioned this one?',
+  'Ingen feil på denne regulatoren. Hvem igangkjørte den?': 'No faults on this controller. Who commissioned it?',
   'Sterkt lys. Godt jeg hadde med solbriller.': 'Bright. Good thing I brought sunglasses.',
   'B, A … cnet. +30 liv.': 'B, A … cnet. +30 lives.',
   'Det er aldri BACnet. Bortsett fra når det er BACnet.': 'It is never BACnet. Except when it is BACnet.',
