@@ -116,6 +116,8 @@ function naboInnst() {
           // controller's own path (564.001.OS001/FCB) that a Niagara station
           // already has as its folders.
           kuttN: Number(her.kuttN) || 0,
+          // Start every tag at the last system number in the name.
+          smart: !!her.smart,
           // Where files go: '' is the browser's Downloads, anything else a
           // folder the server writes into.
           mappe: p.mappe || '', mapper: p.mapper || [],
@@ -234,6 +236,26 @@ function ryddSystem(biter) {
   return [...tall, ...biter.slice(i)];
 }
 
+/* Names copied out of a Niagara station are paths:
+     564001-OS001/BACnet IP.564001-OU001.Energimålere.320002-OE500.320002-OE500_Energy
+   The station and its folders come first, at a depth that differs from
+   point to point, and the real tag is at the end, from the last system
+   number: 320002-OE500_Energy. So the tag starts there. Measured on 650
+   points from one such controller: all 650 found, no two alike.
+   Returns the name from that point on with the folders joined by _, ready
+   for naboSti, or null when there is no system number to start from. */
+function smartNavn(navn) {
+  let s = String(navn || '').trim()
+    .replace(/(\d{3}) (\d{3,4})(?!\d)/g, '$1_$2');   // 332 001 is 332_001
+  const m = /^[^/]*\/[^.]*\.(.*)$/.exec(s);                // station/folder.
+  const seg = (m ? m[1] : s).split('.');
+  for (let i = seg.length - 1; i >= 0; i--) {
+    if (/^(\+[^=]*=)?\d{3}_?\d{3,4}(?!\d)/.test(seg[i]))
+      return seg.slice(i).join('_').replace(/(\p{L}) (\d)/gu, '$1$2');   // Plan 1 is Plan1
+  }
+  return null;
+}
+
 /* How many leading parts every tag on a device shares with the others on it,
    taking the smallest over the devices: what can be cut everywhere without
    reaching into what makes two points different. */
@@ -305,9 +327,10 @@ function naboRad(p, t, o, anlegg, enhetNavn, rett) {
   // SYSTEM points are not system-numbered, so the normalisation leaves them be.
   const norm = o.norm.paa && !system ? normaliser(p.name, o) : null;
   const topp = naboTopp(t, o);
-  let stiRen = norm ? norm.sti : naboSti(p.name, '', o);
+  const smart = o.smart && !system && !norm ? smartNavn(p.name) : null;
+  let stiRen = norm ? norm.sti : naboSti(smart ?? p.name, '', o);
   const grunn = stiRen;
-  if (o.kuttN && !system) stiRen = kuttStart(stiRen, o.kuttN);
+  if (o.kuttN && !system && !smart) stiRen = kuttStart(stiRen, o.kuttN);
   // BTG's +PRE=360.001: the prefix glued to the system number. A SYSTEM
   // point has no system number and sits outside them all, so it goes bare.
   // It goes on the system number - the first part that is a number - so a
@@ -361,7 +384,7 @@ function naboRad(p, t, o, anlegg, enhetNavn, rett) {
     linje: f.map(x => String(x).replace(/[;\r\n]/g, ' ')).join(';'),
     sti, type, typeNavn: shortType(p.type), inst: p.instance, enhet, des,
     trend: !!trend, klasse, beskr, navn: p.name || '', harSd: sd.rest !== (p.description || '').trim(),
-    hale: !!rett.hale, stiRen, grunn, sdKode, beskrSd,
+    hale: !!rett.hale, stiRen, grunn, smart: !!smart, sdKode, beskrSd,
     auto: {sti: stiAuto, beskr: beskrAuto, enhet: enhetAuto, des: desAuto, trend: sd.trend, klasse: sd.klasse},
     rett,
   };
@@ -972,6 +995,19 @@ function tegnKutt(r, o) {
   if (!el) return;
   const vanlige = r.rader.filter(x => !x.system);
   if (!vanlige.length) { el.hidden = true; return; }
+  const kanSmart = vanlige.filter(x => smartNavn(x.navn)).length;
+  const haandTag = vanlige.filter(x => x.rett.sti !== undefined || x.rett.hale).length;
+  const haandLenke = haandTag
+    ? ` <button type="button" class="kutt-lenke" data-nullstill="1" title="${esc(T('Tar bort håndrettinger av taggen, så regelen virker. Beskrivelse, enhet, trend og alarm beholdes.', 'Takes off hand edits of the tag, so the rule applies. Description, unit, trend and alarm stay.'))}">${T(`Nullstill ${haandTag} håndrettede tagger`, `Reset ${haandTag} hand-edited tags`)}</button>` : '';
+  if (o.smart) {
+    const treff = vanlige.filter(x => x.smart).length;
+    el.hidden = false;
+    el.innerHTML = `<span class="kutt-tittel">${T('Taggen starter ved systemnummeret', 'Tags start at the system number')}</span>
+      <span class="kutt-info" style="margin-left:0">${T(`${treff} av ${vanlige.length} tagger`, `${treff} of ${vanlige.length} tags`)}${
+        treff < vanlige.length ? T(` · resten som før`, ` · the rest as before`) : ''}</span>
+      <span class="kutt-info"><button type="button" class="kutt-lenke" data-smart="0">${T('Slå av', 'Turn off')}</button>${haandLenke}</span>`;
+    return;
+  }
   const eks = vanlige[0];
   const deler = eks.grunn.split('.');
   // What all tags share, but the suggestion stops after the controller's own
@@ -988,11 +1024,12 @@ function tegnKutt(r, o) {
     <span class="kutt-deler" title="${esc(T('Klikk der du vil kutte. Alt til og med det leddet tas bort fra hver tagg.', 'Click where to cut. Everything up to and including that part is taken off every tag.'))}">${
       vis.map((d, i) => `<button type="button" class="kutt-del${i < n ? ' bort' : ''}${i < forslag ? ' felles' : ''}" data-kutt="${i + 1}">${esc(d)}</button>`).join('<i>.</i>')
     }<i>.</i><span class="kutt-rest">${esc(deler.slice(vis.length).join('.'))}</span></span>
-    <span class="kutt-info">${n
+    <span class="kutt-info">${kanSmart >= vanlige.length * 0.5
+      ? `<button type="button" class="btn kutt-smart" data-smart="1" title="${esc(T('Finner det siste systemnummeret i hvert navn og starter taggen der, uansett hvor lang stien foran er.', 'Finds the last system number in each name and starts the tag there, however long the path in front is.'))}">${T(`Start ved systemnummeret (${kanSmart} av ${vanlige.length})`, `Start at the system number (${kanSmart} of ${vanlige.length})`)}</button>` : ''}${n
       ? `${T(`${n} ledd tas bort fra ${berort} tagger`, `${n} parts taken off ${berort} tags`)} <button type="button" class="kutt-lenke" data-kutt="0">${T('Ikke fjern noe', 'Remove nothing')}</button>`
       : forslag
         ? `<button type="button" class="kutt-lenke" data-kutt="${forslag}">${T(`Fjern ${deler.slice(0, forslag).join('.')}.`, `Remove ${deler.slice(0, forslag).join('.')}.`)}</button>`
-        : T('Klikk et ledd for å kutte der', 'Click a part to cut there')}</span>`;
+        : T('Klikk et ledd for å kutte der', 'Click a part to cut there')}${haandLenke}</span>`;
 }
 
 function tegnNabo(helt) {
@@ -1567,6 +1604,18 @@ function koblNabo(ov) {
   $('naboAnleggMod').onchange = (e) => { lagreNabo({foranAnlegg: e.target.value === 'tag'}); tegnNabo(); };
   const kutt = $('naboKutt');
   kutt.addEventListener('click', (e) => {
+    const sm = e.target.closest('[data-smart]');
+    if (sm) { lagreAnlegg({smart: sm.dataset.smart === '1'}); tegnNabo(); return; }
+    if (e.target.closest('[data-nullstill]')) {
+      const r = naboResultat();
+      const ender = r.rader.filter(x => x.rett.sti !== undefined || x.rett.hale)
+        .flatMap(x => [[x.key, 'sti', undefined], [x.key, 'hale', undefined]]);
+      NABO.angre = naboInnst().rett;
+      settRett(ender);
+      toast(T(`${ender.length / 2} tagger følger regelen igjen`, `${ender.length / 2} tags follow the rule again`));
+      tegnNabo();
+      return;
+    }
     const b = e.target.closest('[data-kutt]');
     if (!b) return;
     const n = Number(b.dataset.kutt);

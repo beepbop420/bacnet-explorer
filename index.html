@@ -3558,7 +3558,7 @@ body.uten-bevegelse .scanbox *,body.uten-bevegelse .nabe-mark.nikk{animation:non
 .nabo-kropp.tom .nabo-kilder{display:none}
 .nabo-slipp:focus-visible,.nabo-start:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .nabo-topp{padding:10px 16px 8px}
-.nabo-topp .nabo-fig{width:32px;height:32px}
+.nabo-topp .nabo-fig{width:42px;height:42px}
 .nabo-ord{font-size:15px;font-weight:600;letter-spacing:var(--spor)}
 .nabo-diff-h,.nabo-gruppe-knapp b{font-weight:500}
 .nabo-sys,.nabo-kilde-anlegg,.nabo-kilde-ede{font-size:var(--t-1);text-transform:none;letter-spacing:0}
@@ -3654,6 +3654,7 @@ html.nabo-halloween .nabo-fig .nabo-oyne rect,.lys .nabo-fig .nabo-oyne rect{fil
 .kutt-info{margin-left:auto;display:flex;gap:10px;align-items:baseline}
 .kutt-lenke{background:none;border:0;padding:0;font:inherit;color:var(--accent);cursor:pointer}
 .kutt-lenke:hover{text-decoration:underline}
+.kutt-smart{height:26px;padding:0 10px;font-size:12px}
 .nabo-kropp{display:grid;grid-template-columns:260px minmax(0,1fr);min-height:0}
 .nabo-kilder{border-right:1px solid var(--line);display:flex;flex-direction:column;min-height:0}
 .nabo-h{font-size:11px;color:var(--fg-3);padding:10px 14px 6px;display:flex;gap:6px}
@@ -3926,8 +3927,16 @@ td.h .nabo-rett-inn{min-width:44px;text-align:right}
 .ser .nabo-fig .nabo-oyne{transform:translateY(-.8px)}
 /* head on the keyboard, out cold */
 .knock .nabo-fig .nabo-hode{transform:translateY(3.4px) rotate(-4deg)}
-@keyframes nabo-tap{0%{transform:translateY(1.1px)}50%{transform:none}}
-@keyframes nabo-tap1{0%{transform:translateY(1.1px)}100%{transform:none}}
+@keyframes nabo-tap{0%{transform:translateY(1.8px)}50%{transform:none}}
+@keyframes nabo-tap1{0%{transform:translateY(1.8px)}100%{transform:none}}
+/* The keys light under his hands, so typing reads at 17 px too: in the top
+   bar the whole keyboard flickers, in the large figure the key rows do. */
+@keyframes nabo-tast-lys{0%{stroke:var(--accent)}50%{stroke:var(--bg)}}
+@keyframes nabo-tast-fyll{0%{fill:var(--accent)}50%{fill:var(--fg-3)}}
+.taster .nabo-fig .nabo-taster{animation:nabo-tast-lys .16s steps(1) infinite}
+.tap .nabo-fig .nabo-taster{animation:nabo-tast-lys .14s steps(1)}
+.nabo-hus-knapp.taster .nabo-fig .nabo-tast{animation:nabo-tast-fyll .2s steps(1) infinite}
+.nabo-hus-knapp.tap .nabo-fig .nabo-tast{animation:nabo-tast-fyll .14s steps(1)}
 /* the terminal line beside him: grey mono, a thin cursor */
 .nabo-hus-knapp{position:relative}
 .nabo-term{position:absolute;left:calc(100% + 8px);top:50%;transform:translateY(-50%);white-space:nowrap;pointer-events:none;

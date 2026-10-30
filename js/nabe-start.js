@@ -178,6 +178,11 @@ const FAKTA = [
   ['COV betyr at regulatoren sier fra selv. Mindre spørring, mer ro.', 'COV means the controller speaks up itself. Less asking, more peace.'],
 ];
 const NYTT = {
+  '1.23': [
+    ['NABO: «Start ved systemnummeret». Navn kopiert fra en Niagara-stasjon blir til ekte tagger: 564001-OS001/BACnet IP.360003.AV-40128 blir 360.003.AV.40128', 'NABO: “Start at the system number”. Names copied from a Niagara station become real tags: 564001-OS001/BACnet IP.360003.AV-40128 becomes 360.003.AV.40128'],
+    ['Knapp for å nullstille håndrettede tagger, så regelen kan virke på dem også', 'A button to reset hand-edited tags, so the rule applies to them too'],
+    ['Tastaturet lyser når NABO taster, og inne i NABO taster den store figuren med', 'The keyboard lights when NABO types, and inside NABO the large figure types along'],
+  ],
   '1.22': [
     ['Aktive alarmer viser også punkter med alarm- eller feilflagg. Mange regulatorer har tom alarmliste selv når noe står i alarm, og da sa NABE «ingen alarmer» feil', 'Active alarms also shows points with an alarm or fault flag. Many controllers have an empty alarm list even when something is in alarm, and NABE wrongly said “no alarms”'],
     ['NABO: «Fjern fra starten». Klikk leddet du vil kutte til, så forsvinner f.eks. 564.001.OS001/FCB fra alle tagger. Huskes per anlegg', 'NABO: “Remove from the start”. Click the part to cut to and 564.001.OS001/FCB, say, goes from every tag. Remembered per site'],

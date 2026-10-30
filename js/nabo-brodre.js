@@ -45,6 +45,21 @@ function brorTap() {
   brorTap.t = setTimeout(() => h.classList.remove('tap', 'h'), 160);
 }
 
+/* Inside NABO he is drawn large in the header: whatever the small one in
+   the top bar does - typing, a key, looking up - the large one does too. */
+(function speil() {
+  const h = bror();
+  if (!h) return;
+  const K = ['taster', 'fort', 'h', 'ser', 'sover', 'knock'];
+  new MutationObserver(() => {
+    const s = $('naboHusStor');
+    if (!s) return;
+    for (const k of K) s.classList.toggle(k, h.classList.contains(k));
+    if (h.classList.contains('tap')) { s.classList.remove('tap'); void s.offsetWidth; s.classList.add('tap'); }
+    else s.classList.remove('tap');
+  }).observe(h, {attributes: true, attributeFilter: ['class']});
+})();
+
 /* A line on his terminal, typed a letter at a time. Lines queue; one at a
    time, and a new one waits for the last to fade. */
 function brorSkriv(tekst, {fart = 55, holde = 2400, tvang = false} = {}) {
