@@ -15,6 +15,12 @@ fetch('/api/status').then(r => r.json()).then(d => { NABE_VERSJON = d.versjon ||
 /* ------------------------------------------------------------ alarm list */
 const ALARM_CACHE = {};
 
+/* The device's own alarm list and the points' status flags, together.
+   GetEventInformation only lists objects with intrinsic reporting set up in
+   the controller; a Corrigo, a WAGO or alarms made in the DDC program never
+   show there, and the list comes back empty while points stand in alarm or
+   fault. So the flags are read as well, and "no alarms" is only said when
+   both are clean and every point's status was actually read. */
 async function fyllAlarmer() {
   const boks = document.getElementById('alarmSect');
   const d = S.activeDev;
@@ -24,28 +30,46 @@ async function fyllAlarmer() {
     try {
       const r = await api('/api/device/alarms', {address: d.address});
       data = ALARM_CACHE[d.address] = {t: Date.now(), r};
-    } catch { return; }
+    } catch { data = {t: Date.now(), r: {status: 'error'}}; }
   }
   // The inspector may have moved on while we waited.
   if (S.activeDev !== d || !document.body.contains(boks)) return;
   const r = data.r;
-  if (r.status !== 'done') { boks.hidden = true; return; }
-  const liste = r.alarmer || [];
+  const listeOk = r.status === 'done';
+  const alle = new Map();
+  for (const a of (listeOk ? r.alarmer || [] : [])) alle.set(a.objid, Object.assign({kilde: 'liste'}, a));
+  for (const p of S.points || []) {
+    const f = (p.status || []).filter(x => x === 'in-alarm' || x === 'fault');
+    if (!f.length || alle.has(p.objid)) continue;
+    alle.set(p.objid, {objid: p.objid, tilstand: f.includes('fault') ? 'fault' : 'in-alarm', ukvittert: [], kilde: 'flagg'});
+  }
+  const liste = [...alle.values()];
+  const lest = (S.points || []).length > 0 && S.points.every(p => p.status_lest === true);
   boks.hidden = false;
+  const kildeTekst = listeOk
+    ? T('Fra enhetens alarmliste og punktenes statusflagg.', 'From the device’s alarm list and the points’ status flags.')
+    : T('Enheten svarer ikke på alarmforespørsel, så dette er fra punktenes statusflagg.', 'The device does not answer the alarm request, so this is from the points’ status flags.');
   if (!liste.length) {
     boks.innerHTML = `<div class="sect-head">${T('Aktive alarmer', 'Active alarms')} <span class="count">0</span></div>`
-      + `<div class="alarm-tom">${T('Ingen aktive alarmer.', 'No active alarms.')}</div>`;
-    nabeSier(T('Ingen alarmer. Mistenkelig.', 'No alarms. Suspicious.'), 'skvatt', 'ingen-alarm');
+      + `<div class="alarm-tom">${lest
+          ? T('Ingen aktive alarmer.', 'No active alarms.')
+          : T('Ingen funnet så langt. Punktene er ikke ferdig lest.', 'None found so far. The points are not fully read yet.')}
+         <div class="alarm-kilde">${kildeTekst}</div></div>`;
+    if (lest && listeOk) nabeSier(T('Ingen alarmer, verken i lista eller i flaggene. Mistenkelig.', 'No alarms, in the list or the flags. Suspicious.'), 'skvatt', 'ingen-alarm:' + d.address);
     return;
   }
   const navn = oid => (S.pointIndex && S.pointIndex.get(oid)?.name) || oid;
+  const tilstand = t => ({'in-alarm': T('i alarm', 'in alarm'), fault: T('feil', 'fault')}[t] || t);
   boks.innerHTML = `<div class="sect-head">${T('Aktive alarmer', 'Active alarms')} <span class="count">${liste.length}</span></div>
     <div class="alarm-liste">${liste.map(a => `
-      <button class="alarm-rad" data-o="${esc(a.objid)}">
+      <button class="alarm-rad" data-o="${esc(a.objid)}" title="${esc(a.kilde === 'flagg'
+        ? T('Statusflagget står i alarm eller feil. Ikke i enhetens alarmliste.', 'The status flag is in alarm or fault. Not in the device’s alarm list.')
+        : T('Fra enhetens alarmliste', 'From the device’s alarm list'))}">
         <span class="alarm-navn">${esc(navn(a.objid))}</span>
-        <span class="alarm-til ${/fault/.test(a.tilstand) ? 'bad' : 'warn'}">${esc(a.tilstand)}</span>
+        <span class="alarm-til ${/fault/.test(a.tilstand) ? 'bad' : 'warn'}">${esc(tilstand(a.tilstand))}</span>
         ${a.ukvittert.length ? `<span class="alarm-ukv" title="${esc(a.ukvittert.join(', '))}">${T('ukvittert', 'unacked')}</span>` : ''}
-      </button>`).join('')}</div>`;
+      </button>`).join('')}</div>
+    <div class="alarm-kilde">${kildeTekst}</div>`;
   boks.querySelectorAll('.alarm-rad').forEach(b => b.onclick = () =>
     document.querySelector(`#pointsWrap tr[data-o="${CSS.escape(b.dataset.o)}"]`)?.click());
 }
@@ -155,6 +179,7 @@ const FAKTA = [
 ];
 const NYTT = {
   '1.22': [
+    ['Aktive alarmer viser også punkter med alarm- eller feilflagg. Mange regulatorer har tom alarmliste selv når noe står i alarm, og da sa NABE «ingen alarmer» feil', 'Active alarms also shows points with an alarm or fault flag. Many controllers have an empty alarm list even when something is in alarm, and NABE wrongly said “no alarms”'],
     ['NABO: «Fjern fra starten». Klikk leddet du vil kutte til, så forsvinner f.eks. 564.001.OS001/FCB fra alle tagger. Huskes per anlegg', 'NABO: “Remove from the start”. Click the part to cut to and 564.001.OS001/FCB, say, goes from every tag. Remembered per site'],
     ['Etter kuttet blir 320002 til 320.002, og samme systemnummer to-tre ganger på rad står bare én gang', 'After the cut 320002 becomes 320.002, and the same system number two or three times in a row is kept once'],
     ['Roligere topp i NABO: valgene for anlegg og prefiks vises først når feltet har noe i seg', 'A calmer top in NABO: the site and prefix choices appear only once the field has something in it'],
