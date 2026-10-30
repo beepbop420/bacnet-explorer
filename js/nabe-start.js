@@ -154,6 +154,11 @@ const FAKTA = [
   ['COV betyr at regulatoren sier fra selv. Mindre spørring, mer ro.', 'COV means the controller speaks up itself. Less asking, more peace.'],
 ];
 const NYTT = {
+  '1.21': [
+    ['Ryddigere statuslinje og enhetshode: antall punkter står under navnet, «vist» bare når et filter skjuler noe', 'A tidier status bar and device header: the point count sits under the name, “shown” only when a filter hides something'],
+    ['Anlegg jeg har vært på er en liste: klikk skanner, dobbeltklikk gir navn, søk når de blir mange', 'Sites I have visited is a list: a click scans, a double-click renames, a search when there are many'],
+    ['Ctrl+S, Ctrl+O og Ctrl+, som i andre programmer, og en knapp som slår på Live der trenden skal være', 'Ctrl+S, Ctrl+O and Ctrl+, as in other programs, and a button that turns Live on where the trend goes'],
+  ],
   '1.20': [
     ['Innstillinger med ekte brytere og nedtrekk, samlet i grupper. Indigo er borte fra forhåndsvalgene', 'Settings with real switches and pop-up buttons, in groups. Indigo is gone from the presets'],
     ['Én stille lukk-knapp i alle dialoger, haker i filtermenyen og blå hovedknapp i begge moduser', 'One quiet close button in every dialog, check marks in the filter menu and a blue default button in both themes'],

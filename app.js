@@ -2029,14 +2029,14 @@ function renderCtx() {
         <span class="ctx-ip">${esc(d.address)}</span>
         ${identBadge(d.address)}
         ${clockBadge(d.address)}
+        <span class="ctx-tall">${S.points.length} ${T('punkter', 'points')}${writable ? ` · ${writable} ${T('skrivbare', 'writable')}` : ''}</span>
       </span>
     </div>
     ${(S.namePrefix && loadPrefs().shortNames !== false) ? `<span class="ctx-prefix" title="Alle punktnavn på denne enheten starter med dette. Det er utelatt fra tabellen for lesbarhet — hold over et navn for å se det fullt ut.">${esc(S.namePrefix)}…</span>` : ''}
     <div class="spacer"></div>
     ${Object.entries(FLAGS).filter(([f]) => flagg[f]).map(([f, m]) =>
       `<button class="ctx-stat ${m.cls}" data-flag="${f}" title="${T('Vis kun punkter ' + esc(m.label), 'Show only points ' + esc(oversettTekst(m.label, true)))}">${flagg[f]} ${esc(m.label)}</button>`).join('')}
-    <span class="ctx-stat">${writable} skrivbare</span>
-    <span class="ctx-stat">${S.points.length} punkter</span>`;
+`;
 
   el.querySelectorAll('[data-klokke]').forEach(b => b.onclick = () => stillKlokka(b.dataset.klokke));
   // Clicking a count filters to it; clicking the one already active clears it,
@@ -3072,8 +3072,8 @@ function avsluttLinje(el) {
 const NABE = {x: 0, y: 0, sist: Date.now(), raf: 0, snu: [], retning: 0, klikk: 0, klikkT: 0};
 
 function nabeMerke() { return document.querySelector('.nabe-mark'); }
-// After start-up: T and the language are not ready this early in the file.
-setTimeout(() => document.querySelectorAll('.gs-close').forEach(b => { if (!b.title) b.title = T('Lukk (Esc)', 'Close (Esc)'); }), 0);
+// After every script has run: T lives in nabe-start.js, which loads after this file.
+document.addEventListener('DOMContentLoaded', () => document.querySelectorAll('.gs-close').forEach(b => { if (!b.title) b.title = T('Lukk (Esc)', 'Close (Esc)'); }));
 
 function nabeTegn() {
   NABE.raf = 0;
@@ -3583,57 +3583,76 @@ function naarTekst(ts) {
   if (!ts) return '';
   const d = new Date(ts * 1000);
   const dager = Math.floor((Date.now() - d) / 86400000);
-  if (dager === 0) return 'i dag ' + d.toLocaleTimeString('no', {hour: '2-digit', minute: '2-digit'});
-  if (dager === 1) return 'i går';
-  if (dager < 30) return dager + ' dager siden';
-  return d.toLocaleDateString('no');
+  if (dager === 0) return T('i dag ', 'today ') + d.toLocaleTimeString('no', {hour: '2-digit', minute: '2-digit'});
+  if (dager === 1) return T('i går', 'yesterday');
+  if (dager < 30) return T(dager + ' dager siden', dager + ' days ago');
+  return d.toLocaleDateString(SPRAAK === 'en' ? 'en-GB' : 'no');
 }
 
+/* A source list, as on a Mac: the whole row scans, a name is changed by
+   double-clicking it, and the two rarer actions show on the row you point at.
+   A search field at the top when there is more than a handful. */
 function tegnMinne() {
-  const rader = Object.entries(MINNE).sort((a, b) => (b[1].sist || 0) - (a[1].sist || 0));
-  $('minneAntall').textContent = rader.length ? `${rader.length} anlegg` : '';
+  const sok = $('minneSok');
+  const q = (sok?.value || '').trim().toLowerCase();
+  const alle = Object.entries(MINNE).sort((a, b) => (b[1].sist || 0) - (a[1].sist || 0));
+  if (sok) sok.hidden = alle.length < 6;
+  const rader = !q ? alle : alle.filter(([key, s]) => [key, s.navn, ...(s.enheter || []).map(e => `${e.vendor || ''} ${e.object_name || ''}`)]
+    .join(' ').toLowerCase().includes(q));
+  $('minneAntall').textContent = alle.length ? `${alle.length} ${T('anlegg', alle.length === 1 ? 'site' : 'sites')}` : '';
+  if (!alle.length) {
+    $('minneBody').innerHTML = `<div class="gs-empty">${T('Ingen skann er husket ennå. Skann et område, så dukker det opp her.',
+      'No scans remembered yet. Scan a range and it shows up here.')}</div>`;
+    return;
+  }
   if (!rader.length) {
-    $('minneBody').innerHTML = '<div class="gs-empty">Ingen skann er husket enn\u00e5. '
-      + 'Skann et omr\u00e5de, s\u00e5 dukker det opp her.</div>';
+    $('minneBody').innerHTML = `<div class="gs-empty">${T(`Ingen anlegg passer «${esc(q)}».`, `No site matches "${esc(q)}".`)}</div>`;
     return;
   }
   $('minneBody').innerHTML = rader.map(([key, s]) => {
     const enh = s.enheter || [];
     const merker = [...new Set(enh.map(e => e.vendor).filter(Boolean))].slice(0, 4);
-    return `<div class="mn-rad">
+    return `<div class="mn-rad" data-skann="${esc(key)}" tabindex="0" role="button"
+        title="${esc(T('Klikk for å skanne · dobbeltklikk navnet for å endre det', 'Click to scan · double-click the name to change it'))}">
       <div class="mn-navn">
-        <div class="mn-tittel${s.navn ? '' : ' uten'}">${esc(s.navn || T('uten navn', 'no name'))}</div>
+        <div class="mn-tittel${s.navn ? '' : ' uten'}" data-navn="${esc(key)}">${esc(s.navn || T('uten navn', 'no name'))}</div>
         <div class="mn-omrade">${esc(key)}</div>
         <div class="mn-under">${merkerHtml(merker)}${
-          s.lokal ? 'fra ' + esc(s.lokal) : ''}${s.modus === 'bbmd' ? ' · via BBMD' : ''}</div>
+          s.lokal ? T('fra ', 'from ') + esc(s.lokal) : ''}${s.modus === 'bbmd' ? ' · via BBMD' : ''}</div>
       </div>
-      <div class="mn-tall">${enh.length} enheter<br>${esc(naarTekst(s.sist))}${
-        s.ganger > 1 ? `<br>${s.ganger} skann` : ''}</div>
+      <div class="mn-tall">${enh.length} ${T(enh.length === 1 ? 'enhet' : 'enheter', enh.length === 1 ? 'device' : 'devices')}<br>${esc(naarTekst(s.sist))}${
+        s.ganger > 1 ? `<br>${s.ganger} ${T('skann', 'scans')}` : ''}</div>
       <div class="mn-knapper">
-        <button class="btn" data-skann="${esc(key)}">Skann</button>
-        <button class="btn" data-navn="${esc(key)}">Navn</button>
-        <button class="btn" data-slett="${esc(key)}">Slett</button>
+        <button class="mn-lenke" data-navn="${esc(key)}">${T('Gi navn', 'Rename')}</button>
+        <button class="mn-lenke fare" data-slett="${esc(key)}">${T('Glem', 'Forget')}</button>
       </div>
     </div>`;
   }).join('');
 
-  $('minneBody').querySelectorAll('[data-skann]').forEach(b => b.onclick = () => {
-    $('rangeInput').value = b.dataset.skann;
-    const modus = (MINNE[b.dataset.skann] || {}).modus;
+  const skann = (key) => {
+    $('rangeInput').value = key;
+    const modus = (MINNE[key] || {}).modus;
     if (modus && [...$('modeSel').options].some(o => o.value === modus)) $('modeSel').value = modus;
-    savePrefs({range: b.dataset.skann, mode: $('modeSel').value});
+    savePrefs({range: key, mode: $('modeSel').value});
     closeMinne();
     runScan();
-  });
-  $('minneBody').querySelectorAll('[data-navn]').forEach(b => b.onclick = async () => {
-    const naa = (MINNE[b.dataset.navn] || {}).navn || '';
-    const navn = prompt('Hva heter dette anlegget?', naa);
+  };
+  const navngi = async (key) => {
+    const naa = (MINNE[key] || {}).navn || '';
+    const navn = prompt(T('Hva heter dette anlegget?', 'What is this site called?'), naa);
     if (navn === null) return;
-    const d = await api('/api/sites/name', {key: b.dataset.navn, name: navn});
-    if (d.status === 'done') { MINNE[b.dataset.navn] = d.site; tegnMinne(); fyllOmradeliste(); }
+    const d = await api('/api/sites/name', {key, name: navn});
+    if (d.status === 'done') { MINNE[key] = d.site; tegnMinne(); fyllOmradeliste(); }
+  };
+  $('minneBody').querySelectorAll('.mn-rad').forEach(r => {
+    r.onclick = (e) => { if (!e.target.closest('button') && e.detail < 2) setTimeout(() => { if (!r._dobbel) skann(r.dataset.skann); }, 260); };
+    r.ondblclick = (e) => { r._dobbel = true; if (e.target.closest('.mn-tittel')) navngi(r.dataset.skann); setTimeout(() => { r._dobbel = false; }, 400); };
+    r.onkeydown = (e) => { if (e.key === 'Enter') skann(r.dataset.skann); };
   });
-  $('minneBody').querySelectorAll('[data-slett]').forEach(b => b.onclick = async () => {
-    if (!confirm(`Glemme ${b.dataset.slett}?`)) return;
+  $('minneBody').querySelectorAll('button[data-navn]').forEach(b => b.onclick = (e) => { e.stopPropagation(); navngi(b.dataset.navn); });
+  $('minneBody').querySelectorAll('[data-slett]').forEach(b => b.onclick = async (e) => {
+    e.stopPropagation();
+    if (!confirm(T(`Glemme ${b.dataset.slett}?`, `Forget ${b.dataset.slett}?`))) return;
     const d = await api('/api/sites/delete', {key: b.dataset.slett});
     if (d.status === 'done') { delete MINNE[b.dataset.slett]; tegnMinne(); fyllOmradeliste(); }
   });
@@ -4935,7 +4954,10 @@ function sekvensTast(e) {
    gjor det mulig: +KG32=360.001-RT601 og +KG32=360.002-RT601 er samme punkt
    paa to systemer, og felles-prefikset for HVER enhet er nettopp den delen som
    skiller dem. Da sitter man igjen med RT601 paa begge. */
-function cmpNoekkel(p, prefiks) {
+/* The key is lower-case so RT601 and rt601 meet; the row shows the name as
+   the device spells it. */
+function cmpNoekkel(p, prefiks) { return cmpKort(p, prefiks).toLowerCase(); }
+function cmpKort(p, prefiks) {
   let n = (p.name || '').trim();
   if (prefiks && n.toLowerCase().startsWith(prefiks.toLowerCase())) {
     n = n.slice(prefiks.length);
@@ -4954,7 +4976,7 @@ function cmpNoekkel(p, prefiks) {
   if (kortet) n = kortet;
   // Uten navn er objekt-IDen det eneste som finnes, og den er ofte lik paa
   // to like regulatorer.
-  return (n || p.objid).toLowerCase();
+  return n || p.objid;
 }
 
 function sammenlignData(ipA, ipB) {
@@ -4979,7 +5001,8 @@ function sammenlignData(ipA, ipB) {
       const ulik = talla ? Math.abs(va - vb) > 1e-9 : String(va) !== String(vb);
       if (ulik) { art = 'ulik'; ulike++; } else { art = 'lik'; like++; }
     }
-    rader.push({k, a, b, art});
+    const kilde = a || b;
+    rader.push({k, a, b, art, vis: cmpKort(kilde, a ? pa : pb)});
   }
   return {rader, ulike, bareA, bareB, like, prefiksA: pa, prefiksB: pb};
 }
@@ -5015,7 +5038,7 @@ function tegnSammenlign() {
     + vis.slice(0, 600).map(r => {
         const navn = (r.a && r.a.name) || (r.b && r.b.name) || r.k;
         return `<div class="cmp-rad ${r.art}">`
-          + `<span class="cmp-navn" title="${esc(navn)}">${esc(r.k)}</span>`
+          + `<span class="cmp-navn" title="${esc(navn)}">${esc(r.vis || r.k)}</span>`
           + `<span class="cmp-v">${vFmt(r.a)}</span>`
           + `<span class="cmp-v">${vFmt(r.b)}</span>`
           + `<span class="cmp-merke">${merke[r.art]}</span></div>`;
@@ -6765,8 +6788,11 @@ function trendMeta(g, p) {
 function trendBlock(p) {
   const g = trendGeo(p);
   if (!g) {
-    return `<div class="trend-wrap"><div style="font-size:10px;color:var(--fg-3)">${
-      S.live ? 'Samler trend…' : 'Slå på Live for å se trend'}</div></div>`;
+    // Off: a button that does what the hint used to ask you to do.
+    return `<div class="trend-wrap trend-tom">${S.live
+      ? `<span>${T('Samler trend…', 'Collecting a trend…')}</span>`
+      : `<button type="button" class="btn trend-live" onclick="$('pollBtn')?.click()">${T('Slå på Live', 'Turn Live on')}</button>
+         <span>${T('for å se trend', 'to see a trend')}</span>`}</div>`;
   }
   const spLinje = g.sp
     ? `<line class="trend-sp" x1="0" y1="${g.sp.y}" x2="${g.w}" y2="${g.sp.y}"/>` : '';
@@ -7067,8 +7093,10 @@ function renderWatch() {
   if (S.watch.length && S._watchSig === watchSignatur() && oppdaterWatch()) return;
   S._watchSig = watchSignatur();
   if (!S.watch.length) {
-    el.innerHTML = '<div style="padding:8px 10px;font-size:10.5px;color:var(--fg-3);line-height:1.4">'
-      + 'Fest punkter med ☆ (eller mellomrom) — også fra andre enheter</div>';
+    // Drawn while app.js is still loading, before T exists: plain Norwegian,
+    // and the language sweep translates it like the rest of this file.
+    el.innerHTML = '<div class="watch-tom"><span class="watch-stjerne">☆</span>'
+      + 'Fest punkter med ☆ eller mellomrom. De følges live, også fra andre enheter.</div>';
     return;
   }
   el.innerHTML = S.watch.map((w, i) => {
@@ -9122,6 +9150,13 @@ document.addEventListener('keydown', e => {
     e.preventDefault(); diagApne(); return;
   }
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'f') { e.preventDefault(); openGlobal(); return; }
+  // The keys every Mac and Windows app has: save, open, settings.
+  if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && $('naboOverlay').hidden) {
+    const k = e.key.toLowerCase();
+    if (k === 's') { e.preventDefault(); $('prjSave')?.click(); return; }
+    if (k === 'o') { e.preventDefault(); $('prjOpen')?.click(); return; }
+    if (e.key === ',') { e.preventDefault(); $('temaBtn')?.click(); return; }
+  }
   if (e.key === 'Escape') {
     if (!$('diagOverlay').hidden) { diagLukk(); return; }
     if (!$('cmpOverlay').hidden) { closeSammenlign(); return; }
@@ -9692,6 +9727,10 @@ const ORDBOK = {
 
   /* --- live and watch --- */
   'Live av': 'Live off',
+  'Lagre / åpne anlegg': 'Save / open a site',
+  'Fest punkter med ☆ eller mellomrom. De følges live, også fra andre enheter.':
+    'Pin points with ☆ or space. They are followed live, from other devices too.',
+  'Søk i anlegg, leverandører og enheter': 'Search sites, vendors and devices',
   'Live på': 'Live on',
   'Live av/på': 'Live on/off',
   'Start/stopp live-oppdatering (L)': 'Start/stop live updating (L)',

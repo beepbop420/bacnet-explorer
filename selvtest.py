@@ -77,6 +77,97 @@ def sjekk(navn, ok, detalj=""):
     print(f"  {'OK ' if ok else 'FEIL'}  {navn}{'  - ' + detalj if detalj else ''}", flush=True)
 
 
+def royktest():
+    """
+    Opens NABE in a headless Chrome or Edge and listens for JavaScript errors
+    while it starts. A file that parses can still stop at start-up - a value
+    used a line too early takes every script after it down - and only a real
+    browser shows that. Skipped when neither browser is installed.
+    """
+    import base64, shutil, socket, struct, tempfile
+    kandidater = [shutil.which("chrome"), shutil.which("msedge"),
+                  r"C:\Program Files\Google\Chrome\Application\chrome.exe",
+                  r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"]
+    nettleser = next((k for k in kandidater if k and Path(k).is_file()), None)
+    if not nettleser:
+        print("  --   ingen Chrome/Edge, røyktesten hoppes over", flush=True)
+        return
+    port = 9339
+    prof = tempfile.mkdtemp(prefix="nabe-royk-")
+    p = subprocess.Popen([nettleser, "--headless=new", f"--remote-debugging-port={port}", f"--user-data-dir={prof}",
+                          "--no-first-run", "about:blank"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    feil, sjekker = [], {}
+    try:
+        ws = None
+        for _ in range(60):
+            try:
+                with urllib.request.urlopen(f"http://127.0.0.1:{port}/json", timeout=1) as r:
+                    ws = next(t for t in json.load(r) if t["type"] == "page")["webSocketDebuggerUrl"]
+                break
+            except Exception:
+                time.sleep(0.25)
+        s = socket.create_connection(("127.0.0.1", port), timeout=10)
+        nokkel = base64.b64encode(os.urandom(16)).decode()
+        s.send((f"GET {ws.split(str(port), 1)[1]} HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nUpgrade: websocket\r\n"
+                f"Connection: Upgrade\r\nSec-WebSocket-Key: {nokkel}\r\nSec-WebSocket-Version: 13\r\n\r\n").encode())
+        buf = b""
+        while b"\r\n\r\n" not in buf:
+            buf += s.recv(4096)
+        rest = [buf.split(b"\r\n\r\n", 1)[1]]
+
+        def les(n):
+            while len(rest[0]) < n:
+                rest[0] += s.recv(1 << 20)
+            d, rest[0] = rest[0][:n], rest[0][n:]
+            return d
+
+        def send(obj):
+            data = json.dumps(obj).encode()
+            hode = bytearray([0x81])
+            n = len(data)
+            hode += bytes([0x80 | n]) if n < 126 else bytes([0x80 | 126]) + struct.pack(">H", n)
+            maske = os.urandom(4)
+            s.send(bytes(hode) + maske + bytes(b ^ maske[i % 4] for i, b in enumerate(data)))
+
+        def motta():
+            _, b2 = les(2)
+            n = b2 & 0x7f
+            if n == 126:
+                n = struct.unpack(">H", les(2))[0]
+            elif n == 127:
+                n = struct.unpack(">Q", les(8))[0]
+            return json.loads(les(n))
+
+        send({"id": 1, "method": "Runtime.enable"})
+        send({"id": 2, "method": "Page.navigate", "params": {"url": BASE + "/"}})
+        slutt = time.time() + 6
+        s.settimeout(0.5)
+        while time.time() < slutt:
+            try:
+                m = motta()
+            except socket.timeout:
+                continue
+            if m.get("method") == "Runtime.exceptionThrown":
+                d = m["params"]["exceptionDetails"]
+                feil.append((d.get("exception") or {}).get("description", d.get("text", "?")).splitlines()[0][:160])
+        s.settimeout(10)
+        send({"id": 3, "method": "Runtime.evaluate", "params": {"returnByValue": True, "expression":
+              "({skann: typeof runScan === 'function' && !!document.querySelector('.skann-ny'),"
+              " nabo: !!document.getElementById('naboHus'), meny: typeof closeMenus === 'function'})"}})
+        while True:
+            m = motta()
+            if m.get("id") == 3:
+                sjekker = m.get("result", {}).get("result", {}).get("value") or {}
+                break
+    except Exception as e:
+        feil.append(f"røyktesten selv: {e}")
+    finally:
+        p.kill()
+    sjekk("appen starter i nettleseren uten JavaScript-feil", not feil, "; ".join(feil[:3]))
+    sjekk("scan-feltet, NABO og menyene er på plass etter oppstart",
+          bool(sjekker) and all(sjekker.values()), json.dumps(sjekker))
+
+
 def kjor_tester():
     s = kall("/api/start", {"local_address": "127.0.0.1/8"})
     sjekk("kobler til", s.get("status") == "done", s.get("local_address", s.get("error", "")))
@@ -154,6 +245,7 @@ def kjor_tester():
             if p.returncode:
                 feil.append(f"{js.name}: {(p.stderr.strip().splitlines() or ['?'])[-1]}")
         sjekk("all JavaScript lar seg tolke", not feil, "; ".join(feil))
+    royktest()
     v = kall("/api/ny-versjon")
     sjekk("versjonssjekk svarer (med eller uten nett)", v.get("status") == "done", f"her {v.get('her')}, github {v.get('github')}")
 

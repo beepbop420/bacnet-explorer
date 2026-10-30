@@ -186,7 +186,7 @@
 .theme-tgl::after{
   content:'';position:absolute;top:3px;left:3px;width:18px;height:18px;
   border-radius:50%;pointer-events:none;
-  background:var(--warn);
+  background:#f5b301;
   transform:translateX(-30px) scale(.55);opacity:0;
   transition:transform 520ms cubic-bezier(.5,.05,.2,1), opacity 320ms ease 90ms;
 }
@@ -2893,7 +2893,7 @@ tbody tr.picked > td:first-child::before{
   padding:5px 10px 3px;font-size:9px;text-transform:uppercase;letter-spacing:var(--spor);
   color:var(--fg-3);font-weight:600;
 }
-.menu-hint{margin-left:auto;font-size:9px;color:var(--fg-3);font-family:var(--mono)}
+.menu-hint{margin-left:auto;padding-left:16px;font-size:11px;color:var(--fg-3);font-family:var(--sans)}
 .menu-item.menu-tung{font-weight:500}
 
 .sett-faner{display:flex;gap:2px;padding:0 12px;border-bottom:1px solid var(--line)}
@@ -4601,6 +4601,39 @@ button:focus:not(:focus-visible){outline:none;box-shadow:none}
 /* Toasts: neutral. Colour only when something went wrong. */
 .toast:not(.err)::before{display:none}
 .toast{border-radius:8px}
+/* The device header: counts belong with the device, under its name. */
+.ctx-tall{color:var(--fg-3);font-size:11px;white-space:nowrap}
+.ctx-tall::before{content:'·';margin-right:6px;color:var(--line-2)}
+/* The status bar says three things: live, points, connection. The device
+   number is in the header already, and "shown" only matters when a filter
+   hides something - then it is the way to clear it. */
+.statusbar{font-family:var(--sans)}
+.statusbar b{font-variant-numeric:tabular-nums;font-weight:600}
+.statusbar .sb-item:has(#sbDev){display:none}
+.statusbar .sb-vist:not(.kan-nullstilles){display:none}
+.statusbar .sb-vist.kan-nullstilles{color:var(--accent)}
+/* Inspector: the property names in the reading face, values in mono. */
+.kv dt{font-family:var(--sans);font-size:11px}
+.kv{gap:5px 10px}
+.trend-tom{display:flex;align-items:center;gap:8px;font-size:11px;color:var(--fg-3)}
+.trend-tom .trend-live{height:24px;padding:0 10px;font-size:11px}
+/* Watch, empty: an invitation in the middle, not a footnote. */
+.watch-tom{display:flex;flex-direction:column;align-items:center;gap:6px;padding:18px 16px;text-align:center;
+  font-size:11.5px;color:var(--fg-3);line-height:1.45}
+.watch-stjerne{font-size:18px;color:var(--line-2)}
+/* Sites I have visited: a source list. */
+.mn-sok{margin:10px 14px 0;width:calc(100% - 28px);height:28px}
+#minneBody .mn-rad{cursor:pointer;border-radius:8px;padding:8px 10px;border-bottom:0;margin-bottom:2px}
+#minneBody .mn-rad:hover,#minneBody .mn-rad:focus-visible{background:var(--hover);outline:none}
+.mn-knapper{display:flex;gap:10px;opacity:0;transition:opacity .12s}
+.mn-rad:hover .mn-knapper,.mn-rad:focus-within .mn-knapper{opacity:1}
+.mn-lenke{background:none;border:0;padding:2px 0;font:inherit;font-size:11.5px;color:var(--accent);cursor:pointer}
+.mn-lenke:hover{text-decoration:underline}
+.mn-lenke.fare{color:var(--err)}
+.mn-tall{font-family:var(--sans);font-size:11px;color:var(--fg-3);text-align:right;line-height:1.5}
+/* Tagging: a text field as wide as what goes in it, as in a Mac form. */
+#settTagging input.field:not([type=checkbox]):not([type=radio]){max-width:340px}
+#settTagging select.field{max-width:220px}
 /* The default button is the accent, in both themes, as on a Mac. */
 .btn.primary{background:var(--accent);border-color:var(--accent);color:#0b1220}
 .btn.primary:hover:not(:disabled){background:color-mix(in srgb,var(--accent) 86%,var(--fg));border-color:color-mix(in srgb,var(--accent) 86%,var(--fg))}
@@ -4673,22 +4706,21 @@ button:focus:not(:focus-visible){outline:none;box-shadow:none}
            the two is what made this list fourteen items long. -->
       <div id="toolsPop" class="menu-pop menu-right" hidden>
         <div class="menu-gruppe">Anlegg</div>
-        <button id="prjSave" class="menu-item">Lagre anlegg</button>
-        <button id="prjOpen" class="menu-item">Åpne anlegg…</button>
+        <button id="prjSave" class="menu-item">Lagre anlegg<span class="menu-hint">Ctrl+S</span></button>
+        <button id="prjOpen" class="menu-item">Åpne anlegg…<span class="menu-hint">Ctrl+O</span></button>
         <button id="minneBtn" class="menu-item">Anlegg jeg har vært på…</button>
         <button id="cmpBtn" class="menu-item">Sammenlikn to enheter…</button>
         <div class="menu-sep"></div>
         <div class="menu-gruppe">Nettverk</div>
         <button id="rescanNow" class="menu-item">Søk etter enheter nå</button>
-        <button id="diagBtn" class="menu-item">Sjekk en adresse…</button>
+        <button id="diagBtn" class="menu-item">Sjekk en adresse…<span class="menu-hint">Ctrl+D</span></button>
         <button id="reconnBtn" class="menu-item">Koble til på nytt</button>
         <div class="menu-sep"></div>
         <div class="menu-gruppe">Vis</div>
         <button id="colsBtn" class="menu-item">Kolonner…</button>
         <button id="wlogBtn" class="menu-item">Skrivelogg</button>
         <div class="menu-sep"></div>
-        <button id="temaBtn" class="menu-item menu-tung">Innstillinger…
-          <span class="menu-hint">Ctrl+K for alt</span></button>
+        <button id="temaBtn" class="menu-item menu-tung">Innstillinger…<span class="menu-hint">Ctrl+,</span></button>
       </div>
     </div>
     <button id="themeBtn" class="theme-tgl" title="Bytt mellom mørk og lys visning" aria-label="Bytt visning"><i></i></button>
@@ -4827,6 +4859,7 @@ button:focus:not(:focus-visible){outline:none;box-shadow:none}
         <button class="gs-close" style="margin-left:auto" onclick="closeMinne()"><span class="lbl">Lukk</span> ✕</button>
       </div>
       <div class="gs-meta">Hvert skann huskes med området, hvilke enheter som svarte og når. Klikk et anlegg for å skanne det på nytt.</div>
+      <input id="minneSok" class="field mn-sok" type="search" placeholder="Søk i anlegg, leverandører og enheter" autocomplete="off" oninput="tegnMinne()" hidden>
       <div id="minneBody" class="gs-results" style="padding:10px 14px"></div>
     </div>
   </div>
@@ -4942,6 +4975,8 @@ button:focus:not(:focus-visible){outline:none;box-shadow:none}
       <dt>Ctrl+K</dt><dd>Kommandopalett — alt verktøyet kan gjøre, ett søkefelt</dd>
       <dt>Ctrl+F</dt><dd>Søk i alle enheter samtidig</dd>
       <dt>Ctrl+L</dt><dd>Hopp til skannefeltet</dd>
+      <dt>Ctrl+S / Ctrl+O</dt><dd>Lagre / åpne anlegg</dd>
+      <dt>Ctrl+,</dt><dd>Innstillinger</dd>
       <dt>N</dt><dd>Åpne NABO, naboen</dd>
       <dt>Ctrl-klikk</dt><dd>Velg enkeltrad · Shift for område · Ctrl+A alle</dd>
       <dt>Esc</dt><dd>Lukk</dd>
