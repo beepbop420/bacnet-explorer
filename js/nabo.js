@@ -209,7 +209,7 @@ function romkoder(biter) {
 
 /* A system number written in one piece is split the way BTG writes it:
    360001 -> 360.001, 3600001 -> 360.0001. Five digits stay, as BTG leaves
-   31002 (HK Kommunehuset). Only the first
+   31002 (a real site). Only the first
    number in the name, and only when the next part is not a number too -
    360_001 is already split, and in 360.360013 the 360 comes first. */
 function delSystemnummer(biter) {
