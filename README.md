@@ -32,7 +32,7 @@ your mouse, falls asleep when you leave, and has opinions about priority 1.
 - **Live values by COV** where the controller allows it, polling otherwise.
 - **Writes with care:** confirmation, priority shown, optional automatic
   release, and a write log for handover.
-- **Exports** EDE 2.3, CSV, and a **BTG «Variabel» file** for Niagara NTI
+- **Exports** EDE 2.3, CSV, and a **«Variabel» file** for Niagara NTI
   import - with the device field right.
 - **Diagnoses silence:** port conflicts, the wrong adapter, the Windows
   firewall, and the plant you can only reach from a remote desktop.

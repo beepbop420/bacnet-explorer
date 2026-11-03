@@ -97,7 +97,7 @@ function nesteLinje() {
 /* -------------------------------------------------- left to himself */
 const LINJER = [
   'ping nabe', 'git commit -m "fikset"', 'tail -f nabe.log', 'echo $NABO', 'who-is 0-4194303',
-  'ede2btg --stille', ':wq', 'sudo lag kaffe', 'grep -r RT401 .', 'ls ~/anlegg', 'cat /dev/naboer',
+  'ede2var --stille', ':wq', 'sudo lag kaffe', 'grep -r RT401 .', 'ls ~/anlegg', 'cat /dev/naboer',
   'top -o nabe', 'git push --force # tuller',
 ]
 const NATT = ['// TODO: legg deg', 'sleep 28800', 'echo "god natt"'];

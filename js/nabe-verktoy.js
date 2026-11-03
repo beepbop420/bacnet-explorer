@@ -1,4 +1,4 @@
-/* NABE - tunnel guard, BTG file, the last visit
+/* NABE - tunnel guard, Variabel file, the last visit
    Loaded after app.js and shares its globals (S, $, api, toast, nabeSier ...).
    Kept apart so app.js does not have to carry everything. */
 'use strict';
@@ -69,11 +69,11 @@ async function kortvakt() {
 }
 setInterval(kortvakt, 3000);
 
-/* ------------------------------------------------------------ BTG file
-   The «Variabel» file BTG makes from an EDE, made straight from what NABE
+/* ------------------------------------------------------------ Variabel file
+   The «Variabel» file the old generator makes from an EDE, made straight from what NABE
    has read - no EDE round trip, and the device field right.
 
-   Format, from BTG's own exports (several real sites):
+   Format, from the old generator's own exports (several real sites):
    UTF-8 with BOM, CRLF, semicolons, 33 fields per row.
      1 BacnetNetwork      2 site name        3 <Prefix>.<device>
      4 tag path, dots      5 object type no.  6 instance
@@ -85,58 +85,58 @@ setInterval(kortvakt, 3000);
    SD codes in the description decide trend and alarm: the digit is the
    alarm class (0 = none), the letter T means trend, 0 means no trend.
    Without a code a point gets neither trend nor alarm - measured on 1350
-   such points in BTG's own exports.
+   such points in the old generator's own exports.
 
-   The one place BTG gets it wrong is field 3: it takes the device from the
+   The one place the old generator gets it wrong is field 3: it takes the device from the
    EDE file name (Device1234_2026-10-23_EDE becomes ABC.2026_10_23). Here it
    is the device's own name, so NTI finds the device in the station. */
-const BTG_TYPE = {
+const VAR_TYPE = {
   'analog-input': 0, 'analog-output': 1, 'analog-value': 2,
   'binary-input': 3, 'binary-output': 4, 'binary-value': 5,
   'multi-state-input': 13, 'multi-state-output': 14, 'multi-state-value': 19,
 };
-const BTG_HELE = new Set(['percent', 'pascal', 'parts per million', 'volt', 'null', 'percent relative humidity']);
+const VAR_HELE = new Set(['percent', 'pascal', 'parts per million', 'volt', 'null', 'percent relative humidity']);
 
-function btgEnhet(units) {
+function varEnhet(units) {
   if (!units || typeof units !== 'string' || units === 'no-units') return 'null';
   let u = units.replace(/-/g, ' ').replace(/^degrees /, '').toLowerCase();
-  // BTG writes the unit in the singular - pascal, bar, kilowatt hour, cubic
+  // the old generator writes the unit in the singular - pascal, bar, kilowatt hour, cubic
   // meter - except where it is a rate: liters per second stays plural.
   if (!/ per /.test(u))
     u = u.split(' ').map(w => /s$/.test(w) && !/^(celsius|fahrenheit|hertz|lux|siemens)$/.test(w) ? w.slice(0, -1) : w).join(' ');
   return u;
 }
 
-function btgSti(navn, cluster) {
+function varSti(navn, cluster) {
   const biter = String(navn || '').trim().split(/[-_\s.]+/).filter(Boolean);
   return (cluster ? cluster + '.' : '') + biter.join('.');
 }
 
 // An SD code stands on its own, but an underscore may join it to the text:
 // SD1T_Romtemp is as much a code as SD1T Romtemp.
-const BTG_SD_RE = /(?<![A-Za-z0-9])SD(\d)([0-9T])(?![A-Za-z0-9])/i;
-function btgSd(tekst) {
-  const m = BTG_SD_RE.exec(tekst || '');
+const VAR_SD_RE = /(?<![A-Za-z0-9])SD(\d)([0-9T])(?![A-Za-z0-9])/i;
+function varSd(tekst) {
+  const m = VAR_SD_RE.exec(tekst || '');
   if (!m) return {klasse: 0, trend: false, rest: (tekst || '').trim()};
   // Every code goes, not just the first, so none is left to be doubled.
-  const rest = btgUtenSd(tekst);
+  const rest = varUtenSd(tekst);
   return {klasse: Number(m[1]), trend: m[2].toUpperCase() === 'T', rest};
 }
 
-function btgUtenSd(tekst) {
-  return String(tekst || '').replace(new RegExp(BTG_SD_RE.source, 'gi'), ' ')
+function varUtenSd(tekst) {
+  return String(tekst || '').replace(new RegExp(VAR_SD_RE.source, 'gi'), ' ')
     .replace(/\s{2,}/g, ' ').replace(/^[\s\-–:_]+|[\s\-–:_]+$/g, '');
 }
 
-function btgRad(p, t, anlegg, enhetNavn) {
-  const type = BTG_TYPE[p.type];
+function varRad(p, t, anlegg, enhetNavn) {
+  const type = VAR_TYPE[p.type];
   if (type === undefined) return null;
   const analog = type <= 2;
-  const sti = btgSti(p.name, t.cluster);
-  const sd = btgSd(p.description || '');
+  const sti = varSti(p.name, t.cluster);
+  const sd = varSd(p.description || '');
   const beskr = sd.rest || p.name || '';
-  const enhet = analog ? btgEnhet(p.units) : '';
-  const desimaler = analog ? (BTG_HELE.has(enhet) ? 0 : 1) : 0;
+  const enhet = analog ? varEnhet(p.units) : '';
+  const desimaler = analog ? (VAR_HELE.has(enhet) ? 0 : 1) : 0;
   let tilstander = '';
   if (Array.isArray(p.state_text) && p.state_text.length) {
     tilstander = (type >= 3 && type <= 5)
@@ -156,7 +156,7 @@ function btgRad(p, t, anlegg, enhetNavn) {
   return f.map(x => String(x).replace(/[;\r\n]/g, ' ')).join(';');
 }
 
-function lagBtgFil() {
+function lagVarFil() {
   const t = tagInnstillinger();
   const k = tagNokkel();
   const anlegg = (t.anleggsnavn || (k && MINNE[k] && MINNE[k].navn) || '').trim();
@@ -176,7 +176,7 @@ function lagBtgFil() {
       dnavn = dnavn.slice(t.prefiks.length).replace(/^[._\-\s]+/, '');
     const enhetNavn = `${t.prefiks}.${dnavn.replace(/[\s\-.]+/g, '_')}`;
     for (const p of pts) {
-      const r = btgRad(p, t, anlegg, enhetNavn);
+      const r = varRad(p, t, anlegg, enhetNavn);
       if (r) rader.push(r);
     }
   }
@@ -193,10 +193,10 @@ function lagBtgFil() {
   a.download = filnavn;
   document.body.appendChild(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(a.href), 2000);
-  toast(T(`BTG-fil laget: ${rader.length} punkter fra ${enheter} enheter`, `BTG file made: ${rader.length} points from ${enheter} devices`));
-  nabeSier(T('BTG-fil laget. BTG selv er litt fornærmet.', 'BTG file made. BTG itself is a little offended.'), 'fornoyd', 'btg');
+  toast(T(`Variabel-fil laget: ${rader.length} punkter fra ${enheter} enheter`, `Variabel file made: ${rader.length} points from ${enheter} devices`));
+  nabeSier(T('Variabel-fil laget. Niagara får den når du vil.', 'Variabel file made. Niagara gets it when you like.'), 'fornoyd', 'varfil');
 }
-document.addEventListener('click', (e) => { if (e.target.closest?.('#tgBtg')) lagBtgFil(); });
+document.addEventListener('click', (e) => { if (e.target.closest?.('#tgVar')) lagVarFil(); });
 
 
 /* ------------------------------------------------------- the last visit

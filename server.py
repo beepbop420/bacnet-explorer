@@ -106,7 +106,7 @@ ALLOWED_ORIGINS = {
 READ_ONLY_PATHS = {"/api/sites",
                    
     "/api/status", "/api/interfaces", "/api/readonly", "/api/mine", "/api/ny-versjon",
-    "/api/anlegg", "/api/route", "/api/btg-fasit", "/api/kabelnett",
+    "/api/anlegg", "/api/route", "/api/var-fasit", "/api/kabelnett", "/api/object/all",
     "/api/writelog", "/api/notes", "/download", "/logo",
 }
 
@@ -192,7 +192,7 @@ def t(nb: str, en: str) -> str:
     return en if SPRAAK_VAR.get() == "en" else nb
 
 
-VERSJON = "1.32"
+VERSJON = "1.33"
 
 state = {"app": None, "local_address": None, "read_only": False, "bbmd": None}
 
@@ -521,19 +521,28 @@ def ruter_via(ip: str) -> List[Dict[str, Any]]:
 
 # ------------------------------------------------------------- saving files
 # A download in the window always lands in Downloads. NABO's files belong
-# where BTG puts them, or wherever the project keeps its NTI files, so the
+# where the old generator puts them, or wherever the project keeps its NTI files, so the
 # server writes them there itself.
 
 _ULOVLIG_FILNAVN = re.compile(r'[\\/:*?"<>|\x00-\x1f]')
 
 
-def _btg_mappe() -> Optional[str]:
-    """BTG's own export folder, where it already is."""
+def _eksport_mappe() -> Optional[str]:
+    """The folder on the desktop where Variabel files are kept, if there is
+    one: an export folder ("...Export", "...eksport") with a Variabel file
+    in it. Found by what it holds, not by a tool's name."""
     hjem = Path.home()
-    kandidater = [*hjem.glob("OneDrive*/Desktop/BTG-Export"), hjem / "Desktop" / "BTG-Export"]
-    for k in kandidater:
-        if k.is_dir():
-            return str(k)
+    for skrivebord in [*hjem.glob("OneDrive*/Desktop"), hjem / "Desktop"]:
+        try:
+            mapper = [m for m in skrivebord.iterdir() if m.is_dir() and re.search(r"export|eksport", m.name, re.I)]
+        except OSError:
+            continue
+        for m in sorted(mapper):
+            try:
+                if any(m.glob("*Variabel*.csv")) or any(m.glob("*/*Variabel*.csv")):
+                    return str(m)
+            except OSError:
+                continue
     return None
 
 
@@ -563,16 +572,16 @@ def _nedlastinger() -> Optional[str]:
 _FASIT: Dict[str, Any] = {"nokkel": None, "punkter": [], "filer": 0}
 
 
-@app.get("/api/btg-fasit")
-def btg_fasit():
+@app.get("/api/var-fasit")
+def var_fasit():
     """
-    Every tag BTG has written, with its description: the Variabel files in
-    BTG's export folder and under Downloads. NABO compares a point's
+    Every tag the old generator has written, with its description: the Variabel files in
+    the old generator's export folder and under Downloads. NABO compares a point's
     description with these to suggest a tag the way this company writes
     them. Read only, and cached until a file changes.
     """
     filer: List[Path] = []
-    for rot in [_btg_mappe(), _nedlastinger()]:
+    for rot in [_eksport_mappe(), _nedlastinger()]:
         if not rot:
             continue
         try:
@@ -590,7 +599,7 @@ def btg_fasit():
                 rå = f.read_bytes()
             except Exception:
                 continue
-            # BTG writes UTF-8 now; older exports are Windows-1252.
+            # the old generator writes UTF-8 now; older exports are Windows-1252.
             try:
                 tekst = rå.decode("utf-8-sig")
             except UnicodeDecodeError:
@@ -607,7 +616,7 @@ def btg_fasit():
 
 @app.get("/api/mapper")
 def mapper():
-    return {"status": "done", "nedlastinger": _nedlastinger(), "btg": _btg_mappe()}
+    return {"status": "done", "nedlastinger": _nedlastinger(), "eksport": _eksport_mappe()}
 
 
 class LagreBody(BaseModel):
@@ -2082,6 +2091,20 @@ async def object_detail(body: DetailBody):
     except COMM_ERRORS as e:
         return {"status": "error", "error": str(e)}
     return {"status": "done", "objid": body.objid, "properties": props}
+
+
+@app.post("/api/object/all")
+async def object_all(body: DetailBody):
+    """Every property of one object, for «Alle egenskaper» in the inspector."""
+    bacnet_app = _require_app()
+    if bacnet_app is None:
+        return {"status": "error", "error": t("Proxy er ikke startet.", "Not connected.")}
+    addr = device_address(body.address)
+    try:
+        d = await bc.read_object_all(bacnet_app, addr, body.objid)
+    except COMM_ERRORS as e:
+        return {"status": "error", "error": str(e)}
+    return {"status": "done", "objid": body.objid, **d}
 
 
 async def _auto_release(addr: Address, objid: str, prop: str,

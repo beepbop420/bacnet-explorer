@@ -2,18 +2,18 @@
 
    The neighbour of NABE. NABE reads the plant; NABO gives every point the
    name Niagara will know it by, and writes the «Variabel» file NTI imports -
-   the job BTG does, with the devices read live and EDE files side by side.
+   the job the old generator does, with the devices read live and EDE files side by side.
 
    What it takes in: the devices NABE has read, and any number of EDE files
    (with their _StateTexts companion). What it puts out: one Variabel file for
-   all of them or one per device, and EDE files for each. BTG's own settings
-   file, HeaderBTG.ini, is read and written so a site set up in BTG carries
+   all of them or one per device, and EDE files for each. the old generator's own settings
+   file, the header .ini, is read and written so a site set up in the old generator carries
    straight over, and back.
 
-   The row format is the one BTG 2.9.6 writes, 34 fields - see the BTG notes in
+   The row format is the one the old generator writes, 34 fields - see the the old generator notes in
    nabe-verktoy.js for what each field holds. Two things differ on purpose:
    the device field comes from the controller's name rather than the EDE file
-   name, and decimals follow BTG's per-unit table instead of a fixed rule. */
+   name, and decimals follow the old generator's per-unit table instead of a fixed rule. */
 
 const NABO = {
   kilder: [],          // {id, type:'anlegg'|'ede', auto, fil, instans, punkter}
@@ -27,7 +27,7 @@ const NABO = {
   sistValgt: null,     // the last row ticked, where Shift-click ranges from
 };
 
-/* BTG's normalisation, as its Normalisering tab ships it: a regex with named
+/* the old generator's normalisation, as its Normalisering tab ships it: a regex with named
    groups, a template the groups fill, and TC2 function codes mapped to NM. */
 const NORM_STD = {
   paa: false,
@@ -36,7 +36,7 @@ const NORM_STD = {
   koder: 'C = Pådrag, JV_AU, SB_AO, AO, SB.AO, SB.AU, LX_AO\nS = Start, Starts, JP_DO, JP.DO, LX_DO\nA = Alarm, Feil\nA1 = Alarm1, AlarmA, FeilA\nA2 = Alarm2, AlarmB, FeilB\nKMD = Auto, JP_Auto, SB_Auto, AM',
 };
 
-/* BTG's decimals per kind of unit, as HeaderBTG.ini calls them. */
+/* the old generator's decimals per kind of unit, as the header .ini calls them. */
 const EU_STD = {
   EUDefault: 1, EUTemp: 1, EUTrykk_Pa: 0, EUTrykk_kPa: 0, EUTrykk_bar: 1,
   EUluftmengde: 0, EUliterprsek: 1, EUluftkvalitet: 0, EUprosent: 0, EUVolum: 1,
@@ -97,9 +97,9 @@ function lagreAnlegg(patch) {
     ? {anlegg: alle, sistValg: Object.assign({}, p.sistValg || {}, valg)} : {anlegg: alle});
 }
 
-/* How the prefix is used. BTG asks the same in its Format list; here it is
+/* How the prefix is used. the old generator asks the same in its Format list; here it is
    one choice beside the prefix itself, and blank means no prefix at all. */
-const PREF_MOD = ['device', 'tag', 'btg', 'ingen'];
+const PREF_MOD = ['device', 'tag', 'pre', 'ingen'];
 
 function naboInnst() {
   const p = loadPrefs().nabo || {};
@@ -129,7 +129,8 @@ function naboInnst() {
           // What an ending is called in the station, per kind of component.
           // Which family of PX templates in nmNxFiles the site is drawn with.
           // Its word list comes first; your own lines are added after it.
-          pxModul: PX_MODULER[her.pxModul ?? (p.sistValg || {}).pxModul] ? (her.pxModul ?? (p.sistValg || {}).pxModul) : 'freeTag',
+          // Without a choice for this site: what the site itself suggests.
+          pxModul: PX_MODULER[her.pxModul] ? her.pxModul : pxForslag(),
           ordlisteEgen: typeof p.ordliste === 'string' && p.ordliste !== ORDLISTE_STD ? p.ordliste : '',
           get ordliste() { return (PX_MODULER[this.pxModul]?.liste || '') + '\n' + this.ordlisteEgen; },
           // Where files go: '' is the browser's Downloads, anything else a
@@ -172,16 +173,16 @@ function naboSkilleRe(o) {
 }
 /* The point name as a Niagara path: split where you have said it should be,
    joined with dots. A dot left in a name is still a folder to Niagara. */
-/* Measured against 7516 points BTG itself wrote, from the EDE files they came
+/* Measured against 7516 points the old generator itself wrote, from the EDE files they came
    from (five real sites):
    - _ always starts a new part.
    - A part with a space in it is text and stays whole, dots and hyphens and
      all: "XS Akk. tank temp." and "Drift fra SD-anlegg" are one part each.
    - A code part (no spaces) splits on . and - as well.
    - A slash is kept: JP41/JP42 means both pumps, not a folder.
-   This gives what BTG gave for 80 % of those points; the rest are SYSTEM
-   (deliberately at the top here), names BTG left with a trailing space,
-   and tags someone edited by hand in BTG. */
+   This gives what the old generator gave for 80 % of those points; the rest are SYSTEM
+   (deliberately at the top here), names the old generator left with a trailing space,
+   and tags someone edited by hand in the old generator. */
 function naboSti(navn, cluster, o) {
   const deler = [];
   for (const rå of String(navn || '').trim().split('_')) {
@@ -194,7 +195,7 @@ function naboSti(navn, cluster, o) {
   return (cluster ? cluster + '.' : '') + biter.join('.');
 }
 
-/* Room codes as BTG writes them: floor, underscore, room in four digits.
+/* Room codes as the old generator writes them: floor, underscore, room in four digits.
    R00_0004 stays together, and R000004 or R99999 becomes R00_0004 or R99_9999. */
 function romkoder(biter) {
   const ut = [];
@@ -207,17 +208,17 @@ function romkoder(biter) {
   return ut;
 }
 
-/* A system number written in one piece is split the way BTG writes it:
-   360001 -> 360.001, 3600001 -> 360.0001. Five digits stay, as BTG leaves
+/* A system number written in one piece is split the way the old generator writes it:
+   360001 -> 360.001, 3600001 -> 360.0001. Five digits stay, as the old generator leaves
    31002 (a real site). Only the first
    number in the name, and only when the next part is not a number too -
    360_001 is already split, and in 360.360013 the 360 comes first. */
 function delSystemnummer(biter) {
   // An s marks the system (s432_001, s360001). Whatever stands before it is a
-  // program's namespace - Mod_TCP in a Beckhoff - and BTG leaves it out.
+  // program's namespace - Mod_TCP in a Beckhoff - and the old generator leaves it out.
   const s = biter.findIndex(b => /^s\d+$/i.test(b));
   if (s > 0) biter = biter.slice(s);
-  // The first number, counting BTG's +PRE= in front of it; the s goes.
+  // The first number, counting the old generator's +PRE= in front of it; the s goes.
   const i = biter.findIndex(b => /^(\+[^=]*=)?s?\d+$/i.test(b));
   if (i < 0) return biter;
   const m = /^(\+[^=]*=)?s?(\d+)$/i.exec(biter[i]);
@@ -289,7 +290,7 @@ function kompHale(sti, navn) {
 
 /* Endings renamed per kind of component, as the station names them. One
    line per kind: the letters of the component code, then from=to pairs.
-   The energy meter line is read off 43 BTG exports: kWh, kW and Err on 76
+   The energy meter line is read off 43 Variabel exports: kWh, kW and Err on 76
    meters each, RT4 and RT5 for supply and return, DT for the difference,
    Volume in cubic metres and m3 for the flow in cubic metres per hour. */
 const ORDLISTE_STD = 'OE: Energy=kWh, Power=kW, Flow=m3, FT=RT4, RT=RT5, TurTemp=RT4, ReturTemp=RT5, DiffTemp=DT, Volum=Volume, Err=Err';
@@ -305,11 +306,57 @@ const ORDLISTE_STD = 'OE: Energy=kWh, Power=kW, Flow=m3, FT=RT4, RT=RT5, TurTemp
    A line starting with * applies to every kind of component. */
 const PX_MODULER = {
   freeTag: {navn: 'freeTag', liste: ORDLISTE_STD + '\n*: Gn=C, Err=A, Feil=A, Alm=A, Alarm=A, Drift=D, Start=S, Kmd=KMD'},
-  nordomatic: {navn: 'nordomatic / statsbygg', liste: '*: Gn=C, Err=A, Feil=A, Alm=A, Alarm=A, Drift=D, Start=S, Kmd=KMD'},
+  nordomatic: {navn: 'nordomatic', liste: '*: Gn=C, Err=A, Feil=A, Alm=A, Alarm=A, Drift=D, Start=S, Kmd=KMD'},
+  statsbygg: {navn: T('Statsbygg (TFM, understrek)', 'Statsbygg (TFM, underscore)'), liste: '*: Gn=C, Err=A, Feil=A, Alm=A, Alarm=A, Drift=D, Start=S, Kmd=KMD', statsbygg: true},
   tc2: {navn: 'Beckhoff TC2', liste: 'OE: kWh=Energy, kW=Power, RT4=TurTemp, RT5=ReturTemp, FT=TurTemp, RT=ReturTemp, DT=DiffTemp, m3=Flow\n*: D=Drift, Err=Feil, A=Feil, S=Start, Gn=AO, C=AO'},
   ingen: {navn: T('ingen', 'none'), liste: ''},
 };
 let ORD_CACHE = {k: null, kart: null};
+
+/* Which family a site most likely is, when nobody has chosen: Statsbygg
+   when the controllers carry a building number (111096_OUA01), Beckhoff's
+   TC2 words when most of them are Beckhoff, freeTag otherwise. */
+function pxForslag() {
+  const enheter = (typeof S !== 'undefined' && S.devices) || [];
+  if (enheter.some(d => /^\d{6}_OU[A-Z]\d+/i.test(d.object_name || ''))) return 'statsbygg';
+  const beck = enheter.filter(d => /beckhoff/i.test(d.vendor_name || '')).length;
+  return enheter.length && beck / enheter.length > 0.5 ? 'tc2' : 'freeTag';
+}
+
+/* Statsbygg's BACnet tag, from their «Merkemanual BACnet - GK Cloud Standard
+   for Automatikk» rev. 2.10: <building>_<system 4>_<no>_<sub>_<comp3><nn>_<function>,
+   111096_3601_001_04_RTB01_MV - underscores all the way.
+   - system: NS 3451 plus a digit, 360 -> 3601 (balanced ventilation), the
+     rest -> 3200, 3500, 5640 ...
+   - sub-number from the component number: 4xx is supply/flow (04), 5xx
+     extract/return (05), 1xx intake (01), 2xx exhaust (02), else 00.
+   - component: three letters, the third taken from the manual's own
+     examples (RT -> RTB, JP -> JPA, SB -> SBB, LX -> LXZ ...), and the last
+     two digits of the number.
+   - function: what the ending says (Gn -> C, Err -> A), or from the object
+     type when there is none (an input is MV, a binary input D, an output C).
+   The building number is the prefix; without a six-digit one the tag starts
+   with AAAAAA, which the review flags. */
+const SB_TREDJE = {IC: 'A', IE: 'Z', IG: 'A', IK: 'Z', JK: 'Z', JP: 'A', JQ: 'A', JV: 'Z', KA: 'A', LB: 'A', LC: 'Z', LH: 'A', LI: 'B', LK: 'A', LR: 'A', LU: 'Z', LV: 'A', LX: 'Z', MT: 'Z', MW: 'B', NB: 'A', OE: 'A', OU: 'F', QD: 'A', QE: 'A', QF: 'Z', QH: 'Z', QN: 'Z', QT: 'B', QX: 'Z', RB: 'A', RD: 'A', RF: 'B', RH: 'B', RJ: 'Z', RM: 'A', RP: 'B', RT: 'B', RY: 'C', SB: 'B', SI: 'Z', SK: 'Z', SM: 'A', SQ: 'Z', UP: 'A', XH: 'Z', XO: 'Z', XS: 'A'};
+const SB_SYSTEM = {360: '3601', 310: '3101'};
+const SB_FUNK = {GN: 'C', C: 'C', AU: 'C', AO: 'C', SP: 'SP', D: 'D', DRIFT: 'D', S: 'S', START: 'S', A: 'A', ERR: 'A', FEIL: 'A', ALM: 'A', ALARM: 'A', F: 'A', KMD: 'KMD', KV: 'KV', K: 'K'};
+function tilStatsbygg(sti, prefiks, p) {
+  const bygg = /^\d{6}$/.test(String(prefiks || '').trim()) ? String(prefiks).trim() : 'AAAAAA';
+  const d = String(sti).split('.');
+  const si = d.findIndex((x, i) => /^\d{3}$/.test(x) && /^\d{3,4}$/.test(d[i + 1] || ''));
+  const ki = d.findIndex((x, i) => i > si && /^[A-Z]{2}\d{3}$/i.test(x));
+  if (si < 0 || ki < 0) return [bygg, ...d].join('_');
+  const sys = SB_SYSTEM[d[si]] || d[si] + '0';
+  const lop = d[si + 1].padStart(3, '0').slice(-3);
+  const [, bok, nr] = /^([A-Z]{2})(\d{3})$/i.exec(d[ki]);
+  const under = {4: '04', 5: '05', 1: '01', 2: '02'}[nr[0]] || '00';
+  const komp = bok.toUpperCase() + (SB_TREDJE[bok.toUpperCase()] || 'A') + nr.slice(1);
+  const hale = d.slice(ki + 1).join('_');
+  const t = typeof p === 'object' && p ? String(p.type || '') : '';
+  const funk = hale ? (SB_FUNK[hale.toUpperCase()] || hale.toUpperCase())
+    : t === 'analog-input' ? 'MV' : t === 'binary-input' ? 'D' : t.endsWith('output') ? (t.startsWith('binary') ? 'S' : 'C') : 'KV';
+  return [bygg, sys, lop, under, komp, funk].join('_');
+}
 function ordKart(tekst) {
   if (ORD_CACHE.k === tekst) return ORD_CACHE.kart;
   const kart = new Map();
@@ -376,8 +423,8 @@ function felleStart(rader) {
 
 /* What stands in front of the systems in every tag: the prefix as a folder
    if you chose that, and the site name if you want it there. Cluster is not
-   here: in BTG it is the Citect cluster and has never been part of a Niagara
-   tag - NABO keeps it only for HeaderBTG.ini. */
+   here: in the old generator it is the Citect cluster and has never been part of a Niagara
+   tag - NABO keeps it only for the header .ini. */
 function naboTopp(t, o) {
   const pref = o.prefMod === 'tag' ? t.prefiks : '';
   return [pref, o.foranAnlegg ? t.anleggsnavn : ''].map(x => String(x || '').trim().replace(/[\s.]+/g, '_'))
@@ -420,7 +467,7 @@ function normaliser(navn, o) {
 
 /* ------------------------------------------------------------ one row */
 function naboRad(p, t, o, anlegg, enhetNavn, rett) {
-  const type = BTG_TYPE[p.type];
+  const type = VAR_TYPE[p.type];
   if (type === undefined) return null;
   rett = rett || {};
   const analog = type <= 2;
@@ -433,11 +480,11 @@ function naboRad(p, t, o, anlegg, enhetNavn, rett) {
   const grunn = stiRen;
   if (o.kuttN && !system && !smart) stiRen = kuttStart(stiRen, o.kuttN);
   if (!system && !norm) stiRen = brukOrdliste(stiRen, o);
-  // BTG's +PRE=360.001: the prefix glued to the system number. A SYSTEM
+  // the old generator's +PRE=360.001: the prefix glued to the system number. A SYSTEM
   // point has no system number and sits outside them all, so it goes bare.
   // It goes on the system number - the first part that is a number - so a
   // location in front, as VMS in VMS.639.001, stays in front of it.
-  if (o.prefMod === 'btg' && t.prefiks && !system && !/\+[^.]*=/.test(stiRen)) {
+  if (o.prefMod === 'pre' && t.prefiks && !system && !/\+[^.]*=/.test(stiRen)) {
     const biter = stiRen.split('.');
     const i = Math.max(0, biter.findIndex(b => /^\d/.test(b)));
     biter[i] = `+${t.prefiks}=${biter[i]}`;
@@ -450,12 +497,13 @@ function naboRad(p, t, o, anlegg, enhetNavn, rett) {
   const stiHale = rett.hale === true ? naboHale(stiRen) : hale ? kompHale(stiRen, p.name) : stiRen;
   // The controller and floor folders go last, so the underscore rule above
   // could still see OU001 and find RT in OU001.RT.SP.DIFF.NATT.
-  const stiAuto = smart ? utenMapper(stiHale) : stiHale;
+  const stiNO = smart ? utenMapper(stiHale) : stiHale;
+  const stiAuto = o.pxModul === 'statsbygg' && !system ? tilStatsbygg(stiNO, t.prefiks, p) : stiNO;
   const sti = rett.sti ?? stiAuto;
-  const sd = btgSd(p.description || '');
+  const sd = varSd(p.description || '');
   const beskrAuto = sd.rest || p.name || '';
   const beskr = rett.beskr ?? beskrAuto;
-  const enhetAuto = analog ? btgEnhet(p.units) : '';
+  const enhetAuto = analog ? varEnhet(p.units) : '';
   const enhet = rett.enhet ?? enhetAuto;
   // No unit is a count or a state, never a fraction.
   const desAuto = analog ? (enhetAuto === 'null' ? 0 : (o.eu[euNokkel(enhetAuto)] ?? o.eu.EUDefault)) : 0;
@@ -468,7 +516,7 @@ function naboRad(p, t, o, anlegg, enhetNavn, rett) {
       : p.state_text.map((s, i) => `${i + 1}=${s}`).join('|');
   }
   const biter = sti.split('.');
-  // The alarm source is system.sub-component, as BTG writes 310.02-JP40: it
+  // The alarm source is system.sub-component, as the old generator writes 310.02-JP40: it
   // starts at the system number (or SYSTEM), past any prefix or location.
   const fra = biter.findIndex(b => /^(\+[^=]*=)?\d/.test(b) || /^SYSTEM$/i.test(b));
   const del = fra >= 0 ? biter.slice(fra) : biter;
@@ -479,7 +527,7 @@ function naboRad(p, t, o, anlegg, enhetNavn, rett) {
   const sdKode = `SD${klasse || 0}${trend ? 'T' : '0'}`;
   // The code is written once, from Trend and Alarm; any code already in the
   // text, typed by hand or left in the plant, is taken out first.
-  const beskrSd = `${sdKode} ${btgUtenSd(beskr)}`.trim();
+  const beskrSd = `${sdKode} ${varUtenSd(beskr)}`.trim();
   const f = new Array(34).fill('');
   f[0] = 'BacnetNetwork'; f[1] = anlegg; f[2] = enhetNavn; f[3] = sti;
   f[4] = String(type); f[5] = String(p.instance ?? ''); f[6] = naboVerdi(p.value); f[7] = enhet;
@@ -549,7 +597,7 @@ function naboResultat() {
       // No warning for a short path: a controller's own points (.avDTempHeat01)
       // never follow the plant's naming, and nothing can be done about them here.
       if (r.normert === false) r.adv.push(T('Passer ikke normaliseringen, vanlig sti brukt', 'Does not fit the normalisation, plain path used'));
-      // + and = are BTG's own +01=360.001 format; Niagara escapes them and NTI expects it.
+      // + and = are the old generator's own +01=360.001 format; Niagara escapes them and NTI expects it.
       const rare = [...new Set((r.sti.match(/[^A-Za-z0-9_.$+=]/g) || []))];
       if (rare.length) r.adv.push(T(`Niagara må escape ${rare.map(c => c === ' ' ? 'mellomrom' : c).join(' ')}`,
                                     `Niagara has to escape ${rare.map(c => c === ' ' ? 'space' : c).join(' ')}`));
@@ -654,11 +702,11 @@ function lesEdeFil(tekst, filnavn, tilstander) {
   })};
 }
 
-/* The device field is where BTG goes wrong, so this is careful about it. An
+/* The device field is where the old generator goes wrong, so this is careful about it. An
    instance NABE has seen on a plant gives the controller's own name. A project
    name that is one word is the device name in NABE's and Beckhoff's exports;
    one with spaces is a project title. Otherwise it is left for you to fill in
-   - flagged, rather than guessed from the file name as BTG does. */
+   - flagged, rather than guessed from the file name as the old generator does. */
 function devicenavnFor(inst, prosjekt) {
   if (inst) {
     const d = S.devices.find(x => String(x.device_instance) === String(inst) && x.object_name);
@@ -672,7 +720,7 @@ function devicenavnFor(inst, prosjekt) {
   return {navn: '', hvor: ''};
 }
 
-/* A Variabel file read back - what Niagara got last time. BTG writes it with
+/* A Variabel file read back - what Niagara got last time. the old generator writes it with
    no quoting, so a plain split is the honest parser. */
 function lesVariabel(tekst, fil) {
   const rader = tekst.replace(/^\uFEFF/, '').split(/\r?\n/).filter(l => l.startsWith('BacnetNetwork;')).map(l => l.split(';'));
@@ -681,7 +729,7 @@ function lesVariabel(tekst, fil) {
 
 /* What a file name says about the device once the EDE and the dates are
    gone: GR.1A.04_EDE -> GR.1A.04, ABC1_434001OU001_EDE -> ABC1_434001OU001.
-   Device1234_2026-10-23_EDE says nothing, and BTG's ABC.2026_10_23 shows why
+   Device1234_2026-10-23_EDE says nothing, and the old generator's ABC.2026_10_23 shows why
    that must not become the name. */
 function navnFraFil(filnavn) {
   // Whole parts only: EDE, dates, versions and copies go; what is left is the name.
@@ -721,7 +769,7 @@ async function leggTilFiler(filer) {
   tegnNabo();
 }
 
-/* ------------------------------------------------------ HeaderBTG.ini */
+/* ------------------------------------------------------ the header .ini */
 function lesIni(tekst) {
   const seksjoner = [];
   let cur = null;
@@ -744,7 +792,7 @@ async function lesIniFil(fil) {
   const sek = lesIni(tekst);
   if (!sek.length) { toast(T('Fant ingen innstillinger i fila', 'No settings found in the file'), true); return; }
   const patch = {};
-  // Cluster is BTG's Citect cluster. It is kept for the round trip and does
+  // Cluster is the old generator's Citect cluster. It is kept for the round trip and does
   // not touch the Niagara tags.
   const a = iniVerdi(sek, 'Generator', 'Anleggsnavn'), p = iniVerdi(sek, 'Generator', 'Prefix'),
         c = iniVerdi(sek, 'Generator', 'Cluster');
@@ -764,8 +812,8 @@ async function lesIniFil(fil) {
   tegnNabo();
 }
 
-/* Written back in BTG's own layout and encoding, with every section NABO does
-   not know left exactly as it was - KNX, Mapper and the rest stay BTG's. */
+/* Written back in the old generator's own layout and encoding, with every section NABO does
+   not know left exactly as it was - KNX, Mapper and the rest stay the old generator's. */
 function lagIni() {
   const t = tagInnstillinger();
   const o = naboInnst();
@@ -782,14 +830,14 @@ function lagIni() {
   sett('Trend', 'SamplerPeriode', o.trend);
   for (const [k, v] of Object.entries(o.eu)) sett('EngineeringUnits', k, v);
   const tekst = sek.map(s => `[${s.navn}]\r\n` + s.par.map(([k, v]) => `${k}=${v}`).join('\r\n')).join('\r\n') + '\r\n';
-  // BTG reads the file as Windows-1252; æøå and ° are single bytes there.
+  // the old generator reads the file as Windows-1252; æøå and ° are single bytes there.
   const bytes = new Uint8Array(tekst.length);
   for (let i = 0; i < tekst.length; i++) {
     const c = tekst.charCodeAt(i);
     bytes[i] = c < 256 ? c : 63;
   }
-  naboLagre('HeaderBTG.ini', bytes, 'text/plain');
-  toast(T(`HeaderBTG.ini lagret i ${mappeNavn()}`, `HeaderBTG.ini saved in ${mappeNavn()}`));
+  naboLagre('NABO-oppsett.ini', bytes, 'text/plain');
+  toast(T(`NABO-oppsett.ini lagret i ${mappeNavn()}`, `NABO-oppsett.ini saved in ${mappeNavn()}`));
 }
 
 /* -------------------------------------------------------- where files go
@@ -828,7 +876,7 @@ async function lagreEn(navn, data, type) {
 function mappeNavn() {
   const m = naboInnst().mappe;
   if (!m) return T('Nedlastinger', 'Downloads');
-  if (NABO.mapperInfo && m === NABO.mapperInfo.btg) return 'BTG-Export';
+  if (NABO.mapperInfo && m === NABO.mapperInfo.eksport) return T('Eksportmappa', 'Export folder');
   return m.split(/[\\/]/).filter(Boolean).pop() || m;
 }
 function visLagret() {
@@ -847,7 +895,7 @@ function fyllMapper() {
   const o = naboInnst();
   const info = NABO.mapperInfo || {};
   const valg = [['', T('Nedlastinger', 'Downloads'), info.nedlastinger || '']];
-  if (info.btg) valg.push([info.btg, 'BTG-Export', info.btg]);
+  if (info.eksport) valg.push([info.eksport, T('Eksportmappa', 'Export folder'), info.eksport]);
   for (const m of o.mapper) if (m && !valg.some(v => v[0] === m)) valg.push([m, m.split(/[\\/]/).filter(Boolean).pop() || m, m]);
   if (o.mappe && !valg.some(v => v[0] === o.mappe)) valg.push([o.mappe, o.mappe.split(/[\\/]/).pop(), o.mappe]);
   s.innerHTML = valg.map(([v, l, t]) => `<option value="${esc(v)}" title="${esc(t)}">${esc(l)}</option>`).join('')
@@ -857,7 +905,7 @@ function fyllMapper() {
 }
 async function velgMappe() {
   const o = naboInnst();
-  const start = o.mappe || (NABO.mapperInfo && NABO.mapperInfo.btg) || '';
+  const start = o.mappe || (NABO.mapperInfo && NABO.mapperInfo.eksport) || '';
   let valgt = null;
   try {
     if (window.pywebview && window.pywebview.api && window.pywebview.api.velg_mappe) {
@@ -1184,21 +1232,21 @@ function tegnNabo(helt) {
         <div class="nabo-pref"><span>${T('Prefiks', 'Prefix')} <i>${T('valgfritt', 'optional')}</i></span>
           <div class="nabo-pref-felt">
             <input class="field" id="naboPrefiks" autocomplete="off" spellcheck="false" placeholder="${T('f.eks. 01', 'e.g. 01')}">
-            <select class="field" id="naboPrefMod" title="${T('Hvor prefikset brukes, som Format i BTG', 'Where the prefix is used, like Format in BTG')}">
+            <select class="field" id="naboPrefMod" title="${T('Hvor prefikset brukes', 'Where the prefix is used')}">
               <option value="device">${T('foran enhetsnavnet', 'before the device')}</option>
               <option value="tag">${T('foran enhetsnavn og tag', 'before device and tag')}</option>
-              <option value="btg">${T('BTG-format +PRE=360.001', 'BTG format +PRE=360.001')}</option>
+              <option value="pre">${T('Prefiks-format +PRE=360.001', 'Prefix format +PRE=360.001')}</option>
               <option value="ingen">${T('ikke i bruk', 'not used')}</option>
             </select></div></div>
         <label class="kort"><span>${T('Trend hvert', 'Trend every')}</span><input class="field" id="naboTrend" autocomplete="off" spellcheck="false" placeholder="tt:mm:ss"></label>
         <details class="nabo-des"><summary>${T('Avansert', 'Advanced')}</summary>
           <div class="nabo-avansert">
-            <label class="kort" title="${T('Citect-cluster fra BTG. Brukes ikke i Niagara-taggene, bare lagret i HeaderBTG.ini.', 'Citect cluster from BTG. Not used in the Niagara tags, only kept in HeaderBTG.ini.')}"><span>Cluster <i>(Citect)</i></span><input class="field" id="naboCluster" autocomplete="off" spellcheck="false"></label>
-            <label class="nabo-sd-valg"><span>HeaderBTG.ini</span><span class="nabo-ini">
-              <button type="button" class="btn" id="naboIniInn" title="${T('Hent prefiks, anlegg, trend og desimaler fra BTG', 'Take prefix, site, trend and decimals from BTG')}">${T('Hent…', 'Load…')}</button>
-              <button type="button" class="btn" id="naboIniUt" title="${T('Lagre innstillingene i BTGs format, så BTG kan bruke dem', 'Save the settings in BTG\u2019s format, for BTG to use')}">${T('Lagre', 'Save')}</button></span></label>
+            <label class="kort" title="${T('Citect-cluster. Brukes ikke i Niagara-taggene, bare lagret i oppsettfila.', 'Citect cluster. Not used in the Niagara tags, only kept in the settings file.')}"><span>Cluster <i>(Citect)</i></span><input class="field" id="naboCluster" autocomplete="off" spellcheck="false"></label>
+            <label class="nabo-sd-valg"><span>${T('Oppsettfil (.ini)', 'Settings file (.ini)')}</span><span class="nabo-ini">
+              <button type="button" class="btn" id="naboIniInn" title="${T('Hent prefiks, anlegg, trend og desimaler fra en Header-ini', 'Take prefix, site, trend and decimals from a header .ini')}">${T('Hent…', 'Load…')}</button>
+              <button type="button" class="btn" id="naboIniUt" title="${T('Lagre innstillingene som ini-fil, til en annen PC eller et annet prosjekt', 'Save the settings as an .ini file, for another PC or project')}">${T('Lagre', 'Save')}</button></span></label>
             <label class="nabo-sd-valg"><span>${T('Normalisering', 'Normalisation')}</span>
-              <button type="button" class="btn" id="naboNormKnapp" title="${T('BTGs regex, mal og TC2-koder. Trengs sjelden: punktum hele veien og unntakene dekker det meste.', 'BTG\u2019s regex, template and TC2 codes. Rarely needed: dots all the way and the exceptions cover most.')}">${T('Åpne normalisering…', 'Open normalisation…')}</button></label>
+              <button type="button" class="btn" id="naboNormKnapp" title="${T('Regex, mal og TC2-koder. Trengs sjelden: punktum hele veien og unntakene dekker det meste.', 'Regex, template and TC2 codes. Rarely needed: dots all the way and the exceptions cover most.')}">${T('Åpne normalisering…', 'Open normalisation…')}</button></label>
           </div>
           <div class="nabo-des-tittel">${T('Desimaler', 'Decimals')}</div>
           <div class="nabo-des-grid"></div></details>
@@ -1212,7 +1260,7 @@ function tegnNabo(helt) {
           <label class="nabo-slipp" id="naboSlipp" tabindex="0">
             <input type="file" id="naboFil" accept=".csv,.txt,.ini" multiple hidden>
             <b>${T('Legg til EDE-filer', 'Add EDE files')}</b>
-            <span>${T('eller slipp dem her, gjerne med _StateTexts og HeaderBTG.ini', 'or drop them here, with _StateTexts and HeaderBTG.ini if you have them')}</span>
+            <span>${T('eller slipp dem her, gjerne med _StateTexts og en Header-ini', 'or drop them here, with _StateTexts and a header .ini if you have them')}</span>
           </label>
         </aside>
         <main class="nabo-forh">
@@ -1294,7 +1342,7 @@ function tegnNabo(helt) {
   const topp = naboTopp(t, o);
   const vanlig = r.rader.find(x => !x.system);
   const system = r.rader.find(x => x.system);
-  const pre = o.prefMod === 'btg' && t.prefiks ? `+${t.prefiks}=` : '';
+  const pre = o.prefMod === 'pre' && t.prefiks ? `+${t.prefiks}=` : '';
   const dev = (vanlig || system || {}).enhetNavn || ((o.prefMod !== 'ingen' && t.prefiks ? t.prefiks + '.' : '') + 'OU001');
   const tt = x => (topp ? topp + '.' : '') + x;
   $('naboEks').innerHTML = `<b>${esc(dev)}</b><span>${esc(vanlig ? vanlig.sti : tt(pre + 'VMS.639.001.RR001'))}</span>`
@@ -1406,7 +1454,7 @@ function tegnNabo(helt) {
     ${!vis.length ? `<div class="nabo-tom">${T('Ingen rader passer.', 'No rows match.')}</div>` : ''}`
     : `<label class="nabo-start" tabindex="0">${NABO_SVG}
         <b>${T('Slipp EDE-filene her', 'Drop the EDE files here')}</b>
-        <span>${T('eller', 'or')} <u>${T('velg filer', 'choose files')}</u> · ${T('_StateTexts og HeaderBTG.ini kan være med', '_StateTexts and HeaderBTG.ini may come along')}</span>
+        <span>${T('eller', 'or')} <u>${T('velg filer', 'choose files')}</u> · ${T('_StateTexts og en Header-ini kan være med', '_StateTexts and a header .ini may come along')}</span>
         <small>${T('Enheter du har åpnet i NABE kommer med av seg selv.', 'Devices you have opened in NABE come along by themselves.')}</small>
         <input type="file" class="nabo-start-fil" accept=".csv,.txt,.ini" multiple hidden></label>`;
     if (er) {
@@ -1495,7 +1543,7 @@ function tegnNorm(r) {
           <small>{lokasjon} {hoved} {under} {subdir} {komponent} {funksjonskode}</small></label>
         <label><span>${T('Funksjonskoder, NM = TC2, TC2 …', 'Function codes, NM = TC2, TC2 …')}</span>
           <textarea class="field" id="naboNormKoder" rows="7" spellcheck="false"></textarea></label>
-        <button class="btn" id="naboNormStd">${T('Tilbake til BTG-standard', 'Back to BTG default')}</button>
+        <button class="btn" id="naboNormStd">${T('Tilbake til standard', 'Back to the default')}</button>
       </div>
       <div class="nabo-norm-test" id="naboNormTest"></div>
     </div>`;
@@ -1736,7 +1784,7 @@ function rettCelle(td) {
     if (felt === 'des') v = Math.max(0, Math.min(6, parseInt(v, 10) || 0));
     if (felt === 'enhet' && v === '') v = 'null';
     const auto = x.auto[felt];
-    const sd = felt === 'beskr' ? btgSd(v) : null;
+    const sd = felt === 'beskr' ? varSd(v) : null;
     if (sd && sd.rest !== v) {
       // A code typed into the description is an order for Alarm and Trend,
       // and the text keeps only the words - so it is never written twice.
@@ -2072,8 +2120,8 @@ function koblNabo(ov) {
     }
   }, true);
   // The old way in now leads here: the menu item, the button under Tagging.
-  lagBtgFil = aapneNabo;
-  const b = $('btgBtn');
+  lagVarFil = aapneNabo;
+  const b = $('varBtn');
   if (b) b.onclick = aapneNabo;
   const _sprak = settSprak;
   settSprak = function () {
@@ -2303,7 +2351,6 @@ function naboHusTittel() {
   if (sesong) document.documentElement.classList.add('nabo-' + sesong);
 
   const SOK_SVAR = {
-    btg: ['Hvem?', 'Who?'],
     yabe: ['Feil nabolag.', 'Wrong neighbourhood.'],
     excel: ['Ikke her. Aldri mer.', 'Not here. Never again.'],
     nabe: ['Han bor ved siden av. Han kjeder seg.', 'He lives next door. He is bored.'],

@@ -608,6 +608,71 @@ async def read_object_detail(app, addr: Address, objid: str,
     return out
 
 
+# What an object usually has beyond the inspector's set, for controllers
+# that do not answer property-list (it came with BACnet 2012). Asking for
+# one it lacks costs nothing: the property simply comes back as an error.
+ALLE_FALLBACK = [
+    "object-type", "object-identifier", "profile-name", "device-type", "update-interval",
+    "cov-increment", "resolution", "min-pres-value", "max-pres-value",
+    "high-limit", "low-limit", "deadband", "limit-enable", "time-delay", "time-delay-normal",
+    "notification-class", "event-enable", "acked-transitions", "notify-type", "event-time-stamps",
+    "event-detection-enable", "event-algorithm-inhibit", "reliability-evaluation-inhibit",
+    "alarm-value", "alarm-values", "fault-values", "feedback-value", "polarity",
+    "elapsed-active-time", "time-of-active-time-reset", "change-of-state-count",
+    "change-of-state-time", "time-of-state-count-reset", "minimum-on-time", "minimum-off-time",
+    "interface-value", "current-command-priority", "value-source", "last-command-time",
+]
+# Too big or too binary to be worth a line in the inspector.
+ALLE_HOPP = {"property-list", "priority-array", "event-message-texts-config", "tags", "audit-level"}
+
+
+async def read_object_all(app, addr: Address, objid: str,
+                          timeout: float = 10.0) -> Dict[str, Any]:
+    """Every property the object has. Its own property-list first; without
+    one, the common set above. Read with ReadPropertyMultiple in chunks of
+    twelve, one at a time where the device does not take RPM."""
+    liste: List[str] = []
+    try:
+        pl = await asyncio.wait_for(app.read_property(addr, objid, "property-list"), timeout=timeout)
+        liste = [str(x) for x in (pl or [])]
+    except COMM_ERRORS:
+        liste = []
+    kilde = "property-list" if liste else "fallback"
+    props = [x for x in (liste or ALLE_FALLBACK) if x not in ALLE_HOPP]
+    verdier: Dict[str, Any] = {}
+    for i in range(0, len(props), 12):
+        bit = props[i:i + 12]
+        data = await _rpm_chunk(app, addr, [objid], bit, timeout)
+        if data is None:
+            verdier.update(await _read_single(app, addr, objid, bit, timeout))
+        else:
+            verdier.update(data.get(objid, {}))
+    ut: Dict[str, Any] = {}
+    for prop in props:
+        v = verdier.get(prop)
+        if v is None or is_error(v):
+            continue
+        ut[prop] = _enkel(v)
+    return {"kilde": kilde, "properties": ut}
+
+
+def _enkel(v: Any, dybde: int = 0) -> Any:
+    """A value JSON can carry. serialize() covers the common types; a choice
+    (OptionalUnsigned, a time stamp) is opened to the one it holds, and what
+    is left becomes its text."""
+    import json as _json
+    try:
+        s = serialize(v)
+        _json.dumps(s)
+        return s
+    except Exception:
+        pass
+    valg = getattr(v, "_choice", None)
+    if valg and dybde < 4:
+        return _enkel(getattr(v, valg, None), dybde + 1)
+    return str(v)
+
+
 async def poll_values(app, addr: Address, objids: Sequence[str],
                       batch_size: int = 20, concurrency: int = 4,
                       timeout: float = 6.0) -> Dict[str, Any]:

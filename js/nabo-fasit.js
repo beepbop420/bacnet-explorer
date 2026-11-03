@@ -2,7 +2,7 @@
 
    Tagging differs from plant to plant, but the description usually says
    what a point is: «Pådrag tilluftsvifte», «Temperatur tilluft». Every
-   Variabel file BTG has written is a list of descriptions and the tags
+   Variabel file the old generator has written is a list of descriptions and the tags
    they got here. So a point's description is compared with all of them,
    and the closest one lends its form - component code and ending, JV401.Gn
    or RT401 - to the point's own system number.
@@ -67,12 +67,12 @@ async function hentFasit() {
   if (FASIT.klar || FASIT.henter) return;
   FASIT.henter = true;
   try {
-    const d = await (await fetch('/api/btg-fasit', {cache: 'no-store'})).json();
+    const d = await (await fetch('/api/var-fasit', {cache: 'no-store'})).json();
     FASIT.filer = d.filer || 0;
     FASIT.liste = (d.punkter || []).map(([tag, beskr, type]) => {
       const f = fsForm(tag);
       if (!f) return null;
-      const ren = fsRen(btgUtenSd(beskr));
+      const ren = fsRen(varUtenSd(beskr));
       const ix = fsIndeks(f) || fsIndeks(beskr);
       return {f, b: beskr, kl: fsKlasse(type), tri: fsTri(ren), n: fsNokler(ren), ix};
     }).filter(x => x && x.tri.size >= 3);
@@ -90,7 +90,7 @@ function naboForslag(x) {
   const nokkel = kl + '|' + x.beskr;
   let best = FASIT.cache.get(nokkel);
   if (best === undefined) {
-    const ren = fsRen(btgUtenSd(x.beskr));
+    const ren = fsRen(varUtenSd(x.beskr));
     const t = fsTri(ren), n = fsNokler(ren), ix = fsIndeks(x.beskr);
     best = null;
     if (t.size >= 3) {
@@ -175,11 +175,11 @@ function tegnForslagBar(r) {
   const sikre = med.filter(x => x.forslag.sikker).length;
   bar.hidden = false;
   bar.innerHTML = !FASIT.klar
-    ? `<span class="like-tekst">${T('Leser BTG-eksportene…', 'Reading the BTG exports…')}</span>`
+    ? `<span class="like-tekst">${T('Leser Variabel-eksportene…', 'Reading the Variabel exports…')}</span>`
     : !FASIT.liste.length
-      ? `<span class="like-tekst">${T('Fant ingen Variabel-filer i BTG-Export eller Nedlastinger å lære av.', 'Found no Variabel files in BTG-Export or Downloads to learn from.')}</span>`
-      : `<span class="like-tekst">${T(`${med.length} forslag fra beskrivelsen, lært av ${FASIT.liste.length} tagger i ${FASIT.filer} BTG-eksporter.`,
-                                      `${med.length} suggestions from the description, learnt from ${FASIT.liste.length} tags in ${FASIT.filer} BTG exports.`)}</span>
+      ? `<span class="like-tekst">${T('Fant ingen Variabel-filer i eksportmappa eller Nedlastinger å lære av.', 'Found no Variabel files in the export folder or Downloads to learn from.')}</span>`
+      : `<span class="like-tekst">${T(`${med.length} forslag fra beskrivelsen, lært av ${FASIT.liste.length} tagger i ${FASIT.filer} Variabel-eksporter.`,
+                                      `${med.length} suggestions from the description, learnt from ${FASIT.liste.length} tags in ${FASIT.filer} Variabel exports.`)}</span>
          <span class="like-eks">${T('Grønn = sikker, gul = mulig. Klikk et forslag for å bruke det.', 'Green = sure, yellow = possible. Click a suggestion to use it.')}</span>
          ${sikre ? `<button type="button" class="btn primary" data-alle="sikre">${T(`Bruk alle sikre (${sikre})`, `Use every sure one (${sikre})`)}</button>` : ''}
          ${med.length ? `<button type="button" class="btn" data-alle="alle">${T(`Bruk alle (${med.length})`, `Use all (${med.length})`)}</button>` : ''}`;

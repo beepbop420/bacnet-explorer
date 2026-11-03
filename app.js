@@ -3770,14 +3770,14 @@ function merkerHtml(merker) {
 /* ------------------------------------------------------------- tagging */
 /* The settings the tag generator asks for every single time.
 
-   The workflow today is: read a controller here, export EDE, open BTG, and
+   The workflow today is: read a controller here, export EDE, open the old generator, and
    type in prefix, cluster, site name and the rest before it will do anything.
    Those answers do not change between visits - they belong to the building,
    not to the session - so they are kept with the site, next to the ranges and
    the controllers that answered. Come back to the same building next month
    and they are already filled in.
 
-   Field names follow BTG's own: prefix, cluster, anleggsnavn, prosjekt,
+   Field names follow the old generator's own: prefix, cluster, anleggsnavn, prosjekt,
    delimiter, building-id-first. Same words, so there is nothing to translate
    between the two screens. */
 const TAG_STD = {
@@ -3785,7 +3785,7 @@ const TAG_STD = {
   skilletegn: '=', byggIdForst: false, ventLedd: '2', sorter: 'etasje',
 };
 
-// BTG warns above this; the tag becomes unwieldy in Niagara long before it
+// the old generator warns above this; the tag becomes unwieldy in Niagara long before it
 // becomes invalid.
 const PREFIKS_MAKS = 12;
 
@@ -3847,11 +3847,10 @@ function tegnTagging() {
 
     <div class="tg-gruppe">
       <div class="tema-tittel">Identifikasjon</div>
-      ${felt('tgPrefiks', 'Prefiks', 'Foran systemnummeret, som i BTG', t.prefiks)}
+      ${felt('tgPrefiks', 'Prefiks', 'Foran systemnummeret', t.prefiks)}
       ${t.prefiks.length > PREFIKS_MAKS
         ? `<div class="tg-advarsel">Prefikset er ${t.prefiks.length} tegn.
-             Over ${PREFIKS_MAKS} blir taggen tung å lese i Niagara, og BTG
-             advarer om det samme.</div>` : ''}
+             Over ${PREFIKS_MAKS} blir taggen tung å lese i Niagara.</div>` : ''}
       ${felt('tgCluster', 'Cluster', '', t.cluster)}
       ${felt('tgAnlegg', 'Anleggsnavn', '', t.anleggsnavn)}
       ${felt('tgProsjekt', 'Prosjekt', '', t.prosjekt)}
@@ -3891,8 +3890,8 @@ function tegnTagging() {
       <div class="tema-tittel">Slik blir det</div>
       <div class="tg-forhaandsvis">${esc(tagEksempel(t))}</div>
       <div class="tg-foot">
-        <button class="btn primary" id="tgBtg">Åpne NABO</button>
-        <button class="btn" id="tgKopier">Kopier til BTG</button>
+        <button class="btn primary" id="tgVar">Åpne NABO</button>
+        <button class="btn" id="tgKopier">Kopier oppsettet</button>
         <button class="btn" id="tgNullstill">Tøm</button>
       </div>
     </div>`;
@@ -4445,6 +4444,7 @@ function commands() {
   add('Eksport', 'EDE 2.3…', () => { closeCmd(); exportEDE(); }, {when: harPunkter});
   add('Eksport', 'Sammenlign med EDE-fil…', () => { closeCmd(); startEdeCompare(); }, {when: harPunkter});
   add('Eksport', 'Skrivelogg', () => { closeCmd(); showWriteLog(); });
+  add('Visning', 'Garderobe…', () => { closeCmd(); aapneGarderobe(); });
   add('Handling', 'Ukeprogram — vis og rediger', () => { closeCmd(); $('schBtn').click(); }, {when: harEnhet});
 
   add('Anlegg', 'Lagre anlegg', () => { closeCmd(); saveProject(); }, {when: () => S.devices.length > 0});
@@ -6250,6 +6250,7 @@ function openGlobal() {
   renderGlobal();
 }
 function closeGlobal() { $('gsOverlay').hidden = true; }
+document.addEventListener('click', (e) => { if (e.target.closest && e.target.closest('#tbSok')) openGlobal(); });
 
 function renderGlobal() {
   const term = $('gsInput').value;
@@ -6268,7 +6269,23 @@ function renderGlobal() {
   // synlig kaskade der ville stroboskopere mens du skriver.
   if (S._gsSkrevet) box.classList.remove('kaskade');
   if (!S.gsFlag && (!term.trim() || term.trim().length < 2)) {
-    box.innerHTML = '<div class="gs-empty">Skriv minst to tegn</div>';
+    // Nothing typed yet: the plant itself, every device per network, each
+    // with what has been read of it. Clicking one opens it.
+    const per = new Map();
+    for (const d of S.devices) {
+      const k = d._range || T('Ukjent nett', 'Unknown network');
+      if (!per.has(k)) per.set(k, []);
+      per.get(k).push(d);
+    }
+    const punkter = Object.values(S.cache).reduce((n, l) => n + l.length, 0);
+    box.innerHTML = !S.devices.length
+      ? `<div class="gs-empty">${T('Skann et anlegg først, så kan alt i det søkes her.', 'Scan a site first, then everything in it can be searched here.')}</div>`
+      : `<div class="gs-hint">${T(`Skriv for å søke i ${punkter} punkter. Navn, beskrivelse og objekt-ID; flere ord må alle treffe.`, `Type to search ${punkter} points. Name, description and object ID; several words must all match.`)}</div>`
+        + [...per].map(([nett, enheter]) => `<div class="gs-nett">${esc(nett)}</div>`
+          + enheter.map(d => `<button class="gs-enhet" data-ip="${esc(d.address)}"><span>${esc(d.object_name || d.address)}</span>`
+            + `<small>${esc(d.address)} · ${d.device_instance ?? '?'}</small>`
+            + `<small>${S.cache[d.address] ? T(`${S.cache[d.address].length} pkt`, `${S.cache[d.address].length} pts`) : T('ikke lest', 'not read')}</small></button>`).join('')).join('');
+    box.querySelectorAll('.gs-enhet').forEach(b => b.onclick = () => { closeGlobal(); selectDevice(b.dataset.ip); });
     return;
   }
   if (!hits.length) { box.innerHTML = '<div class="gs-empty">Ingen treff</div>'; return; }
@@ -6276,7 +6293,7 @@ function renderGlobal() {
   box.innerHTML = hits.slice(0, 200).map((h, i) => {
     const v = fmtVal(h.p.value);
     return `<button class="gs-row" data-i="${i}">
-      <span class="gs-dev">${h.dev ? h.dev.device_instance : '?'}</span>
+      <span class="gs-dev" title="${esc(h.dev ? String(h.dev.device_instance) : '')}">${esc(h.dev ? (h.dev.object_name || h.dev.device_instance) : '?')}</span>
       <span class="gs-name">${esc(h.p.name || h.p.objid)}</span>
       <span class="gs-desc">${esc(h.p.description || '')}</span>
       <span class="gs-val ${v.c}">${esc(v.t)} ${esc(h.p.unit_symbol || '')}</span>
@@ -6402,6 +6419,10 @@ async function selectPoint(objid) {
     if (w) S.selHist = w.hist.slice();
     const p0 = S.pointIndex.get(objid);
     if (p0 && typeof p0.value === 'number' && !S.selHist.length) S.selHist.push(p0.value);
+    // When each value came, for the hover on the curve. A history taken over
+    // from the watch list has no times of its own: spaced by the interval.
+    const steg = parseInt($('pollInt')?.value, 10) || 5000, naa = Date.now();
+    S.selHistT = S.selHist.map((_, i) => naa - (S.selHist.length - 1 - i) * steg);
   }
   S.selected = objid; S.detail = null; S.detailError = null;
   // Flytt markeringa hvis raden allerede staar der; ellers full omtegning.
@@ -6658,6 +6679,7 @@ function renderInspector() {
     ${loggBlock(p)}
     ${alarmHtml}
     <div class="sect"><div class="sect-head">Egenskaper</div><div class="sect-body data-verdier">${propsBody}</div></div>
+    <div class="sect alle-sect" id="alleSect">${alleBlock(p, d)}</div>
     ${paHtml}
     ${p.writable ? (S.readOnly ? roNotice() : writeForm(p, d)) : ''}
   `;
@@ -6673,6 +6695,46 @@ function renderInspector() {
   const ub = $('ukeAapne');
   if (ub) ub.onclick = () => openSchedules(p.objid);
 }
+
+/* Everything the object has, on request: its own property-list read out,
+   less what the section above already shows. Read once per object and kept
+   for the session; a second click reads it again. */
+function alleBlock(p, d) {
+  const a = S.alle && S.alle[`${S.activeDev && S.activeDev.address}|${p.objid}`];
+  const knapp = `<button type="button" class="btn alle-knapp" data-alle="${esc(p.objid)}">${a
+    ? T('Les på nytt', 'Read again') : T('Les alle egenskaper', 'Read every property')}</button>`;
+  if (!a) return `<div class="sect-head alle-hode">${T('Alle egenskaper', 'All properties')}${knapp}</div>`;
+  if (a.laster) return `<div class="sect-head alle-hode">${T('Alle egenskaper', 'All properties')}<span class="alle-laster"><span class="spin"></span></span></div>`;
+  if (a.feil) return `<div class="sect-head alle-hode">${T('Alle egenskaper', 'All properties')}${knapp}</div><div class="sect-body alle-feil">${esc(a.feil)}</div>`;
+  const vist = new Set(Object.keys(d || {}).concat(['object-name', 'present-value', 'description', 'status-flags', 'units', 'object-identifier', 'object-type']));
+  const vis = (v) => {
+    if (v === null || v === undefined) return '—';
+    if (typeof v === 'object') { const j = JSON.stringify(v); return j.length > 140 ? j.slice(0, 140) + '…' : j; }
+    return String(v);
+  };
+  const rader = Object.entries(a.properties).filter(([k]) => !vist.has(k));
+  return `<div class="sect-head alle-hode">${T('Alle egenskaper', 'All properties')}
+      <small>${rader.length} ${T('til', 'more')}${a.kilde === 'fallback' ? ' · ' + T('uten property-list', 'no property-list') : ''}</small>${knapp}</div>
+    <div class="sect-body data-verdier"><dl class="kv alle-kv">${rader.map(([k, v]) =>
+      `<dt>${esc(k)}</dt><dd title="${esc(vis(v))}">${esc(vis(v))}</dd>`).join('') || `<dt>—</dt><dd>${T('ingenting mer', 'nothing more')}</dd>`}</dl></div>`;
+}
+document.addEventListener('click', async (e) => {
+  const b = e.target.closest && e.target.closest('[data-alle]');
+  if (!b || !S.activeDev) return;
+  const oid = b.dataset.alle, key = `${S.activeDev.address}|${oid}`;
+  S.alle = S.alle || {};
+  S.alle[key] = {laster: true};
+  const tegn = () => {
+    const p = S.pointIndex.get(oid), el = $('alleSect');
+    if (p && el && S.selected === oid) el.innerHTML = alleBlock(p, S.detail);
+  };
+  tegn();
+  try {
+    const r = await api('/api/object/all', {address: S.activeDev.address, objid: oid});
+    S.alle[key] = r.status === 'done' ? r : {feil: r.error || T('Lesingen feilet', 'The read failed')};
+  } catch (err) { S.alle[key] = {feil: err.message}; }
+  tegn();
+});
 
 /* Patch only the value and the trend. A full renderInspector() on every
    poll tick would rebuild the write form and wipe whatever the user was
@@ -6785,7 +6847,8 @@ function tlInnhold(d) {
       flat ? h / 2 : h - 4 - ((v - min) / span) * (h - 10),
     ]);
     const line = xy.map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join(' ');
-    graf = `<svg class="trend" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none">
+    S.tlPunkter = recs.filter(r => Number.isFinite(Number(r.value)));
+    graf = `<svg class="trend" data-kilde="logg" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none">
         <polygon points="0,${h} ${line} ${w},${h}" fill="var(--live)" opacity=".10"/>
         <polyline pathLength="1" points="${line}" fill="none" stroke="var(--live)" stroke-width="1.5"
           stroke-linejoin="round" stroke-linecap="round"/>
@@ -6932,7 +6995,7 @@ function trendBlock(p) {
     `<line class="trend-merke" x1="${m.x}" y1="0" x2="${m.x}" y2="${g.h}"/>`
     + `<circle class="trend-merke-p" cx="${m.x}" cy="${m.y}" r="2.4"/>`).join('');
   return `<div class="trend-wrap">
-    <svg class="trend" viewBox="0 0 ${g.w} ${g.h}" preserveAspectRatio="none">
+    <svg class="trend" data-kilde="live" viewBox="0 0 ${g.w} ${g.h}" preserveAspectRatio="none">
       <polygon points="${g.area}" fill="var(--live)" opacity=".10"/>
       ${merker}
       ${spLinje}
@@ -6999,20 +7062,60 @@ function roNotice() {
        + 'Turn off the padlock in the toolbar to write.')}</div></div></div>`;
 }
 
+/* The write log as a NABE dialog: newest first, grouped by day, what was
+   written where, and whether it took. A release closes the write it
+   belongs to, so what is still standing reads at a glance. Escape and a
+   click outside close it, like every other dialog here. */
 async function showWriteLog() {
   const d = await (await fetch('/api/writelog')).json();
-  const rows = d.entries || [];
-  if (!rows.length) { toast('Ingen skrivinger logget'); return; }
-  const NL = String.fromCharCode(10);
-  const lines = rows.map(e => {
-    const t = new Date(e.ts * 1000).toLocaleString('no');
-    const what = e.action === 'auto-release' ? 'auto-frigi'
-               : e.action === 'release' ? 'frigi' : 'skriv';
-    const val = e.action === 'write' ? '  ' + (e.before ?? '—') + ' -> ' + e.value : '';
-    return t + '  ' + what + ' pri' + (e.priority ?? '-') + '  ' + e.objid
-         + val + '  @' + e.address + '  [' + e.status + ']';
-  });
-  alert('Skrivelogg (nyeste først)' + NL + NL + lines.join(NL));
+  const rader = (d.entries || []).slice().sort((x, y) => y.ts - x.ts);
+  if (!rader.length) { toast(T('Ingen skrivinger logget', 'No writes logged')); return; }
+  const lokal = SPRAAK === 'en' ? 'en-GB' : 'nb-NO';
+  const navn = (ip) => (S.devices.find(x => x.address === ip) || {}).object_name || '';
+  const punkt = (ip, oid) => ((S.cache[ip] || []).find(x => x.objid === oid) || {}).name || '';
+  const dager = new Map();
+  for (const e of rader) {
+    const dag = new Date(e.ts * 1000).toLocaleDateString(lokal, {weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'});
+    if (!dager.has(dag)) dager.set(dag, []);
+    dager.get(dag).push(e);
+  }
+  const hva = (e) => e.action === 'auto-release' ? T('auto-frigi', 'auto-release')
+    : e.action === 'release' ? T('frigi', 'release') : T('skriv', 'write');
+  const rad = (e) => {
+    const ok = e.status === 'done';
+    const pn = punkt(e.address, e.objid);
+    return `<div class="wl-rad${ok ? '' : ' feil'}">
+      <span class="wl-tid">${new Date(e.ts * 1000).toLocaleTimeString(lokal, {hour: '2-digit', minute: '2-digit'})}</span>
+      <span class="wl-hva ${e.action === 'write' ? 'skriv' : 'frigi'}">${esc(hva(e))}</span>
+      <span class="wl-pkt" title="${esc(e.objid)}">${esc(pn || e.objid)}<small>${esc(navn(e.address) || e.address)}</small></span>
+      <span class="wl-pri">pri ${esc(String(e.priority ?? '–'))}</span>
+      <span class="wl-ver">${e.action === 'write' ? `${esc(String(e.before ?? '—'))} <i>→</i> <b>${esc(String(e.value))}</b>` : ''}</span>
+      <span class="wl-st" title="${esc(e.error || '')}">${ok ? '' : esc(T('feilet', 'failed'))}</span>
+    </div>`;
+  };
+  let lag = $('wlOverlay');
+  if (!lag) {
+    lag = document.createElement('div');
+    lag.id = 'wlOverlay';
+    lag.className = 'gs-overlay';
+    lag.setAttribute('role', 'dialog');
+    lag.setAttribute('aria-modal', 'true');
+    document.body.appendChild(lag);
+    lag.addEventListener('click', (e) => { if (e.target === lag || e.target.closest('.gs-close')) lag.hidden = true; });
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !lag.hidden) { lag.hidden = true; e.stopPropagation(); } }, true);
+  }
+  const skrevet = rader.filter(e => e.action === 'write' && e.status === 'done').length;
+  const feilet = rader.filter(e => e.status !== 'done').length;
+  lag.innerHTML = `<div class="gs-modal wl-modal">
+      <div class="gs-head">
+        <span class="wl-tittel">${T('Skrivelogg', 'Write log')}</span>
+        <span class="gs-meta wl-tall">${T(`${skrevet} skrivinger`, `${skrevet} writes`)}${feilet ? ` · <b class="wl-feiltall">${T(`${feilet} feilet`, `${feilet} failed`)}</b>` : ''}</span>
+        <button class="gs-close" style="margin-left:auto"><span class="lbl">${T('Lukk', 'Close')}</span> ✕</button>
+      </div>
+      <div class="gs-meta">${T('Alt NABE har skrevet til anlegg fra denne PC-en, nyeste først. Lagret lokalt.', 'Everything NABE has written to plants from this PC, newest first. Kept locally.')}</div>
+      <div class="wl-liste">${[...dager].map(([dag, liste]) => `<div class="wl-dag">${esc(dag)}</div>${liste.map(rad).join('')}`).join('')}</div>
+    </div>`;
+  lag.hidden = false;
 }
 
 function writeForm(p, d) {
@@ -7303,8 +7406,9 @@ async function pollTick() {
           if (p && p.value !== val) { p.value = val; changed.push(objid); }
           if (objid === S.selected && typeof val === 'number') {
             S.selHist.push(val);
+            (S.selHistT = S.selHistT || []).push(Date.now());
             // Bufferet er fullt: hele kurven flytter seg ett steg til venstre.
-            if (S.selHist.length > SEL_HIST) { S.selHist.shift(); S._trendSkjov = true; }
+            if (S.selHist.length > SEL_HIST) { S.selHist.shift(); S.selHistT.shift(); S._trendSkjov = true; }
           }
         }
         S.watch.filter(w => w.ip === ip && w.objid === objid).forEach(w => {
@@ -8909,7 +9013,7 @@ $('snapBtn').onclick = takeSnapshot;
 $('csvBtn').onclick = exportCSV;
 $('watchClear').onclick = () => { S.watch = []; renderWatch(); renderPoints(); };
 $('edeBtn').onclick = exportEDE;
-$('btgBtn').onclick = () => { closeMenus(); lagBtgFil(); };
+$('varBtn').onclick = () => { closeMenus(); lagVarFil(); };
 document.querySelectorAll('.cmd-segk').forEach(b =>
   b.onclick = () => settCmdSeg(b.dataset.seg));
 
@@ -9709,6 +9813,10 @@ function diagLukk() { const o = $('diagOverlay'); if (o) { o.hidden = true; DIAG
 const ORDBOK = {
   'Søk ved oppstart': 'Search on start',
   'Lest': 'Read',
+  'Søk i anlegget': 'Search the plant',
+  'Garderobe…': 'Wardrobe…',
+  'Klær til NABE og NABO, låst opp av arbeid': 'Clothes for NABE and NABO, unlocked by work',
+  'Søk i alle punkter på alle enheter som er lest (Ctrl+F)': 'Search every point on every device read (Ctrl+F)',
   'Mellomrom betyr og: KG32 RT601 finner alle RT601 på KG32. -ord utelater. "to ord" søker som frase.':
     'A space means and: KG32 RT601 finds every RT601 on KG32. -word leaves out. "two words" searches as a phrase.',
   'Skanner kabelen inn i anlegget, eller anlegget du var på sist, når NABE åpnes':
@@ -9720,7 +9828,7 @@ const ORDBOK = {
   'Etter nett når flere er skannet, ellers etter leverandør': 'By network when several are scanned, otherwise by vendor',
   'med feil': 'with a fault',
   'Prioritetsarray': 'Priority array',
-  'BTG-fil…': 'BTG file…',
+  'Variabel-fil…': 'Variabel file…',
   'Variabel-fil for NTI-import i Niagara, med taggingen fra Innstillinger': 'Variabel file for NTI import into Niagara, with the tagging from Settings',
   'Punkt': 'Point',
   'avvik': 'difference',
@@ -9768,7 +9876,7 @@ const ORDBOK = {
   'Klokker med avvik': 'Clocks that are off',
   'ingenting - alt du skrev er frigitt': 'nothing - everything you wrote is released',
   'alle klokker går riktig': 'all clocks are right',
-  'Lag BTG-fil': 'Make BTG file',
+  'Lag Variabel-fil': 'Make Variabel file',
   'Andre tjenester': 'Other services',
   'Svarer adressen på noe i det hele tatt?': 'Does the address answer anything at all?',
   'Ingenting svarer på denne adressen': 'Nothing answers on this address',
@@ -10143,7 +10251,7 @@ const ORDBOK = {
   'Taggeinnstillinger for dette anlegget…': 'Tag settings for this site…',
   'Tømme taggeinnstillingene for dette anlegget?': 'Clear the tag settings for this site?',
   'Bygg-ID først': 'Building ID first',
-  'Foran systemnummeret, som i BTG': 'Before the system number, as in BTG',
+  'Foran systemnummeret': 'Before the system number, as in the old generator',
   'Hvilket ledd systemnummeret står i': 'Which segment the system number is in',
   'Mellom prefiks og system': 'Between the prefix and the system',
   'Finnes bare i anlegget': 'Only in the plant',
@@ -10168,7 +10276,7 @@ const ORDBOK = {
   'Kunne ikke kopiere': 'Could not copy',
   'Kopier navn': 'Copy name',
   'Kopier punktnavn': 'Copy the point name',
-  'Kopier til BTG': 'Copy for BTG',
+  'Kopier oppsettet': 'Copy the settings',
   'Hva du fant, hva som gjenstår, hva neste mann bør vite…': 'What you found, what is left, what the next person should know…',
   'Ta et snapshot forst - rapporten viser hva som har endret seg siden da': 'Take a snapshot first — the report shows what has changed since then',
   'Fjern dette filteret': 'Remove this filter',
@@ -10463,7 +10571,7 @@ const ORDBOK = {
   'Finn enhet': 'Find device',
   'Åpne NABO': 'Open NABO',
   'NABO — tagger og Variabel-fil…': 'NABO - tags and the Variabel file...',
-  'NABO · tagger og BTG-fil…': 'NABO · tags and BTG file…',
+  'NABO · tagger og Variabel-fil…': 'NABO · tags and Variabel file…',
   'Tagger og Variabel-fil for NTI-import i Niagara, fra anlegget og EDE-filer':
     'Tags and the Variabel file for NTI import into Niagara, from the plant and EDE files',
   'Navn, IP eller instans. Enter åpner den første.': 'Name, IP or instance. Enter opens the first.',

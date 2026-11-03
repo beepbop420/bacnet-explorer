@@ -177,6 +177,18 @@ const FAKTA = [
   ['COV betyr at regulatoren sier fra selv. Mindre spørring, mer ro.', 'COV means the controller speaks up itself. Less asking, more peace.'],
 ];
 const NYTT = {
+  '1.33': [
+    ['Garderoben: klær til NABE og NABO, låst opp av ekte arbeid. Hjelmen kommer når du skriver til et anlegg, hodelykta etter et nattskann. Høyreklikk en av dem', 'The wardrobe: clothes for NABE and NABO, unlocked by real work. The hard hat comes with your first write to a plant, the head torch after a scan at night. Right-click either of them'],
+    ['Arbeidsklær etter situasjon: lesebriller og notat i dokumenter, hjelm når du skriver, hodetelefoner på Live', 'Work gear for the moment: reading glasses and a note in documents, a hard hat when you write, headphones on Live'],
+    ['NABE og NABO prater sammen innimellom, og NABE svarer når NABO pinger', 'NABE and NABO talk now and then, and NABE answers when NABO pings'],
+    ['Ny bunnlinje: Live er en knapp med en strek som fylles fram til neste lesing, og bakgrunnslesingen er en fremdriftslinje. Ingen pulserende prikker', 'A new bottom bar: Live is a button with a line that fills up to the next read, and the background read is a progress bar. No pulsing dots'],
+    ['Søk i anlegget midt i topplinja. Tomt søk viser alle enhetene per nett', 'Search the plant in the middle of the toolbar. An empty search lists every device per network'],
+    ['Hold musa over en trend eller trendlogg for klokkeslett og verdi', 'Hover a trend or trend log for the time and value'],
+    ['«Alle egenskaper» i inspektøren leser alt objektet har', '“All properties” in the inspector reads everything the object has'],
+    ['Skriveloggen er et eget vindu, gruppert per dag', 'The write log is a proper window, grouped by day'],
+    ['NABO: Statsbygg-profil etter merkemanualen: 111096_3601_001_04_RTB01_MV. Profilen velges selv ut fra anlegget', 'NABO: a Statsbygg profile after their tag manual: 111096_3601_001_04_RTB01_MV. The profile picks itself from the site'],
+    ['Hele appen på engelsk, også meldingene fra serveren', 'The whole app in English, the server’s messages too'],
+  ],
   '1.32': [
     ['NABE henger ikke lenger når du lukker den med punkter overstyrt: lukkevakta kommer i stedet for «svarer ikke»', 'NABE no longer hangs when closed with points overridden: the close guard shows instead of “not responding”'],
     ['Innstillingene har avkrysningsbokser som på en Mac, ikke telefonbrytere', 'Settings have checkboxes as on a Mac, not phone switches'],
@@ -204,11 +216,11 @@ const NYTT = {
     ['Forslag fra beskrivelsen kjenner Børverdi som Settpunkt, og X3 eller Y3 i et kurvepunkt følger med til taggen (RT401.K.X3)', 'Suggestions from the description know Børverdi as Settpunkt, and X3 or Y3 in a curve point comes along to the tag (RT401.K.X3)'],
   ],
   '1.27': [
-    ['NABO foreslår tagger fra beskrivelsen, lært av BTG-eksportene dine: «Temperatur tilluft» blir RT401, «Pådrag tilluftsvifte» blir JV401 … Gn. Bare på punkter uten komponentkode', 'NABO suggests tags from the description, learnt from your BTG exports: “Temperatur tilluft” becomes RT401, “Pådrag tilluftsvifte” becomes JV401 … Gn. Only on points without a component code'],
+    ['NABO foreslår tagger fra beskrivelsen, lært av Variabel-eksportene dine: «Temperatur tilluft» blir RT401, «Pådrag tilluftsvifte» blir JV401 … Gn. Bare på punkter uten komponentkode', 'NABO suggests tags from the description, learnt from your Variabel exports: “Temperatur tilluft” becomes RT401, “Pådrag tilluftsvifte” becomes JV401 … Gn. Only on points without a component code'],
     ['Velg PX-familie per anlegg (freeTag, nordomatic/statsbygg, Beckhoff TC2), så følger signalnavnene malene i nmNxFiles: Gn blir C, Err blir A, Drift blir D', 'Pick the PX family per site (freeTag, nordomatic/statsbygg, Beckhoff TC2) and the signal names follow the templates in nmNxFiles: Gn becomes C, Err becomes A, Drift becomes D'],
   ],
   '1.26': [
-    ['NABO har en ordliste for endelser per komponenttype. Energimålere (OE) er fylt inn fra BTG-eksportene: Energy blir kWh, Power kW, Flow m3, FT RT4, RT RT5', 'NABO has a word list for endings per kind of component. Energy meters (OE) are filled in from the BTG exports: Energy becomes kWh, Power kW, Flow m3, FT RT4, RT RT5'],
+    ['NABO har en ordliste for endelser per komponenttype. Energimålere (OE) er fylt inn fra Variabel-eksportene: Energy blir kWh, Power kW, Flow m3, FT RT4, RT RT5', 'NABO has a word list for endings per kind of component. Energy meters (OE) are filled in from the Variabel exports: Energy becomes kWh, Power kW, Flow m3, FT RT4, RT RT5'],
     ['Retter du en endelse på én komponent, kan du velge «Husk for alle OE», så skjer det av seg selv på alle anlegg', 'Correct an ending on one component and choose “Remember for every OE”, and it happens by itself on every site'],
   ],
   '1.25': [
@@ -259,10 +271,10 @@ const NYTT = {
     ['Noen ord i NABOs søkefelt får svar, og det lønner seg å banke på', 'A few words in NABO’s search get an answer, and knocking pays off'],
   ],
   '1.16': [
-    ['NABO er målt mot 7516 punkter BTG har laget fra ekte EDE-filer, og gjør nå som BTG der BTG har rett', 'NABO is measured against 7516 points BTG made from real EDE files, and now does as BTG where BTG is right'],
+    ['NABO er målt mot 7516 ekte tagger fra ekte EDE-filer, og treffer nå der de var riktige', 'NABO is measured against 7516 real tags from real EDE files, and now matches where they were right'],
     ['Tekst med mellomrom er ett ledd (Drift fra SD-anlegg), romkoder blir R00_0004, og skråstrek beholdes', 'Text with spaces is one part (Drift fra SD-anlegg), room codes become R00_0004, and a slash is kept'],
-    ['Et s foran systemnummeret (s360001) markerer hvor taggen starter, som i BTG', 'An s before the system number (s360001) marks where the tag starts, as in BTG'],
-    ['Punkter uten SD-kode får ikke trend, slik BTG gjør', 'Points without an SD code get no trend, as BTG does'],
+    ['Et s foran systemnummeret (s360001) markerer hvor taggen starter', 'An s before the system number (s360001) marks where the tag starts'],
+    ['Punkter uten SD-kode får ikke trend', 'Points without an SD code get no trend'],
     ['Finnes ikke noe device-navn, brukes filnavnet uten EDE og datoer', 'With no device name to be found, the file name without EDE and dates is used'],
   ],
   '1.15': [
@@ -275,7 +287,7 @@ const NYTT = {
     ['Advarselen om kort sti er borte: den slo ut på hundrevis av leverandørpunkter og druknet de som betyr noe', 'The short path warning is gone: it hit hundreds of vendor points and drowned the ones that matter'],
   ],
   '1.13': [
-    ['NABO: systemnummer skrevet i ett deles som i BTG, 360001 blir 360.001', 'NABO: system numbers written in one piece are split as in BTG, 360001 becomes 360.001'],
+    ['NABO: systemnummer skrevet i ett deles, 360001 blir 360.001', 'NABO: system numbers written in one piece are split, 360001 becomes 360.001'],
     ['Anlegg og prefiks er valgfrie, og du velger selv om de skal stå i taggen', 'Site and prefix are optional, and you choose whether they go in the tag'],
     ['Ingenting stopper eksporten lenger fordi et felt er tomt', 'Nothing stops the export any more because a field is empty'],
     ['Normalisering ligger under Avansert, og SD-koden leses fra beskrivelsen som før', 'Normalisation sits under Advanced, and the SD code is read from the description as before'],
@@ -289,8 +301,8 @@ const NYTT = {
     ['NABO: klikk, Shift og Ctrl markerer rader, og «samme navnemønster» eller «samme type» tar resten', 'NABO: click, Shift and Ctrl tick rows, and "same name pattern" or "same type" takes the rest'],
     ['Unntakene huskes per anlegg, også når samme EDE kommer med ny dato i filnavnet', 'The exceptions are kept per site, also when the same EDE arrives with a new date in its name'],
     ['SYSTEM-punktene ligger i egen mappe på toppnivå, utenfor systemene', 'SYSTEM points sit in their own folder at the top, outside the systems'],
-    ['Prefiks er valgfritt, med en velger som i BTG: foran device, foran device og tag, eller +PRE=360.001', 'The prefix is optional, with a choice as in BTG: before the device, before device and tag, or +PRE=360.001'],
-    ['Cluster er Citect-clusteret fra BTG og påvirker ikke Niagara-taggene', 'Cluster is BTG’s Citect cluster and does not touch the Niagara tags'],
+    ['Prefiks er valgfritt, med en velger: foran device, foran device og tag, eller +PRE=360.001', 'The prefix is optional, with a choice: before the device, before device and tag, or +PRE=360.001'],
+    ['Cluster er Citect-clusteret og påvirker ikke Niagara-taggene', 'Cluster is the Citect cluster and does not touch the Niagara tags'],
     ['Slipp en EDE-fil hvor som helst i NABE, så åpner NABO seg med den', 'Drop an EDE file anywhere on NABE and NABO opens with it'],
   ],
   '1.10': [
@@ -302,7 +314,7 @@ const NYTT = {
     ['Filene havner i Nedlastinger også i app-vinduet, der de før kunne forsvinne uten beskjed', 'Files land in Downloads in the app window too, where they could vanish without a word before'],
   ],
   '1.9.1': [
-    ['NABO: velg hvor filene lagres - Nedlastinger, BTG-Export eller en mappe du velger selv', 'NABO: choose where files are saved - Downloads, BTG-Export or a folder of your own'],
+    ['NABO: velg hvor filene lagres - Nedlastinger, eksportmappa eller en mappe du velger selv', 'NABO: choose where files are saved - Downloads, the export folder or a folder of your own'],
     ['«Åpne mappa» viser fila du nettopp lagret i Utforsker', '"Open folder" shows the file you just saved in Explorer'],
   ],
   '1.9': [
@@ -318,15 +330,15 @@ const NYTT = {
   '1.8': [
     ['NABO › Sammenlign: les inn Variabel-fila Niagara fikk, og se hva som er nytt, endret og borte', 'NABO › Compare: read in the Variabel file Niagara got, and see what is new, changed and gone'],
     ['Lag en fil med bare nye og endrede rader til NTI', 'Make a file with only the new and changed rows for NTI'],
-    ['NABO › Normalisering: BTGs regex, mal for stien og funksjonskoder fra TC2 til NM, med test på ekte navn', 'NABO › Normalisation: BTG’s regex, a path template and function codes from TC2 to NM, tested on real names'],
+    ['NABO › Normalisering: regex, mal for stien og funksjonskoder fra TC2 til NM, med test på ekte navn', 'NABO › Normalisation: a regex, a path template and function codes from TC2 to NM, tested on real names'],
     ['Flere sjekker, og et stopp før en fil med feil eksporteres', 'More checks, and a stop before a file with errors is exported'],
-    ['Enheter skrives i entall som i BTG: pascal, bar, kilowatt hour', 'Units are written in the singular as BTG does: pascal, bar, kilowatt hour'],
+    ['Enheter skrives i entall: pascal, bar, kilowatt hour', 'Units are written in the singular as Niagara expects: pascal, bar, kilowatt hour'],
   ],
   '1.7': [
     ['NABO - Not Another BACnet Object-namer: tagger og Variabel-fil til Niagara, under Eksport', 'NABO - Not Another BACnet Object-namer: tags and the Variabel file for Niagara, under Export'],
     ['Enheter fra anlegget og EDE-filer side om side, med device-navnet riktig', 'Devices from the plant and EDE files side by side, with the device name right'],
-    ['Leser og lagrer HeaderBTG.ini, så oppsettet går begge veier mellom BTG og NABO', 'Reads and saves HeaderBTG.ini, so settings go both ways between BTG and NABO'],
-    ['Desimaler per enhetstype og trendintervall som i BTG, og varsel om like tagger', 'Decimals per unit type and trend interval as in BTG, and a warning on duplicate tags'],
+    ['Leser og lagrer oppsettet som ini-fil', 'Reads and saves the settings as an .ini file'],
+    ['Desimaler per enhetstype og trendintervall, og varsel om like tagger', 'Decimals per unit type and trend interval, and a warning on duplicate tags'],
   ],
   '1.6.4': [
     ['Startskjermen viser kortene dine med IP og nettene bak dem - klikk for å skanne derfra', 'The start screen shows your adapters with their IP and the networks behind them - click to scan from there'],
@@ -352,7 +364,7 @@ const NYTT = {
     ['Klikk «vist av» i statuslinja for å nullstille filteret', 'Click "shown of" in the status bar to clear the filter'],
   ],
   '1.5': [
-    ['BTG-fil ligger nå i Eksport-menyen', 'The BTG file is now in the Export menu'],
+    ['Variabel-fila ligger nå i Eksport-menyen', 'The Variabel file is now in the Export menu'],
     ['Enhetslista hopper ikke lenger under musa mens anlegget leses', 'The device list no longer jumps under the pointer while the site is read'],
     ['Smale vinduer: tabellen beholder kolonnene sine', 'Narrow windows: the table keeps its columns'],
     ['Live blinker rolig, og Escape lukker alle dialoger', 'Live flashes quietly, and Escape closes every dialog'],
