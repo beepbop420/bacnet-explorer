@@ -158,7 +158,14 @@ def main():
             mine = []
         if not mine:
             return True
-        vindu.evaluate_js("typeof visLukkVakt === 'function' ? visLukkVakt() : window.pywebview.api.lukk()")
+        # Asked from another thread, after this handler has returned. Called
+        # here, evaluate_js waits for the window's own thread - which is the
+        # one sitting in this handler waiting for it: Windows then marks NABE
+        # "not responding" and the guard never shows. Seen with one point
+        # still overridden at pri 8.
+        threading.Thread(target=lambda: vindu.evaluate_js(
+            "typeof visLukkVakt === 'function' ? visLukkVakt() : window.pywebview.api.lukk()"),
+            daemon=True).start()
         return False
 
     vindu.events.closing += lukker

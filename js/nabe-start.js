@@ -179,6 +179,7 @@ const FAKTA = [
 ];
 const NYTT = {
   '1.32': [
+    ['NABE henger ikke lenger når du lukker den med punkter overstyrt: lukkevakta kommer i stedet for «svarer ikke»', 'NABE no longer hangs when closed with points overridden: the close guard shows instead of “not responding”'],
     ['Innstillingene har avkrysningsbokser som på en Mac, ikke telefonbrytere', 'Settings have checkboxes as on a Mac, not phone switches'],
     ['Skriv-knappen er rolig til du har en verdi, og sier så nøyaktig hva den gjør: «Skriv 21,5 på pri 8»', 'The Write button is quiet until there is a value, and then says exactly what it does: “Write 21.5 at pri 8”'],
     ['Enhetskortene skiller alarm fra feil, og kommandopaletten har fått tilbake æ, ø og å. «sok» finner fortsatt «Søk»', 'Device cards tell an alarm from a fault, and the command palette has its æ, ø and å back. “sok” still finds “Søk”'],
