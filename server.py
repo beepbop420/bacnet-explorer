@@ -192,7 +192,7 @@ def t(nb: str, en: str) -> str:
     return en if SPRAAK_VAR.get() == "en" else nb
 
 
-VERSJON = "1.39"
+VERSJON = "1.40"
 
 state = {"app": None, "local_address": None, "read_only": False, "bbmd": None}
 

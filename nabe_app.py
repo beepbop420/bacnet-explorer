@@ -111,12 +111,19 @@ def main():
             break
         time.sleep(0.05)
 
-    # The window comes back where it was left.
+    # The window comes back where it was left - maximised if it was, and
+    # maximised the first time. A position Windows gives a minimised window
+    # (-32000) or one off every screen is no place to come back to.
     geo_fil = data / "vindu.json"
     try:
         geo = json.loads(geo_fil.read_text(encoding="utf-8"))
     except Exception:
         geo = {}
+    if not isinstance(geo.get("x"), int) or not isinstance(geo.get("y"), int) or min(geo["x"], geo["y"]) < -2000:
+        geo.pop("x", None); geo.pop("y", None)
+    if geo.get("b", 0) < 960 or geo.get("h", 0) < 600:
+        geo.pop("b", None); geo.pop("h", None)
+    TILSTAND = {"maks": geo.get("maks", True), "min": False}
 
     class Api:
         """What the page can ask of the window."""
@@ -133,8 +140,22 @@ def main():
 
     vindu = webview.create_window(
         "NABE", base, width=geo.get("b", 1440), height=geo.get("h", 900),
-        x=geo.get("x"), y=geo.get("y"), min_size=(960, 600),
+        x=geo.get("x"), y=geo.get("y"), min_size=(960, 600), maximized=TILSTAND["maks"],
         background_color="#111113", text_select=True, js_api=Api())
+
+    # Whether it is maximised or minimised now, from the window's own events.
+    def _maks():
+        TILSTAND["maks"] = True; TILSTAND["min"] = False
+
+    def _min():
+        TILSTAND["min"] = True
+
+    def _vanlig():
+        TILSTAND["maks"] = False; TILSTAND["min"] = False
+    for navn, f in (("maximized", _maks), ("minimized", _min), ("restored", _vanlig)):
+        ev = getattr(vindu.events, navn, None)
+        if ev is not None:
+            ev += f
 
     def lukker():
         """
@@ -144,8 +165,13 @@ def main():
         have chosen. With nothing outstanding the window simply closes.
         """
         try:
-            json.dump({"b": vindu.width, "h": vindu.height, "x": vindu.x, "y": vindu.y},
-                      geo_fil.open("w", encoding="utf-8"))
+            ny = dict(geo)
+            ny["maks"] = TILSTAND["maks"]
+            # Minimised or maximised, the size and place are not the window's
+            # own: the last normal ones are kept.
+            if not TILSTAND["min"] and not TILSTAND["maks"] and min(vindu.x, vindu.y) > -2000:
+                ny.update({"b": vindu.width, "h": vindu.height, "x": vindu.x, "y": vindu.y})
+            json.dump(ny, geo_fil.open("w", encoding="utf-8"))
         except Exception:
             pass
         if Api.tillat_lukking:

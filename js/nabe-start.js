@@ -177,6 +177,9 @@ const FAKTA = [
   ['COV betyr at regulatoren sier fra selv. Mindre spørring, mer ro.', 'COV means the controller speaks up itself. Less asking, more peace.'],
 ];
 const NYTT = {
+  '1.40': [
+    ['NABE åpner maksimert, og husker om vinduet var maksimert. Lukket du den minimert, åpnet den før utenfor skjermen', 'NABE opens maximised, and remembers whether the window was. Closed while minimised, it used to open off screen'],
+  ],
   '1.39': [
     ['Flere punkter sammen: velg to eller flere (Ctrl-klikk, Shift-klikk eller dra over radene), så tegner inspektøren dem i én graf mens Live går. Hver kurve har sin egen skala, så % og °C kan stå side om side', 'Several points together: select two or more (Ctrl-click, Shift-click or drag over the rows) and the inspector draws them in one chart while Live runs. Each curve has its own scale, so % and °C can sit side by side'],
     ['Shift- og Ctrl-klikk i tabellen markerer rader, ikke tekst, og Shift tegner ikke lenger en blå ramme rundt panelet', 'Shift- and Ctrl-click in the table select rows, not text, and Shift no longer draws a blue ring around the pane'],
