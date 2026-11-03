@@ -40,6 +40,7 @@ async function sokVedStart() {
     if ($('modeSel').value === 'bbmd') { $('modeSel').value = 'auto'; $('modeSel').dispatchEvent(new Event('change')); }
     brukOmrade(nett.map(n => n.cidr).join(', '));
     nabeSier(T(`Kabel i ${nett[0].cidr}. Ser hvem som er der.`, `A cable in ${nett[0].cidr}. Seeing who is there.`), 'fornoyd', 'kabel-start');
+    AN.autoSkann = true;
     runScan();
     return;
   }
@@ -50,10 +51,22 @@ async function sokVedStart() {
   if (a) {
     const i = SK.rader.findIndex(r => r.a?.key === a.key);
     nabeSier(T(`${visNavn(a)} er nåbar. Fortsetter der.`, `${visNavn(a)} is in reach. Carrying on there.`), 'fornoyd', 'start-naabar');
+    AN.autoSkann = true;
     bruk(i >= 0 ? SK.rader[i] : {type: 'anlegg', a}, {skann: true});
   }
 }
 setTimeout(sokVedStart, 1400);
+
+/* «Just open it» means just that: a scan the search on start began is
+   stopped, and the field keeps the site so Enter starts it again. */
+function stoppAutoSkann() {
+  if (!AN.autoSkann) return;
+  AN.autoSkann = false;
+  if (S.scanJob && document.body.classList.contains('skanner')) {
+    cancelScan();
+    nabeSier(T('Stoppet søket. Enter i feltet skanner når du vil.', 'Stopped the search. Enter in the field scans when you like.'), null, 'auto-stopp');
+  }
+}
 
 // What a site is called on screen: its name, else its controllers' names.
 function visNavn(a) {

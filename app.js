@@ -767,8 +767,9 @@ async function runScan() {
     /* Hva som ble skannet, saa manglendeEnheter() vet hvilke savnede enheter
        som hoerer til - ikke enheter paa et helt annet nett. */
     S.sisteOmraader = omraader;
-    S.tomtSkann = S.devices.length ? null : {mode, omraader};
-    if (!S.devices.length) nabeTrist();
+    // A scan you stopped found nothing because you stopped it - no advice for that.
+    S.tomtSkann = S.devices.length || LINJE.avbrutt ? null : {mode, omraader};
+    if (!S.devices.length && !LINJE.avbrutt) nabeTrist();
     nabeEtterSkann(S.devices.length);
     tell('skann'); tell('enheter', S.devices.length);
     if (S.devices.length) visRutere();

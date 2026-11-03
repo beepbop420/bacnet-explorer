@@ -177,6 +177,11 @@ const FAKTA = [
   ['COV betyr at regulatoren sier fra selv. Mindre spørring, mer ro.', 'COV means the controller speaks up itself. Less asking, more peace.'],
 ];
 const NYTT = {
+  '1.35': [
+    ['«Bare åpne» og Esc på startsiden stopper søket ved oppstart. Feltet beholder anlegget, så Enter skanner når du vil', '“Just open it” and Esc on the start page stop the search on start. The field keeps the site, so Enter scans when you like'],
+    ['Garderoben kan rulles helt ned til Hals', 'The wardrobe scrolls all the way down to Neck'],
+    ['Et skann du stopper selv, gir ikke lenger råd om hvorfor ingen svarte', 'A scan you stop yourself no longer gives advice about why nobody answered'],
+  ],
   '1.34': [
     ['Lukkevakta er ny: punktene som står overstyrt med navn, regulator, prioritet og når de ble skrevet, og knapper i vanlig størrelse', 'The close guard is new: the points still overridden by name, controller, priority and when they were written, and buttons of a normal size'],
     ['«Siste punkter» (Ctrl+E) og karrierekortet har fått tilbake sin egen form', '“Recent points” (Ctrl+E) and the career card have their own shape back'],
@@ -496,7 +501,7 @@ async function visStartskjerm(igjen = false) {
   };
   const markert = () => rader().findIndex(x => x.getAttribute('aria-selected') === 'true');
   const tast = (e) => {
-    if (e.key === 'Escape') { e.preventDefault(); lukk(); return; }
+    if (e.key === 'Escape') { e.preventDefault(); if (typeof stoppAutoSkann === 'function') stoppAutoSkann(); lukk(); return; }
     const felt = $('ssOmr');
     // Up and down belong to the list; Enter scans the marked site unless
     // something has been typed in the field.
@@ -513,7 +518,7 @@ async function visStartskjerm(igjen = false) {
     }
   };
   document.addEventListener('keydown', tast, true);
-  lag.querySelector('.ss-videre').onclick = lukk;
+  lag.querySelector('.ss-videre').onclick = () => { if (typeof stoppAutoSkann === 'function') stoppAutoSkann(); lukk(); };
   lag.querySelector('.ss-sprak').onclick = () => {
     const omr = $('ssOmr').value;
     settSprak(SPRAAK === 'en' ? 'nb' : 'en', true);

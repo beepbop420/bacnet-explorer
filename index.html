@@ -4892,12 +4892,12 @@ body.uten-bevegelse .plagg,body.uten-bevegelse .rekv,body.uten-bevegelse .plagg-
 .gd-arb{display:flex;align-items:flex-start;gap:8px;margin-left:auto;font-size:12px;color:var(--fg);cursor:pointer;max-width:420px}
 .gd-arb input{margin-top:2px;accent-color:var(--accent)}
 .gd-arb small{display:block;font-size:10.5px;color:var(--fg-3);margin-top:1px}
-.gd-hoved{display:grid;grid-template-columns:200px minmax(0,1fr);min-height:0;max-height:min(560px,70vh)}
+.gd-hoved{display:grid;grid-template-columns:200px minmax(0,1fr);grid-template-rows:minmax(0,1fr);height:min(560px,calc(100vh - 220px));min-height:0;overflow:hidden}
 .gd-scene{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:20px;
   border-right:1px solid var(--line);background:color-mix(in srgb,var(--bg) 55%,var(--panel))}
 .gd-stor svg{width:120px;height:120px;display:block}
 .gd-scene-tekst{font-size:11px;color:var(--fg-3);text-align:center;line-height:1.45}
-.gd-katalog{overflow:auto;padding:4px 14px 16px}
+.gd-katalog{min-height:0;overflow-y:auto;overscroll-behavior:contain;padding:4px 14px 16px}
 .gd-plass{font-size:11px;font-weight:600;color:var(--fg-3);padding:14px 2px 6px}
 .gd-rutenett{display:grid;grid-template-columns:repeat(auto-fill,minmax(112px,1fr));gap:8px}
 .gd-kort{display:flex;flex-direction:column;align-items:center;gap:4px;padding:10px 8px 8px;border-radius:9px;
