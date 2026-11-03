@@ -178,6 +178,11 @@ const FAKTA = [
   ['COV betyr at regulatoren sier fra selv. Mindre spørring, mer ro.', 'COV means the controller speaks up itself. Less asking, more peace.'],
 ];
 const NYTT = {
+  '1.32': [
+    ['Innstillingene har avkrysningsbokser som på en Mac, ikke telefonbrytere', 'Settings have checkboxes as on a Mac, not phone switches'],
+    ['Skriv-knappen er rolig til du har en verdi, og sier så nøyaktig hva den gjør: «Skriv 21,5 på pri 8»', 'The Write button is quiet until there is a value, and then says exactly what it does: “Write 21.5 at pri 8”'],
+    ['Enhetskortene skiller alarm fra feil, og kommandopaletten har fått tilbake æ, ø og å. «sok» finner fortsatt «Søk»', 'Device cards tell an alarm from a fault, and the command palette has its æ, ø and å back. “sok” still finds “Søk”'],
+  ],
   '1.31': [
     ['Ny startside: hvem og hva til venstre, anleggene dine til høyre i én liste med prikk for det som er nåbart. Piltaster og Enter velger', 'A new start page: who and what on the left, your sites on the right in one list with a dot for what is in reach. Arrow keys and Enter choose'],
     ['Startsiden blir stående mens NABE skanner anlegget du var på sist, og raden viser svarene som kommer', 'The start page stays while NABE scans the site you were at last, and the row shows the replies as they come'],

@@ -1069,7 +1069,10 @@ function devStatus(d) {
     const c = flagCounts(pts);
     const feil = (c['in-alarm'] || 0) + (c['fault'] || 0);
     const over = (c['overridden'] || 0) + (c['out-of-service'] || 0);
-    if (feil) return `<em class="dev-st bad" title="${feil} punkter i alarm eller med feil">${feil} feil</em>`;
+    // Named as the plant line names them: an alarm is not a fault.
+    const alarm = c['in-alarm'] || 0, fault = c['fault'] || 0;
+    const ord = alarm && fault ? 'alarm/feil' : alarm ? 'i alarm' : 'feil';
+    if (feil) return `<em class="dev-st bad" title="${alarm} i alarm, ${fault} med feil">${feil} ${ord}</em>`;
     if (over) return `<em class="dev-st warn" title="${over} punkter overstyrt eller ute av drift">${over} overstyrt</em>`;
     return '';
   }
@@ -4329,9 +4332,9 @@ function commands() {
   const add = (gruppe, etikett, kjor, o = {}) =>
     c.push(Object.assign({gruppe, etikett, kjor}, o));
 
-  add('Naviger', 'Skann IP-omrade', () => { closeCmd(); $('rangeInput').focus(); $('rangeInput').select(); });
-  add('Naviger', 'Sok i alle leste enheter', () => { closeCmd(); openGlobal(); }, {hint: 'Ctrl+F'});
-  add('Naviger', 'Sok i punkter pa denne enheten', () => { closeCmd(); $('q').focus(); }, {hint: '/', when: harPunkter});
+  add('Naviger', 'Skann IP-område', () => { closeCmd(); $('rangeInput').focus(); $('rangeInput').select(); });
+  add('Naviger', 'Søk i alle leste enheter', () => { closeCmd(); openGlobal(); }, {hint: 'Ctrl+F'});
+  add('Naviger', 'Søk i punkter på denne enheten', () => { closeCmd(); $('q').focus(); }, {hint: '/', when: harPunkter});
 
   add('Filter', 'Vis alle punkter', () => {
     S.filters = {q: '', type: '', flag: '', writable: false, diff: false};
@@ -4351,25 +4354,25 @@ function commands() {
   add('Filter', 'Kun endret siden snapshot', () => { S.filters.diff = !S.filters.diff; renderPoints(); syncMenuStates(); },
       {when: () => harPunkter() && !!S.snapshot, tilstand: () => S.filters.diff ? 'pa' : ''});
 
-  add('Handling', 'Les punktene pa nytt', () => {
+  add('Handling', 'Les punktene på nytt', () => {
     const ip = S.activeDev.address;
     delete S.cache[ip]; delete S.cacheMeta[ip]; closeCmd(); selectDevice(ip, {force: true});
   }, {when: harEnhet});
   add('Handling', 'Start/stopp live-oppdatering', () => { S.live ? stopPolling() : startPolling(); },
       {hint: 'L', when: harPunkter, tilstand: () => S.live ? 'pa' : ''});
   add('Handling', 'Sjekk en adresse', () => { closeCmd(); diagApne(); },
-      {hint: 'Ctrl+D', undertekst: () => 'naar du vet IP-en og den ikke svarer'});
-  add('Handling', 'Sok etter enheter na', () => { closeCmd(); rescanOnce(true); },
+      {hint: 'Ctrl+D', undertekst: () => 'når du vet IP-en og den ikke svarer'});
+  add('Handling', 'Søk etter enheter nå', () => { closeCmd(); rescanOnce(true); },
       {when: () => S.connected && !!$('rangeInput').value.trim(),
        undertekst: () => S.devices.length + ' kjent'});
-  add('Handling', 'Overvak nettet kontinuerlig', () => $('rescanBtn').click(),
+  add('Handling', 'Overvåk nettet kontinuerlig', () => $('rescanBtn').click(),
       {tilstand: () => RESCAN.on ? 'pa' : '',
        undertekst: () => RESCAN.on ? RESCAN.runs + ' runder' : 'av'});
   add('Handling', 'Ta snapshot', () => takeSnapshot(), {when: harPunkter});
   add('Handling', 'Frigi valgte punkter', () => { closeCmd(); releaseSelected(); },
       {when: () => harPunkter() && selectedVisible().some(p => p.writable) && !S.readOnly,
        undertekst: () => selectedVisible().filter(p => p.writable).length + ' valgt'});
-  add('Handling', 'Lesemodus - blokker all skriving', () => $('roBtn').click(),
+  add('Handling', 'Lesemodus — blokker all skriving', () => $('roBtn').click(),
       {tilstand: () => S.readOnly ? 'pa' : ''});
 
   add('Visning', 'Vis alle objekttyper (ukeprogram, kalender, trendlogg)',
@@ -4378,19 +4381,19 @@ function commands() {
        undertekst: () => { const t = S.typeCounts || {};
          const skjult = Object.entries(t).filter(([k]) => !VERDITYPER.has(k))
                               .reduce((n,[,v]) => n+v, 0);
-         return skjult ? skjult + ' objekter skjult na' : ''; }});
-  add('Visning', 'Innstillinger...', () => { closeCmd(); openTema(); });
-  add('Eksport', 'NABO - tagger og Variabel-fil...', () => { closeCmd(); aapneNabo(); }, {hint: 'N'});
-  add('Eksport', 'Taggeinnstillinger for dette anlegget...',
+         return skjult ? skjult + ' objekter skjult nå' : ''; }});
+  add('Visning', 'Innstillinger…', () => { closeCmd(); openTema(); });
+  add('Eksport', 'NABO — tagger og Variabel-fil…', () => { closeCmd(); aapneNabo(); }, {hint: 'N'});
+  add('Eksport', 'Taggeinnstillinger for dette anlegget…',
       () => { closeCmd(); openTema('tagging'); });
-  add('Visning', 'Utseende — farger, bilder og størrelse...',
+  add('Visning', 'Utseende — farger, bilder og størrelse…',
       () => { closeCmd(); openTema('utseende'); });
-  add('Visning', 'Kolonner...', () => { closeCmd(); openCols(); });
-  add('Visning', 'Grupper enheter (leverandor / IP-omrade / av)', () => $('groupBtn').click(),
+  add('Visning', 'Kolonner…', () => { closeCmd(); openCols(); });
+  add('Visning', 'Grupper enheter (automatisk / leverandør / nett / av)', () => $('groupBtn').click(),
       {tilstand: () => grupperingsTekst(),
        undertekst: () => { const lev = new Set(S.devices.map(d => vendorOf(d.vendor_name, d.vendor_id).label)).size;
                            const omr = new Set(S.devices.map(d => d._range).filter(Boolean)).size;
-                           return `${lev} leverandorer${omr > 1 ? ', ' + omr + ' omrader' : ''}`; },
+                           return `${lev} leverandører${omr > 1 ? ', ' + omr + ' nett' : ''}`; },
        when: () => S.devices.length > 0});
   add('Visning', 'Forkort punktnavn', () => $('shortBtn').click(),
       {tilstand: () => loadPrefs().shortNames !== false ? 'pa' : '',
@@ -4399,28 +4402,28 @@ function commands() {
       {tilstand: () => document.documentElement.getAttribute('data-theme') === 'light' ? 'pa' : ''});
   add('Visning', 'Tett visning', () => $('denseBtn').click(),
       {tilstand: () => document.body.classList.contains('dense') ? 'pa' : ''});
-  add('Visning', 'Forhandsles enheter i bakgrunnen', () => $('preBtn').click(),
+  add('Visning', 'Forhåndsles enheter i bakgrunnen', () => $('preBtn').click(),
       {tilstand: () => PRE.on ? 'pa' : ''});
   add('Visning', 'Stor visning av valgt punkt', () => { closeCmd(); openZoom(); },
       {hint: 'Z', when: () => !!S.selected});
 
-  add('Nettverk', 'Sammenlikn to enheter…', () => { closeCmd(); openSammenlign(); },
+  add('Nettverk', 'Sammenlign to enheter…', () => { closeCmd(); openSammenlign(); },
       {when: () => S.devices.filter(d => (S.cache[d.address] || []).length).length >= 2});
 
   add('Eksport', 'Sesjonsrapport…', () => { closeCmd(); visSesjonsrapport(); });
   add('Eksport', 'Endret siden snapshot…', () => { closeCmd(); visSnapshotrapport(); },
       {when: () => !!S.snapshot});
 
-  add('Eksport', 'CSV...', () => { closeCmd(); exportCSV(); }, {when: harPunkter});
-  add('Eksport', 'EDE 2.3...', () => { closeCmd(); exportEDE(); }, {when: harPunkter});
-  add('Eksport', 'Sammenlign med EDE-fil...', () => { closeCmd(); startEdeCompare(); }, {when: harPunkter});
+  add('Eksport', 'CSV…', () => { closeCmd(); exportCSV(); }, {when: harPunkter});
+  add('Eksport', 'EDE 2.3…', () => { closeCmd(); exportEDE(); }, {when: harPunkter});
+  add('Eksport', 'Sammenlign med EDE-fil…', () => { closeCmd(); startEdeCompare(); }, {when: harPunkter});
   add('Eksport', 'Skrivelogg', () => { closeCmd(); showWriteLog(); });
   add('Handling', 'Ukeprogram — vis og rediger', () => { closeCmd(); $('schBtn').click(); }, {when: harEnhet});
 
   add('Anlegg', 'Lagre anlegg', () => { closeCmd(); saveProject(); }, {when: () => S.devices.length > 0});
-  add('Anlegg', 'Anlegg jeg har vært på...', () => { closeCmd(); openMinne(); });
-  add('Anlegg', 'Apne anlegg...', () => { closeCmd(); openProjects(); });
-  add('Anlegg', 'Koble til pa nytt', () => $('reconnBtn').click());
+  add('Anlegg', 'Anlegg jeg har vært på…', () => { closeCmd(); openMinne(); });
+  add('Anlegg', 'Åpne anlegg…', () => { closeCmd(); openProjects(); });
+  add('Anlegg', 'Koble til på nytt', () => $('reconnBtn').click());
 
   for (const d of S.devices) {
     const ip = d.address;
@@ -4460,9 +4463,11 @@ function closeCmd() { $('cmdOverlay').hidden = true; }
    thrown into one string and any subsequence counted as a hit ("Filter Kun
    overstyrte" contains t, e, t, t in order). Matches are scored and the label
    is what counts most; the group and the subtext only break ties. */
+const cmdBrett = (t) => String(t).toLowerCase().replace(/æ/g, 'ae').replace(/[øö]/g, 'o').replace(/[åä]/g, 'a');
 function cmdScore(x, q) {
-  const etikett = x.etikett.toLowerCase();
-  const ekstra = (x.gruppe + ' ' + (x.undertekst ? x.undertekst() : '')).toLowerCase();
+  q = cmdBrett(q);
+  const etikett = cmdBrett(x.etikett);
+  const ekstra = cmdBrett(x.gruppe + ' ' + (x.undertekst ? x.undertekst() : ''));
 
   if (etikett.startsWith(q)) return 100;
   const i = etikett.indexOf(q);
@@ -7034,6 +7039,21 @@ function wireWriteForm(p) {
   };
   $('wSend').onclick = () => send(false);
   $('wRel').onclick = () => send(true);
+  /* The button is quiet until there is something to write, and then says
+     exactly what it will do: the value and the priority, read once more on
+     the thing you press. A select (binary, multi-state) always has a value. */
+  const knapp = $('wSend'), felt = $('wVal'), pri = $('wPri');
+  const synk = () => {
+    const v = String(felt.value ?? '').trim();
+    const vis = felt.tagName === 'SELECT' ? (felt.selectedOptions[0]?.textContent || v).trim() : v;
+    knapp.disabled = !v;
+    knapp.classList.toggle('primary', !!v);
+    knapp.textContent = v ? `Skriv ${vis} på pri ${pri.value}` : 'Skriv';
+  };
+  felt.addEventListener('input', synk);
+  felt.addEventListener('change', synk);
+  pri.addEventListener('change', synk);
+  synk();
 }
 
 async function refreshOne(objid) {
@@ -9824,7 +9844,7 @@ const ORDBOK = {
   'Hvert skann huskes med området, hvilke enheter som svarte og når. Klikk et anlegg for å skanne det på nytt.':
     'Every scan is remembered with its range, which devices answered and when. Click a site to scan it again.',
   'Sammenlikn to enheter': 'Compare two devices',
-  'Sammenlikn to enheter…': 'Compare two devices…',
+  'Sammenlign to enheter…': 'Compare two devices…',
 
   /* --- menu: network --- */
   'Nettverk': 'Network',
@@ -9837,15 +9857,15 @@ const ORDBOK = {
   'Leser de andre enhetene i bakgrunnen etter et skann':
     'Reads the other devices in the background after a scan',
   'Grupper enheter': 'Group devices',
-  'Samle listen etter leverandør eller IP-område':
-    'Collect the list by vendor or IP range',
+  'Etter nett når flere er skannet, ellers etter leverandør':
+    'By network when several are scanned, otherwise by vendor',
 
   /* --- menu: view and settings --- */
   'Vis': 'View',
   'Flere rader på skjermen, mindre luft': 'More rows on screen, less air',
   'Innstillinger…': 'Settings…',
   'Ctrl+K for alt': 'Ctrl+K for everything',
-  'Endringer vises med en gang og lagres pa denne maskinen. Lys og mørk visning huskes hver for seg.':
+  'Endringer vises med en gang og lagres på denne maskinen. Lys og mørk visning huskes hver for seg.':
     'Changes apply at once and are stored on this machine. Light and dark are remembered separately.',
   'Blokkerer all skriving til anlegget': 'Blocks all writing to the plant',
   'Lesemodus': 'Read-only mode',
@@ -9922,8 +9942,8 @@ const ORDBOK = {
   'Svarer denne adressen på ping?': 'Does this address answer a ping?',
   'Søker…': 'Searching…',
   'Overvåker nettet i bakgrunnen': 'Watching the network in the background',
-  'Sok etter enheter na': 'Look for devices now',
-  'Koble til pa nytt': 'Reconnect',
+  'Søk etter enheter nå': 'Look for devices now',
+  'Koble til på nytt': 'Reconnect',
   'Laster punkter…': 'Loading points…',
   'Leser verdier fra': 'Reading values from',
   'Leser beskrivelser fra': 'Reading descriptions from',
@@ -9942,7 +9962,7 @@ const ORDBOK = {
   'Ingenting er lest fra enheten.': 'Nothing has been read from the device.',
   'Les punktet på nytt': 'Read the point again',
   'Forhåndsleser enheter i bakgrunnen': 'Pre-reading devices in the background',
-  'Forhandsles enheter i bakgrunnen': 'Pre-read devices in the background',
+  'Forhåndsles enheter i bakgrunnen': 'Pre-read devices in the background',
   'Forhåndslesing av enheter er av': 'Pre-reading devices is off',
   'Flere enheter svarer på denne ID-en': 'Several devices answer this ID',
   'Forespørsler treffer den som svarer først, så lesinger og skrivinger': 'Requests reach whichever answers first, so reads and writes',
@@ -10038,7 +10058,7 @@ const ORDBOK = {
   'delt med fellesserveren': 'shared with the common server',
   'lagret her · fellesserveren er ikke tilgjengelig': 'saved here · the common server is unreachable',
   'lagret her, men ikke delt — fellesserveren svarte ikke': 'saved here, but not shared — the common server did not answer',
-  'Taggeinnstillinger for dette anlegget...': 'Tag settings for this site…',
+  'Taggeinnstillinger for dette anlegget…': 'Tag settings for this site…',
   'Tømme taggeinnstillingene for dette anlegget?': 'Clear the tag settings for this site?',
   'Bygg-ID først': 'Building ID first',
   'Foran systemnummeret, som i BTG': 'Before the system number, as in BTG',
@@ -10081,7 +10101,7 @@ const ORDBOK = {
   'Minst én kolonne må vises': 'At least one column must be shown',
   'Grupperes etter': 'Grouped by',
   'Enheter vises i én liste': 'Devices are shown in one list',
-  'Grupper enheter (leverandor / IP-omrade / av)': 'Group devices (vendor / IP range / off)',
+  'Grupper enheter (automatisk / leverandør / nett / av)': 'Group devices (vendor / IP range / off)',
   'Punktnavn vises fullt ut': 'Point names are shown in full',
   'Alle punktnavn på denne enheten starter med dette. Det er utelatt fra tabellen for lesbarhet — hold over et navn for å se det fullt ut.': 'Every point name on this device starts with this. It is dropped from the table for readability — hover a name to see it in full.',
   'Live og trend': 'Live and trend',
@@ -10090,8 +10110,8 @@ const ORDBOK = {
   'Løs fra overvåking': 'Unpin from the watch list',
   'Alle var allerede festet': 'They were all pinned already',
   'Type, saa navn': 'Type, then name',
-  'Sok i punkter pa denne enheten': 'Search points on this device',
-  'Sok i alle leste enheter': 'Search every device read',
+  'Søk i punkter på denne enheten': 'Search points on this device',
+  'Søk i alle leste enheter': 'Search every device read',
   'Søket dekker navn, beskrivelse og objekt-ID på denne enheten.': 'The search covers name, description and object ID on this device.',
   'Flere ord må alle treffe, uansett rekkefølge — «360.001 RT601»': 'Several words must all match, in any order — “360.001 RT601”',
   'finner punkter som inneholder begge. Sett minus foran et ord for': 'finds points containing both. Put a minus in front of a word to',
@@ -10100,7 +10120,7 @@ const ORDBOK = {
   'søker i': 'searching in',
   'gaa til punkter': 'go to points',
   'gaa til enheter / punkter / overvaaking': 'go to devices / points / watch',
-  'Utseende — farger, bilder og størrelse...': 'Appearance — colours, images and size…',
+  'Utseende — farger, bilder og størrelse…': 'Appearance — colours, images and size…',
   'Utseendet er tilbakestilt': 'Appearance reset',
   'Tilbakestille alle farger og størrelser til standard?': 'Reset every colour and size to the default?',
   'Hele grensesnittet': 'The whole interface',
@@ -10194,16 +10214,16 @@ const ORDBOK = {
   'Piltaster': 'Arrow keys',
   'Handling': 'Action',
   'Handlinger': 'Actions',
-  'Innstillinger...': 'Settings...',
-  'Kolonner...': 'Columns...',
+  'Innstillinger…': 'Settings...',
+  'Kolonner…': 'Columns...',
   'Kolonner…': 'Columns…',
   'Lys visning': 'Light appearance',
   'Mørk visning': 'Dark appearance',
   'Naviger': 'Navigate',
-  'Overvak nettet kontinuerlig': 'Watch the network continuously',
+  'Overvåk nettet kontinuerlig': 'Watch the network continuously',
   'Sesjonsrapport…': 'Session report…',
   'Sesjonsrapport...': 'Session report...',
-  'Skann IP-omrade': 'Scan an IP range',
+  'Skann IP-område': 'Scan an IP range',
   'Skrivelogg': 'Write log',
   'Visning': 'Display',
   'pa': 'on',
@@ -10233,7 +10253,7 @@ const ORDBOK = {
   'Type': 'Type',
   'ingen': 'none',
   'Ingen': 'None',
-  'Les punktene pa nytt': 'Read the points again',
+  'Les punktene på nytt': 'Read the points again',
   'Start/stopp live-oppdatering': 'Start/stop live updating',
   'leverandorer': 'vendors',
   'leverandorer / IP-omrader': 'vendors / IP ranges',
@@ -10256,7 +10276,7 @@ const ORDBOK = {
   'sjekker…': 'checking…',
   'Legg den i lista': 'Add it to the list',
   'Kunne ikke spørre serveren': 'Could not ask the server',
-  'naar du vet IP-en og den ikke svarer': 'when you know the IP and it does not answer',
+  'når du vet IP-en og den ikke svarer': 'when you know the IP and it does not answer',
   /* Sentences the diagnose endpoint returns as free text. They are long and
      specific, so they live here rather than being rebuilt client-side from a
      key - the server stays the one place that decides what a step means. */
@@ -10304,10 +10324,10 @@ const ORDBOK = {
      entries rather than being folded into the ones above. */
   'Skriving': 'Writing',
   'Utseende': 'Appearance',
-  'Anlegg jeg har vært på...': 'Sites I have visited...',
-  'Apne anlegg...': 'Open site...',
-  'Lesemodus - blokker all skriving': 'Read-only mode - block all writing',
-  'Sammenlign med EDE-fil...': 'Compare with an EDE file...',
+  'Anlegg jeg har vært på…': 'Sites I have visited...',
+  'Åpne anlegg…': 'Open site...',
+  'Lesemodus — blokker all skriving': 'Read-only mode - block all writing',
+  'Sammenlign med EDE-fil…': 'Compare with an EDE file...',
   'Utseende - farger, bilder og størrelse...': 'Appearance - colours, images and size...',
   // Settings → Tagging
   'Identifikasjon': 'Identification',
@@ -10360,7 +10380,7 @@ const ORDBOK = {
   'enheter lest': 'devices read',
   'Finn enhet': 'Find device',
   'Åpne NABO': 'Open NABO',
-  'NABO - tagger og Variabel-fil...': 'NABO - tags and the Variabel file...',
+  'NABO — tagger og Variabel-fil…': 'NABO - tags and the Variabel file...',
   'NABO · tagger og BTG-fil…': 'NABO · tags and BTG file…',
   'Tagger og Variabel-fil for NTI-import i Niagara, fra anlegget og EDE-filer':
     'Tags and the Variabel file for NTI import into Niagara, from the plant and EDE files',
@@ -10388,9 +10408,13 @@ const MONSTER = [
   [/^(\d+) av (\d+) objekter · (\d+)%$/, (m) => `${m[1]} of ${m[2]} objects · ${m[3]}%`,
    /^(\d+) of (\d+) objects · (\d+)%$/, (m) => `${m[1]} av ${m[2]} objekter · ${m[3]}%`],
   [/^(\d+) objekter$/, (m) => `${m[1]} objects`, /^(\d+) objects$/, (m) => `${m[1]} objekter`],
-  [/^(\d+) objekter skjult na$/, (m) => `${m[1]} objects hidden now`,
-   /^(\d+) objects hidden now$/, (m) => `${m[1]} objekter skjult na`],
+  [/^(\d+) objekter skjult nå$/, (m) => `${m[1]} objects hidden now`,
+   /^(\d+) objects hidden now$/, (m) => `${m[1]} objekter skjult nå`],
   [/^(\d+) feil$/, (m) => `${m[1]} faults`, /^(\d+) faults$/, (m) => `${m[1]} feil`],
+  [/^Skriv (.+) på pri (\d+)$/, (m) => `Write ${m[1]} at pri ${m[2]}`, /^Write (.+) at pri (\d+)$/, (m) => `Skriv ${m[1]} på pri ${m[2]}`],
+  [/^(\d+) i alarm$/, (m) => `${m[1]} in alarm`, /^(\d+) in alarm$/, (m) => `${m[1]} i alarm`],
+  [/^(\d+) alarm\/feil$/, (m) => `${m[1]} alarm/fault`, /^(\d+) alarm\/fault$/, (m) => `${m[1]} alarm/feil`],
+  [/^(\d+) i alarm, (\d+) med feil$/, (m) => `${m[1]} in alarm, ${m[2]} faulty`, /^(\d+) in alarm, (\d+) faulty$/, (m) => `${m[1]} i alarm, ${m[2]} med feil`],
   [/^(\d+) overstyrt$/, (m) => `${m[1]} overridden`, /^(\d+) overridden$/, (m) => `${m[1]} overstyrt`],
   [/^(\d+) pkt$/, (m) => `${m[1]} pts`, /^(\d+) pts$/, (m) => `${m[1]} pkt`],
   // The device count inside this sentence is translated on its own first,

@@ -4298,8 +4298,8 @@ td.c-val.ned{animation:verdi-lb-ned 700ms var(--mot-kurve)}
 :root.levfarge .dev.laster::before{background:var(--vc)}
 /* The card gliding in carries the same bar, so it lands already belonging. */
 :root.levfarge #flylag .dev.glid{box-shadow:inset 3px 0 0 var(--vc)}
-/* Device heading: the maker as a tinted chip under the name. */
-:root.levfarge .ctx-under .vendor{font-size:11px;padding:1px 8px 1px 6px;border-radius:999px;
+/* Device heading: the maker as a quiet tinted label under the name - square-ish, not a pill. */
+:root.levfarge .ctx-under .vendor{font-size:11px;padding:1px 7px 1px 6px;border-radius:4px;
   background:color-mix(in srgb,var(--vc) 16%,transparent);
   color:color-mix(in srgb,var(--vc) 55%,var(--fg))}
 :root.levfarge .ctx-under .vendor i{width:6px;height:6px;flex:0 0 6px;border-radius:50%;opacity:1}
@@ -4567,14 +4567,20 @@ button:focus:not(:focus-visible){outline:none;box-shadow:none}
 .gs-head .gs-close:hover{background:var(--hover);border-color:transparent;color:var(--fg)}
 .gs-close .lbl{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
 .gs-input{font-family:var(--sans)}
-/* On and off is a switch. The word stays for screen readers and translation,
-   the eye gets the switch. */
-.sett-rad.bryter .menu-state{position:relative;width:32px;min-width:32px;height:19px;padding:0;border-radius:10px;border:0;
-  background:var(--line-2);color:transparent;font-size:0;overflow:hidden;transition:background .18s}
-.sett-rad.bryter .menu-state::after{content:'';position:absolute;left:2px;top:2px;width:15px;height:15px;border-radius:50%;
-  background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.3);transition:transform .18s var(--fjaer)}
-.sett-rad.bryter.on .menu-state,.sett-rad.bryter.paa .menu-state{background:var(--ok);border:0}
-.sett-rad.bryter.on .menu-state::after,.sett-rad.bryter.paa .menu-state::after{transform:translateX(13px)}
+/* On and off is a checkbox, as in a Mac preference pane: in front of the
+   setting, in the accent colour when ticked. Not a phone switch. The word
+   stays for screen readers and translation; the eye gets the box. */
+.sett-rad.bryter{grid-template-columns:16px minmax(0,1fr);gap:2px 10px;align-items:start}
+.sett-rad.bryter small{grid-column:2;grid-row:2}
+.sett-rad.bryter .menu-state{grid-column:1;grid-row:1;align-self:start;position:relative;width:14px;min-width:14px;height:14px;
+  margin-top:2px;padding:0;border-radius:4px;border:1px solid var(--line-2);background:var(--raised);
+  color:transparent;font-size:0;overflow:hidden;box-shadow:0 1px 0 rgba(0,0,0,.12);transition:background .12s,border-color .12s}
+.sett-rad.bryter .menu-state::after{content:'';position:absolute;left:4px;top:1px;width:4px;height:8px;
+  border-right:2px solid #fff;border-bottom:2px solid #fff;transform:rotate(45deg) scale(.4);opacity:0;
+  transition:transform .16s var(--fjaer),opacity .1s}
+.sett-rad.bryter.on .menu-state,.sett-rad.bryter.paa .menu-state{background:var(--accent);border-color:var(--accent)}
+.sett-rad.bryter.on .menu-state::after,.sett-rad.bryter.paa .menu-state::after{transform:rotate(45deg) scale(1);opacity:1}
+.sett-rad.bryter:hover .menu-state{border-color:var(--fg-3)}
 /* A choice between several is a pop-up button: the value and a chevron. */
 .sett-rad:not(.bryter) .menu-state{border:1px solid var(--line-2);background:var(--panel);color:var(--fg);
   font:12px var(--sans);padding:3px 8px 3px 10px;border-radius:6px;min-width:0;display:inline-flex;align-items:center;gap:8px}
@@ -5014,7 +5020,7 @@ button:focus:not(:focus-visible){outline:none;box-shadow:none}
         <span id="temaModus" class="gs-meta" style="border:none;padding:0"></span>
         <button class="gs-close" style="margin-left:auto" onclick="closeTema()"><span class="lbl">Lukk</span> ✕</button>
       </div>
-      <div class="gs-meta">Endringer vises med en gang og lagres pa denne maskinen. Lys og mørk visning huskes hver for seg.</div>
+      <div class="gs-meta">Endringer vises med en gang og lagres på denne maskinen. Lys og mørk visning huskes hver for seg.</div>
       <div class="sett-faner" role="tablist">
         <button class="sett-fane sel" data-fane="oppsett" role="tab">Oppsett</button>
         <button class="sett-fane" data-fane="tagging" role="tab">Tagging</button>
@@ -5038,7 +5044,7 @@ button:focus:not(:focus-visible){outline:none;box-shadow:none}
         </div>
         <div class="sett-gruppe"><div class="tema-tittel">Enhetslista</div>
           <button id="groupBtn" class="sett-rad">Grupper enheter
-            <small>Samle listen etter leverandør eller IP-område</small>
+            <small>Etter nett når flere er skannet, ellers etter leverandør</small>
             <span id="groupState" class="menu-state"></span></button>
           <button id="autoSokBtn" class="sett-rad bryter" role="switch">Søk ved oppstart
             <small>Skanner kabelen inn i anlegget, eller anlegget du var på sist, når NABE åpnes</small>
