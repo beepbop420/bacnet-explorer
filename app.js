@@ -5439,7 +5439,12 @@ function gaaTilRute(i) {
   const f = el.querySelector('.dev, .watch-row button, button');
   (f || el).focus();
   el.scrollIntoView({block: 'nearest'});
+  // The ring says where the keys went - only when they were what moved you.
+  el.classList.add('rute-fokus');
+  el.addEventListener('focusout', () => el.classList.remove('rute-fokus'), {once: true});
 }
+// A click is a mouse move, not a pane jump: the ring goes.
+document.addEventListener('pointerdown', () => document.querySelectorAll('.rute-fokus').forEach(e => e.classList.remove('rute-fokus')), true);
 
 /* ------------------------------------------- D1/D2: paletten som ett soek */
 /* Paletten kunne bare handlinger. Skulle man til et punkt maatte man lukke

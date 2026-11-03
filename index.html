@@ -588,7 +588,9 @@ select.field{font-family:var(--sans);cursor:pointer}
 /* Rutene kan ta imot fokus for tastatursekvensene (g p, g o). De skal ikke
    tegne en ring rundt hele flaten - markeringa inne i dem er signalet. */
 #pointsWrap:focus,#watchList:focus,#devList:focus{outline:none}
-#pointsWrap:focus-visible,#watchList:focus-visible,#devList:focus-visible{
+/* Only after a pane jump with the keyboard (F6), not whenever a key is
+   pressed: Shift held to select rows would otherwise ring the whole table. */
+#pointsWrap.rute-fokus:focus,#watchList.rute-fokus:focus,#devList.rute-fokus:focus{
   outline:2px solid var(--accent);outline-offset:-2px;
 }
 .feilrute{display:flex;flex-direction:column;align-items:center;gap:6px;padding:34px 18px}
