@@ -177,6 +177,10 @@ const FAKTA = [
   ['COV betyr at regulatoren sier fra selv. Mindre spørring, mer ro.', 'COV means the controller speaks up itself. Less asking, more peace.'],
 ];
 const NYTT = {
+  '1.39': [
+    ['Flere punkter sammen: velg to eller flere (Ctrl-klikk, Shift-klikk eller dra over radene), så tegner inspektøren dem i én graf mens Live går. Hver kurve har sin egen skala, så % og °C kan stå side om side', 'Several points together: select two or more (Ctrl-click, Shift-click or drag over the rows) and the inspector draws them in one chart while Live runs. Each curve has its own scale, so % and °C can sit side by side'],
+    ['Shift- og Ctrl-klikk i tabellen markerer rader, ikke tekst', 'Shift- and Ctrl-click in the table select rows, not text'],
+  ],
   '1.38': [
     ['Tunnelen: når ingen anlegg kan nås, kan NABE kjøres gjennom en VPN-tunnel som er nede. Hold mellomrom for å stige, unngå brannmurene, samle I-Am', 'The tunnel: when no site can be reached, NABE can be flown through a dead VPN tunnel. Hold space to rise, dodge the firewalls, collect I-Am'],
     ['Tre plagg som bare finnes i Tunnelen: flygebriller, gullkabel, og en jetpakke for den som klarer 150 poeng i én tur', 'Three items found only in the tunnel: flying goggles, a gold cable, and a jetpack for whoever makes 150 points in one run'],

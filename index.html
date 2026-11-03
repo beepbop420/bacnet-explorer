@@ -4989,6 +4989,25 @@ body.uten-bevegelse .plagg,body.uten-bevegelse .rekv,body.uten-bevegelse .plagg-
 @keyframes gd-flamme{from{transform:scaleY(.7)}to{transform:scaleY(1.15)}}
 @media (prefers-reduced-motion:reduce){html:not(.med-bevegelse) .plagg-flamme{animation:none}}
 body.uten-bevegelse .plagg-flamme{animation:none}
+
+/* ---------- several points together ---------- */
+#pointsWrap tbody tr{-webkit-user-select:none;user-select:none}
+#pointsWrap tbody td.c-name,#pointsWrap tbody td.c-desc{-webkit-user-select:text;user-select:text}
+.sammen .sect-head small{font-weight:400;color:var(--fg-3);margin-left:6px}
+.sammen-graf{display:block;width:100%;height:110px;cursor:crosshair;border-bottom:1px solid var(--line)}
+.sammen-linje{stroke:var(--fg-3);stroke-width:1;vector-effect:non-scaling-stroke;stroke-dasharray:2 2}
+.sammen-tom{font-size:11.5px;color:var(--fg-3);padding:10px 0;display:flex;align-items:center;gap:8px}
+.sammen-tegn{display:flex;flex-direction:column;gap:2px;margin-top:8px}
+.sammen-rad{display:grid;grid-template-columns:10px minmax(0,1fr) auto auto;gap:8px;align-items:baseline;padding:3px 4px;border-radius:5px;font-size:11.5px;cursor:pointer}
+.sammen-rad:hover{background:var(--hover)}
+.sammen-rad i{width:10px;height:2px;border-radius:1px;align-self:center}
+.sammen-navn{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--fg-2)}
+.sammen-rad b{font-family:var(--mono);font-weight:600;color:var(--fg)}
+.sammen-rad small{font-family:var(--mono);font-size:10.5px;color:var(--fg-3)}
+.sammen-mer{font-size:10.5px;color:var(--fg-3);padding:2px 4px}
+.sammen-lapp div{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--fg-2)}
+.sammen-lapp div i{width:8px;height:2px;border-radius:1px}
+.sammen-lapp div b{margin-left:auto;padding-left:10px}
 </style>
 </head>
 <body>
@@ -5515,6 +5534,7 @@ body.uten-bevegelse .plagg-flamme{animation:none}
 <script src="/js/nabe-bunn.js"></script>
 <script src="/js/nabe-graf.js"></script>
 <script src="/js/nabe-tunnel.js"></script>
+<script src="/js/nabe-sammen.js"></script>
 <script src="/js/nabo.js"></script>
 <script src="/js/nabo-brodre.js"></script>
 <script src="/js/nabo-fasit.js"></script>
