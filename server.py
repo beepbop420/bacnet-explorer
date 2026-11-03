@@ -192,7 +192,7 @@ def t(nb: str, en: str) -> str:
     return en if SPRAAK_VAR.get() == "en" else nb
 
 
-VERSJON = "1.41"
+VERSJON = "1.42"
 
 state = {"app": None, "local_address": None, "read_only": False, "bbmd": None}
 
@@ -2765,6 +2765,36 @@ async def sites_delete(body: SiteKeyBody):
     return {"status": "done"}
 
 
+# The counters behind the wardrobe, what NABE and NABO wear, and the tunnel
+# record live in the window's localStorage. An update leaves that alone, but
+# a new PC or a reset WebView2 profile does not, so the page keeps a copy
+# here next to the site memory and takes back whatever is higher.
+PROGRESS_FILE = DATA_DIR / "fremgang.json"
+
+
+@app.get("/api/fremgang")
+async def fremgang_les():
+    try:
+        data = json.loads(PROGRESS_FILE.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        data = {}
+    return {"status": "done", "fremgang": data if isinstance(data, dict) else {}}
+
+
+@app.post("/api/fremgang")
+async def fremgang_lagre(body: Dict[str, Any]):
+    tekst = json.dumps(body, ensure_ascii=False)
+    if len(tekst) > 200_000:
+        return {"status": "error", "error": t("For stort", "Too large")}
+    tmp = PROGRESS_FILE.with_suffix(".tmp")
+    try:
+        tmp.write_text(tekst, encoding="utf-8")
+        os.replace(tmp, PROGRESS_FILE)
+    except OSError as e:
+        return {"status": "error", "error": str(e)}
+    return {"status": "done"}
+
+
 NOTES_FILE = DATA_DIR / "notes.json"
 NOTES: Dict[str, Dict[str, Any]] = {}
 
@@ -2978,83 +3008,6 @@ async def set_note(body: NoteBody):
     # Saved locally first, shared second: the sharing is allowed to fail.
     await _push_note(key, NOTES.get(key))
     return {"status": "done", "notes": NOTES, "sync": NOTES_SYNC}
-
-
-PROJECT_DIR = DATA_DIR / "projects"
-
-
-def _safe_name(name: str) -> str:
-    """Keep saved files inside PROJECT_DIR regardless of what is typed."""
-    cleaned = "".join(c for c in (name or "").strip() if c.isalnum() or c in " _-.")
-    cleaned = cleaned.strip(" .") or "uten-navn"
-    return cleaned[:80]
-
-
-class ProjectBody(BaseModel):
-    name: str
-    data: Dict[str, Any]
-
-
-@app.get("/api/projects")
-def list_projects():
-    PROJECT_DIR.mkdir(exist_ok=True)
-    out = []
-    for f in sorted(PROJECT_DIR.glob("*.json")):
-        try:
-            d = json.loads(f.read_text(encoding="utf-8"))
-            out.append({
-                "name": f.stem,
-                "saved": d.get("saved"),
-                "devices": len(d.get("devices") or []),
-                "watch": len(d.get("watch") or []),
-                "snapshots": len(d.get("snapshots") or []),
-            })
-        except Exception:
-            continue
-    return {"status": "done", "projects": out}
-
-
-@app.post("/api/projects/save")
-def save_project(body: ProjectBody):
-    PROJECT_DIR.mkdir(exist_ok=True)
-    name = _safe_name(body.name)
-    path = PROJECT_DIR / f"{name}.json"
-
-    data = dict(body.data or {})
-    data["saved"] = time.time()
-
-    # Snapshots accumulate so two visits can be compared; keep the last 10.
-    if path.is_file():
-        try:
-            prev = json.loads(path.read_text(encoding="utf-8"))
-            snaps = list(prev.get("snapshots") or [])
-        except Exception:
-            snaps = []
-    else:
-        snaps = []
-    new_snap = data.pop("snapshot", None)
-    if new_snap:
-        snaps.append({"ts": data["saved"], "values": new_snap})
-    data["snapshots"] = snaps[-10:]
-
-    path.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
-    return {"status": "done", "name": name, "snapshots": len(data["snapshots"])}
-
-
-@app.get("/api/projects/{name}")
-def load_project(name: str):
-    path = PROJECT_DIR / f"{_safe_name(name)}.json"
-    if not path.is_file():
-        return {"status": "error", "error": t("Fant ikke prosjektet", "Project not found")}
-    return {"status": "done", "data": json.loads(path.read_text(encoding="utf-8"))}
-
-
-@app.post("/api/projects/{name}/delete")
-def delete_project(name: str):
-    path = PROJECT_DIR / f"{_safe_name(name)}.json"
-    if path.is_file():
-        path.unlink()
-    return {"status": "done"}
 
 
 # The UI is served straight off disk and gets updated in place, so caching it

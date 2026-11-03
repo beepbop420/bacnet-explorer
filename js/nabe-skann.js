@@ -586,7 +586,6 @@ runScan = async function () {
     tegnListe();
   }
 };
-$('scanBtn').onclick = runScan;
 const _skannAvbryt = cancelScan;
 cancelScan = function () { SK.avbrutt = true; return _skannAvbryt.apply(this, arguments); };
 

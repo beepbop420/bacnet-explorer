@@ -395,8 +395,7 @@ function anSammenlign(t) {
 }
 
 (function kobl() {
-  const _tegn = renderDevices;
-  renderDevices = function () { const r = _tegn.apply(this, arguments); tegnAnlegg(); return r; };
+  etter('renderDevices', () => tegnAnlegg());
   // The first scan of the day on a known site opens the controller you had
   // open when you left it. Later scans leave the choice to you.
   const _skann = runScan;
@@ -413,7 +412,6 @@ function anSammenlign(t) {
     }
     return r;
   };
-  if (!document.body.classList.contains('skanner')) $('scanBtn').onclick = runScan;
   const _velg = selectDevice;
   selectDevice = function (ip) {
     const key = asNokkel();

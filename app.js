@@ -3,6 +3,22 @@
    code that runs while this file is still loading can use it too; until
    the language is set further down, that text is Norwegian. */
 const T = (nb, en) => { try { return SPRAAK === 'en' ? en : nb; } catch { return nb; } };
+// The modules add to the core functions (scan, the device list, a poll) by
+// name, so each one wraps whatever is there by then. Buttons call the global
+// by name too (() => runScan()), so they always get the newest wrapping.
+function foer(navn, fn) {
+  const f = window[navn];
+  window[navn] = function (...a) { fn.apply(this, a); return f.apply(this, a); };
+}
+function etter(navn, fn) {
+  const f = window[navn];
+  window[navn] = function (...a) {
+    const r = f.apply(this, a);
+    if (r && typeof r.then === 'function') return r.then(v => { fn.call(this, v, ...a); return v; });
+    fn.call(this, r, ...a);
+    return r;
+  };
+}
 /* One collator, made once. localeCompare with a locale argument builds a new
    one for every comparison - measured at 22 ms to sort 528 points, most of the
    time it took to redraw the table. */
@@ -713,7 +729,7 @@ async function runScan() {
   const perOmraade = [];
   b.innerHTML = 'Avbryt';
   b.disabled = false;
-  b.onclick = cancelScan;
+  b.onclick = () => cancelScan();
 
   try {
     for (let n = 0; n < omraader.length; n++) {
@@ -785,7 +801,7 @@ async function runScan() {
   // Not re-enabled when the backend is gone: pressing it again would only
   // produce the same failure.
   b.disabled = BACKEND_NEDE || !S.connected;
-  b.textContent = T('Skann', 'Scan'); b.onclick = runScan;
+  b.textContent = T('Skann', 'Scan'); b.onclick = () => runScan();
 }
 
 async function cancelScan() {
@@ -1071,17 +1087,6 @@ function presenceTag(d) {
   return `<em class="dev-seen${p.naa ? '' : ' borte'}" title="${esc(tittel)}">${p.svar}/${p.av}</em>`;
 }
 
-function devFlagTags(ip) {
-  const pts = S.cache[ip];
-  if (!pts) return '';
-  const c = flagCounts(pts);
-  const feil = (c['in-alarm'] || 0) + (c['fault'] || 0);
-  const over = (c['overridden'] || 0) + (c['out-of-service'] || 0);
-  let ut = '';
-  if (feil) ut += `<em class="dev-flag bad" title="${feil} punkter i alarm eller med feil">${feil}</em>`;
-  if (over) ut += `<em class="dev-flag warn" title="${over} punkter overstyrt eller ute av drift">${over}</em>`;
-  return ut;
-}
 
 /* One word on the right of the card: the worst thing about it, in words.
    Faults before overrides, because a fault is the thing to go and look at;
@@ -2507,9 +2512,7 @@ new MutationObserver(muts => {
 const DIALOG_LUKK = {
   schOverlay: () => closeSchedules(),
   temaOverlay: () => closeTema(),
-  minneOverlay: () => closeMinne(),
   edeOverlay: () => closeEde(),
-  prjOverlay: () => closeProjects(),
   cmdOverlay: () => closeCmd(),
   colsOverlay: () => closeCols(),
   gsOverlay: () => closeGlobal(),
@@ -3692,91 +3695,7 @@ async function husk(omraader, enheter) {
   } catch { /* minnet er en bekvemmelighet, ikke noe aa stoppe skannet for */ }
 }
 
-function openMinne() { $('minneOverlay').hidden = false; hentMinne().then(tegnMinne); }
-function closeMinne() { $('minneOverlay').hidden = true; }
 
-function naarTekst(ts) {
-  if (!ts) return '';
-  const d = new Date(ts * 1000);
-  const dager = Math.floor((Date.now() - d) / 86400000);
-  if (dager === 0) return T('i dag ', 'today ') + d.toLocaleTimeString('no', {hour: '2-digit', minute: '2-digit'});
-  if (dager === 1) return T('i går', 'yesterday');
-  if (dager < 30) return T(dager + ' dager siden', dager + ' days ago');
-  return d.toLocaleDateString(SPRAAK === 'en' ? 'en-GB' : 'no');
-}
-
-/* A source list, as on a Mac: the whole row scans, a name is changed by
-   double-clicking it, and the two rarer actions show on the row you point at.
-   A search field at the top when there is more than a handful. */
-function tegnMinne() {
-  const sok = $('minneSok');
-  const q = (sok?.value || '').trim().toLowerCase();
-  const alle = Object.entries(MINNE).sort((a, b) => (b[1].sist || 0) - (a[1].sist || 0));
-  if (sok) sok.hidden = alle.length < 6;
-  const rader = !q ? alle : alle.filter(([key, s]) => [key, s.navn, ...(s.enheter || []).map(e => `${e.vendor || ''} ${e.object_name || ''}`)]
-    .join(' ').toLowerCase().includes(q));
-  $('minneAntall').textContent = alle.length ? `${alle.length} ${T('anlegg', alle.length === 1 ? 'site' : 'sites')}` : '';
-  if (!alle.length) {
-    $('minneBody').innerHTML = `<div class="gs-empty">${T('Ingen skann er husket ennå. Skann et område, så dukker det opp her.',
-      'No scans remembered yet. Scan a range and it shows up here.')}</div>`;
-    return;
-  }
-  if (!rader.length) {
-    $('minneBody').innerHTML = `<div class="gs-empty">${T(`Ingen anlegg passer «${esc(q)}».`, `No site matches "${esc(q)}".`)}</div>`;
-    return;
-  }
-  $('minneBody').innerHTML = rader.map(([key, s]) => {
-    const enh = s.enheter || [];
-    const merker = [...new Set(enh.map(e => e.vendor).filter(Boolean))].slice(0, 4);
-    return `<div class="mn-rad" data-skann="${esc(key)}" tabindex="0" role="button"
-        title="${esc(T('Klikk for å skanne · dobbeltklikk navnet for å endre det', 'Click to scan · double-click the name to change it'))}">
-      <div class="mn-navn">
-        <div class="mn-tittel${s.navn ? '' : ' uten'}" data-navn="${esc(key)}">${esc(s.navn || T('uten navn', 'no name'))}</div>
-        <div class="mn-omrade">${esc(key)}</div>
-        <div class="mn-under">${merkerHtml(merker)}${
-          s.lokal ? T('fra ', 'from ') + esc(s.lokal) : ''}${s.modus === 'bbmd' ? ' · via BBMD' : ''}</div>
-      </div>
-      <div class="mn-tall">${enh.length} ${T(enh.length === 1 ? 'enhet' : 'enheter', enh.length === 1 ? 'device' : 'devices')}<br>${esc(naarTekst(s.sist))}${
-        s.ganger > 1 ? `<br>${s.ganger} ${T('skann', 'scans')}` : ''}</div>
-      <div class="mn-knapper">
-        <button class="mn-lenke" data-navn="${esc(key)}">${T('Gi navn', 'Rename')}</button>
-        <button class="mn-lenke fare" data-slett="${esc(key)}">${T('Glem', 'Forget')}</button>
-      </div>
-    </div>`;
-  }).join('');
-
-  const skann = (key) => {
-    $('rangeInput').value = key;
-    const modus = (MINNE[key] || {}).modus;
-    if (modus && [...$('modeSel').options].some(o => o.value === modus)) $('modeSel').value = modus;
-    savePrefs({range: key, mode: $('modeSel').value});
-    closeMinne();
-    runScan();
-  };
-  const navngi = async (key) => {
-    const naa = (MINNE[key] || {}).navn || '';
-    const navn = prompt(T('Hva heter dette anlegget?', 'What is this site called?'), naa);
-    if (navn === null) return;
-    const d = await api('/api/sites/name', {key, name: navn});
-    if (d.status === 'done') { MINNE[key] = d.site; tegnMinne(); fyllOmradeliste(); }
-  };
-  $('minneBody').querySelectorAll('.mn-rad').forEach(r => {
-    r.onclick = (e) => { if (!e.target.closest('button') && e.detail < 2) setTimeout(() => { if (!r._dobbel) skann(r.dataset.skann); }, 260); };
-    r.ondblclick = (e) => { r._dobbel = true; if (e.target.closest('.mn-tittel')) navngi(r.dataset.skann); setTimeout(() => { r._dobbel = false; }, 400); };
-    r.onkeydown = (e) => { if (e.key === 'Enter') skann(r.dataset.skann); };
-  });
-  $('minneBody').querySelectorAll('button[data-navn]').forEach(b => b.onclick = (e) => { e.stopPropagation(); navngi(b.dataset.navn); });
-  $('minneBody').querySelectorAll('[data-slett]').forEach(b => b.onclick = async (e) => {
-    e.stopPropagation();
-    if (!confirm(T(`Glemme ${b.dataset.slett}?`, `Forget ${b.dataset.slett}?`))) return;
-    const d = await api('/api/sites/delete', {key: b.dataset.slett});
-    if (d.status === 'done') { delete MINNE[b.dataset.slett]; tegnMinne(); fyllOmradeliste(); }
-  });
-}
-
-function merkerHtml(merker) {
-  return merker.map(m => `<span class="mn-vendor">${esc(m)}</span>`).join('');
-}
 
 /* ------------------------------------------------------------- tagging */
 /* The settings the tag generator asks for every single time.
@@ -3791,10 +3710,7 @@ function merkerHtml(merker) {
    Field names follow the old generator's own: prefix, cluster, anleggsnavn, prosjekt,
    delimiter, building-id-first. Same words, so there is nothing to translate
    between the two screens. */
-const TAG_STD = {
-  prefiks: '', cluster: '', anleggsnavn: '', prosjekt: '',
-  skilletegn: '=', byggIdForst: false, ventLedd: '2', sorter: 'etasje',
-};
+const TAG_STD = {prefiks: '', cluster: '', anleggsnavn: '', prosjekt: ''};
 
 // the old generator warns above this; the tag becomes unwieldy in Niagara long before it
 // becomes invalid.
@@ -3817,127 +3733,11 @@ async function lagreTagging(patch) {
   // Kept as the default for the next site too, so a new building starts from
   // what you last used rather than from blank.
   savePrefs({taggingStd: naa});
-  if (!k) { tegnTagging(); return; }
+  if (!k) return;
   try {
     const d = await api('/api/sites/tagging', {key: k, tagging: naa});
     if (d.status === 'done') MINNE[k] = d.site;
   } catch { /* lokalt er lagret uansett */ }
-  tegnTagging();
-}
-
-/* What a tag will look like with these settings, built from a real point on
-   the device if there is one - a preview from invented data proves nothing. */
-function tagEksempel(t) {
-  const p = (S.points || []).find(x => x.name) || null;
-  const navn = p ? shortName(p) || p.name : 'RT401';
-  const biter = [];
-  if (t.prefiks) biter.push('+' + t.prefiks);
-  if (t.cluster) biter.push(t.cluster);
-  const system = t.byggIdForst ? '360.003' : '003.360';
-  return (biter.join('') || '+PREFIKS') + t.skilletegn + system + '-' +
-         String(navn).split(/[.\/]/).pop().slice(0, 18);
-}
-
-function tegnTagging() {
-  const el = $('settTagging');
-  if (!el) return;
-  const t = tagInnstillinger();
-  const k = tagNokkel();
-  const site = k && MINNE[k] ? MINNE[k] : null;
-
-  const felt = (id, etikett, hjelp, verdi, attr = '') => `
-    <div class="tg-rad">
-      <label for="${id}">${etikett}${hjelp ? `<small>${hjelp}</small>` : ''}</label>
-      <input type="text" id="${id}" value="${esc(verdi ?? '')}" spellcheck="false"${attr}>
-    </div>`;
-
-  el.innerHTML = `
-    <div class="tg-anlegg">${k
-      ? T(`Lagres for ${esc(site && site.navn ? site.navn : k)}`, `Saved for ${esc(site && site.navn ? site.navn : k)}`)
-      : 'Ingen område skannet ennå — lagres som standard for neste anlegg'}</div>
-
-    <div class="tg-gruppe">
-      <div class="tema-tittel">Identifikasjon</div>
-      ${felt('tgPrefiks', 'Prefiks', 'Foran systemnummeret', t.prefiks)}
-      ${t.prefiks.length > PREFIKS_MAKS
-        ? `<div class="tg-advarsel">Prefikset er ${t.prefiks.length} tegn.
-             Over ${PREFIKS_MAKS} blir taggen tung å lese i Niagara.</div>` : ''}
-      ${felt('tgCluster', 'Cluster', '', t.cluster)}
-      ${felt('tgAnlegg', 'Anleggsnavn', '', t.anleggsnavn)}
-      ${felt('tgProsjekt', 'Prosjekt', '', t.prosjekt)}
-    </div>
-
-    <div class="tg-gruppe">
-      <div class="tema-tittel">Oppbygging</div>
-      <div class="tg-rad">
-        <label for="tgSkille">Skilletegn<small>Mellom prefiks og system</small></label>
-        <span class="sel-boks"><select id="tgSkille">
-          ${['=', '-', '.', '_', ':'].map(x =>
-            `<option value="${x}"${t.skilletegn === x ? ' selected' : ''}>${x}</option>`).join('')}
-        </select></span>
-      </div>
-      <div class="tg-rad avkryss">
-        <input type="checkbox" id="tgByggForst"${t.byggIdForst ? ' checked' : ''}>
-        <label for="tgByggForst">Bygg-ID først
-          <small>Bygg-ID foran systemnummeret</small></label>
-      </div>
-      <div class="tg-rad">
-        <label for="tgLedd">Ventilasjonssystemets ledd<small>Hvilket ledd systemnummeret står i</small></label>
-        <span class="sel-boks"><select id="tgLedd">
-          ${['1', '2', '3', '4'].map(x =>
-            `<option value="${x}"${t.ventLedd === x ? ' selected' : ''}>${x}</option>`).join('')}
-        </select></span>
-      </div>
-      <div class="tg-rad">
-        <label for="tgSorter">Sortering</label>
-        <span class="sel-boks"><select id="tgSorter">
-          <option value="etasje"${t.sorter === 'etasje' ? ' selected' : ''}>Etasje</option>
-          <option value="vent"${t.sorter === 'vent' ? ' selected' : ''}>Ventilasjonssystem</option>
-        </select></span>
-      </div>
-    </div>
-
-    <div class="tg-gruppe">
-      <div class="tema-tittel">Slik blir det</div>
-      <div class="tg-forhaandsvis">${esc(tagEksempel(t))}</div>
-      <div class="tg-foot">
-        <button class="btn primary" id="tgVar">Åpne NABO</button>
-        <button class="btn" id="tgKopier">Kopier oppsettet</button>
-        <button class="btn" id="tgNullstill">Tøm</button>
-      </div>
-    </div>`;
-
-  const bind = (id, noekkel) => {
-    const e = $(id);
-    if (!e) return;
-    e.onchange = () => lagreTagging({[noekkel]: e.type === 'checkbox' ? e.checked : e.value});
-  };
-  bind('tgPrefiks', 'prefiks'); bind('tgCluster', 'cluster');
-  bind('tgAnlegg', 'anleggsnavn'); bind('tgProsjekt', 'prosjekt');
-  bind('tgSkille', 'skilletegn'); bind('tgByggForst', 'byggIdForst');
-  bind('tgLedd', 'ventLedd'); bind('tgSorter', 'sorter');
-
-  const kop = $('tgKopier');
-  if (kop) kop.onclick = () => {
-    // Laid out as label and value on separate lines so it can be read while
-    // filling the fields on the other screen.
-    const linjer = [
-      ['Prefix', t.prefiks], ['Cluster', t.cluster],
-      ['Anleggsnavn', t.anleggsnavn], ['Prosjekt', t.prosjekt],
-      ['Delimiter', t.skilletegn],
-      ['Bygg-ID først', t.byggIdForst ? 'ja' : 'nei'],
-      ['Ventilasjonsledd', t.ventLedd], ['Sortering', t.sorter],
-    ].filter(([, v]) => v !== '' && v !== undefined)
-     .map(([a, b]) => `${a}: ${b}`).join('\n');
-    navigator.clipboard.writeText(linjer)
-      .then(() => toast('Innstillingene er kopiert'))
-      .catch(() => toast('Kunne ikke kopiere', true));
-  };
-  const nul = $('tgNullstill');
-  if (nul) nul.onclick = () => {
-    if (!confirm('Tømme taggeinnstillingene for dette anlegget?')) return;
-    lagreTagging(Object.assign({}, TAG_STD));
-  };
 }
 
 /* ------------------------------------------------------------------ tema */
@@ -4421,8 +4221,6 @@ function commands() {
          return skjult ? skjult + ' objekter skjult nå' : ''; }});
   add('Visning', 'Innstillinger…', () => { closeCmd(); openTema(); });
   add('Eksport', 'NABO — tagger og Variabel-fil…', () => { closeCmd(); aapneNabo(); }, {hint: 'N'});
-  add('Eksport', 'Taggeinnstillinger for dette anlegget…',
-      () => { closeCmd(); openTema('tagging'); });
   add('Visning', 'Utseende — farger, bilder og størrelse…',
       () => { closeCmd(); openTema('utseende'); });
   add('Visning', 'Kolonner…', () => { closeCmd(); openCols(); });
@@ -4459,9 +4257,6 @@ function commands() {
   add('Visning', 'Tunnelen (spill)', () => { closeCmd(); aapneTunnel(); }, {when: () => !S.activeDev});
   add('Handling', 'Ukeprogram — vis og rediger', () => { closeCmd(); $('schBtn').click(); }, {when: harEnhet});
 
-  add('Anlegg', 'Lagre anlegg', () => { closeCmd(); saveProject(); }, {when: () => S.devices.length > 0});
-  add('Anlegg', 'Anlegg jeg har vært på…', () => { closeCmd(); openMinne(); });
-  add('Anlegg', 'Åpne anlegg…', () => { closeCmd(); openProjects(); });
   add('Anlegg', 'Koble til på nytt', () => $('reconnBtn').click());
 
   for (const d of S.devices) {
@@ -6087,105 +5882,6 @@ function syncMenuStates() {
       : S.namePrefix ? T(`Utelater «${S.namePrefix}» fra tabellen — fullt navn i tooltip, søk og eksport`, `Leaves “${S.namePrefix}” out of the table — full name in the tooltip, search and export`)
                      : 'På, men punktnavnene her har ingen felles start å utelate';
   }
-}
-
-/* ------------------------------------------------------------------ project */
-/* A site is saved server-side so a colleague opening the same instance sees
-   the same sites. Snapshots accumulate per save, which is what makes
-   "what changed since last visit" possible. */
-function projectPayload() {
-  return {
-    devices: S.devices,
-    watch: S.watch.map(w => ({ip: w.ip, objid: w.objid, name: w.name, unit: w.unit})),
-    range: $('rangeInput').value.trim(),
-    iface: S.localAddr,
-    snapshot: S.snapshot || null,
-    // The object list is what costs minutes to read; live values cost one
-    // poll. So the structure is persisted and the values deliberately are
-    // not - showing yesterday's temperature as if it were current would be
-    // worse than showing nothing.
-    points: Object.fromEntries(Object.entries(S.cache).map(([ip, pts]) => [ip,
-      pts.map(p => { const {value, status, _hay, ...rest} = p; return rest; })])),
-    pointsMeta: S.cacheMeta,
-    // Model and firmware are facts about the device; the clock reading is a
-    // measurement that was true at the time. Saving the drift would show
-    // yesterday's number as if it were current, so only the static half is
-    // kept and the clock is re-read on the next visit.
-    identity: Object.fromEntries(Object.entries(S.identity).map(([ip, id]) => {
-      const {'clock-drift': _d, 'device-time': _t, ...rest} = id;
-      return [ip, rest];
-    })),
-  };
-}
-
-async function saveProject() {
-  const suggested = loadPrefs().lastProject || '';
-  const name = prompt('Navn på anlegget:', suggested);
-  if (!name) return;
-  S.prosjektNavn = name;
-  const d = await api('/api/projects/save', {name, data: projectPayload()});
-  if (d.status !== 'done') { toast(d.error || 'Lagring feilet', true); return; }
-  savePrefs({lastProject: d.name});
-  toast(`Lagret «${d.name}» · ${d.snapshots} snapshot(s)`);
-}
-
-async function openProjects() {
-  const d = await (await fetch('/api/projects')).json();
-  const list = d.projects || [];
-  const box = $('prjList');
-  if (!list.length) {
-    box.innerHTML = '<div class="gs-empty">Ingen lagrede anlegg ennå</div>';
-  } else {
-    box.innerHTML = list.map((p, i) => `<div class="prj-row">
-      <button class="prj-open" data-n="${esc(p.name)}">
-        <span class="prj-name">${esc(p.name)}</span>
-        <span class="prj-meta">${p.devices} enheter · ${p.watch} overvåket · ${p.snapshots} snapshot(s)</span>
-        <span class="prj-date">${p.saved ? new Date(p.saved * 1000).toLocaleString('no') : ''}</span>
-      </button>
-      <button class="prj-del" data-d="${esc(p.name)}" title="Slett">✕</button>
-    </div>`).join('');
-    box.querySelectorAll('.prj-open').forEach(b => b.onclick = () => loadProject(b.dataset.n));
-    box.querySelectorAll('.prj-del').forEach(b => b.onclick = async () => {
-      if (!confirm(`Slette «${b.dataset.d}»?`)) return;
-      await api(`/api/projects/${encodeURIComponent(b.dataset.d)}/delete`);
-      openProjects();
-    });
-  }
-  $('prjOverlay').hidden = false;
-}
-function closeProjects() { $('prjOverlay').hidden = true; }
-
-async function loadProject(name) {
-  const d = await (await fetch('/api/projects/' + encodeURIComponent(name))).json();
-  if (d.status !== 'done') { toast(d.error || 'Kunne ikke åpne', true); return; }
-  const p = d.data || {};
-  closeProjects();
-  // EDE wants a project name in its header; the loaded project is the best
-  // answer we have for what this set of devices is called.
-  S.prosjektNavn = name;
-
-  S.devices = p.devices || [];
-  S.cache = {}; S.cacheMeta = p.pointsMeta || {}; S.identity = p.identity || {};
-  for (const [ip, pts] of Object.entries(p.points || {})) {
-    S.cache[ip] = pts.map(q => Object.assign({value: null, status: []}, q));
-  }
-  S.activeDev = null; S.points = []; S.pointIndex = new Map();
-  S.selected = null; S.sel.clear();
-  S.watch = (p.watch || []).map(w => Object.assign({hist: [], value: null}, w));
-  if (p.range) $('rangeInput').value = p.range;
-
-  // Restore the most recent snapshot so "changed since" works immediately.
-  const snaps = p.snapshots || [];
-  if (snaps.length) {
-    S.snapshot = snaps[snaps.length - 1].values;
-    S.snapAt = new Date(snaps[snaps.length - 1].ts * 1000);
-    $('sbSnap').innerHTML = `<b>snapshot</b> ${S.snapAt.toLocaleDateString('no')}`;
-  }
-  S.projectSnaps = snaps;
-
-  renderDevices(); renderCtx(); renderPoints(); renderInspector(); renderWatch();
-  savePrefs({lastProject: name});
-  toast(T(`Åpnet «${name}» · ${S.devices.length} enheter${snaps.length ? ` · snapshot fra ${S.snapAt.toLocaleDateString('no')}` : ''}`, `Opened “${name}” · ${S.devices.length} devices${snaps.length ? ` · snapshot from ${S.snapAt.toLocaleDateString('en-GB')}` : ''}`));
 }
 
 /* ------------------------------------------------------------ global search */
@@ -8803,7 +8499,7 @@ function exportEDE() {
 
   const lines = [
     pad(['#Engineering-Data-Exchange']),
-    pad(['PROJECT_NAME', f(tagInnstillinger().prosjekt || S.prosjektNavn
+    pad(['PROJECT_NAME', f(tagInnstillinger().prosjekt
         || dev.object_name || `Enhet ${dev.device_instance}`)]),
     pad(['TIMESTAMP_OF_LAST_CHANGE', stempel]),
     pad(['AUTHOR_OF_LAST_CHANGE', 'NABE']),
@@ -8860,20 +8556,6 @@ function exportEDE() {
     filer.push([stLinjer.join('\r\n') + '\r\n', `${basis}_StateTexts.csv`]);
   }
 
-  /* The tag generator's own settings, written beside the export. They are not
-     part of EDE - nothing will read them automatically - but they travel with
-     the file, so the answers are next to the data they belong to instead of
-     being retyped from memory a week later. */
-  const tg = tagInnstillinger();
-  if (Object.values(tg).some(v => v !== '' && v !== false)) {
-    const tgL = ['#Tag generator settings', '#Felt;Verdi',
-      `Prefix;${f(tg.prefiks)}`, `Cluster;${f(tg.cluster)}`,
-      `Anleggsnavn;${f(tg.anleggsnavn)}`, `Prosjekt;${f(tg.prosjekt)}`,
-      `Delimiter;${f(tg.skilletegn)}`,
-      `BuildingIdFirst;${tg.byggIdForst ? 'Y' : 'N'}`,
-      `VentilationSegment;${f(tg.ventLedd)}`, `Sort;${f(tg.sorter)}`];
-    filer.push([tgL.join('\r\n') + '\r\n', `${basis}_TagSettings.csv`]);
-  }
 
   // Static lookup tables. They carry no site data, but Beckhoff ships them
   // with every export and a reader that expects the set should find it. The
@@ -8989,7 +8671,7 @@ document.addEventListener('click', e => {
     $('helpPop').hidden = true;
   }
 });
-$('scanBtn').onclick = runScan;
+$('scanBtn').onclick = () => runScan();
 $('rangeInput').onkeydown = e => { if (e.key === 'Enter' && !$('scanBtn').disabled) runScan(); };
 
 let qTimer;
@@ -9030,7 +8712,7 @@ $('snapBtn').onclick = takeSnapshot;
 $('csvBtn').onclick = exportCSV;
 $('watchClear').onclick = () => { S.watch = []; renderWatch(); renderPoints(); };
 $('edeBtn').onclick = exportEDE;
-$('varBtn').onclick = () => { closeMenus(); lagVarFil(); };
+$('varBtn').onclick = () => { closeMenus(); aapneNabo(); };
 document.querySelectorAll('.cmd-segk').forEach(b =>
   b.onclick = () => settCmdSeg(b.dataset.seg));
 
@@ -9055,10 +8737,8 @@ $('gsInput').oninput = () => {
   renderGlobal();
 };
 // Firing an action from a menu should also dismiss it.
-['snapBtn','csvBtn','edeBtn','edeCmpBtn','schBtn','wlogBtn','prjSave','prjOpen','reconnBtn','denseBtn','roBtn']
+['snapBtn','csvBtn','edeBtn','edeCmpBtn','schBtn','wlogBtn','reconnBtn','denseBtn','roBtn']
   .forEach(id => { const el = $(id); if (el) el.addEventListener('click', () => closeMenus()); });
-$('prjSave').onclick = saveProject;
-$('prjOpen').onclick = openProjects;
 $('edeCmpBtn').onclick = startEdeCompare;
 $('colsBtn').onclick = openCols;
 $('colsReset').onclick = () => {
@@ -9068,7 +8748,6 @@ $('colsReset').onclick = () => {
 $('rescanBtn').onclick = () => { RESCAN.on ? rescanStop() : rescanStart();
   toast(RESCAN.on ? T('Overvåker nettet i bakgrunnen', 'Watching the network in the background') : T('Overvåking av', 'Watching off')); };
 $('rescanNow').onclick = () => { toast(T('Søker…', 'Searching…')); rescanOnce(true); };
-$('minneBtn').onclick = () => { closeMenus(); openMinne(); };
 $('motionBtn').onclick = () => {
   savePrefs({utenBevegelse: !bevegelseAv()});
   brukBevegelse();
@@ -9085,7 +8764,7 @@ document.querySelectorAll('.sett-fane').forEach(f => {
 
 /* One place that knows which panels exist, so adding a tab is one entry here
    rather than a chain of booleans that grows a term each time. */
-const SETT_FANER = {oppsett: 'settOppsett', tagging: 'settTagging', utseende: 'temaBody'};
+const SETT_FANER = {oppsett: 'settOppsett', utseende: 'temaBody'};
 
 function visSettFane(navn) {
   const valgt = SETT_FANER[navn] ? navn : 'oppsett';
@@ -9103,7 +8782,6 @@ function visSettFane(navn) {
     if (el) el.hidden = n !== valgt;
   });
   if (valgt === 'utseende') tegnTema();
-  if (valgt === 'tagging') tegnTagging();
 }
 $('temaEksport').onclick = temaEksporter;
 $('temaImport').onclick = temaImporter;
@@ -9426,22 +9104,18 @@ document.addEventListener('keydown', e => {
     e.preventDefault(); diagApne(); return;
   }
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'f') { e.preventDefault(); openGlobal(); return; }
-  // The keys every Mac and Windows app has: save, open, settings.
+  // The key every Mac and Windows app has for settings.
   if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && $('naboOverlay').hidden) {
     const k = e.key.toLowerCase();
-    if (k === 's') { e.preventDefault(); $('prjSave')?.click(); return; }
-    if (k === 'o') { e.preventDefault(); $('prjOpen')?.click(); return; }
     if (e.key === ',') { e.preventDefault(); $('temaBtn')?.click(); return; }
   }
   if (e.key === 'Escape') {
     if (!$('diagOverlay').hidden) { diagLukk(); return; }
     if (!$('cmpOverlay').hidden) { closeSammenlign(); return; }
     if (!$('raportOverlay').hidden) { closeRapport(); return; }
-    if (!$('minneOverlay').hidden) { closeMinne(); return; }
     if (!$('temaOverlay').hidden) { closeTema(); return; }
     if (!$('schOverlay').hidden) { closeSchedules(); return; }
     if (!$('edeOverlay').hidden) { closeEde(); return; }
-    if (!$('prjOverlay').hidden) { closeProjects(); return; }
     if (!$('cmdOverlay').hidden) { closeCmd(); return; }
     if (!$('colsOverlay').hidden) { closeCols(); return; }
     if (!$('gsOverlay').hidden) { closeGlobal(); return; }
@@ -9828,14 +9502,14 @@ function diagLukk() { const o = $('diagOverlay'); if (o) { o.hidden = true; DIAG
    out half-translated. */
 
 const ORDBOK = {
+  'Mellomrom betyr og: KG32 RT601 finner alle RT601 på KG32. -ord utelater. "to ord" søker som frase.':
+    'A space means and: KG32 RT601 finds every RT601 on KG32. -word leaves out. "two words" searches as a phrase.',
   'Søk ved oppstart': 'Search on start',
   'Lest': 'Read',
   'Søk i anlegget': 'Search the plant',
   'Garderobe…': 'Wardrobe…',
   'Klær til NABE og NABO, låst opp av arbeid': 'Clothes for NABE and NABO, unlocked by work',
   'Søk i alle punkter på alle enheter som er lest (Ctrl+F)': 'Search every point on every device read (Ctrl+F)',
-  'Mellomrom betyr og: KG32 RT601 finner alle RT601 på KG32. -ord utelater. "to ord" søker som frase.':
-    'A space means and: KG32 RT601 finds every RT601 on KG32. -word leaves out. "two words" searches as a phrase.',
   'Skanner kabelen inn i anlegget, eller anlegget du var på sist, når NABE åpnes':
     'Scans the cable into the plant, or the site you were at last, when NABE opens',
   'Menyer, dialoger, temabytte og NABE selv beveger seg. Følger Windows til du velger her':
@@ -9846,7 +9520,6 @@ const ORDBOK = {
   'med feil': 'with a fault',
   'Prioritetsarray': 'Priority array',
   'Variabel-fil…': 'Variabel file…',
-  'Variabel-fil for NTI-import i Niagara, med taggingen fra Innstillinger': 'Variabel file for NTI import into Niagara, with the tagging from Settings',
   'Punkt': 'Point',
   'avvik': 'difference',
   'Ett eller flere IP-områder: 10.75.1.0/24, én IP, eller 10.75.1.10-40. Skill dem med komma, semikolon eller mellomrom — de skannes etter tur inn i én liste. I BBMD-modus: IP-en til byggets BBMD.':
@@ -9859,13 +9532,8 @@ const ORDBOK = {
   'Sweep — grundig': 'Sweep — thorough',
   'BBMD — via én IP': 'BBMD — via one IP',
   'Sweep — rask': 'Sweep — fast',
-  'Who-Is (kringkasting)': 'Who-Is (broadcast)',
   'Laster nettverkskort…': 'Loading adapters…',
   'Nettverkskortet forespørslene sendes fra': 'The adapter requests are sent from',
-  'Ett eller flere IP-områder. Skill dem med komma, semikolon eller mellomrom — de skannes etter tur inn i én liste.':
-    'One or more IP ranges. Separate them with a comma, semicolon or space — they are scanned in turn into a single list.',
-  'Grundig prøver stille adresser en gang til, langsomt — finner enheter som ellers mistes over VPN. Rask tar én runde. Who-Is blokkeres ofte.':
-    'Thorough re-probes silent addresses once more, slowly — it finds devices that are otherwise missed over a VPN. Fast takes one pass. Who-Is is often blocked.',
   'Bytt mellom mørk og lys visning': 'Switch between dark and light',
   'Bytt visning': 'Switch appearance',
   'Hurtigtaster': 'Keyboard shortcuts',
@@ -9896,11 +9564,8 @@ const ORDBOK = {
   'Lag Variabel-fil': 'Make Variabel file',
   'Andre tjenester': 'Other services',
   'Svarer adressen på noe i det hele tatt?': 'Does the address answer anything at all?',
-  'Ingenting svarer på denne adressen': 'Nothing answers on this address',
   'Brannmuren': 'Firewall',
   'Slipper Windows inn svarene?': 'Does Windows let the answers in?',
-  'Kunne ikke lese brannmuren': 'Could not read the firewall',
-  'Svar som kommer som kringkasting slipper inn.': 'Answers sent as broadcasts get in.',
   'Fredag etter to. Ingen nye overstyringer nå, ok?': 'Friday after two. No new overrides now, ok?',
   'Sen kveld med igangkjøring? Jeg holder deg med selskap.': 'Late commissioning night? I will keep you company.',
   'Hvem banker?': 'Who is knocking?',
@@ -9956,21 +9621,14 @@ const ORDBOK = {
   'Enhetene glir inn her etter hvert som de svarer.': 'Devices glide in here as they answer.',
   'Sjekk at': 'Check that',
   'Fra': 'From',
-  'viser nettverkskortet som når anlegget.': 'shows the adapter that reaches the plant.',
-  'Skriv IP-området i': 'Enter the IP range in',
   ', f.eks.': ', e.g.',
   'Trykk': 'Press',
-  '— enhetene dukker opp her.': '— the devices appear here.',
-  'Fest punkter med ☆ (eller mellomrom) — også fra andre enheter':
-    'Pin points with ☆ (or space) — from other devices too',
   'Skriv en IP, et område eller navnet på et anlegg øverst til venstre. NABE velger nettverkskort selv.':
     'Type an IP, a range or a site name at the top left. NABE picks the adapter itself.',
   'Trykk Enter eller Skann. Anlegg du har vært på står under feltet.':
     'Press Enter or Scan. Sites you have visited are listed under the field.',
   'Hopp til skannefeltet': 'Jump to the scan field',
   'Åpne NABO, naboen': 'Open NABO, the neighbour',
-  'Skriv IP-området, f.eks.': 'Enter the IP range, e.g.',
-  ', og trykk Skann.': ', then press Scan.',
   'Klikk en enhet for å laste punktene.': 'Click a device to load its points.',
   'Klikk et punkt for detaljer, trend og skriving.':
     'Click a point for details, trend and writing.',
@@ -9978,8 +9636,6 @@ const ORDBOK = {
   /* --- search and filtering --- */
   'Søk i punkter': 'Search points',
   'Søk… (/) — flere ord = alle må treffe': 'Search… (/) — several words = all must match',
-  'Mellomrom betyr og: KG32 RT601 finner alle RT601 på KG32.  -ord utelater.  "to ord" søker som frase.':
-    'A space means and: KG32 RT601 finds every RT601 on KG32.  -word excludes.  "two words" searches as a phrase.',
   'Søk i alle enheter…': 'Search every device…',
   'Søk i alle enheter samtidig': 'Search every device at once',
   'Søk etter handling eller enhet…': 'Search for an action or a device…',
@@ -10000,13 +9656,10 @@ const ORDBOK = {
   'Kun skrivbare': 'Only writable',
   'kun verdier': 'values only',
   'leverandør': 'vendor',
-  'Leverandør': 'Vendor',
   'IP-område': 'IP range',
   'ingen felles start': 'no common prefix',
   'På, men punktnavnene her har ingen felles start å utelate':
     'On, but the point names here have no common prefix to drop',
-  'Menyer, dialoger, temabytte og NABE selv beveger seg. Følger\n              Windows til du velger her':
-    'Menus, dialogs, the theme switch and NABE himself move. Follows\n              Windows until you choose here',
 
   /* --- table and selection --- */
   'Kopier': 'Copy',
@@ -10032,7 +9685,6 @@ const ORDBOK = {
   'Lagre / åpne anlegg': 'Save / open a site',
   'Fest punkter med ☆ eller mellomrom. De følges live, også fra andre enheter.':
     'Pin points with ☆ or space. They are followed live, from other devices too.',
-  'Søk i anlegg, leverandører og enheter': 'Search sites, vendors and devices',
   'Live på': 'Live on',
   'Live av/på': 'Live on/off',
   'Start/stopp live-oppdatering (L)': 'Start/stop live updating (L)',
@@ -10044,12 +9696,7 @@ const ORDBOK = {
 
   /* --- menu: sites --- */
   'Anlegg': 'Sites',
-  'Lagre anlegg': 'Save site',
-  'Åpne anlegg…': 'Open site…',
   'Anlegg jeg har vært på': 'Sites I have visited',
-  'Anlegg jeg har vært på…': 'Sites I have visited…',
-  'Hvert skann huskes med området, hvilke enheter som svarte og når. Klikk et anlegg for å skanne det på nytt.':
-    'Every scan is remembered with its range, which devices answered and when. Click a site to scan it again.',
   'Sammenlikn to enheter': 'Compare two devices',
   'Sammenlign to enheter…': 'Compare two devices…',
 
@@ -10071,7 +9718,6 @@ const ORDBOK = {
   'Vis': 'View',
   'Flere rader på skjermen, mindre luft': 'More rows on screen, less air',
   'Innstillinger…': 'Settings…',
-  'Ctrl+K for alt': 'Ctrl+K for everything',
   'Endringer vises med en gang og lagres på denne maskinen. Lys og mørk visning huskes hver for seg.':
     'Changes apply at once and are stored on this machine. Light and dark are remembered separately.',
   'Blokkerer all skriving til anlegget': 'Blocks all writing to the plant',
@@ -10140,7 +9786,6 @@ const ORDBOK = {
   'Ingen enheter svarte': 'No devices answered',
   'Ingen BACnet-enheter i omraadet': 'No BACnet devices in the range',
   'Ukjent område': 'Unknown range',
-  'Ingen område skannet ennå — lagres som standard for neste anlegg': 'No range scanned yet — saved as the default for the next site',
   'Skann på nytt': 'Scan again',
   'Prøv igjen': 'Try again',
   'Prøv «Sweep — grundig»': 'Try “Sweep — thorough”',
@@ -10181,7 +9826,6 @@ const ORDBOK = {
   'Ingen skrivbare punkter valgt': 'No writable points selected',
   'Ingen handling matcher': 'No action matches',
   'Ingen ur matcher': 'No schedule matches',
-  'Ingen lagrede anlegg ennå': 'No saved sites yet',
   'Ingen lagret ennå': 'None saved yet',
   'Ingen skrivinger logget': 'No writes logged',
   'Loggen er tom': 'The log is empty',
@@ -10200,7 +9844,6 @@ const ORDBOK = {
   'Velg to forskjellige enheter': 'Pick two different devices',
   'Åpne minst to enheter først — sammenlikningen bruker det som er lest': 'Open at least two devices first — the comparison uses what has been read',
   'Velg et punkt i tabellen for detaljer, live trend og skriving.': 'Pick a point in the table for details, a live trend and writing.',
-  'Slå på Live for å se trend': 'Turn Live on to see a trend',
   'Skriv verdi': 'Write value',
   'Skriv verdi…': 'Write value…',
   'Skriv verdi @ prioritet': 'Write value @ priority',
@@ -10222,7 +9865,6 @@ const ORDBOK = {
   'Lesemodus er på — skriving er blokkert.': 'Read-only mode is on — writing is blocked.',
   'Lesemodus på — skriving blokkert': 'Read-only — writing blocked',
   'Lesemodus er på — ukeprogrammet kan ikke endres.': 'Read-only mode is on — the schedule cannot be changed.',
-  'Skrivelogg (nyeste først)': 'Write log (newest first)',
   'etter 5 min': 'after 5 min',
   'etter 15 min': 'after 15 min',
   'etter 30 min': 'after 30 min',
@@ -10255,7 +9897,6 @@ const ORDBOK = {
   'Ukeprogram og trendlogger på enheten følger denne klokka.': 'The schedule and trend logs on the device follow this clock.',
   'står på': 'is at',
   'Hva heter dette anlegget?': 'What is this site called?',
-  'Navn på anlegget:': 'Site name:',
   'Navn på visningen:': 'View name:',
   'Lagre nåværende…': 'Save the current one…',
   'Lagre notat': 'Save note',
@@ -10265,12 +9906,6 @@ const ORDBOK = {
   'delt med fellesserveren': 'shared with the common server',
   'lagret her · fellesserveren er ikke tilgjengelig': 'saved here · the common server is unreachable',
   'lagret her, men ikke delt — fellesserveren svarte ikke': 'saved here, but not shared — the common server did not answer',
-  'Taggeinnstillinger for dette anlegget…': 'Tag settings for this site…',
-  'Tømme taggeinnstillingene for dette anlegget?': 'Clear the tag settings for this site?',
-  'Bygg-ID først': 'Building ID first',
-  'Foran systemnummeret': 'Before the system number, as in the old generator',
-  'Hvilket ledd systemnummeret står i': 'Which segment the system number is in',
-  'Mellom prefiks og system': 'Between the prefix and the system',
   'Finnes bare i anlegget': 'Only in the plant',
   'Ulikt navn': 'Different name',
   'Endret verdi': 'Changed value',
@@ -10289,11 +9924,9 @@ const ORDBOK = {
   'Fant ikke EDE-kolonneoverskriften (object-name / object-type).': 'Could not find the EDE column heading (object-name / object-type).',
   'Overvåkingshistorikk eksportert': 'Watch history exported',
   'Rapporten er kopiert - lim inn der du vil': 'The report is copied — paste it wherever you want',
-  'Innstillingene er kopiert': 'The settings are copied',
   'Kunne ikke kopiere': 'Could not copy',
   'Kopier navn': 'Copy name',
   'Kopier punktnavn': 'Copy the point name',
-  'Kopier oppsettet': 'Copy the settings',
   'Hva du fant, hva som gjenstår, hva neste mann bør vite…': 'What you found, what is left, what the next person should know…',
   'Ta et snapshot forst - rapporten viser hva som har endret seg siden da': 'Take a snapshot first — the report shows what has changed since then',
   'Fjern dette filteret': 'Remove this filter',
@@ -10355,7 +9988,6 @@ const ORDBOK = {
   'Bildet er for lyst — dempet det og gjorde flatene mer dekkende': 'The image is too light — dimmed it and made the surfaces more opaque',
   '% — teksten er lesbar igjen': '% — the text is legible again',
   'Kunne ikke lese temafilen': 'Could not read the theme file',
-  'Kunne ikke åpne': 'Could not open',
   'Navn': 'Name',
   'Verdi': 'Value',
   'Enhet': 'Device',
@@ -10377,7 +10009,6 @@ const ORDBOK = {
   'Peker over': 'Pointing at',
   'viser de 40 nyeste': 'showing the 40 newest',
   'Punkter lest': 'Points read',
-  'Punkter naa': 'Points now',
   'Slik bruker du den': 'How to use it',
   'Åpne minst to enheter først': 'Open at least two devices first',
   'på denne enheten': 'on this device',
@@ -10425,11 +10056,9 @@ const ORDBOK = {
   'Kolonner…': 'Columns...',
   'Kolonner…': 'Columns…',
   'Lys visning': 'Light appearance',
-  'Mørk visning': 'Dark appearance',
   'Naviger': 'Navigate',
   'Overvåk nettet kontinuerlig': 'Watch the network continuously',
   'Sesjonsrapport…': 'Session report…',
-  'Sesjonsrapport...': 'Session report...',
   'Skann IP-område': 'Scan an IP range',
   'Skrivelogg': 'Write log',
   'Visning': 'Display',
@@ -10438,15 +10067,11 @@ const ORDBOK = {
   /* --- found by rendering the device screens with data --- */
   'Beskrivelse': 'Description',
   'Objekt': 'Object',
-  'Objekt-ID': 'Object ID',
   'Kolonner': 'Columns',
-  'Lagrede anlegg': 'Saved sites',
   'Rapport': 'Report',
-  'Skriv minst to tegn': 'Type at least two characters',
   'Ta snapshot': 'Take a snapshot',
   'Tilbakestill': 'Reset',
   'Ukeprogram…': 'Schedule…',
-  'Ukeprogram...': 'Schedule...',
   'leser anlegget:': 'reading the site:',
   'leser…': 'reading…',
   '⏏ Frigi': '⏏ Release',
@@ -10454,7 +10079,6 @@ const ORDBOK = {
   'Frigi': 'Release',
   'Fest': 'Pin',
   'Prioritet': 'Priority',
-  'Enheter lest': 'Devices read',
   'Trend': 'Trend',
   'Status': 'Status',
   'Type': 'Type',
@@ -10463,7 +10087,6 @@ const ORDBOK = {
   'Les punktene på nytt': 'Read the points again',
   'Start/stopp live-oppdatering': 'Start/stop live updating',
   'leverandorer': 'vendors',
-  'leverandorer / IP-omrader': 'vendors / IP ranges',
   /* --- check an address --- */
   'Sjekk én': 'Check one',
   'Sjekk én': 'Check one',
@@ -10487,25 +10110,7 @@ const ORDBOK = {
   /* Sentences the diagnose endpoint returns as free text. They are long and
      specific, so they live here rather than being rebuilt client-side from a
      key - the server stays the one place that decides what a step means. */
-  'Ingen andre programmer kjemper om porten.':
-    'No other program is competing for the port.',
-  'Trafikken går direkte, uten ruter.': 'The traffic goes direct, without a router.',
-  'Ingen forbindelse startet': 'No connection started',
-  'Velg nettverkskort øverst til venstre og koble til.':
-    'Pick an adapter at the top left and connect.',
-  'Adressen er ikke en vanlig IP - trolig en enhet bak en gateway. Da går trafikken via ruteren, og samme subnett gjelder ikke.':
-    'The address is not a plain IP - most likely a device behind a gateway. The traffic then goes via the router, and being on the same subnet does not apply.',
-  'Den må rutes. Det kan gå helt fint, men da må ruteren slippe BACnet gjennom - og kringkasting (Who-Is) stopper som regel her. Bruk sweep.':
-    'It has to be routed. That can work fine, but the router has to let BACnet through - and broadcast (Who-Is) usually stops here. Use sweep.',
-  'Adressen er i live og nås herfra.': 'The address is alive and reachable from here.',
-  'Det er ikke fasit. Mange regulatorer og brannmurer slipper ikke ICMP, og svarer likevel på BACnet. Se hva neste steg sier før du konkluderer.':
-    'That is not the last word. Plenty of controllers and firewalls drop ICMP and still answer BACnet. See what the next step says before you conclude.',
   'Ikke tilkoblet': 'Not connected',
-  'Start forbindelsen først.': 'Start the connection first.',
-  'Oppslaget feilet': 'The lookup failed',
-  'Adressen svarer ikke på UDP 47808. Er det riktig IP? Bruker anlegget en annen BACnet-port? Sitter enheten bak en gateway, er det gatewayens IP du skal spørre, ikke enhetens.':
-    'The address does not answer on UDP 47808. Is that the right IP? Does the plant use a different BACnet port? If the device sits behind a gateway, it is the gateway IP you ask, not the device one.',
-  'Ukjent steg': 'Unknown step',
   /* the conclusions */
   'Enheten svarer.': 'The device answers.',
   'Start her: et annet program har porten.': 'Start here: another program has the port.',
@@ -10516,38 +10121,17 @@ const ORDBOK = {
   /* The conclusion tails. A <b> splits the sentence, so these are the halves
      that follow it, and they are here in full: an exact match short-circuits
      before the phrase pass can touch them. */
-  'Den er lest herfra nå, så det som ikke virker ligger et annet sted enn i forbindelsen.':
-    'It was read from here just now, so whatever is not working is somewhere other than the connection.',
-  'Så lenge det holder UDP 47808 er det tilfeldig hvem som får svarene, og du kan lete etter alt annet forgjeves.':
-    'While it holds UDP 47808 it is chance who gets the replies, and you can hunt for everything else in vain.',
-  'Da er det ikke nettveien. Sjekk at enheten faktisk snakker BACnet/IP på 47808, og prøv «Sweep — grundig» — stille adresser svarer ofte på andre forsøk.':
-    'So it is not the network path. Check that the device really speaks BACnet/IP on 47808, and try “Sweep — thorough” — silent addresses often answer on the second attempt.',
-  'Den må rutes. Sjekk at du står på riktig nettverkskort, og at ruteren slipper BACnet gjennom.':
-    'It has to be routed. Check that you are on the right adapter, and that the router lets BACnet through.',
-  'Verken ping eller BACnet. Sjekk kabel, VLAN, brannmur, og at IP-en er riktig. Merk at en del regulatorer ikke svarer på ping i det hele tatt — prøv «Sweep — grundig» på området før du konkluderer.':
-    'Neither ping nor BACnet. Check the cable, the VLAN, the firewall, and that the IP is right. Note that some controllers do not answer a ping at all — try “Sweep — thorough” on the range before you conclude.',
   /* The command palette carries ASCII variants of the same labels - three
      dots rather than an ellipsis, and no diacritics - so they are their own
      entries rather than being folded into the ones above. */
   'Skriving': 'Writing',
   'Utseende': 'Appearance',
-  'Anlegg jeg har vært på…': 'Sites I have visited...',
-  'Åpne anlegg…': 'Open site...',
   'Lesemodus — blokker all skriving': 'Read-only mode - block all writing',
   'Sammenlign med EDE-fil…': 'Compare with an EDE file...',
-  'Utseende - farger, bilder og størrelse...': 'Appearance - colours, images and size...',
   // Settings → Tagging
-  'Identifikasjon': 'Identification',
   'Prefiks': 'Prefix',
   'Anleggsnavn': 'Site name',
-  'Prosjekt': 'Project',
-  'Oppbygging': 'Structure',
-  'Skilletegn': 'Separator',
-  'Bygg-ID foran systemnummeret': 'Building ID before the system number',
-  'Ventilasjonssystemets ledd': 'Ventilation system segment',
   'Sortering': 'Sorting',
-  'Etasje': 'Floor',
-  'Ventilasjonssystem': 'Ventilation system',
   // Settings → Appearance
   'Ferdige oppsett': 'Presets',
   'Standard': 'Default',

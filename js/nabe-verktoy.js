@@ -95,7 +95,6 @@ const VAR_TYPE = {
   'binary-input': 3, 'binary-output': 4, 'binary-value': 5,
   'multi-state-input': 13, 'multi-state-output': 14, 'multi-state-value': 19,
 };
-const VAR_HELE = new Set(['percent', 'pascal', 'parts per million', 'volt', 'null', 'percent relative humidity']);
 
 function varEnhet(units) {
   if (!units || typeof units !== 'string' || units === 'no-units') return 'null';
@@ -105,11 +104,6 @@ function varEnhet(units) {
   if (!/ per /.test(u))
     u = u.split(' ').map(w => /s$/.test(w) && !/^(celsius|fahrenheit|hertz|lux|siemens)$/.test(w) ? w.slice(0, -1) : w).join(' ');
   return u;
-}
-
-function varSti(navn, cluster) {
-  const biter = String(navn || '').trim().split(/[-_\s.]+/).filter(Boolean);
-  return (cluster ? cluster + '.' : '') + biter.join('.');
 }
 
 // An SD code stands on its own, but an underscore may join it to the text:
@@ -128,75 +122,7 @@ function varUtenSd(tekst) {
     .replace(/\s{2,}/g, ' ').replace(/^[\s\-–:_]+|[\s\-–:_]+$/g, '');
 }
 
-function varRad(p, t, anlegg, enhetNavn) {
-  const type = VAR_TYPE[p.type];
-  if (type === undefined) return null;
-  const analog = type <= 2;
-  const sti = varSti(p.name, t.cluster);
-  const sd = varSd(p.description || '');
-  const beskr = sd.rest || p.name || '';
-  const enhet = analog ? varEnhet(p.units) : '';
-  const desimaler = analog ? (VAR_HELE.has(enhet) ? 0 : 1) : 0;
-  let tilstander = '';
-  if (Array.isArray(p.state_text) && p.state_text.length) {
-    tilstander = (type >= 3 && type <= 5)
-      ? `0=${p.state_text[0] || 'Av'}|1=${p.state_text[1] || 'På'}`
-      : p.state_text.map((s, i) => `${i + 1}=${s}`).join('|');
-  }
-  const biter = sti.split('.');
-  const kilde = sd.klasse
-    ? `${anlegg} ${biter.length >= 3 ? `${biter[0]}.${biter[1]}-${biter[2]}` : sti}` : '';
-  const f = new Array(33).fill('');
-  f[0] = 'BacnetNetwork'; f[1] = anlegg; f[2] = enhetNavn; f[3] = sti;
-  f[4] = String(type); f[5] = String(p.instance ?? ''); f[7] = enhet;
-  f[8] = String(desimaler); f[9] = tilstander; f[10] = beskr;
-  f[11] = sd.trend ? 'Interval|00:05:00' : '';
-  if (sd.klasse) { f[12] = String(sd.klasse); f[13] = beskr; f[14] = kilde; }
-  // Semicolons inside a description would shift every field after it.
-  return f.map(x => String(x).replace(/[;\r\n]/g, ' ')).join(';');
-}
 
-function lagVarFil() {
-  const t = tagInnstillinger();
-  const k = tagNokkel();
-  const anlegg = (t.anleggsnavn || (k && MINNE[k] && MINNE[k].navn) || '').trim();
-  if (!t.prefiks || !anlegg) {
-    toast(T('Fyll inn prefiks og anleggsnavn først.', 'Fill in prefix and site name first.'), true);
-    $(t.prefiks ? 'tgAnlegg' : 'tgPrefiks')?.focus();
-    return;
-  }
-  const rader = [];
-  let enheter = 0;
-  for (const d of S.devices) {
-    const pts = S.cache[d.address];
-    if (!pts || !pts.length) continue;
-    enheter++;
-    let dnavn = String(d.object_name || d.device_instance).trim();
-    if (dnavn.toLowerCase().startsWith(t.prefiks.toLowerCase()))
-      dnavn = dnavn.slice(t.prefiks.length).replace(/^[._\-\s]+/, '');
-    const enhetNavn = `${t.prefiks}.${dnavn.replace(/[\s\-.]+/g, '_')}`;
-    for (const p of pts) {
-      const r = varRad(p, t, anlegg, enhetNavn);
-      if (r) rader.push(r);
-    }
-  }
-  if (!rader.length) {
-    toast(T('Ingen leste enheter ennå. Åpne enhetene du vil ha med.', 'No devices read yet. Open the devices you want included.'), true);
-    return;
-  }
-  const n = new Date(), to = x => String(x).padStart(2, '0');
-  const stempel = `${n.getFullYear()}-${to(n.getMonth() + 1)}-${to(n.getDate())} ${to(n.getHours())}${to(n.getMinutes())}${to(n.getSeconds())}`;
-  const filnavn = `${t.prefiks} Variabel ${anlegg} ${stempel}.csv`.replace(/[\\/:*?"<>|]/g, '_');
-  const blob = new Blob(['﻿' + rader.join('\r\n') + '\r\n'], {type: 'text/csv;charset=utf-8'});
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = filnavn;
-  document.body.appendChild(a); a.click(); a.remove();
-  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
-  toast(T(`Variabel-fil laget: ${rader.length} punkter fra ${enheter} enheter`, `Variabel file made: ${rader.length} points from ${enheter} devices`));
-  nabeSier(T('Variabel-fil laget. Niagara får den når du vil.', 'Variabel file made. Niagara gets it when you like.'), 'fornoyd', 'varfil');
-}
-document.addEventListener('click', (e) => { if (e.target.closest?.('#tgVar')) lagVarFil(); });
 
 
 /* ------------------------------------------------------- the last visit

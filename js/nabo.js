@@ -1033,7 +1033,7 @@ function eksporterVariabel(bare) {
   }
   if (!feil && !loadPrefs().nabo?.forsteFil) { lagreNabo({forsteFil: Date.now()}); naboKonfetti(); }
   if (typeof blikk === 'function') blikk(2.4, 0, 1200);
-  if (typeof tell === 'function') tell('nabo');
+  if (typeof tell === 'function') { tell('nabo'); tell('varfil'); }
   if (typeof nabeSier === 'function' && !feil) setTimeout(() => nabeSier(
     T('Naboen har levert. Pent arbeid, egentlig.', 'The neighbour delivered. Decent work, actually.'), 'fornoyd', 'nabo-levert'), 900);
 }
@@ -2119,8 +2119,6 @@ function koblNabo(ov) {
       e.preventDefault(); e.stopPropagation(); aapneErstatt();
     }
   }, true);
-  // The old way in now leads here: the menu item, the button under Tagging.
-  lagVarFil = aapneNabo;
   const b = $('varBtn');
   if (b) b.onclick = aapneNabo;
   const _sprak = settSprak;

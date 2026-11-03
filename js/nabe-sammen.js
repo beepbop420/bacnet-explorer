@@ -165,12 +165,9 @@ function tegnSammen() {
 
 /* ---------------------------------------------------- wiring */
 (function kobl() {
-  const _insp = renderInspector;
-  renderInspector = function () { const r = _insp.apply(this, arguments); tegnSammen(); return r; };
-  const _punkter = renderPoints;
-  renderPoints = function () { const r = _punkter.apply(this, arguments); tegnSammen(); return r; };
-  const _tick = pollTick;
-  pollTick = async function () { const r = await _tick.apply(this, arguments); registrer(); tegnSammen(); return r; };
+  etter('renderInspector', () => tegnSammen());
+  etter('renderPoints', () => tegnSammen());
+  etter('pollTick', () => { registrer(); tegnSammen(); });
   // A click on a legend line inspects that point.
   document.addEventListener('click', (e) => {
     const rad = e.target.closest && e.target.closest('.sammen-rad');

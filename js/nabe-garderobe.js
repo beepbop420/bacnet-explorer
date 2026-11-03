@@ -380,15 +380,8 @@ function aktivitet(navn, ms) {
   }
 
   // Counters for the items: Live, a Variabel file, a scan at night, a write.
-  const _start = startPolling;
-  startPolling = function () { if (!S.live) tell('live'); return _start.apply(this, arguments); };
-  if (typeof lagVarFil === 'function') {
-    const _var = lagVarFil;
-    lagVarFil = function () { tell('varfil'); return _var.apply(this, arguments); };
-  }
-  const _skann = runScan;
-  runScan = function () { const h = new Date().getHours(); if (h >= 22 || h < 5) tell('natt'); return _skann.apply(this, arguments); };
-  $('scanBtn').onclick = runScan;
+  foer('startPolling', () => { if (!S.live) tell('live'); });
+  foer('runScan', () => { const h = new Date().getHours(); if (h >= 22 || h < 5) tell('natt'); });
   document.addEventListener('click', (e) => { if (e.target.closest && e.target.closest('#wSend')) GARD.skrevet = Date.now(); }, true);
 
   // A new item unlocked: NABE says so, once.
@@ -426,4 +419,42 @@ function aktivitet(navn, ms) {
 })();
 
 window.aapneGarderobe = aapneGarderobe;
+
+/* ---------------------------------------------------- a copy on disk
+   The counters, the outfits and the tunnel record are in localStorage, which
+   an update keeps but a new PC does not. The server keeps a copy in the data
+   folder; on start the higher of the two wins, then the copy follows along. */
+(function fremgang() {
+  const REKORD = 'nabe_tunnel_rekord';
+  const rekord = () => { try { return Number(localStorage.getItem(REKORD)) || 0; } catch { return 0; } };
+  const naa = () => JSON.stringify({teller: teller(), garderobe: loadPrefs().garderobe || null, tunnel: rekord()});
+  let sist = '';
+  const lagre = () => {
+    const s = naa();
+    if (s === sist) return;
+    sist = s;
+    fetch('/api/fremgang', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: s, keepalive: true}).catch(() => {});
+  };
+  fetch('/api/fremgang').then(r => r.json()).then(({fremgang: f}) => {
+    if (!f || !Object.keys(f).length) return;
+    const t = teller(), ft = f.teller || {};
+    let endret = false;
+    for (const [k, v] of Object.entries(ft)) {
+      if (k === 'sett') continue;
+      if (typeof v === 'number' ? v > (t[k] || 0) : !(k in t)) { t[k] = v; endret = true; }
+    }
+    const sett = [...new Set([...(t.sett || []), ...(ft.sett || [])])];
+    if (sett.length !== (t.sett || []).length) { t.sett = sett; endret = true; }
+    if (endret) try { localStorage.setItem(TELLER_NOKKEL, JSON.stringify(t)); } catch {}
+    if (f.garderobe && !loadPrefs().garderobe) { savePrefs({garderobe: f.garderobe}); kleAlle(); }
+    if (f.tunnel > rekord()) {
+      try { localStorage.setItem(REKORD, String(f.tunnel)); } catch {}
+      if (typeof TUN === 'object') TUN.rekord = f.tunnel;
+    }
+  }).catch(() => {}).finally(() => {
+    lagre();
+    setInterval(lagre, 30000);
+    addEventListener('pagehide', lagre);
+  });
+})();
 document.addEventListener('click', (e) => { if (e.target.closest && e.target.closest('#gardBtn')) { document.body.click(); aapneGarderobe(); } });

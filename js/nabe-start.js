@@ -177,6 +177,12 @@ const FAKTA = [
   ['COV betyr at regulatoren sier fra selv. Mindre spørring, mer ro.', 'COV means the controller speaks up itself. Less asking, more peace.'],
 ];
 const NYTT = {
+  '1.42': [
+    ['Ryddet bort det gamle: Tagging-fanen i Innstillinger, den gamle Variabel-generatoren, Lagre/Åpne anlegg og «Anlegg jeg har vært på». NABO gjør taggingen, og startsiden husker anleggene', 'Cleared out the old: the Tagging tab in Settings, the old Variabel generator, Save/Open site and “Sites I have visited”. NABO does the tagging, and the start page remembers the sites'],
+    ['Gi navn og Glem står nå på hver rad på startsiden', 'Rename and Forget now sit on each row of the start page'],
+    ['EDE-eksporten lager ikke lenger en _TagSettings-fil', 'The EDE export no longer makes a _TagSettings file'],
+    ['Plaggene, tellerne og tunnelrekorden lagres også i NABE-mappa, så de følger med til en ny PC', 'Items, counters and the tunnel record are also kept in the NABE folder, so they come along to a new PC'],
+  ],
   '1.41': [
     ['Startsiden gjør det du ber om: et anlegg du klikker, skannes også om NABE fortsatt kobler til, og «Bare åpne» eller Esc avlyser søket ved oppstart også før det har begynt', 'The start page does what you ask: a site you click is scanned even while NABE is still connecting, and “Just open it” or Esc call off the search on start even before it has begun'],
   ],
@@ -596,7 +602,7 @@ async function visStartskjerm(igjen = false) {
 
   // A scan that found nothing is not a place you left off.
   const steder = Object.entries(MINNE || {}).filter(([, s]) => (s.enheter || []).length)
-    .sort((a, b) => (b[1].sist || 0) - (a[1].sist || 0)).slice(0, 6);
+    .sort((a, b) => (b[1].sist || 0) - (a[1].sist || 0)).slice(0, 60);
   const kjent = new Set(steder.map(([k]) => k));
   // Networks the PC is on that are not already a site above.
   const andre = [];
@@ -627,6 +633,10 @@ async function visStartskjerm(igjen = false) {
           ${b && b.over ? `<span class="ss-over">${b.over} ${T('overstyrt da du gikk', 'overridden when you left')}</span>` : ''}
         </span>
         <span class="ss-naar">${esc(naar(s.sist))}</span>
+        <span class="ss-handling" aria-hidden="true">
+          <span class="ss-h" data-navngi="${esc(key)}" title="${esc(T('Gi anlegget et navn', 'Name the site'))}">${T('Gi navn', 'Rename')}</span>
+          <span class="ss-h fare" data-glem="${esc(key)}" title="${esc(T('Glem anlegget', 'Forget the site'))}">${T('Glem', 'Forget')}</span>
+        </span>
       </button>`;
   }).join('');
   if (andre.length) {
@@ -640,8 +650,31 @@ async function visStartskjerm(igjen = false) {
         </button>`).join('');
   }
   liste.innerHTML = html || `<div class="ss-tom">${T('Ingen anlegg ennå. Skriv et område til venstre.', 'No sites yet. Type a range on the left.')}</div>`;
-  liste.querySelectorAll('.ss-rad[data-k]').forEach(b => b.onclick = () =>
-    skann(b.dataset.k.split(' ').join(', '), (MINNE[b.dataset.k] || {}).modus));
+  liste.querySelectorAll('.ss-rad[data-k]').forEach(b => b.onclick = async (e) => {
+    // Naming and forgetting live on the row, as they did in the old list of
+    // sites: shown when you point at it, and never a scan.
+    const navngi = e.target.closest('[data-navngi]'), glem = e.target.closest('[data-glem]');
+    if (navngi || glem) {
+      e.stopPropagation();
+      const key = (navngi || glem).dataset[navngi ? 'navngi' : 'glem'];
+      if (navngi) {
+        const navn = prompt(T('Hva heter dette anlegget?', 'What is this site called?'), (MINNE[key] || {}).navn || '');
+        if (navn === null) return;
+        const d = await api('/api/sites/name', {key, name: navn});
+        if (d.status === 'done') MINNE[key] = d.site;
+      } else {
+        if (!confirm(T(`Glemme ${key}? Enhetene og navnet NABE husker for det, forsvinner.`, `Forget ${key}? The devices and name NABE remembers for it go.`))) return;
+        const d = await api('/api/sites/delete', {key});
+        if (d.status === 'done') delete MINNE[key];
+      }
+      if (typeof fyllOmradeliste === 'function') fyllOmradeliste();
+      document.removeEventListener('keydown', tast, true);
+      lag.remove();
+      visStartskjerm(true);
+      return;
+    }
+    skann(b.dataset.k.split(' ').join(', '), (MINNE[b.dataset.k] || {}).modus);
+  });
   liste.querySelectorAll('.ss-rad[data-v]').forEach(b => b.onclick = () => skannVia(b.dataset.v, b.dataset.c));
   liste.addEventListener('pointermove', (e) => {
     const r = e.target.closest('.ss-rad');

@@ -45,8 +45,7 @@
   for (const id of ['sbRescan', 'sbSnap']) $(id)?.classList.add('sb-grense');
 
   /* The beat: restarted on every read, as long as the interval. */
-  const _tick = pollTick;
-  pollTick = async function () {
+  foer('pollTick', () => {
     if (S.live) {
       const ms = parseInt($('pollInt')?.value, 10) || 5000;
       takt.style.transition = 'none';
@@ -55,30 +54,19 @@
       takt.style.transition = bevegelseAv() ? 'none' : `transform ${ms}ms linear`;
       takt.style.transform = 'scaleX(1)';
     }
-    return _tick.apply(this, arguments);
-  };
-  const _stopp = stopPolling;
-  stopPolling = function () {
-    const r = _stopp.apply(this, arguments);
+  });
+  etter('stopPolling', () => {
     takt.style.transition = 'transform .2s'; takt.style.transform = 'scaleX(0)';
     knapp.classList.remove('paa');
-    return r;
-  };
-  const _start = startPolling;
-  startPolling = function () {
-    knapp.classList.add('paa');
-    return _start.apply(this, arguments);
-  };
+  });
+  foer('startPolling', () => knapp.classList.add('paa'));
 
-  const _pre = renderPrefetchStatus;
-  renderPrefetchStatus = function () {
-    const r = _pre.apply(this, arguments);
+  etter('renderPrefetchStatus', () => {
     const total = S.devices.length;
     const lest = S.devices.filter(d => S.cache[d.address]).length;
     const feilet = S.devices.filter(d => PRE.failed.has(d.address)).length;
     const ferdig = !total || lest + feilet >= total;
     preBar.hidden = pre.hidden || ferdig;
     fylt.style.transform = `scaleX(${total ? (lest + feilet) / total : 0})`;
-    return r;
-  };
+  });
 })();
