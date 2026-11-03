@@ -192,7 +192,7 @@ def t(nb: str, en: str) -> str:
     return en if SPRAAK_VAR.get() == "en" else nb
 
 
-VERSJON = "1.36"
+VERSJON = "1.37"
 
 state = {"app": None, "local_address": None, "read_only": False, "bbmd": None}
 
@@ -2222,7 +2222,9 @@ def mine_overstyringer() -> List[Dict[str, Any]]:
         k = (e.get("address"), e.get("objid"), e.get("priority"))
         if e.get("action") == "write":
             aktive[k] = e
-        elif e.get("action") in ("release", "auto-release"):
+        elif e.get("action") in ("release", "auto-release", "forget"):
+            # forget: released some other way - from Niagara, by a colleague -
+            # and taken off the list by hand.
             aktive.pop(k, None)
     return [{"address": k[0], "objid": k[1], "priority": k[2], "value": e.get("value"),
              "ts": e.get("ts")} for k, e in aktive.items()]
@@ -2316,7 +2318,34 @@ def anlegg_liste():
 
 @app.get("/api/mine")
 def get_mine():
-    return {"status": "done", "overstyrt": mine_overstyringer()}
+    """What you hold, each with whether its plant can be reached from here
+    now. A point on a network you have left cannot be released, and asking
+    you to at the door only gets in the way."""
+    try:
+        kort = list_interfaces()
+    except Exception:
+        kort = []
+    ut = []
+    for o in mine_overstyringer():
+        o = dict(o)
+        o["naabar"] = naabar(str(o.get("address") or ""), kort) is not None
+        ut.append(o)
+    return {"status": "done", "overstyrt": ut}
+
+
+class GlemBody(BaseModel):
+    address: str
+    objid: str
+    priority: int
+
+
+@app.post("/api/mine/glem")
+def glem_mine(body: GlemBody):
+    """Off the list without writing anything to the plant - for a point
+    released some other way. Logged like everything else."""
+    log_write({"address": body.address, "objid": body.objid, "prop": "present-value",
+               "priority": body.priority, "action": "forget", "value": None, "status": "done"})
+    return {"status": "done"}
 
 
 NY_VERSJON: Dict[str, Any] = {"t": 0.0, "versjon": None}

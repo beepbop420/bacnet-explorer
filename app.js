@@ -7091,7 +7091,7 @@ async function showWriteLog() {
     dager.get(dag).push(e);
   }
   const hva = (e) => e.action === 'auto-release' ? T('auto-frigi', 'auto-release')
-    : e.action === 'release' ? T('frigi', 'release') : T('skriv', 'write');
+    : e.action === 'release' ? T('frigi', 'release') : e.action === 'forget' ? T('glemt', 'forgotten') : T('skriv', 'write');
   const rad = (e) => {
     const ok = e.status === 'done';
     const pn = punkt(e.address, e.objid);

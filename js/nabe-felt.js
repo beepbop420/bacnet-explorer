@@ -32,7 +32,11 @@ function minHolder(ip, objid, pri) {
 async function visLukkVakt() {
   await hentMine();
   const liste = [...MINE.values()];
-  if (!liste.length) { window.pywebview?.api?.lukk(); return; }
+  // Only what can be reached can be released. A point on a network you have
+  // left waits for the next visit - NABE says so on start when it is in
+  // reach again - so it does not stop you at the door.
+  const kan = liste.filter(o => o.naabar !== false);
+  if (!kan.length) { window.pywebview?.api?.lukk(); return; }
   document.getElementById('lukkvakt')?.remove();
   const lag = document.createElement('div');
   lag.id = 'lukkvakt';
@@ -44,54 +48,75 @@ async function visLukkVakt() {
   // the small print - the list is read in a hurry, on the way out.
   const navn = (o) => ((S.cache[o.address] || []).find(p => p.objid === o.objid) || {}).name || o.objid;
   const enhet = (o) => (S.devices.find(d => d.address === o.address) || {}).object_name || o.address;
-  lag.innerHTML = `<div class="lv-kort">
+  const nokkel = (o) => `${o.address}|${o.objid}|${o.priority}`;
+  const rad = (o) => `
+      <div class="lv-rad${o.naabar === false ? ' utenfor' : ''}" data-k="${esc(nokkel(o))}">
+        <span class="lv-pkt">${esc(navn(o))}<small>${esc(enhet(o))} · ${esc(o.objid)}${o.naabar === false ? ` · <b>${T('ikke innen rekkevidde nå', 'not in reach now')}</b>` : ''}</small></span>
+        <span class="lv-pri">pri ${esc(String(o.priority))}</span>
+        <span class="lv-ver">${esc(String(o.value))}</span>
+        <span class="lv-tid">${o.ts ? esc(new Date(o.ts * 1000).toLocaleString(lokal, {day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit'})) : ''}</span>
+        <button type="button" class="lv-glem" data-glem="${esc(nokkel(o))}" title="${esc(T('Ta av lista uten å skrive noe - for et punkt som er frigitt på annen måte', 'Take it off the list without writing anything - for a point released some other way'))}">${T('Glem', 'Forget')}</button>
+      </div>`;
+  const tegn = () => {
+    const alle = [...MINE.values()], naa = alle.filter(o => o.naabar !== false);
+    lag.innerHTML = `<div class="lv-kort">
     <div class="lv-hode">
       <div class="lv-fig">${NABE_SVG.replace('width="26" height="26"', 'width="44" height="44"')}</div>
       <div>
         <h2 class="lv-tittel">${T('Pluggen sitter fast', 'The plug is stuck')}</h2>
         <p class="lv-tekst">${T(
-          `${liste.length} ${liste.length === 1 ? 'punkt står' : 'punkter står'} fortsatt overstyrt av deg. Det er sånn anlegg blir stående i manuell.`,
-          `${liste.length} ${liste.length === 1 ? 'point is' : 'points are'} still overridden by you. That is how plants get left in manual.`)}</p>
+          `${naa.length} ${naa.length === 1 ? 'punkt står' : 'punkter står'} fortsatt overstyrt av deg. Det er sånn anlegg blir stående i manuell.`,
+          `${naa.length} ${naa.length === 1 ? 'point is' : 'points are'} still overridden by you. That is how plants get left in manual.`)}</p>
       </div>
     </div>
-    <div class="lv-liste">${liste.map(o => `
-      <div class="lv-rad">
-        <span class="lv-pkt">${esc(navn(o))}<small>${esc(enhet(o))} · ${esc(o.objid)}</small></span>
-        <span class="lv-pri">pri ${esc(String(o.priority))}</span>
-        <span class="lv-ver">${esc(String(o.value))}</span>
-        <span class="lv-tid">${o.ts ? esc(new Date(o.ts * 1000).toLocaleString(lokal, {day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit'})) : ''}</span>
-      </div>`).join('')}</div>
+    <div class="lv-liste">${naa.map(rad).join('')}${alle.length > naa.length ? `
+      <div class="lv-under">${T('Utenfor rekkevidde nå - NABE minner deg på dem neste gang du er der', 'Out of reach now - NABE reminds you of them next time you are there')}</div>
+      ${alle.filter(o => o.naabar === false).map(rad).join('')}` : ''}</div>
     <div class="lv-knapper">
       <button class="btn" id="lvAvbryt">${T('Avbryt', 'Cancel')}</button>
       <span class="lv-rom"></span>
       <button class="btn" id="lvLukk">${T('Lukk likevel', 'Close anyway')}</button>
-      <button class="btn primary" id="lvFrigi">${T('Frigi alle og lukk', 'Release all and close')}</button>
+      <button class="btn primary" id="lvFrigi">${naa.length === alle.length ? T('Frigi alle og lukk', 'Release all and close') : T(`Frigi ${naa.length} og lukk`, `Release ${naa.length} and close`)}</button>
     </div></div>`;
+    kobl();
+  };
+  const lukkLag = () => { lag.remove(); document.removeEventListener('keydown', esc_, true); };
+  const esc_ = (e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); lukkLag(); } };
+  const kobl = () => {
+    lag.querySelector('#lvAvbryt').onclick = lukkLag;
+    lag.querySelector('#lvLukk').onclick = () => {
+      nabeSier(T('Greit. Jeg sa ingenting.', 'Fine. I said nothing.'), 'trist');
+      setTimeout(() => window.pywebview?.api?.lukk(), 900);
+    };
+    lag.querySelectorAll('[data-glem]').forEach(b => b.onclick = async () => {
+      const o = MINE.get(b.dataset.glem);
+      if (!o) return;
+      await api('/api/mine/glem', {address: o.address, objid: o.objid, priority: o.priority});
+      await hentMine();
+      if (![...MINE.values()].some(x => x.naabar !== false)) { lukkLag(); window.pywebview?.api?.lukk(); return; }
+      tegn();
+    });
+    lag.querySelector('#lvFrigi').onclick = async () => {
+      lag.querySelector('#lvFrigi').disabled = true;
+      const naa = [...MINE.values()].filter(o => o.naabar !== false);
+      let ok = 0;
+      for (const o of naa) {
+        try {
+          const r = await api('/api/write', {address: o.address, objid: o.objid, priority: o.priority, release: true});
+          if (r.status === 'done') ok++;
+        } catch {}
+      }
+      toast(T(`${ok} av ${naa.length} frigitt`, `${ok} of ${naa.length} released`), ok < naa.length);
+      if (ok === naa.length) setTimeout(() => window.pywebview?.api?.lukk(), 700);
+      else { await hentMine(); tegn(); }
+    };
+  };
+  tegn();
   document.body.appendChild(lag);
   nabeKlasse('nervos', 4000);
   setTimeout(() => $('lvFrigi')?.focus(), 30);
-  const lukkLag = () => { lag.remove(); document.removeEventListener('keydown', esc_); };
-  const esc_ = (e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); lukkLag(); } };
   document.addEventListener('keydown', esc_, true);
   lag.addEventListener('click', (e) => { if (e.target === lag) lukkLag(); });
-  $('lvAvbryt').onclick = lukkLag;
-  $('lvLukk').onclick = () => {
-    nabeSier(T('Greit. Jeg sa ingenting.', 'Fine. I said nothing.'), 'trist');
-    setTimeout(() => window.pywebview?.api?.lukk(), 900);
-  };
-  $('lvFrigi').onclick = async () => {
-    $('lvFrigi').disabled = true;
-    let ok = 0;
-    for (const o of liste) {
-      try {
-        const r = await api('/api/write', {address: o.address, objid: o.objid, priority: o.priority, release: true});
-        if (r.status === 'done') ok++;
-      } catch {}
-    }
-    toast(T(`${ok} av ${liste.length} frigitt`, `${ok} of ${liste.length} released`), ok < liste.length);
-    if (ok === liste.length) setTimeout(() => window.pywebview?.api?.lukk(), 700);
-    else { await hentMine(); $('lvFrigi').disabled = false; }
-  };
 }
 window.addEventListener('beforeunload', (e) => {
   if (!window.pywebview && MINE.size) { e.preventDefault(); e.returnValue = ''; }

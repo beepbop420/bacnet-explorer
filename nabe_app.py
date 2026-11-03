@@ -156,7 +156,10 @@ def main():
                 mine = json.loads(r.read()).get("overstyrt", [])
         except Exception:
             mine = []
-        if not mine:
+        # Only what can be released from here stops the window: a point on a
+        # network you have left waits for the next visit, where NABE reminds
+        # you on start.
+        if not any(o.get("naabar", True) for o in mine):
             return True
         # Asked from another thread, after this handler has returned. Called
         # here, evaluate_js waits for the window's own thread - which is the

@@ -4929,7 +4929,7 @@ body.uten-bevegelse .plagg,body.uten-bevegelse .rekv,body.uten-bevegelse .plagg-
 .lv-tittel{margin:2px 0 4px;font-size:15px;font-weight:600;color:var(--fg)}
 .lv-tekst{margin:0;font-size:12.5px;line-height:1.5;color:var(--fg-2)}
 .lv-liste{margin:0 20px;border:1px solid var(--line);border-radius:8px;max-height:220px;overflow:auto}
-.lv-rad{display:grid;grid-template-columns:minmax(0,1fr) auto auto auto;gap:12px;align-items:baseline;padding:8px 12px;font-size:12px}
+.lv-rad{display:grid;grid-template-columns:minmax(0,1fr) auto auto auto auto;gap:12px;align-items:baseline;padding:8px 12px;font-size:12px}
 .lv-rad + .lv-rad{border-top:1px solid var(--line)}
 .lv-pkt{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:var(--mono);color:var(--fg)}
 .lv-pkt small{display:block;font-family:var(--sans);font-size:10.5px;color:var(--fg-3);margin-top:1px}
@@ -4957,6 +4957,12 @@ body.uten-bevegelse .plagg,body.uten-bevegelse .rekv,body.uten-bevegelse .plagg-
 .ctx-web:hover{color:var(--accent);background:color-mix(in srgb,var(--accent) 10%,transparent)}
 .ctx-web:hover svg,.ctx-web:focus-visible svg{opacity:1}
 .ctx-web.venter{opacity:.6;cursor:progress}
+
+.lv-glem{font-size:11px;color:var(--fg-3);padding:1px 6px;border-radius:4px;background:none;border:0;cursor:pointer}
+.lv-glem:hover{color:var(--fg);background:var(--hover)}
+.lv-rad.utenfor{opacity:.55}
+.lv-rad.utenfor small b{font-weight:500;color:var(--fg-2)}
+.lv-under{padding:8px 12px 4px;font-size:10.5px;color:var(--fg-3);border-top:1px solid var(--line)}
 </style>
 </head>
 <body>
