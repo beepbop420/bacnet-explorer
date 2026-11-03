@@ -26,6 +26,7 @@ async function sokVedStart() {
   if (AN.sokt || loadPrefs().autoSok === false) return;
   // Wait for the adapter and the site list, a few seconds at most.
   for (let i = 0; i < 40 && !(S.connected && SK.lastet); i++) await new Promise(r => setTimeout(r, 250));
+  if (AN.avlyst) return;
   const ri = $('rangeInput');
   // The field comes back with last time's range; only a change is yours.
   const fraSist = ri.value.trim();
@@ -35,7 +36,7 @@ async function sokVedStart() {
   AN.sokt = true;
   let nett = [];
   try { nett = (await (await fetch('/api/kabelnett', {cache: 'no-store'})).json()).nett || []; } catch {}
-  if (opptatt() || !startskjermViker(nett[0]?.cidr)) return;
+  if (AN.avlyst || opptatt() || !startskjermViker(nett[0]?.cidr)) return;
   if (nett.length) {
     if ($('modeSel').value === 'bbmd') { $('modeSel').value = 'auto'; $('modeSel').dispatchEvent(new Event('change')); }
     brukOmrade(nett.map(n => n.cidr).join(', '));
@@ -60,6 +61,9 @@ setTimeout(sokVedStart, 1400);
 /* «Just open it» means just that: a scan the search on start began is
    stopped, and the field keeps the site so Enter starts it again. */
 function stoppAutoSkann() {
+  // Also before it has begun: the search on start waits for the connection,
+  // and closing the card in those seconds used to let it go ahead after.
+  AN.avlyst = true;
   if (!AN.autoSkann) return;
   AN.autoSkann = false;
   if (S.scanJob && document.body.classList.contains('skanner')) {

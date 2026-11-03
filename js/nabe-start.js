@@ -177,6 +177,9 @@ const FAKTA = [
   ['COV betyr at regulatoren sier fra selv. Mindre spørring, mer ro.', 'COV means the controller speaks up itself. Less asking, more peace.'],
 ];
 const NYTT = {
+  '1.41': [
+    ['Startsiden gjør det du ber om: et anlegg du klikker, skannes også om NABE fortsatt kobler til, og «Bare åpne» eller Esc avlyser søket ved oppstart også før det har begynt', 'The start page does what you ask: a site you click is scanned even while NABE is still connecting, and “Just open it” or Esc call off the search on start even before it has begun'],
+  ],
   '1.40': [
     ['NABE åpner maksimert, og husker om vinduet var maksimert. Lukket du den minimert, åpnet den før utenfor skjermen', 'NABE opens maximised, and remembers whether the window was. Closed while minimised, it used to open off screen'],
   ],
@@ -499,7 +502,14 @@ async function visStartskjerm(igjen = false) {
     if (modus && [...$('modeSel').options].some(o => o.value === modus)) $('modeSel').value = modus;
     savePrefs({range: omr, mode: $('modeSel').value});
     lukk();
-    setTimeout(() => { if (S.connected) runScan(); }, 300);
+    // A site chosen here is the start: the search on start stands down, and
+    // the scan waits for the connection if NABE is still making it.
+    if (typeof AN !== 'undefined') AN.avlyst = true;
+    (async () => {
+      for (let i = 0; i < 60 && !S.connected; i++) await new Promise(r => setTimeout(r, 200));
+      await new Promise(r => setTimeout(r, 300));
+      if (S.connected && !document.body.classList.contains('skanner')) runScan();
+    })();
   };
   // A network row: bind that adapter first, so the scan goes out where the
   // route is rather than wherever Windows last sent it.
