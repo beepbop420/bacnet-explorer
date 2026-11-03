@@ -177,6 +177,9 @@ const FAKTA = [
   ['COV betyr at regulatoren sier fra selv. Mindre spørring, mer ro.', 'COV means the controller speaks up itself. Less asking, more peace.'],
 ];
 const NYTT = {
+  '1.36': [
+    ['Klikk IP-adressen i enhetsoverskriften for å åpne regulatorens webgrensesnitt i nettleseren. NABE velger HTTPS eller HTTP etter hva den svarer på', 'Click the IP address in the device heading to open the controller’s web interface in your browser. NABE picks HTTPS or HTTP by what it answers on'],
+  ],
   '1.35': [
     ['«Bare åpne» og Esc på startsiden stopper søket ved oppstart. Feltet beholder anlegget, så Enter skanner når du vil', '“Just open it” and Esc on the start page stop the search on start. The field keeps the site, so Enter scans when you like'],
     ['Garderoben kan rulles helt ned til Hals', 'The wardrobe scrolls all the way down to Neck'],

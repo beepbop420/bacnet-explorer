@@ -192,7 +192,7 @@ def t(nb: str, en: str) -> str:
     return en if SPRAAK_VAR.get() == "en" else nb
 
 
-VERSJON = "1.35"
+VERSJON = "1.36"
 
 state = {"app": None, "local_address": None, "read_only": False, "bbmd": None}
 
@@ -3075,6 +3075,38 @@ async def _ping_one(ip: str, timeout_ms: int, sem: asyncio.Semaphore) -> bool:
                 pass
             return False
 
+
+
+class WebBody(BaseModel):
+    address: str
+
+
+@app.post("/api/webside")
+async def webside(body: WebBody):
+    """Opens a controller's own web page in the PC's browser. Only a plain
+    IP, only http or https, whichever answers - HTTPS first, since that is
+    what WAGO, Distech and most newer controllers serve."""
+    host = str(body.address).split(":")[0].strip()
+    try:
+        ipaddress.IPv4Address(host)
+    except ValueError:
+        return {"status": "error", "error": t("Ikke en IP-adresse", "Not an IP address")}
+
+    async def svarer(port: int) -> bool:
+        try:
+            _, w = await asyncio.wait_for(asyncio.open_connection(host, port), timeout=1.5)
+            w.close()
+            return True
+        except Exception:
+            return False
+    https, http = await asyncio.gather(svarer(443), svarer(80))
+    if not (https or http):
+        return {"status": "error", "error": t(f"{host} har ingen webside på 443 eller 80",
+                                             f"{host} has no web page on 443 or 80")}
+    url = f"https://{host}/" if https else f"http://{host}/"
+    import webbrowser
+    webbrowser.open(url)
+    return {"status": "done", "url": url}
 
 
 async def _tjenester(ip: str) -> Dict[str, Any]:

@@ -4949,6 +4949,14 @@ body.uten-bevegelse .plagg,body.uten-bevegelse .rekv,body.uten-bevegelse .plagg-
 .ss-kort.enkel .ss-rad-navn{font-size:13px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .ss-kort.enkel .ss-rad-meta{font-size:11px;color:var(--fg-3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .ss-kort.enkel.liste{width:min(460px,calc(100vw - 32px));padding:18px 16px 14px}
+
+/* The address in the device heading is a link to the controller's web page. */
+.ctx-web{display:inline-flex;align-items:center;gap:4px;padding:0 4px;margin:0 -4px;border-radius:4px;
+  font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+.ctx-web svg{width:10px;height:10px;fill:none;stroke:currentColor;stroke-width:1.3;opacity:0;transition:opacity .12s}
+.ctx-web:hover{color:var(--accent);background:color-mix(in srgb,var(--accent) 10%,transparent)}
+.ctx-web:hover svg,.ctx-web:focus-visible svg{opacity:1}
+.ctx-web.venter{opacity:.6;cursor:progress}
 </style>
 </head>
 <body>

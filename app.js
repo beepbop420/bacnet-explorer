@@ -2120,7 +2120,7 @@ function renderCtx() {
       <span class="ctx-under">
         <span class="vendor" style="--vc:${v.color};flex:0 0 auto"><i></i><span>${esc(v.label)}</span></span>
         <span class="ctx-id">${d.device_instance ?? '?'}</span>
-        <span class="ctx-ip">${esc(d.address)}</span>
+        <button type="button" class="ctx-ip ctx-web" data-web="${esc(d.address)}" title="${esc(T('Åpne webgrensesnittet til regulatoren', 'Open the controller’s web interface'))}">${esc(d.address)}<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M5 2H2.5v7.5H10V7M7 2h3v3M10 2 5.6 6.4"/></svg></button>
         ${identBadge(d.address)}
         ${clockBadge(d.address)}
         <span class="ctx-tall">${S.points.length} ${T('punkter', 'points')}${writable ? ` · ${writable} ${T('skrivbare', 'writable')}` : ''}</span>
@@ -2133,6 +2133,16 @@ function renderCtx() {
 `;
 
   el.querySelectorAll('[data-klokke]').forEach(b => b.onclick = () => stillKlokka(b.dataset.klokke));
+  // The address opens the controller's own web page, in the PC's browser.
+  el.querySelectorAll('[data-web]').forEach(b => b.onclick = async () => {
+    b.classList.add('venter');
+    try {
+      const r = await api('/api/webside', {address: b.dataset.web});
+      if (r.status === 'done') toast(T(`Åpner ${r.url}`, `Opening ${r.url}`));
+      else toast(r.error || T('Fant ingen webside', 'Found no web page'), true);
+    } catch (e) { toast(e.message, true); }
+    b.classList.remove('venter');
+  });
   // Clicking a count filters to it; clicking the one already active clears it,
   // so the same button gets you back out.
   el.querySelectorAll('[data-flag]').forEach(b => b.onclick = () => {
