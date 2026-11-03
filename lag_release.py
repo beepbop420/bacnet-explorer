@@ -19,13 +19,36 @@ import lag_installasjon
 HER = Path(__file__).parent
 
 
-def notater(versjon: str) -> str:
-    src = (HER / "js" / "nabe-start.js").read_text(encoding="utf-8")
+def _linjer(src: str, versjon: str):
     m = re.search(r"'" + re.escape(versjon) + r"': \[(.*?)\n  \],", src, re.S)
-    linjer = re.findall(r"\['(?:[^'\\]|\\.)*', '((?:[^'\\]|\\.)*)'\]", m.group(1)) if m else []
-    tekst = "\n".join(f"- {l}" for l in linjer) or "- Improvements and fixes"
-    return (f"{tekst}\n\n**Install:** download `NABE-Installasjon.zip`, right-click it and choose "
+    return re.findall(r"\['(?:[^'\\]|\\.)*', '((?:[^'\\]|\\.)*)'\]", m.group(1)) if m else []
+
+
+def _tall(v: str):
+    return tuple(int(x) for x in re.findall(r"\d+", v))
+
+
+def notater(versjon: str, forrige: str = "") -> str:
+    """This version's «New in» lines, and those of every version since the
+    last release, so nothing that was never published goes unmentioned."""
+    src = (HER / "js" / "nabe-start.js").read_text(encoding="utf-8")
+    deler = ["\n".join(f"- {l}" for l in _linjer(src, versjon)) or "- Improvements and fixes"]
+    if forrige:
+        imellom = sorted({v for v in re.findall(r"^  '(\d+(?:\.\d+)+)': \[", src, re.M)
+                          if _tall(forrige) < _tall(v) < _tall(versjon)}, key=_tall, reverse=True)
+        for v in imellom:
+            deler.append(f"Also in {v}:\n" + "\n".join(f"- {l}" for l in _linjer(src, v)))
+    return ("\n\n".join(deler) + "\n\n**Install:** download `NABE-Installasjon.zip`, right-click it and choose "
             "*Extract All*, then double-click **Installer NABE**. No administrator rights needed.")
+
+
+def forrige_release() -> str:
+    r = subprocess.run(["gh", "release", "list", "--limit", "1", "--json", "tagName"],
+                       cwd=HER, capture_output=True, text=True, encoding="utf-8")
+    try:
+        return json.loads(r.stdout)[0]["tagName"].lstrip("v")
+    except Exception:
+        return ""
 
 
 def main():
@@ -38,7 +61,7 @@ def main():
         cmd = ["gh", "release", "upload", tag, str(zipfil), "--clobber"]
     else:
         cmd = ["gh", "release", "create", tag, str(zipfil), "--title", f"NABE {versjon}",
-               "--notes", notater(versjon), "--latest"]
+               "--notes", notater(versjon, forrige_release()), "--latest"]
     r = subprocess.run(cmd, cwd=HER, capture_output=True, text=True, encoding="utf-8")
     print(r.stdout.strip() or r.stderr.strip())
     sys.exit(r.returncode)
