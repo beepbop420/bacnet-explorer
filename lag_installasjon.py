@@ -1,4 +1,4 @@
-"""
+r"""
 Lager dist/NABE-Installasjon.zip (og en kopi med versjonsnummer).
 
     venv\Scripts\python.exe lag_installasjon.py
