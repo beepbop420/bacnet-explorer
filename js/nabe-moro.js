@@ -93,7 +93,7 @@ function visKarriere() {
   lag.className = 'startskjerm';
   const rad = (n, nb, en) => `<div class="ss-rad" style="cursor:default"><span class="ss-rad-navn">${T(nb, en)}</span><span class="ss-rad-meta" style="font-size:14px;color:var(--fg)">${(n || 0).toLocaleString('no')}</span></div>`;
   const tittel = (t.skann || 0) > 100 ? T('Veteran', 'Veteran') : (t.skann || 0) > 20 ? T('Fast inventar', 'Part of the furniture') : T('Lærling', 'Apprentice');
-  lag.innerHTML = `<div class="ss-kort">
+  lag.innerHTML = `<div class="ss-kort enkel">
     <div class="ss-logo">${NABE_SVG.replace('width="26" height="26"', 'width="72" height="72"')}</div>
     <h2 style="margin:4px 0 2px">${T('Din NABE-karriere', 'Your NABE career')}</h2>
     <div class="ss-under">${esc(tittel)}</div>

@@ -178,6 +178,12 @@ const FAKTA = [
   ['COV betyr at regulatoren sier fra selv. Mindre spørring, mer ro.', 'COV means the controller speaks up itself. Less asking, more peace.'],
 ];
 const NYTT = {
+  '1.31': [
+    ['Ny startside: hvem og hva til venstre, anleggene dine til høyre i én liste med prikk for det som er nåbart. Piltaster og Enter velger', 'A new start page: who and what on the left, your sites on the right in one list with a dot for what is in reach. Arrow keys and Enter choose'],
+    ['Startsiden blir stående mens NABE skanner anlegget du var på sist, og raden viser svarene som kommer', 'The start page stays while NABE scans the site you were at last, and the row shows the replies as they come'],
+    ['Skanner du flere nett, grupperes enhetene etter nett, med leverandør inni når et nett er stort', 'Scan several networks and the devices are grouped by network, with vendor inside when a network is large'],
+    ['NABE avslutter med en gang vinduet lukkes, også når en forespørsel henger', 'NABE exits as soon as the window closes, also when a request is hanging'],
+  ],
   '1.30': [
     ['Hundrevis av feil under én del av en JACE blir én linje: «527 under BACnet IP.564001-OU001». Trolig én forbindelse nede, ikke 527 feil. Klikk for bare de punktene', 'Hundreds of faults under one part of a JACE become one line: “527 under BACnet IP.564001-OU001”. Probably one link down, not 527 faults. Click for just those points'],
     ['Et skann som ikke hører noe, sletter ikke lenger enhetene NABE husker fra anlegget', 'A scan that hears nothing no longer wipes the controllers NABE remembers for the site'],
@@ -385,7 +391,13 @@ function hilsen() {
 
 let FAKTA_NR = null;
 
-/* igjen: drawn again after a language switch - same fact, no count, no entrance. */
+/* igjen: drawn again after a language switch - same fact, no count, no entrance.
+
+   Laid out like a welcome window on a Mac: on the left who this is and what
+   you can do, on the right the places you have been. One list, not two -
+   the sites you were on and the networks the PC sits on now used to be
+   shown separately, mostly saying the same thing twice. Arrow keys move
+   through the list and Enter scans; typing goes to the field. */
 async function visStartskjerm(igjen = false) {
   if (!igjen) tell('aapnet');
   const lag = document.createElement('div');
@@ -398,26 +410,35 @@ async function visStartskjerm(igjen = false) {
   const sistSett = (() => { try { return localStorage.getItem('nabe_sett_versjon'); } catch { return null; } })();
   lag.innerHTML = `
     <div class="ss-kort">
-      <button class="ss-sprak" type="button" lang="${T('en', 'no')}">${T('English', 'Norsk')}</button>
-      <div class="ss-logo">${NABE_SVG.replace('width="26" height="26"', 'width="96" height="96"')}</div>
-      <h1 class="ss-navn">NABE</h1>
-      <div class="ss-under">Not Another BACnet Explorer<span class="ss-ver"></span></div>
-      <div class="ss-hilsen">${esc(hilsen())}</div>
-      <div class="ss-anlegg" hidden>
-        <div class="ss-tittel">${T('Fortsett der du slapp', 'Pick up where you left off')}</div>
-        <div class="ss-liste"></div>
-      </div>
-      <div class="ss-nett" hidden>
-        <div class="ss-tittel">${T('Nettverket nå', 'The network now')}</div>
-        <div class="ss-kortliste"></div>
-      </div>
-      <form class="ss-nytt">
-        <input class="field" id="ssOmr" placeholder="${T('Nytt område, f.eks. 10.75.1.0/24', 'New range, e.g. 10.75.1.0/24')}" autocomplete="off">
-        <button class="btn primary" type="submit">${T('Skann', 'Scan')}</button>
-      </form>
-      <button class="ss-videre" type="button">${T('Bare åpne', 'Just open it')} <kbd>Esc</kbd></button>
-      <div class="ss-nytt-i" hidden></div>
-      <div class="ss-fakta">${esc(T(fakta[0], fakta[1]))}</div>
+      <section class="ss-venstre">
+        <div class="ss-logo">${NABE_SVG.replace('width="26" height="26"', 'width="84" height="84"')}</div>
+        <h1 class="ss-navn">NABE</h1>
+        <div class="ss-under">Not Another BACnet Explorer<span class="ss-ver"></span></div>
+        <div class="ss-hilsen">${esc(hilsen())}</div>
+        <form class="ss-nytt">
+          <label class="ss-felt-etikett" for="ssOmr">${T('Skann et område', 'Scan a range')}</label>
+          <div class="ss-felt">
+            <input class="field" id="ssOmr" placeholder="10.75.1.0/24" autocomplete="off" spellcheck="false">
+            <button class="btn primary" type="submit">${T('Skann', 'Scan')}</button>
+          </div>
+          <div class="ss-felt-hint">${T('Én IP, et område som 10.75.1.10-40, eller flere med komma', 'One IP, a range like 10.75.1.10-40, or several with commas')}</div>
+        </form>
+        <div class="ss-handlinger">
+          <button class="ss-videre" type="button"><span>${T('Bare åpne', 'Just open it')}</span><kbd>Esc</kbd></button>
+          <div class="ss-nytt-i" hidden></div>
+        </div>
+        <div class="ss-bunn">
+          <span class="ss-fakta">${esc(T(fakta[0], fakta[1]))}</span>
+          <button class="ss-sprak" type="button" lang="${T('en', 'no')}">${T('English', 'Norsk')}</button>
+        </div>
+      </section>
+      <section class="ss-hoyre">
+        <div class="ss-liste-hode">${T('Anlegg', 'Sites')}</div>
+        <div class="ss-liste" role="listbox" aria-label="${T('Anlegg', 'Sites')}">
+          <div class="ss-tom">${T('Ser etter anlegg og nett…', 'Looking for sites and networks…')}</div>
+        </div>
+        <div class="ss-tast" aria-hidden="true"><kbd>↑</kbd><kbd>↓</kbd> ${T('velg', 'choose')} <kbd>↵</kbd> ${T('skann', 'scan')}</div>
+      </section>
     </div>`;
   document.body.appendChild(lag);
 
@@ -428,22 +449,47 @@ async function visStartskjerm(igjen = false) {
     try { localStorage.setItem('nabe_sett_versjon', NABE_VERSJON); } catch {}
   };
   const skann = (omr, modus) => {
+    // Already being scanned by the search on start: just go in.
+    if (document.body.classList.contains('skanner') && $('rangeInput').value.trim() === omr) { lukk(); return; }
     $('rangeInput').value = omr;
     if (modus && [...$('modeSel').options].some(o => o.value === modus)) $('modeSel').value = modus;
     savePrefs({range: omr, mode: $('modeSel').value});
     lukk();
     setTimeout(() => { if (S.connected) runScan(); }, 300);
   };
-  // From the network section: bind that adapter first, so the scan goes
-  // out where the route is rather than wherever Windows last sent it.
+  // A network row: bind that adapter first, so the scan goes out where the
+  // route is rather than wherever Windows last sent it.
   const skannVia = async (omr, cidr) => {
     if (cidr && S.localAddr !== cidr) {
       try { await connectTo(cidr, {quiet: true}); } catch {}
     }
     skann(omr);
   };
+  const rader = () => [...lag.querySelectorAll('.ss-rad')];
+  const marker = (i) => {
+    const r = rader();
+    if (!r.length) return;
+    i = Math.max(0, Math.min(r.length - 1, i));
+    r.forEach((x, j) => x.setAttribute('aria-selected', String(j === i)));
+    r[i].scrollIntoView({block: 'nearest'});
+  };
+  const markert = () => rader().findIndex(x => x.getAttribute('aria-selected') === 'true');
   const tast = (e) => {
-    if (e.key === 'Escape') { e.preventDefault(); lukk(); }
+    if (e.key === 'Escape') { e.preventDefault(); lukk(); return; }
+    const felt = $('ssOmr');
+    // Up and down belong to the list; Enter scans the marked site unless
+    // something has been typed in the field.
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      if (!rader().length) return;
+      e.preventDefault();
+      const i = markert();
+      marker(i < 0 ? 0 : i + (e.key === 'ArrowDown' ? 1 : -1));
+      return;
+    }
+    if (e.key === 'Enter' && !felt.value.trim() && markert() >= 0) {
+      e.preventDefault();
+      rader()[markert()].click();
+    }
   };
   document.addEventListener('keydown', tast, true);
   lag.querySelector('.ss-videre').onclick = lukk;
@@ -472,16 +518,19 @@ async function visStartskjerm(igjen = false) {
     if (g) g.style.transform = `translate(${(vx / len * mag).toFixed(2)}px, ${(vy / len * mag).toFixed(2)}px)`;
   });
 
-  // Version and what is new - filled once the server has answered.
+  // Version, and what is new as a line you can open - with a dot until seen.
   setTimeout(() => {
-    if (NABE_VERSJON) lag.querySelector('.ss-ver').textContent = ' · v' + NABE_VERSJON;
+    if (NABE_VERSJON) lag.querySelector('.ss-ver').textContent = ' · ' + NABE_VERSJON;
     const nytt = NYTT[NABE_VERSJON];
-    if (nytt && sistSett !== NABE_VERSJON) {
-      const boks = lag.querySelector('.ss-nytt-i');
-      boks.hidden = false;
-      boks.innerHTML = `<div class="ss-tittel">${T('Nytt i', 'New in')} ${esc(NABE_VERSJON)}</div><ul>`
-        + nytt.map(x => `<li>${esc(T(x[0], x[1]))}</li>`).join('') + '</ul>';
-    }
+    if (!nytt) return;
+    const boks = lag.querySelector('.ss-nytt-i');
+    const ulest = sistSett !== NABE_VERSJON;
+    boks.hidden = false;
+    boks.classList.toggle('ulest', ulest);
+    boks.innerHTML = `<details${ulest ? ' open' : ''}>
+        <summary><span>${T('Nytt i', 'New in')} ${esc(NABE_VERSJON)}</span>${ulest ? '<i class="ss-prikk" aria-label="ny"></i>' : ''}</summary>
+        <ul>${nytt.map(x => `<li>${esc(T(x[0], x[1]))}</li>`).join('')}</ul>
+      </details>`;
   }, 400);
 
   // The last plants, newest first, and the adapters as they are right now.
@@ -492,40 +541,83 @@ async function visStartskjerm(igjen = false) {
   for (const k of nett) for (const a of k.anlegg) if (!via[a.key]) via[a.key] = k.interface;
 
   // A scan that found nothing is not a place you left off.
-  const rader = Object.entries(MINNE || {}).filter(([, s]) => (s.enheter || []).length).sort((a, b) => (b[1].sist || 0) - (a[1].sist || 0)).slice(0, 5);
-  if (rader.length) {
-    lag.querySelector('.ss-anlegg').hidden = false;
-    const liste = lag.querySelector('.ss-liste');
-    liste.innerHTML = rader.map(([key, s]) => {
-      const n = (s.enheter || []).length;
-      const tittel = s.navn || enhetsnavn(s) || key;
-      return `
-      <button class="ss-rad" data-k="${esc(key)}" title="${esc(enhetsliste(s))}">
-        <span class="ss-rad-navn">${esc(tittel)}</span>
-        <span class="ss-rad-meta">${tittel !== key ? `<span class="ss-ip">${esc(key)}</span> · ` : ''}${n} ${n === 1 ? T('enhet', 'device') : T('enheter', 'devices')}${leverandorer(s)}${s.modus === 'bbmd' ? ' · BBMD' : ''}${via[key] ? ` · via ${esc(via[key])}` : ''}${(() => {
-          const b = sisteBesok(key);
-          return b && b.over ? ` · <span class="ss-over">${b.over} ${T('overstyrt da du gikk', 'overridden when you left')}</span>` : '';
-        })()}</span>
-      </button>`;
-    }).join('');
-    liste.querySelectorAll('.ss-rad').forEach(b => b.onclick = () =>
-      skann(b.dataset.k.split(' ').join(', '), (MINNE[b.dataset.k] || {}).modus));
+  const steder = Object.entries(MINNE || {}).filter(([, s]) => (s.enheter || []).length)
+    .sort((a, b) => (b[1].sist || 0) - (a[1].sist || 0)).slice(0, 6);
+  const kjent = new Set(steder.map(([k]) => k));
+  // Networks the PC is on that are not already a site above.
+  const andre = [];
+  for (const k of nett) for (const b of k.brikker) {
+    const k2 = b.v.split(', ').join(' ');
+    // A site that was scanned and found empty is neither a site nor news.
+    if (kjent.has(k2) || ((MINNE || {})[k2] && !((MINNE || {})[k2].enheter || []).length) || andre.some(x => x.v === b.v)) continue;
+    andre.push({...b, kort: k.interface, cidr: k.cidr});
   }
 
-  const vis = nett.filter(k => k.brikker.length);
-  if (vis.length) {
-    lag.querySelector('.ss-nett').hidden = false;
-    lag.querySelector('.ss-kortliste').innerHTML = vis.map(k => `
-      <div class="ss-kort-rad">
-        <div class="ss-kort-hode"><span class="ss-kort-navn">${esc(k.interface)}</span>
-          <span class="ss-ip">${esc(k.ip)}</span>${S.localAddr === k.cidr ? `<span class="ss-kort-i-bruk">${T('i bruk', 'in use')}</span>` : ''}</div>
-        <div class="ss-kort-nett">${k.brikker.map(b => `
-          <button type="button" class="ss-nett-brikke" data-v="${esc(b.v)}" data-c="${esc(k.cidr)}" title="${esc(b.tittel)}">
-            <span class="ss-ip">${esc(b.v)}</span><span class="ss-nett-merke">${esc(b.merke)}</span>
-          </button>`).join('')}</div>
-      </div>`).join('');
-    lag.querySelectorAll('.ss-nett-brikke').forEach(b => b.onclick = () => skannVia(b.dataset.v, b.dataset.c));
+  const naar = (t) => {
+    if (!t) return '';
+    const d = Math.floor((Date.now() / 1000 - t) / 86400);
+    return d < 1 ? T('i dag', 'today') : d < 2 ? T('i går', 'yesterday') : d < 30 ? T(`${d} d`, `${d} d`)
+      : new Date(t * 1000).toLocaleDateString(SPRAAK === 'en' ? 'en-GB' : 'nb-NO', {day: 'numeric', month: 'short'});
+  };
+  const liste = lag.querySelector('.ss-liste');
+  let html = steder.map(([key, s], i) => {
+    const n = (s.enheter || []).length;
+    const tittel = s.navn || enhetsnavn(s) || key;
+    const b = sisteBesok(key);
+    const naabar = !!via[key];
+    return `<button type="button" class="ss-rad" role="option" aria-selected="false" data-k="${esc(key)}" style="--i:${i}" title="${esc(enhetsliste(s))}">
+        <i class="ss-dot${naabar ? ' paa' : ''}" title="${naabar ? T('Nåbar nå', 'In reach now') : T('Ingen vei dit nå', 'No route there now')}"></i>
+        <span class="ss-rad-tekst">
+          <span class="ss-rad-navn">${esc(tittel)}</span>
+          <span class="ss-rad-meta"><span class="ss-ip">${esc(key)}</span> · ${n} ${n === 1 ? T('enhet', 'device') : T('enheter', 'devices')}${leverandorer(s)}${s.modus === 'bbmd' ? ' · BBMD' : ''}${naabar ? ` · via ${esc(via[key])}` : ''}</span>
+          ${b && b.over ? `<span class="ss-over">${b.over} ${T('overstyrt da du gikk', 'overridden when you left')}</span>` : ''}
+        </span>
+        <span class="ss-naar">${esc(naar(s.sist))}</span>
+      </button>`;
+  }).join('');
+  if (andre.length) {
+    html += `<div class="ss-liste-hode ss-under-hode">${T('Nett denne PC-en ser', 'Networks this PC sees')}</div>`
+      + andre.slice(0, 5).map((b, j) => `<button type="button" class="ss-rad ss-rad-nett" role="option" aria-selected="false" data-v="${esc(b.v)}" data-c="${esc(b.cidr)}" style="--i:${steder.length + j}" title="${esc(b.tittel)}">
+          <i class="ss-dot nett"></i>
+          <span class="ss-rad-tekst">
+            <span class="ss-rad-navn ss-ip">${esc(b.v)}</span>
+            <span class="ss-rad-meta">${esc(b.merke)} · ${esc(b.kort)}</span>
+          </span>
+        </button>`).join('');
   }
+  liste.innerHTML = html || `<div class="ss-tom">${T('Ingen anlegg ennå. Skriv et område til venstre.', 'No sites yet. Type a range on the left.')}</div>`;
+  liste.querySelectorAll('.ss-rad[data-k]').forEach(b => b.onclick = () =>
+    skann(b.dataset.k.split(' ').join(', '), (MINNE[b.dataset.k] || {}).modus));
+  liste.querySelectorAll('.ss-rad[data-v]').forEach(b => b.onclick = () => skannVia(b.dataset.v, b.dataset.c));
+  liste.addEventListener('pointermove', (e) => {
+    const r = e.target.closest('.ss-rad');
+    if (r) marker(rader().indexOf(r));
+  });
+  // The site most likely wanted is marked: the newest one in reach.
+  const forste = rader().findIndex(r => r.querySelector('.ss-dot.paa'));
+  if (forste >= 0) marker(forste);
+  merkAutoRad();
+}
+
+/* The row the search on start is scanning says so, with the count of
+   controllers that have answered, until the scan is done. */
+function merkAutoRad() {
+  const lag = $('startskjerm');
+  const r = lag && window.SS_AUTO && [...lag.querySelectorAll('.ss-rad[data-k]')].find(x => x.dataset.k === window.SS_AUTO);
+  if (!r || r.classList.contains('auto')) return;
+  r.classList.add('auto');
+  const naar = r.querySelector('.ss-naar');
+  const t = setInterval(() => {
+    if (!document.body.contains(r)) { clearInterval(t); return; }
+    const n = S.devices.length;
+    if (document.body.classList.contains('skanner')) {
+      naar.textContent = n ? T(`${n} svar`, `${n} replies`) : T('skanner…', 'scanning…');
+    } else if (n) {
+      naar.textContent = T(`${n} ${n === 1 ? 'klar' : 'klare'}`, `${n} ready`);
+      r.classList.add('klar');
+      clearInterval(t);
+    }
+  }, 300);
 }
 
 /* What a remembered site is, in the words on the equipment: the controller

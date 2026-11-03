@@ -152,7 +152,7 @@ def main():
             return True
         try:
             import urllib.request
-            with urllib.request.urlopen(base + "/api/mine", timeout=2) as r:
+            with urllib.request.urlopen(base + "/api/mine", timeout=1) as r:
                 mine = json.loads(r.read()).get("overstyrt", [])
         except Exception:
             mine = []
@@ -173,6 +173,15 @@ def main():
                   storage_path=str(data / "webview"))
     server.should_exit = True
     traad.join(timeout=3)
+    # Gone when the window is gone. Python would otherwise wait at exit for
+    # every worker thread still in a call - a ping to a dead address, a read
+    # from a controller behind a tunnel that dropped - and NABE would hang
+    # on with no window. Everything worth keeping is written as it happens.
+    try:
+        sys.stderr.flush()
+    except Exception:
+        pass
+    os._exit(0)
 
 
 if __name__ == "__main__":

@@ -68,24 +68,24 @@ function sistNaabar() {
     .sort((x, y) => y.sist - x.sist)[0] || null;
 }
 
-/* The start card makes way for the search - unless you have begun typing
-   in it, or it is showing what is new in this version. Then the card stays,
-   and says what is going on behind it. */
+/* The start card stays: it is where you start, and the search on start
+   only gets a head start behind it. The card says what is being scanned -
+   on the site's own row when it is one, as a line under the greeting when
+   it is a cable - and choosing that row then just goes in. Typing in the
+   card's field first means you want something else, so nothing starts. */
 function startskjermViker(cidr) {
   const lag = $('startskjerm');
   if (!lag) return true;
   if ($('ssOmr')?.value.trim()) return false;
-  const nytt = lag.querySelector('.ss-nytt-i');
-  if (nytt && !nytt.hidden) {
-    const a = cidr ? null : sistNaabar();
+  const a = cidr ? null : sistNaabar();
+  window.SS_AUTO = a ? a.key : '';
+  if (typeof merkAutoRad === 'function') merkAutoRad();
+  if (cidr) {
     const linje = document.createElement('div');
     linje.className = 'ss-auto';
-    linje.textContent = cidr ? T(`Skanner kabelen i ${cidr} i bakgrunnen.`, `Scanning the cable in ${cidr} in the background.`)
-      : T(`Skanner ${visNavn(a) || 'anlegget'} i bakgrunnen.`, `Scanning ${visNavn(a) || 'the site'} in the background.`);
+    linje.textContent = T(`Skanner kabelen i ${cidr} i bakgrunnen.`, `Scanning the cable in ${cidr} in the background.`);
     lag.querySelector('.ss-hilsen')?.after(linje);
-    return true;
   }
-  lag.querySelector('.ss-videre')?.click();
   return true;
 }
 

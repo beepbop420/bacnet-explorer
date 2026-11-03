@@ -1080,6 +1080,38 @@ function devStatus(d) {
 let BORTE_FOER = new Set();
 let BORTE_NAA = new Set();
 
+/* How the device list is grouped. Left to itself: by network once more
+   than one has been scanned - each network is usually its own part of the
+   building, a substation or a floor - and by vendor when it is all one
+   network. A choice made in the settings is kept. */
+function grupperingsValg() {
+  const p = loadPrefs();
+  if (p.groupBy) return p.groupBy;
+  return p.groupVendor === false ? 'none' : 'auto';
+}
+function grupperingsAkse() {
+  const v = grupperingsValg();
+  if (v !== 'auto') return v;
+  return new Set(S.devices.map(d => d._range).filter(Boolean)).size > 1 ? 'range' : 'vendor';
+}
+function grupperingsTekst() {
+  const v = grupperingsValg();
+  return v === 'auto' ? `automatisk · ${GROUP_NAVN[grupperingsAkse()]}` : GROUP_NAVN[v];
+}
+
+/* Which adapter a network is reached through, asked once per network and
+   kept: the heading says "via Hoppensprett" without a request per redraw. */
+const NETT_VIA = {};
+function nettVia(omr) {
+  if (omr in NETT_VIA) return NETT_VIA[omr];
+  NETT_VIA[omr] = '';
+  fetch('/api/route?target=' + encodeURIComponent(omr.split(/[\s,]/)[0]))
+    .then(r => r.json())
+    .then(r => { if (r && r.interface) { NETT_VIA[omr] = r.interface; renderDevices(); } })
+    .catch(() => {});
+  return '';
+}
+
 function renderDevices() {
   BORTE_NAA = new Set();
   $('devCount').textContent = S.devices.length;
@@ -1104,7 +1136,7 @@ function renderDevices() {
   }
   const dupIds = new Set(duplicateInstances().map(([inst]) => String(inst)));
 
-  const gruppert = (loadPrefs().groupBy || (loadPrefs().groupVendor === false ? 'none' : 'vendor')) === 'vendor';
+  const gruppert = grupperingsAkse() === 'vendor';
   const kort = (d) => {
     const sel = S.activeDev && S.activeDev.address === d.address ? ' sel' : '';
     const v = vendorOf(d.vendor_name, d.vendor_id);
@@ -1146,7 +1178,7 @@ function renderDevices() {
     </button>`;
   };
 
-  const akse = loadPrefs().groupBy || (loadPrefs().groupVendor === false ? 'none' : 'vendor');
+  const akse = grupperingsAkse();
   if (akse === 'none') {
     el.innerHTML = S.devices.map(kort).join('');
   } else {
@@ -1171,9 +1203,14 @@ function renderDevices() {
        reading turns sections red one by one, and a section that jumps up
        under the cursor turns a click on a device into a click on a heading.
        The new order is applied when the pointer leaves. */
+    // Networks stay in the order you gave them: they are places, and a
+    // floor that moves up because it has a fault is a floor you lose.
+    const plassNett = (g) => { const i = (S.scanRanges || []).indexOf(g.v.label); return i < 0 ? 1e6 : i; };
     let rekke = [...grupper.values()]
-      .sort((a, b) => verst(b) - verst(a) || b.enheter.length - a.enheter.length
-                      || NORSK.compare(a.v.label, b.v.label));
+      .sort(akse === 'range'
+        ? (a, b) => plassNett(a) - plassNett(b) || NORSK.compare(a.v.label, b.v.label)
+        : (a, b) => verst(b) - verst(a) || b.enheter.length - a.enheter.length
+                    || NORSK.compare(a.v.label, b.v.label));
     if (el.matches(':hover') && S._grpRekke) {
       const plass = (g) => { const i = S._grpRekke.indexOf(g.v.label); return i < 0 ? 1e6 : i; };
       rekke = rekke.slice().sort((a, b) => plass(a) - plass(b));
@@ -1189,14 +1226,15 @@ function renderDevices() {
         return `<div class="vgroup${av ? ' av' : ''}" style="--vc:${g.v.color}">
           <button class="vgroup-head" data-vendor="${esc(g.v.label)}">
             <span class="vgroup-bar"></span>
-            <span class="vgroup-name">${esc(g.v.label)}</span>
+            <span class="vgroup-name${akse === 'range' ? ' nett' : ''}">${esc(g.v.label)}</span>
+            ${akse === 'range' ? nettMeta(g) : ''}
             ${feil ? `<em class="dev-flag bad" title="${feil} enheter med feil">${feil}</em>` : ''}
             ${adv ? `<em class="dev-flag warn" title="${adv} enheter med overstyringer">${adv}</em>` : ''}
             <span class="vgroup-n">${g.enheter.length}</span>
             <span class="vgroup-chev">⌃</span>
           </button>
           <div class="vgroup-body"><div class="vgroup-inner">${
-            g.enheter.map(kort).join('')}</div></div>
+            akse === 'range' ? nettInnhold(g, kort) : g.enheter.map(kort).join('')}</div></div>
         </div>`;
       }).join('');
 
@@ -1220,6 +1258,34 @@ function renderDevices() {
   // Arrivals still opening carry on where they were, on the new elements.
   fortsettAnkomster();
   nabeKortEgg();
+}
+
+/* Under a network heading: the adapter it is reached through, a name it was
+   given, and how many answered this round when not all did. */
+function nettMeta(g) {
+  const via = nettVia(g.v.label);
+  const m = (typeof MINNE !== 'undefined' && MINNE[g.v.label]) || null;
+  const navn = m && m.navn ? m.navn : '';
+  const stille = g.enheter.filter(d => { const p = presence(d); return p && !p.naa; }).length;
+  const deler = [navn, via && `via ${via}`, stille && `${g.enheter.length - stille} av ${g.enheter.length} svarte`].filter(Boolean);
+  // Always there, empty or not: it is what pushes the count to the right.
+  return `<span class="vgroup-meta">${esc(deler.join(' · '))}</span>`;
+}
+
+/* A big network with more than one maker is split by maker inside it - a
+   line, not another heading you have to open. A small one is not: four
+   cards need no sections, and their colour already says the maker. */
+function nettInnhold(g, kort) {
+  const per = new Map();
+  for (const d of g.enheter) {
+    const v = vendorOf(d.vendor_name, d.vendor_id);
+    if (!per.has(v.label)) per.set(v.label, {v, enheter: []});
+    per.get(v.label).enheter.push(d);
+  }
+  if (g.enheter.length < 8 || per.size < 2) return g.enheter.map(kort).join('');
+  return [...per.values()].sort((a, b) => b.enheter.length - a.enheter.length || NORSK.compare(a.v.label, b.v.label))
+    .map(u => `<div class="vsub" style="--vc:${u.v.color}"><span class="vsub-navn">${esc(u.v.label)}</span><span class="vsub-n">${u.enheter.length}</span></div>`
+      + u.enheter.map(kort).join('')).join('');
 }
 
 /* -------------------------------------------------------------- load points */
@@ -4321,7 +4387,7 @@ function commands() {
       () => { closeCmd(); openTema('utseende'); });
   add('Visning', 'Kolonner...', () => { closeCmd(); openCols(); });
   add('Visning', 'Grupper enheter (leverandor / IP-omrade / av)', () => $('groupBtn').click(),
-      {tilstand: () => GROUP_NAVN[loadPrefs().groupBy || (loadPrefs().groupVendor === false ? 'none' : 'vendor')],
+      {tilstand: () => grupperingsTekst(),
        undertekst: () => { const lev = new Set(S.devices.map(d => vendorOf(d.vendor_name, d.vendor_id).label)).size;
                            const omr = new Set(S.devices.map(d => d._range).filter(Boolean)).size;
                            return `${lev} leverandorer${omr > 1 ? ', ' + omr + ' omrader' : ''}`; },
@@ -5931,9 +5997,8 @@ function syncMenuStates() {
 
   const gb = $('groupBtn');
   if (gb) {
-    const akse = loadPrefs().groupBy || (loadPrefs().groupVendor === false ? 'none' : 'vendor');
-    gb.classList.toggle('on', akse !== 'none');
-    $('groupState').textContent = GROUP_NAVN[akse];
+    gb.classList.toggle('on', grupperingsAkse() !== 'none');
+    $('groupState').textContent = grupperingsTekst();
   }
 
   const kort = loadPrefs().shortNames !== false;
@@ -8913,15 +8978,16 @@ function bevegelseAv() {
   return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 }
 
-const GROUP_AKSER = ['vendor', 'range', 'none'];
-const GROUP_NAVN = {vendor: 'leverandør', range: 'IP-område', none: 'av'};
+const GROUP_AKSER = ['auto', 'vendor', 'range', 'none'];
+const GROUP_NAVN = {auto: 'automatisk', vendor: 'leverandør', range: 'nett', none: 'av'};
 $('groupBtn').onclick = () => {
-  const naa = loadPrefs().groupBy || (loadPrefs().groupVendor === false ? 'none' : 'vendor');
+  const naa = grupperingsValg();
   const neste = GROUP_AKSER[(GROUP_AKSER.indexOf(naa) + 1) % GROUP_AKSER.length];
   savePrefs({groupBy: neste, groupVendor: neste !== 'none'});
   renderDevices(); syncMenuStates();
   toast(neste === 'none' ? 'Enheter vises i én liste'
-                         : 'Grupperes etter ' + GROUP_NAVN[neste]);
+      : neste === 'auto' ? 'Grupperes etter nett når flere er skannet, ellers etter leverandør'
+      : 'Grupperes etter ' + GROUP_NAVN[neste]);
 };
 
 /* Schedules, calendars, trend logs and notification classes are objects like
