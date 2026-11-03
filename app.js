@@ -4456,6 +4456,7 @@ function commands() {
   add('Eksport', 'Sammenlign med EDE-fil…', () => { closeCmd(); startEdeCompare(); }, {when: harPunkter});
   add('Eksport', 'Skrivelogg', () => { closeCmd(); showWriteLog(); });
   add('Visning', 'Garderobe…', () => { closeCmd(); aapneGarderobe(); });
+  add('Visning', 'Tunnelen (spill)', () => { closeCmd(); aapneTunnel(); }, {when: () => !S.activeDev});
   add('Handling', 'Ukeprogram — vis og rediger', () => { closeCmd(); $('schBtn').click(); }, {when: harEnhet});
 
   add('Anlegg', 'Lagre anlegg', () => { closeCmd(); saveProject(); }, {when: () => S.devices.length > 0});

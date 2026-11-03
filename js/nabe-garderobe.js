@@ -80,8 +80,18 @@ const PLAGG = [
   {id: 'refleks', plass: 'hals', navn: ['Refleksvest', 'Hi-vis vest'], krav: ['enheter', 100, ['Finn 100 enheter', 'Find 100 devices']],
    nabe: '<rect x="3" y="24.8" width="26" height="4.2" rx="1" fill="#c6f432"/><rect x="3" y="26.2" width="26" height="1.1" fill="#e8e8e8"/>',
    nabo: '<rect x="8" y="20.6" width="16" height="2.8" rx=".8" fill="#c6f432"/><rect x="8" y="21.5" width="16" height=".8" fill="#e8e8e8"/>'},
+  // --- earned in the tunnel game, nowhere else
+  {id: 'flygebriller', plass: 'ansikt', navn: ['Flygebriller', 'Flying goggles'], krav: ['tunnelRekord', 25, ['25 poeng i Tunnelen', '25 points in the tunnel']], spill: true,
+   nabe: '<rect x="2.6" y="13.4" width="26.8" height="2.4" fill="#5b3a1e"/><circle cx="11.2" cy="15.6" r="4.9" fill="rgba(255,200,120,.28)" stroke="#a87a3d" stroke-width="1.4"/><circle cx="20.8" cy="15.6" r="4.9" fill="rgba(255,200,120,.28)" stroke="#a87a3d" stroke-width="1.4"/>',
+   nabo: '<rect x="8" y="14" width="16" height="1.6" fill="#5b3a1e"/><circle cx="13.1" cy="14.8" r="2.7" fill="rgba(255,200,120,.28)" stroke="#a87a3d" stroke-width="1"/><circle cx="18.9" cy="14.8" r="2.7" fill="rgba(255,200,120,.28)" stroke="#a87a3d" stroke-width="1"/>'},
+  {id: 'gullkabel', plass: 'hals', navn: ['Gullkabel', 'Gold cable'], krav: ['tunnelRunder', 50, ['Kjør Tunnelen 50 ganger', 'Run the tunnel 50 times']], spill: true,
+   nabe: '<path d="M4 26.6Q16 31 28 26.6" fill="none" stroke="#e8b923" stroke-width="1.6"/><rect x="14" y="27.6" width="4" height="3.2" rx=".6" fill="#e8b923"/><path d="M15 30.8v1.2M17 30.8v1.2" stroke="#c99a00" stroke-width=".6"/>',
+   nabo: '<path d="M9.4 22.6Q16 25.4 22.6 22.6" fill="none" stroke="#e8b923" stroke-width="1.2"/><rect x="14.6" y="23.4" width="2.8" height="2.2" rx=".5" fill="#e8b923"/>'},
+  {id: 'jetpakke', plass: 'ekstra', navn: ['Jetpakke', 'Jetpack'], krav: ['tunnelRekord', 150, ['150 poeng i én tur i Tunnelen', '150 points in one tunnel run']], spill: true, sjelden: true,
+   nabe: '<g class="plagg-jet"><rect x="-1.8" y="12" width="4.4" height="13" rx="2" fill="#9aa4b1" stroke="#6b7480" stroke-width=".5"/><rect x="29.4" y="12" width="4.4" height="13" rx="2" fill="#9aa4b1" stroke="#6b7480" stroke-width=".5"/><rect x="-1" y="14.6" width="2.8" height="1" fill="#e63946"/><rect x="30.2" y="14.6" width="2.8" height="1" fill="#e63946"/><path d="M-1.2 25h3.2l-.6 1.6h-2z M30 25h3.2l-.6 1.6h-2z" fill="#4a4f57"/><path class="plagg-flamme" d="M-.6 26.8Q.4 31.6 1.4 26.8Z M30.6 26.8Q31.6 31.6 32.6 26.8Z" fill="#ffb02e"/><path class="plagg-flamme indre" d="M0 26.8Q.4 29.4.8 26.8Z M31.2 26.8Q31.6 29.4 32 26.8Z" fill="#fff4b0"/></g>',
+   nabo: '<g class="plagg-jet"><rect x="1" y="29.6" width="30" height="2.2" rx="1.1" fill="#2c6be0"/><rect x="3" y="30.2" width="26" height=".7" rx=".35" fill="#9cc2ff"/><path class="plagg-flamme" d="M5 31.8Q6 34.6 7 31.8Z M25 31.8Q26 34.6 27 31.8Z" fill="#7fd1ff"/></g>'},
 ];
-const PLASSER = [['hode', ['Hode', 'Head']], ['ansikt', ['Ansikt', 'Face']], ['hals', ['Hals', 'Neck']]];
+const PLASSER = [['hode', ['Hode', 'Head']], ['ansikt', ['Ansikt', 'Face']], ['hals', ['Hals', 'Neck']], ['ekstra', ['Ekstra', 'Extra']]];
 
 // Props for what they do now and then - not worn, held.
 const REKVISITT = {
@@ -187,10 +197,10 @@ function tegnGarderobe() {
     const paa = valgt[p.plass] === p.id;
     const [k, n, tekst] = p.krav || [];
     const har = p.krav ? Math.min(t[k] || 0, n) : 0;
-    return `<button type="button" class="gd-kort${aapen ? '' : ' laast'}${paa ? ' paa' : ''}" data-plagg="${p.id}" ${aapen ? '' : 'aria-disabled="true"'}
+    return `<button type="button" class="gd-kort${aapen ? '' : ' laast'}${paa ? ' paa' : ''}${p.spill ? ' spill' : ''}${p.sjelden ? ' sjelden' : ''}" data-plagg="${p.id}" ${aapen ? '' : 'aria-disabled="true"'}
         title="${esc(aapen ? (paa ? T('Ta av', 'Take off') : T('Ta på', 'Put on')) : T(tekst[0], tekst[1]))}">
       <span class="gd-fig" data-forhand="${p.id}">${forhaand(hvem)}</span>
-      <span class="gd-navn">${esc(pn(p))}</span>
+      <span class="gd-navn">${esc(pn(p))}</span>${p.spill ? `<span class="gd-merke">${T('Fra Tunnelen', 'From the tunnel')}</span>` : ''}
       ${aapen ? `<span class="gd-status">${paa ? T('På', 'On') : ''}</span>`
               : `<span class="gd-krav">${esc(T(tekst[0], tekst[1]))}</span><span class="gd-bar"><i style="transform:scaleX(${har / n})"></i></span><span class="gd-tall">${har} / ${n}</span>`}
     </button>`;
@@ -274,6 +284,9 @@ const PLAGG_REPLIKK = {
   refleks: [['nabo', 'ingen kommer til å kjøre på deg her', 'nobody is going to run you over in here'], ['nabe', 'Det er fordi jeg bruker refleks.', 'That is because I wear hi-vis.']],
   kokkelue: [['nabo', 'hva lager vi?', 'what are we making?'], ['nabe', 'Variabel-fil. Al dente.', 'A Variabel file. Al dente.']],
   slips: [['nabo', 'møte?', 'meeting?'], ['nabe', 'Overlevering. Kunden liker slips.', 'Handover. The client likes ties.']],
+  jetpakke: [['nabo', 'HVOR fikk du den', 'WHERE did you get that'], ['nabe', '150 brannmurer. Uten VPN.', '150 firewalls. Without a VPN.'], ['nabo', 'kan jeg låne den', 'can i borrow it'], ['nabe', 'Nei.', 'No.']],
+  flygebriller: [['nabo', 'skal du fly?', 'are you flying?'], ['nabe', 'Jeg har flydd. I en tunnel.', 'I have flown. In a tunnel.']],
+  gullkabel: [['nabo', 'er den ekte gull', 'is that real gold'], ['nabe', 'Kategori 8. Ingen merker forskjellen.', 'Category 8. Nobody can tell.']],
   hodelykt: [['nabe', 'Mørkt her. Eller er det bare dark mode.', 'Dark in here. Or is it just dark mode.']],
   solbriller: [['nabo', 'det er innendørs', 'we are indoors'], ['nabe', 'Skjermen er lys.', 'The screen is bright.']],
   nerd: [['nabo', 'teip?', 'tape?'], ['nabe', 'Den holder. Som det meste i et teknisk rom.', 'It holds. Like most things in a plant room.']],

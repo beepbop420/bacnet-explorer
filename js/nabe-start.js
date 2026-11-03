@@ -177,6 +177,10 @@ const FAKTA = [
   ['COV betyr at regulatoren sier fra selv. Mindre spørring, mer ro.', 'COV means the controller speaks up itself. Less asking, more peace.'],
 ];
 const NYTT = {
+  '1.38': [
+    ['Tunnelen: når ingen anlegg kan nås, kan NABE kjøres gjennom en VPN-tunnel som er nede. Hold mellomrom for å stige, unngå brannmurene, samle I-Am', 'The tunnel: when no site can be reached, NABE can be flown through a dead VPN tunnel. Hold space to rise, dodge the firewalls, collect I-Am'],
+    ['Tre plagg som bare finnes i Tunnelen: flygebriller, gullkabel, og en jetpakke for den som klarer 150 poeng i én tur', 'Three items found only in the tunnel: flying goggles, a gold cable, and a jetpack for whoever makes 150 points in one run'],
+  ],
   '1.37': [
     ['Lukkevakta stopper deg bare for punkter du kan frigi herfra. Står det noe overstyrt på et nett du har forlatt, lukker NABE og minner deg på det neste gang du er der', 'The close guard only stops you for points you can release from here. Something overridden on a network you have left: NABE closes, and reminds you next time you are there'],
     ['«Glem» tar et punkt av lista uten å skrive noe, for det som er frigitt på annen måte. Det står i skriveloggen', '“Forget” takes a point off the list without writing anything, for what was released some other way. It shows in the write log'],
