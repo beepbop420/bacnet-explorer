@@ -10,6 +10,17 @@ one VPN with fifty others, and controllers that refuse to answer a Who-Is.
 It also has a small, deeply unimpressed controller for a mascot. It watches
 your mouse, falls asleep when you leave, and has opinions about priority 1.
 
+## ⬇ Download
+
+**[Download NABE for Windows](https://github.com/beepbop420/bacnet-explorer/releases/latest/download/NABE-Installasjon.zip)** (≈20 MB)
+
+1. Right-click the zip and choose **Extract All**.
+2. Double-click **Installer NABE** in the folder that appears.
+3. Done - NABE is in the Start menu.
+
+No administrator rights needed. Everything else in the zip is tucked away;
+**Installer NABE** is the only thing you see.
+
 > The interface is in English by default, with Norwegian one click away.
 > Code comments are in English, with some Norwegian where the trade speaks it.
 
@@ -49,8 +60,9 @@ your mouse, falls asleep when you leave, and has opinions about priority 1.
 python lag_installasjon.py
 ```
 
-builds `dist/NABE-Installasjon-<version>.zip`. Unzip it and double-click
-**Installer NABE**. It installs for the current user only - no administrator
+builds `dist/NABE-Installasjon.zip` (and a copy with the version in the
+name). Unzip it and double-click **Installer NABE** - the only file in it
+you can see; the rest sits in a hidden folder next to it. It installs for the current user only - no administrator
 rights - with Start menu and desktop shortcuts, an entry in *Apps*, and an
 uninstaller that keeps your site memory. The terms and conditions are worth
 reading. Nobody does.
