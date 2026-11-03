@@ -220,6 +220,14 @@ def kjor_tester():
     uten = [d.get("address") for d in r.get("devices") or [] if not d.get("object_name")]
     sjekk("Who-Is-funn får navn", bool(r.get("devices")) and not uten, f"uten navn: {uten}")
 
+    # The search on start scans on its own; with the tunnel down it hears
+    # nothing, and that must not wipe what the site is known to have.
+    en = {"address": "10.9.9.9", "device_instance": 1, "object_name": "X"}
+    kall("/api/sites", {"ranges": ["10.9.9.0/24"], "devices": [en]})
+    tom = kall("/api/sites", {"ranges": ["10.9.9.0/24"], "devices": []})
+    sjekk("et tomt skann sletter ikke enhetene anlegget husker",
+          len((tom.get("site") or {}).get("enheter") or []) == 1, str((tom.get("site") or {}).get("enheter")))
+
     import base64, tempfile
     tmp = tempfile.mkdtemp(prefix="nabo-")
     r1 = kall("/api/lagre", {"mappe": tmp, "navn": "nabo.csv", "data": base64.b64encode(b"x").decode()})

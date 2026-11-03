@@ -171,7 +171,7 @@ async def guard_and_cors(request, call_next):
         response.headers["Vary"] = "Origin"
     return response
 
-VERSJON = "1.29"
+VERSJON = "1.30"
 
 state = {"app": None, "local_address": None, "read_only": False, "bbmd": None}
 
@@ -2593,8 +2593,16 @@ async def sites_record(body: SiteBody):
     naa = time.time()
     site = SITES.get(key) or {"forste": naa, "ganger": 0, "navn": ""}
     site["ranges"] = [r.strip() for r in body.ranges if r.strip()]
-    site["sist"] = naa
-    site["ganger"] = int(site.get("ganger", 0)) + 1
+    # A scan that heard nothing at a site that has answered before says the
+    # VPN was down or another program held the port - not that the building
+    # is empty. The controllers stay remembered, and it does not count as a
+    # visit. Measured: one such scan behind a port conflict wiped the six
+    # controllers of a real site, and the search on start would repeat it
+    # every time the tunnel was down.
+    tom_igjen = not body.devices and bool(site.get("enheter"))
+    if not tom_igjen:
+        site["sist"] = naa
+        site["ganger"] = int(site.get("ganger", 0)) + 1
     if body.local_address:
         site["lokal"] = body.local_address
     if body.name is not None:
@@ -2606,10 +2614,11 @@ async def sites_record(body: SiteBody):
 
     # Only the fields that identify a controller - a whole point list belongs
     # in a project, not in a list you skim to remember where you were.
-    site["enheter"] = [
-        {k: d.get(k) for k in ("address", "device_instance", "object_name", "vendor")}
-        for d in (body.devices or [])[:400]
-    ]
+    if not tom_igjen:
+        site["enheter"] = [
+            {k: d.get(k) for k in ("address", "device_instance", "object_name", "vendor")}
+            for d in (body.devices or [])[:400]
+        ]
     SITES[key] = site
 
     if len(SITES) > SITES_MAX:

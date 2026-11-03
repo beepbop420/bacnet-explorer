@@ -178,6 +178,11 @@ const FAKTA = [
   ['COV betyr at regulatoren sier fra selv. Mindre spørring, mer ro.', 'COV means the controller speaks up itself. Less asking, more peace.'],
 ];
 const NYTT = {
+  '1.30': [
+    ['Hundrevis av feil under én del av en JACE blir én linje: «527 under BACnet IP.564001-OU001». Trolig én forbindelse nede, ikke 527 feil. Klikk for bare de punktene', 'Hundreds of faults under one part of a JACE become one line: “527 under BACnet IP.564001-OU001”. Probably one link down, not 527 faults. Click for just those points'],
+    ['Et skann som ikke hører noe, sletter ikke lenger enhetene NABE husker fra anlegget', 'A scan that hears nothing no longer wipes the controllers NABE remembers for the site'],
+    ['Søket ved oppstart tar anlegget du var på sist, også når flere er innen rekkevidde, og tomme skann står ikke lenger på startkortet', 'The search on start takes the site you were at last, also when several are in reach, and empty scans no longer stand on the start card'],
+  ],
   '1.29': [
     ['NABE søker selv når den åpnes: kabelen inn i anlegget, eller anlegget du var på sist, og åpner regulatoren du slapp', 'NABE looks for itself when it opens: the cable into the plant, or the site you were at last, and opens the controller you left'],
     ['Én linje for hele anlegget over enhetslista: overstyrt, i alarm, feil og ute av drift på alle regulatorene. Klikk et tall for punktene', 'One line for the whole plant above the device list: overridden, in alarm, faulty and out of service across every controller. Click a count for the points'],
@@ -486,7 +491,8 @@ async function visStartskjerm(igjen = false) {
   const via = {};
   for (const k of nett) for (const a of k.anlegg) if (!via[a.key]) via[a.key] = k.interface;
 
-  const rader = Object.entries(MINNE || {}).sort((a, b) => (b[1].sist || 0) - (a[1].sist || 0)).slice(0, 5);
+  // A scan that found nothing is not a place you left off.
+  const rader = Object.entries(MINNE || {}).filter(([, s]) => (s.enheter || []).length).sort((a, b) => (b[1].sist || 0) - (a[1].sist || 0)).slice(0, 5);
   if (rader.length) {
     lag.querySelector('.ss-anlegg').hidden = false;
     const liste = lag.querySelector('.ss-liste');

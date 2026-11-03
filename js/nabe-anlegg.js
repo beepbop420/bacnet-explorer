@@ -43,16 +43,30 @@ async function sokVedStart() {
     runScan();
     return;
   }
-  const naa = Date.now() / 1000;
-  const nylig = SK.anlegg.filter(a => a.naabar && a.sist && naa - a.sist < 14 * 86400);
-  if (nylig.length === 1) {
-    const a = nylig[0];
+  // The newest site with controllers in it. An empty scan is not a site, and
+  // on a real PC two or three are always in reach (the office network too),
+  // so the last one you worked on wins, as on the start card.
+  const a = sistNaabar();
+  if (a) {
     const i = SK.rader.findIndex(r => r.a?.key === a.key);
-    nabeSier(T(`${a.navn || a.key} er nåbar. Fortsetter der.`, `${a.navn || a.key} is in reach. Carrying on there.`), 'fornoyd', 'start-naabar');
+    nabeSier(T(`${visNavn(a)} er nåbar. Fortsetter der.`, `${visNavn(a)} is in reach. Carrying on there.`), 'fornoyd', 'start-naabar');
     bruk(i >= 0 ? SK.rader[i] : {type: 'anlegg', a}, {skann: true});
   }
 }
 setTimeout(sokVedStart, 1400);
+
+// What a site is called on screen: its name, else its controllers' names.
+function visNavn(a) {
+  if (!a) return '';
+  const m = typeof MINNE !== 'undefined' ? MINNE[a.key] : null;
+  return a.navn || (m && typeof enhetsnavn === 'function' && enhetsnavn(m)) || a.key;
+}
+
+function sistNaabar() {
+  const naa = Date.now() / 1000;
+  return SK.anlegg.filter(a => a.naabar && a.enheter > 0 && a.sist && naa - a.sist < 14 * 86400)
+    .sort((x, y) => y.sist - x.sist)[0] || null;
+}
 
 /* The start card makes way for the search - unless you have begun typing
    in it, or it is showing what is new in this version. Then the card stays,
@@ -63,12 +77,11 @@ function startskjermViker(cidr) {
   if ($('ssOmr')?.value.trim()) return false;
   const nytt = lag.querySelector('.ss-nytt-i');
   if (nytt && !nytt.hidden) {
-    const naa = Date.now() / 1000;
-    const a = cidr ? null : SK.anlegg.find(x => x.naabar && x.sist && naa - x.sist < 14 * 86400);
+    const a = cidr ? null : sistNaabar();
     const linje = document.createElement('div');
     linje.className = 'ss-auto';
     linje.textContent = cidr ? T(`Skanner kabelen i ${cidr} i bakgrunnen.`, `Scanning the cable in ${cidr} in the background.`)
-      : T(`Skanner ${a?.navn || a?.key || 'anlegget'} i bakgrunnen.`, `Scanning ${a?.navn || a?.key || 'the site'} in the background.`);
+      : T(`Skanner ${visNavn(a) || 'anlegget'} i bakgrunnen.`, `Scanning ${visNavn(a) || 'the site'} in the background.`);
     lag.querySelector('.ss-hilsen')?.after(linje);
     return true;
   }
@@ -150,18 +163,33 @@ function tegnAnlegg() {
   const sist = AN.forrige && AN.forrige.key === asNokkel() ? anSistTekst(AN.forrige) : '';
   let liste = '';
   if (AN.apen && t.flagg[AN.apen]?.length) {
-    const rader = t.flagg[AN.apen];
-    liste = `<div class="as-liste">${rader.slice(0, 60).map(({d, p}) =>
-      `<button type="button" class="as-rad" data-ip="${esc(d.address)}" data-obj="${esc(p.objid)}" title="${esc(p.name || p.objid)}">
-         <span class="as-dev">${esc(d.object_name || d.address)}</span>
-         <span class="as-pkt">${esc(p.name || p.objid)}</span>
+    const grupper = anGrupper(t.flagg[AN.apen]);
+    const rad = ({d, p}) => `<button type="button" class="as-rad" data-ip="${esc(d.address)}" data-obj="${esc(p.objid)}" title="${esc(p.name || p.objid)}">
+         <span class="as-pkt">${esc(anKort(d, p))}</span>
          <span class="as-ver">${esc(anVerdi(p))}</span>
-       </button>`).join('')}
-      ${rader.length > 60 ? `<div class="as-mer">${T(`og ${rader.length - 60} til`, `and ${rader.length - 60} more`)}</div>` : ''}</div>`;
+       </button>`;
+    liste = `<div class="as-liste">${grupper.map(g => {
+      const vis = g.enkle.length <= 8 ? g.enkle.length : (grupper.length === 1 ? 10 : 4);
+      const skjult = g.rader.length - vis;
+      return `<div class="as-gruppe">
+        <button type="button" class="as-ghode" data-apne="${esc(g.d.address)}" title="${T('Åpne regulatoren med disse punktene', 'Open the controller with these points')}">
+          <span>${esc(g.d.object_name || g.d.address)}</span><b>${g.rader.length}</b></button>
+        ${g.klynger.map(k => `<button type="button" class="as-felles" data-apne="${esc(g.d.address)}" data-q="${esc(k.vis)}" title="${T('Åpne regulatoren med bare disse punktene', 'Open the controller with only these points')}"><b>${k.alle ? T('alle', 'all') : k.n}</b> ${T('under', 'under')} ${esc(k.vis)}</button>`).join('')}
+        ${g.klynger.length ? `<div class="as-aarsak">${g.klynger.length === 1
+            ? T('Trolig én felles årsak, som en forbindelse som er nede.', 'Probably one cause, like a link that is down.')
+            : T('Trolig én årsak for hver del, som forbindelser som er nede.', 'Probably one cause for each part, like links that are down.')}</div>` : ''}
+        ${g.enkle.slice(0, vis).map(rad).join('')}
+        ${skjult > 0 ? `<button type="button" class="as-mer" data-apne="${esc(g.d.address)}">${g.klynger.length && !vis
+            ? T(`åpne alle ${g.rader.length}`, `open all ${g.rader.length}`)
+            : T(`og ${skjult} til · åpne`, `and ${skjult} more · open`)}</button>` : ''}
+      </div>`;
+    }).join('')}</div>`;
   }
   const html = `<div class="as-linje">
       <span class="as-tittel">${T('Anlegget', 'The plant')}</span>
       <span class="as-tallene">${hoved}</span>
+    </div>
+    <div class="as-linje2">
       <span class="as-fram">${fram}${sist ? ` · <span class="as-sist">${sist}</span>` : ''}</span>
       <button type="button" class="as-kopier" data-kopier title="${T('Kopier status som tekst, til servicerapporten', 'Copy the status as text, for the service report')}">${T('Kopier', 'Copy')}</button>
     </div>${liste}`;
@@ -174,6 +202,16 @@ async function anKlikk(e) {
   const b = e.target.closest('[data-f]');
   if (b) { AN.apen = AN.apen === b.dataset.f ? '' : b.dataset.f; tegnAnlegg(); return; }
   if (e.target.closest('[data-kopier]')) { anKopier(e.target.closest('[data-kopier]')); return; }
+  const apne = e.target.closest('[data-apne]');
+  if (apne) {
+    const f = AN.apen;
+    await selectDevice(apne.dataset.apne);
+    if (S.activeDev?.address !== apne.dataset.apne) return;
+    settFlaggfilter(f);
+    S.filters.q = apne.dataset.q || ''; $('q').value = S.filters.q;
+    renderPoints();
+    return;
+  }
   const r = e.target.closest('.as-rad');
   if (r) {
     const f = AN.apen;
@@ -184,6 +222,78 @@ async function anKlikk(e) {
     renderPoints();
     selectPoint(r.dataset.obj);
   }
+}
+
+
+/* The flagged points of one kind, per controller, most first.
+
+   A JACE with 600 faulty points rarely has 600 faults. Its points are
+   grouped by where they come from - BACnet IP.564001-OU001, BACnet
+   IP.360003 - and when nearly everything under one such part is flagged,
+   that part is named once instead: it is one link down, one unit gone.
+   Measured on a real site: 607 faults on 564001-OS001 were 527 under the
+   integration to OU001 (which itself answered with none) and the rest
+   under the one to 360003. Only what is left over is listed one by one. */
+function anGrupper(rader) {
+  const per = new Map();
+  for (const x of rader) {
+    if (!per.has(x.d.address)) per.set(x.d.address, {d: x.d, rader: []});
+    per.get(x.d.address).rader.push(x);
+  }
+  const grupper = [...per.values()].sort((a, b) => b.rader.length - a.rader.length);
+  for (const g of grupper) {
+    g.klynger = g.rader.length >= 8 ? anKlynger(g) : [];
+    g.enkle = g.rader.filter(x => !g.klynger.some(k => (x.p.name || '').startsWith(k.pre)));
+  }
+  return grupper;
+}
+
+function anKlynger(g) {
+  const pts = S.cache[g.d.address] || [];
+  const deler = s => s.split(/(?<=[./])/);
+  const forelder = pre => deler(pre).slice(0, -1).join('');
+  const felles = typeof commonNamePrefix === 'function' ? commonNamePrefix(pts) || '' : '';
+  const tellF = new Map(), tellA = new Map();
+  const legg = (m, n) => {
+    const d = deler(n);
+    let pre = '';
+    for (let k = 0; k < d.length - 1 && k < 8; k++) { pre += d[k]; m.set(pre, (m.get(pre) || 0) + 1); }
+  };
+  for (const x of g.rader) legg(tellF, x.p.name || '');
+  for (const p of pts) legg(tellA, p.name || '');
+  // A part counts when it holds at least eight of the flags, nearly
+  // everything under it is flagged, and it is not the controller itself.
+  const del = pre => pre.length > felles.length && (tellF.get(pre) || 0) >= 8
+    && tellF.get(pre) / (tellA.get(pre) || 1) >= 0.8 && (tellA.get(pre) || 0) < pts.length * 0.98;
+  const dybde = pre => deler(pre).length;
+  const barn = pre => [...tellF.keys()].filter(k => k !== pre && k.startsWith(pre) && dybde(k) === dybde(pre) + 1);
+  // Down to the parts that say most: BACnet IP is split into the units
+  // under it when they carry nearly all of its flags between them. Only
+  // into units - names with a number, 564001-OU001 or 360003 - not into
+  // the folders inside one (Plan 2, Energimålere): a unit that is gone
+  // takes all its folders with it, and that is one cause, not three.
+  const enhet = pre => /\d{3}/.test(deler(pre).pop() || '');
+  const ned = pre => {
+    const b = barn(pre).filter(k => del(k) && enhet(k));
+    const sum = b.reduce((n, k) => n + tellF.get(k), 0);
+    return b.length && sum >= 0.9 * tellF.get(pre) ? b.flatMap(ned) : [pre];
+  };
+  const topp = [...tellF.keys()].filter(k => del(k) && !del(forelder(k)));
+  const valgt = [...new Set(topp.flatMap(ned))].sort((a, b) => tellF.get(b) - tellF.get(a)).slice(0, 4);
+  return valgt.map(pre => ({
+    pre, n: tellF.get(pre), alle: tellF.get(pre) === g.rader.length,
+    vis: (pre.startsWith(felles) ? pre.slice(felles.length) : pre).replace(/[./]$/, '') || pre,
+  }));
+}
+
+// A point's name without what every point on its controller starts with.
+const AN_FELLES = new WeakMap();
+function anKort(d, p) {
+  const n = p.name || p.objid;
+  const pts = S.cache[d.address] || [];
+  if (!AN_FELLES.has(pts)) AN_FELLES.set(pts, typeof commonNamePrefix === 'function' ? commonNamePrefix(pts) || '' : '');
+  const f = AN_FELLES.get(pts);
+  return f && n.startsWith(f) && n.length > f.length ? n.slice(f.length) : n;
 }
 
 /* ------------------------------------------------- copying, comparing */
@@ -198,9 +308,17 @@ function anTekst(t) {
   if (!med.length) linjer.push(t.ferdig && t.alleStatus && !t.feilet
     ? T('Ingen punkter i alarm, med feil, overstyrt eller ute av drift.', 'No points in alarm, faulty, overridden or out of service.')
     : T('Ingen flagg funnet i det som er lest.', 'Nothing flagged in what was read.'));
+  // Per controller, and a long run with one cause as one line: a report
+  // with 600 lines of the same fault is read by nobody.
   for (const f of med) {
     linjer.push('', `${t.flagg[f].length} ${anFlaggNavn(f)}:`);
-    for (const {d, p} of t.flagg[f]) linjer.push(`  ${d.object_name || d.address}  ${p.name || p.objid}  ${anVerdi(p)}`);
+    for (const g of anGrupper(t.flagg[f])) {
+      linjer.push(`  ${g.d.object_name || g.d.address} (${g.rader.length})`);
+      for (const k of g.klynger) linjer.push(`    ${k.alle ? T('alle', 'all') : k.n} ${T('under', 'under')} ${k.vis}`);
+      const vis = g.enkle.length <= 8 ? g.enkle.length : 5;
+      for (const x of g.enkle.slice(0, vis)) linjer.push(`    ${anKort(x.d, x.p)}  ${anVerdi(x.p)}`);
+      if (g.enkle.length > vis) linjer.push(`    ${T(`… og ${g.enkle.length - vis} til`, `… and ${g.enkle.length - vis} more`)}`);
+    }
   }
   return linjer.join('\r\n');
 }
