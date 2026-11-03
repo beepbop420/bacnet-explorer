@@ -228,6 +228,12 @@ def kjor_tester():
     sjekk("et tomt skann sletter ikke enhetene anlegget husker",
           len((tom.get("site") or {}).get("enheter") or []) == 1, str((tom.get("site") or {}).get("enheter")))
 
+    # English edition: no static text in index.html may stay Norwegian.
+    import subprocess as _sp
+    v = _sp.run(["node", str(Path(__file__).parent / "sprakvakt.js"), str(Path(__file__).parent)],
+                capture_output=True, text=True, encoding="utf-8")
+    sjekk("engelsk: all fast tekst i index.html er oversatt", v.returncode == 0, (v.stdout or "").strip()[:300])
+
     import base64, tempfile
     tmp = tempfile.mkdtemp(prefix="nabo-")
     r1 = kall("/api/lagre", {"mappe": tmp, "navn": "nabo.csv", "data": base64.b64encode(b"x").decode()})

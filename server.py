@@ -125,6 +125,16 @@ def _origin_ok(request) -> bool:
 
 
 @app.middleware("http")
+async def sprak(request, call_next):
+    """The page's language, for t() in whatever this request runs."""
+    tok = SPRAAK_VAR.set("en" if request.headers.get("x-sprak") == "en" else "nb")
+    try:
+        return await call_next(request)
+    finally:
+        SPRAAK_VAR.reset(tok)
+
+
+@app.middleware("http")
 async def guard_and_cors(request, call_next):
     """
     Answers Private Network Access preflights, keeps cross-origin reads
@@ -162,7 +172,7 @@ async def guard_and_cors(request, call_next):
         return JSONResponse(
             status_code=403,
             content={"status": "error",
-                     "error": "Avvist: forespørselen kom fra et annet nettsted."},
+                     "error": t("Avvist: forespørselen kom fra et annet nettsted.", "Rejected: the request came from another site.")},
         )
 
     response = await call_next(request)
@@ -170,6 +180,17 @@ async def guard_and_cors(request, call_next):
         response.headers["Access-Control-Allow-Origin"] = origin
         response.headers["Vary"] = "Origin"
     return response
+
+# Messages written here reach the screen. The page sends its language with
+# every request (X-Sprak), and t() picks the matching half. Jobs started by a
+# request run in a copy of its context, so their messages follow along.
+import contextvars
+SPRAAK_VAR: "contextvars.ContextVar[str]" = contextvars.ContextVar("sprak", default="nb")
+
+
+def t(nb: str, en: str) -> str:
+    return en if SPRAAK_VAR.get() == "en" else nb
+
 
 VERSJON = "1.32"
 
@@ -602,14 +623,14 @@ def lagre_fil(body: LagreBody):
     import base64
     mappe = Path(body.mappe)
     if not mappe.is_absolute() or not mappe.is_dir():
-        return {"status": "error", "error": f"Fant ikke mappa {body.mappe}"}
+        return {"status": "error", "error": t(f"Fant ikke mappa {body.mappe}", f"Folder not found: {body.mappe}")}
     navn = body.navn.strip()
     if not navn or navn in (".", "..") or _ULOVLIG_FILNAVN.search(navn):
-        return {"status": "error", "error": "Ugyldig filnavn"}
+        return {"status": "error", "error": t("Ugyldig filnavn", "Invalid file name")}
     try:
         data = base64.b64decode(body.data, validate=True)
     except Exception:
-        return {"status": "error", "error": "Ugyldig innhold"}
+        return {"status": "error", "error": t("Ugyldig innhold", "Invalid content")}
     maal = mappe / navn
     stamme, ending = maal.stem, maal.suffix
     n = 2
@@ -632,7 +653,7 @@ def vis_fil(body: StiBody):
     """Open Explorer with the file selected."""
     p = Path(body.sti)
     if not p.is_absolute() or not p.exists():
-        return {"status": "error", "error": "Fila finnes ikke"}
+        return {"status": "error", "error": t("Fila finnes ikke", "The file does not exist")}
     if os.name == "nt":
         subprocess.Popen(["explorer", "/select,", str(p)])
     return {"status": "done"}
@@ -643,7 +664,7 @@ async def velg_mappe(body: StiBody):
     """Windows' own folder dialog, for when NABE runs in a browser and has no
     window of its own to ask. Shown on top, since nothing owns it."""
     if os.name != "nt":
-        return {"status": "error", "error": "Bare på Windows"}
+        return {"status": "error", "error": t("Bare på Windows", "Windows only")}
     start = body.sti if body.sti and Path(body.sti).is_dir() else str(Path.home())
     ps = (
         "Add-Type -AssemblyName System.Windows.Forms;"
@@ -703,7 +724,7 @@ def forslag(ip: str):
     try:
         ipaddress.IPv4Address(ip)
     except ValueError:
-        return {"status": "error", "error": "Ugyldig IP"}
+        return {"status": "error", "error": t("Ugyldig IP", "Invalid IP")}
     ruter = ruter_via(ip)
     nett = [ipaddress.IPv4Network(r["cidr"]) for r in ruter]
     anlegg = []
@@ -785,13 +806,17 @@ def port_advarsel(naboer: List[Dict[str, Any]]) -> Optional[str]:
     if not naboer:
         return None
     hvem = ", ".join(f"{n['name']} (PID {n['pid']})" for n in naboer[:3])
-    return (
+    return t(
         f"Et annet program lytter også på UDP {BACNET_PORT}: {hvem}. "
         "Windows tillater det, men da er det tilfeldig hvem av dere som får "
         "svarene fra anlegget - og den andre finner ingenting uten å si fra. "
         "Lukk det andre BACnet-verktøyet og trykk «Koble til på nytt», eller "
-        f"gi denne en egen port med NABE_BACNET_PORT=47809 i start.bat."
-    )
+        f"gi denne en egen port med NABE_BACNET_PORT=47809 i start.bat.",
+        f"Another program is also listening on UDP {BACNET_PORT}: {hvem}. "
+        "Windows allows it, but then it is chance which of you gets the "
+        "replies from the plant - and the other finds nothing without saying so. "
+        "Close the other BACnet tool and press “Reconnect”, or "
+        f"give this one its own port with NABE_BACNET_PORT=47809 in start.bat.")
 
 
 def device_address(spec) -> Address:
@@ -1204,7 +1229,7 @@ async def scan_unicast_sweep(bacnet_app, hosts: List[str],
         if not pending:
             break
         if job is not None:
-            job["phase"] = "søker" if p == 0 else "sjekker stille adresser"
+            job["phase"] = t("søker", "searching") if p == 0 else t("sjekker stille adresser", "checking silent addresses")
             job["total"] = len(pending) if p else len(hosts)
             job["done"] = 0
         sem = asyncio.Semaphore(max(1, conc))
@@ -1285,11 +1310,11 @@ async def _scan_via_bbmd(job, body: "ScanBody", hosts: List[str]):
     typing one IP never comes back with nothing to show for it.
     """
     bbmd = hosts[0]
-    job["phase"] = f"leser BBMD-tabellen hos {bbmd}"
+    job["phase"] = t(f"leser BBMD-tabellen hos {bbmd}", f"reading the BBMD table at {bbmd}")
     loop = asyncio.get_event_loop()
     bdt = await loop.run_in_executor(None, _les_bdt, bbmd)
     job["bdt"] = bdt
-    job["phase"] = f"registrerer hos BBMD {bbmd}"
+    job["phase"] = t(f"registrerer hos BBMD {bbmd}", f"registering with BBMD {bbmd}")
     bacnet_app = await _switch_bbmd(bbmd)
     status = await _wait_registration(bacnet_app)
     if status == 0:
@@ -1300,19 +1325,24 @@ async def _scan_via_bbmd(job, body: "ScanBody", hosts: List[str]):
             r = await probe_host_unicast(bacnet_app, bbmd, 2.0, asyncio.Semaphore(1))
             if r:
                 devices.append(r)
-        return devices, f"Registrert hos BBMD {bbmd}" + _bdt_tekst(bbmd, bdt), status
+        return devices, t(f"Registrert hos BBMD {bbmd}", f"Registered with BBMD {bbmd}") + _bdt_tekst(bbmd, bdt), status
 
     bacnet_app = await _switch_bbmd(None)
     if status == -1:
-        note = (f"{bbmd} svarte ikke på registrering som foreign device - "
-                "den er trolig ikke BBMD. Leste adressen alene.")
+        note = t(f"{bbmd} svarte ikke på registrering som foreign device - "
+                 "den er trolig ikke BBMD. Leste adressen alene.",
+                 f"{bbmd} did not answer the foreign device registration - "
+                 "it is probably not a BBMD. Read the address on its own.")
     else:
         # 0x30 is what every BACnet/IP device that is not a BBMD answers with,
         # and also what a BBMD with foreign registration switched off says.
-        note = (f"{bbmd} avviste registreringen (kode 0x{status:02X}). Den er "
-                "enten ikke BBMD, eller tar ikke imot foreign devices. "
-                "Leste adressen alene.")
-    job["phase"] = f"leser {bbmd}"
+        note = t(f"{bbmd} avviste registreringen (kode 0x{status:02X}). Den er "
+                 "enten ikke BBMD, eller tar ikke imot foreign devices. "
+                 "Leste adressen alene.",
+                 f"{bbmd} refused the registration (code 0x{status:02X}). It is "
+                 "either not a BBMD, or does not take foreign devices. "
+                 "Read the address on its own.")
+    job["phase"] = t(f"leser {bbmd}", f"reading {bbmd}")
     r = await probe_host_unicast(bacnet_app, bbmd, 2.0, asyncio.Semaphore(1))
     return ([r] if r else []), note + _bdt_tekst(bbmd, bdt), status
 
@@ -1322,8 +1352,10 @@ def _bdt_tekst(bbmd: str, bdt: Optional[List[str]]) -> str:
     andre = [p for p in (bdt or []) if p.split(":")[0] != bbmd.split(":")[0]]
     if not andre:
         return ""
-    return (f". Bygget har {len(andre) + 1} BBMD-er - de andre er "
-            + ", ".join(andre) + ". Skann dem i BBMD-modus for resten av anlegget.")
+    return t(f". Bygget har {len(andre) + 1} BBMD-er - de andre er "
+             + ", ".join(andre) + ". Skann dem i BBMD-modus for resten av anlegget.",
+             f". The building has {len(andre) + 1} BBMDs - the others are "
+             + ", ".join(andre) + ". Scan them in BBMD mode for the rest of the plant.")
 
 
 async def _run_scan(job, body: "ScanBody", hosts: List[str], net):
@@ -1371,7 +1403,7 @@ async def _run_scan(job, body: "ScanBody", hosts: List[str], net):
             hosts_scanned = net.num_addresses
 
     if state["app"] is not None and any(d.get("object_name") is None for d in devices):
-        job["phase"] = "henter navn"
+        job["phase"] = t("henter navn", "fetching names")
         await berik_navn(state["app"], devices)
 
     devices.sort(key=lambda d: (d["device_instance"] is None, d["device_instance"]))
@@ -1401,7 +1433,7 @@ async def scan_subnet(body: ScanBody):
     from a crash - so progress and cancel are part of the contract.
     """
     if state["app"] is None:
-        return {"status": "error", "error": "Proxy er ikke startet. Kall /api/start først."}
+        return {"status": "error", "error": t("Proxy er ikke startet. Kall /api/start først.", "Not connected. Call /api/start first.")}
     try:
         spec = body.subnet.strip()
         if body.mode == "bbmd" and spec.count(":") == 1:
@@ -1412,17 +1444,21 @@ async def scan_subnet(body: ScanBody):
         else:
             hosts, net = parse_target(spec)
     except Exception as e:
-        return {"status": "error", "error": f"Ugyldig subnet/IP-range: {e}"}
+        return {"status": "error", "error": t(f"Ugyldig subnet/IP-range: {e}", f"Invalid subnet/IP range: {e}")}
     if body.mode == "bbmd" and (hosts is None or len(hosts) != 1):
         return {"status": "error",
-                "error": "BBMD-modus tar én IP: adressen til byggets BBMD, "
-                         "som oftest JACE-en eller hovedsentralen."}
+                "error": t("BBMD-modus tar én IP: adressen til byggets BBMD, "
+                           "som oftest JACE-en eller hovedsentralen.",
+                           "BBMD mode takes one IP: the building's BBMD, "
+                           "usually the JACE or the main controller.")}
     sweep = body.mode == "unicast_sweep" or (body.mode == "auto" and not _is_local(net))
     if sweep and (hosts is None or len(hosts) > MAX_SWEEP_HOSTS):
         return {
             "status": "error",
-            "error": f"Rangen er for stor for unicast-sweep ({net.num_addresses} adresser, "
-                     f"maks {MAX_SWEEP_HOSTS}). Bruk et mindre subnet.",
+            "error": t(f"Rangen er for stor for unicast-sweep ({net.num_addresses} adresser, "
+                       f"maks {MAX_SWEEP_HOSTS}). Bruk et mindre subnet.",
+                       f"The range is too large for a unicast sweep ({net.num_addresses} addresses, "
+                       f"max {MAX_SWEEP_HOSTS}). Use a smaller subnet."),
         }
 
     job = _new_job("scan")
@@ -1651,7 +1687,7 @@ def _job_public(job: Dict[str, Any]) -> Dict[str, Any]:
 def job_status(job_id: str):
     job = JOBS.get(job_id)
     if not job:
-        return {"status": "error", "error": "Ukjent jobb"}
+        return {"status": "error", "error": t("Ukjent jobb", "Unknown job")}
     return _job_public(job)
 
 
@@ -1659,7 +1695,7 @@ def job_status(job_id: str):
 def job_cancel(job_id: str):
     job = JOBS.get(job_id)
     if not job:
-        return {"status": "error", "error": "Ukjent jobb"}
+        return {"status": "error", "error": t("Ukjent jobb", "Unknown job")}
     t = job.get("task")
     if t and not t.done():
         t.cancel()
@@ -1962,7 +1998,7 @@ async def device_points(body: LoadPointsBody):
     """Start the load as a job; the UI polls /api/job/{id} for progress."""
     bacnet_app = _require_app()
     if bacnet_app is None:
-        return {"status": "error", "error": "Proxy er ikke startet."}
+        return {"status": "error", "error": t("Proxy er ikke startet.", "Not connected.")}
 
     job = _new_job("points")
     job["background"] = bool(body.background)
@@ -2002,7 +2038,7 @@ def job_promote(job_id: str):
     global _FOREGROUND
     job = JOBS.get(job_id)
     if not job:
-        return {"status": "error", "error": "Ukjent jobb"}
+        return {"status": "error", "error": t("Ukjent jobb", "Unknown job")}
     if job.get("background"):
         job["background"] = False
         if job["status"] == "running":
@@ -2017,7 +2053,7 @@ def job_promote(job_id: str):
 async def poll(body: PollBody):
     bacnet_app = _require_app()
     if bacnet_app is None:
-        return {"status": "error", "error": "Proxy er ikke startet."}
+        return {"status": "error", "error": t("Proxy er ikke startet.", "Not connected.")}
 
     out: Dict[str, Dict[str, Any]] = {}
 
@@ -2039,7 +2075,7 @@ async def poll(body: PollBody):
 async def object_detail(body: DetailBody):
     bacnet_app = _require_app()
     if bacnet_app is None:
-        return {"status": "error", "error": "Proxy er ikke startet."}
+        return {"status": "error", "error": t("Proxy er ikke startet.", "Not connected.")}
     addr = device_address(body.address)
     try:
         props = await bc.read_object_detail(bacnet_app, addr, body.objid)
@@ -2298,7 +2334,7 @@ class TrendBody(BaseModel):
 async def device_schedules(body: SchedBody):
     bacnet_app = _require_app()
     if bacnet_app is None:
-        return {"status": "error", "error": "Proxy er ikke startet."}
+        return {"status": "error", "error": t("Proxy er ikke startet.", "Not connected.")}
     addr = device_address(body.address)
     try:
         objids = await bc.read_object_list(
@@ -2318,7 +2354,7 @@ async def device_schedules(body: SchedBody):
 async def object_trendlog(body: TrendBody):
     bacnet_app = _require_app()
     if bacnet_app is None:
-        return {"status": "error", "error": "Proxy er ikke startet."}
+        return {"status": "error", "error": t("Proxy er ikke startet.", "Not connected.")}
     addr = device_address(body.address)
     try:
         data = await bc.read_trend_log(bacnet_app, addr, body.objid, limit=body.limit)
@@ -2337,10 +2373,10 @@ class SchedWriteBody(BaseModel):
 async def schedule_write(body: SchedWriteBody):
     """Write a whole weekly schedule back to the controller."""
     if state["read_only"]:
-        return {"status": "error", "error": "Lesemodus er pa - skriving er blokkert."}
+        return {"status": "error", "error": t("Lesemodus er pa - skriving er blokkert.", "Read-only is on - writing is blocked.")}
     bacnet_app = _require_app()
     if bacnet_app is None:
-        return {"status": "error", "error": "Proxy er ikke startet."}
+        return {"status": "error", "error": t("Proxy er ikke startet.", "Not connected.")}
     addr = device_address(body.address)
     try:
         res = await bc.write_weekly_schedule(bacnet_app, addr, body.objid, body.dager)
@@ -2381,7 +2417,7 @@ async def points_forced(body: ForcedBody):
     """
     bacnet_app = _require_app()
     if bacnet_app is None:
-        return {"status": "error", "error": "Proxy er ikke startet."}
+        return {"status": "error", "error": t("Proxy er ikke startet.", "Not connected.")}
     if not body.objids:
         return {"status": "done", "forced": {}}
     addr = device_address(body.address)
@@ -2397,7 +2433,7 @@ async def points_forced(body: ForcedBody):
         if raa is None or bc.is_error(raa):
             # The object answered, but not about this: an input has no
             # priority array at all.
-            ut[oid] = {"pri": None, "grunn": "ingen prioritetstabell"}
+            ut[oid] = {"pri": None, "grunn": t("ingen prioritetstabell", "no priority array")}
             continue
         arr = bc.serialize_priority_array(raa)
         # Highest slot with something in it is the one in control.
@@ -2409,12 +2445,12 @@ async def points_forced(body: ForcedBody):
             # that is the local override: a hand switch on the module or the
             # controller's own out-of-service handling. No amount of releasing
             # priorities will clear it, and saying so saves a wasted trip.
-            ut[oid] = {"pri": None, "grunn": "lokal overstyring pa enheten"}
+            ut[oid] = {"pri": None, "grunn": t("lokal overstyring pa enheten", "local override on the device")}
     for oid in body.objids:
         # Anything the device never answered for is reported as such rather
         # than quietly left out, or it reads as "nothing is holding it".
         if oid not in ut and oid in body.objids[:400]:
-            ut[oid] = {"pri": None, "grunn": "enheten svarte ikke"}
+            ut[oid] = {"pri": None, "grunn": t("enheten svarte ikke", "the device did not answer")}
     return {"status": "done", "forced": ut}
 
 
@@ -2422,10 +2458,10 @@ async def points_forced(body: ForcedBody):
 async def device_clock(body: ClockBody):
     """Set one controller's clock from this PC."""
     if state["read_only"]:
-        return {"status": "error", "error": "Lesemodus er pa - skriving er blokkert."}
+        return {"status": "error", "error": t("Lesemodus er pa - skriving er blokkert.", "Read-only is on - writing is blocked.")}
     bacnet_app = _require_app()
     if bacnet_app is None:
-        return {"status": "error", "error": "Proxy er ikke startet."}
+        return {"status": "error", "error": t("Proxy er ikke startet.", "Not connected.")}
     addr = device_address(body.address)
     try:
         res = await bc.sync_clock(bacnet_app, addr)
@@ -2448,14 +2484,14 @@ async def device_clock(body: ClockBody):
 async def write(body: WriteBody):
     bacnet_app = _require_app()
     if bacnet_app is None:
-        return {"status": "error", "error": "Proxy er ikke startet."}
+        return {"status": "error", "error": t("Proxy er ikke startet.", "Not connected.")}
     if state["read_only"]:
-        return {"status": "error", "error": "Lesemodus er på - skriving er blokkert."}
+        return {"status": "error", "error": t("Lesemodus er på - skriving er blokkert.", "Read-only is on - writing is blocked.")}
 
     addr = device_address(body.address)
     value = None if body.release else body.value
     if not body.release and value is None:
-        return {"status": "error", "error": "Ingen verdi angitt."}
+        return {"status": "error", "error": t("Ingen verdi angitt.", "No value given.")}
 
     # Read the value back first so the log (and the UI's confirmation) records
     # what the point actually stood at before it was touched.
@@ -2588,7 +2624,7 @@ async def sites_record(body: SiteBody):
     """Remember a scan: which ranges, what answered, and when."""
     key = _site_key(body.ranges)
     if not key:
-        return {"status": "error", "error": "Ingen omrader oppgitt"}
+        return {"status": "error", "error": t("Ingen omrader oppgitt", "No ranges given")}
 
     naa = time.time()
     site = SITES.get(key) or {"forste": naa, "ganger": 0, "navn": ""}
@@ -2659,7 +2695,7 @@ async def sites_tagging(body: TaggingBody):
 async def sites_name(body: SiteNameBody):
     site = SITES.get(body.key)
     if not site:
-        return {"status": "error", "error": "Ukjent anlegg"}
+        return {"status": "error", "error": t("Ukjent anlegg", "Unknown site")}
     site["navn"] = body.name.strip()[:80]
     _save_sites()
     return {"status": "done", "site": site}
@@ -2672,7 +2708,7 @@ class SiteKeyBody(BaseModel):
 @app.post("/api/sites/delete")
 async def sites_delete(body: SiteKeyBody):
     if SITES.pop(body.key, None) is None:
-        return {"status": "error", "error": "Ukjent anlegg"}
+        return {"status": "error", "error": t("Ukjent anlegg", "Unknown site")}
     _save_sites()
     return {"status": "done"}
 
@@ -2877,7 +2913,7 @@ async def sync_notes():
 async def set_note(body: NoteBody):
     key = body.key.strip()
     if not key:
-        return {"status": "error", "error": "Mangler nokkel."}
+        return {"status": "error", "error": t("Mangler nokkel.", "Missing key.")}
     text = body.text.strip()
     if text:
         NOTES[key] = {"text": text, "updated": time.time()}
@@ -2886,7 +2922,7 @@ async def set_note(body: NoteBody):
         # so the device stops showing a note marker.
         NOTES.pop(key, None)
     if not _save_notes():
-        return {"status": "error", "error": "Kunne ikke skrive notatfilen."}
+        return {"status": "error", "error": t("Kunne ikke skrive notatfilen.", "Could not write the notes file.")}
     # Saved locally first, shared second: the sharing is allowed to fail.
     await _push_note(key, NOTES.get(key))
     return {"status": "done", "notes": NOTES, "sync": NOTES_SYNC}
@@ -2957,7 +2993,7 @@ def save_project(body: ProjectBody):
 def load_project(name: str):
     path = PROJECT_DIR / f"{_safe_name(name)}.json"
     if not path.is_file():
-        return {"status": "error", "error": "Fant ikke prosjektet"}
+        return {"status": "error", "error": t("Fant ikke prosjektet", "Project not found")}
     return {"status": "done", "data": json.loads(path.read_text(encoding="utf-8"))}
 
 
@@ -3040,16 +3076,23 @@ async def _tjenester(ip: str) -> Dict[str, Any]:
             return None
     apne = [p for p in await asyncio.gather(*[prov(p) for p in porter]) if p]
     if not apne:
-        return {"status": "feil", "detalj": "Ingenting svarer på denne adressen",
-                "forklaring": "Verken nettside, Workbench, fjernskrivebord eller BACnet svarer. "
-                              "Da slipper ikke VPN-en deg fram hit. Når du anlegget bare via "
-                              "fjernskrivebord til en maskin der ute, må NABE kjøre på den "
-                              "maskinen - bruk den portable utgaven."}
+        return {"status": "feil", "detalj": t("Ingenting svarer på denne adressen", "Nothing answers at this address"),
+                "forklaring": t("Verken nettside, Workbench, fjernskrivebord eller BACnet svarer. "
+                                "Da slipper ikke VPN-en deg fram hit. Når du anlegget bare via "
+                                "fjernskrivebord til en maskin der ute, må NABE kjøre på den "
+                                "maskinen - bruk den portable utgaven.",
+                                "Neither web page, Workbench, remote desktop nor BACnet answers. "
+                                "The VPN does not let you through to here. If you reach the plant only "
+                                "by remote desktop to a machine out there, NABE has to run on that "
+                                "machine - use the portable edition.")}
     navn = ", ".join(sorted({porter[p] for p in apne}))
-    return {"status": "advarsel", "detalj": f"Svarer på {navn}",
-            "forklaring": "Adressen nås, men hvis BACnet over ikke svarte, slipper VPN-en "
-                          "trolig TCP men ikke UDP 47808. Be den som drifter VPN-en åpne "
-                          "UDP 47808 til dette nettet."}
+    return {"status": "advarsel", "detalj": t(f"Svarer på {navn}", f"Answers on {navn}"),
+            "forklaring": t("Adressen nås, men hvis BACnet over ikke svarte, slipper VPN-en "
+                            "trolig TCP men ikke UDP 47808. Be den som drifter VPN-en åpne "
+                            "UDP 47808 til dette nettet.",
+                            "The address can be reached, but if BACnet above did not answer, the VPN "
+                            "probably lets TCP through but not UDP 47808. Ask whoever runs the VPN to open "
+                            "UDP 47808 to this network.")}
 
 
 # ------------------------------------------------------------------- alarms
@@ -3070,7 +3113,7 @@ async def device_alarms(body: AlarmBody):
     """
     bacnet_app = _require_app()
     if bacnet_app is None:
-        return {"status": "error", "error": "Ikke tilkoblet."}
+        return {"status": "error", "error": t("Ikke tilkoblet.", "Not connected.")}
     addr = device_address(body.address)
     ut: List[Dict[str, Any]] = []
     siste = None
@@ -3094,11 +3137,11 @@ async def device_alarms(body: AlarmBody):
             if not ack.moreEvents:
                 break
     except asyncio.TimeoutError:
-        return {"status": "error", "error": "Ingen svar på alarmspørringen."}
+        return {"status": "error", "error": t("Ingen svar på alarmspørringen.", "No answer to the alarm request.")}
     except COMM_ERRORS as e:
         tekst = f"{type(e).__name__}: {e}"
         if "unrecognized" in tekst.lower() or "service" in tekst.lower() or "reject" in tekst.lower():
-            return {"status": "unsupported", "error": "Enheten støtter ikke alarmlister."}
+            return {"status": "unsupported", "error": t("Enheten støtter ikke alarmlister.", "The device does not support alarm lists.")}
         return {"status": "error", "error": tekst}
     return {"status": "done", "alarmer": ut}
 
@@ -3115,7 +3158,7 @@ async def routers():
     """
     bacnet_app = _require_app()
     if bacnet_app is None:
-        return {"status": "error", "error": "Ikke tilkoblet."}
+        return {"status": "error", "error": t("Ikke tilkoblet.", "Not connected.")}
     funn: Dict[str, set] = {}
 
     async def spor(dest):
@@ -3211,7 +3254,7 @@ def _brannmur_sjekk() -> Dict[str, Any]:
     adapter on, and is there an allow rule for this Python on that profile?
     """
     if os.name != "nt":
-        return {"status": "ok", "detalj": "Ikke Windows", "forklaring": "Ingen Windows-brannmur å sjekke."}
+        return {"status": "ok", "detalj": t("Ikke Windows", "Not Windows"), "forklaring": t("Ingen Windows-brannmur å sjekke.", "No Windows firewall to check.")}
     import sys
     lokal = (state.get("local_address") or "").split("/")[0].split(":")[0]
     alias = next((e["interface"] for e in list_interfaces() if e["ip"] == lokal), None)
@@ -3230,7 +3273,7 @@ def _brannmur_sjekk() -> Dict[str, Any]:
                             creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
         data = json.loads(ut.stdout.strip() or "{}")
     except Exception as e:
-        return {"status": "advarsel", "detalj": "Kunne ikke lese brannmuren", "forklaring": str(e)}
+        return {"status": "advarsel", "detalj": t("Kunne ikke lese brannmuren", "Could not read the firewall"), "forklaring": str(e)}
     kat = (data.get("kat") or "").strip()
     profiler = data.get("profiler") or []
     if isinstance(profiler, str):
@@ -3239,13 +3282,17 @@ def _brannmur_sjekk() -> Dict[str, Any]:
     kommando = (f'New-NetFirewallRule -DisplayName "NABE BACnet" -Direction Inbound '
                 f'-Program "{exe}" -Protocol UDP -LocalPort {BACNET_PORT} -Action Allow -Profile Any')
     if dekket:
-        return {"status": "ok", "detalj": f"Tillatt på {kat or 'nettet'}",
-                "forklaring": "Svar som kommer som kringkasting slipper inn."}
+        return {"status": "ok", "detalj": t(f"Tillatt på {kat or 'nettet'}", f"Allowed on {kat or 'the network'}"),
+                "forklaring": t("Svar som kommer som kringkasting slipper inn.", "Replies sent as broadcasts get in.")}
     return {"status": "advarsel",
-            "detalj": f"{alias or 'Kortet'} er {kat or 'ukjent'}, og Python har ingen regel der",
-            "forklaring": "Direkte svar slipper inn, men I-Am som kringkastes stoppes - "
-                          "Who-Is kan da gå glipp av enheter, mens sweep virker. "
-                          "Kjør dette i PowerShell som administrator for å åpne: " + kommando,
+            "detalj": t(f"{alias or 'Kortet'} er {kat or 'ukjent'}, og Python har ingen regel der",
+                        f"{alias or 'The adapter'} is {kat or 'unknown'}, and Python has no rule there"),
+            "forklaring": t("Direkte svar slipper inn, men I-Am som kringkastes stoppes - "
+                            "Who-Is kan da gå glipp av enheter, mens sweep virker. "
+                            "Kjør dette i PowerShell som administrator for å åpne: ",
+                            "Direct replies get in, but broadcast I-Am is stopped - "
+                            "Who-Is can then miss devices, while a sweep works. "
+                            "Run this in PowerShell as administrator to open it: ") + kommando,
             "kommando": kommando}
 
 
@@ -3275,25 +3322,28 @@ async def diagnose(body: DiagnoseBody):
         naboer = port_naboer()
         if not naboer:
             return {"status": "ok",
-                    "detalj": f"UDP {BACNET_PORT} er vår alene",
-                    "forklaring": "Ingen andre programmer kjemper om porten."}
+                    "detalj": t(f"UDP {BACNET_PORT} er vår alene", f"UDP {BACNET_PORT} is ours alone"),
+                    "forklaring": t("Ingen andre programmer kjemper om porten.", "No other program is competing for the port.")}
         hvem = ", ".join(f"{n['name']} (PID {n['pid']})" for n in naboer[:3])
-        return {"status": "feil", "detalj": f"{hvem} har også UDP {BACNET_PORT}",
+        return {"status": "feil", "detalj": t(f"{hvem} har også UDP {BACNET_PORT}", f"{hvem} also has UDP {BACNET_PORT}"),
                 "forklaring": port_advarsel(naboer)}
 
     if steg == "kort":
         lokal = state.get("local_address")
         if not lokal:
-            return {"status": "feil", "detalj": "Ingen forbindelse startet",
-                    "forklaring": "Velg nettverkskort øverst til venstre og koble til."}
+            return {"status": "feil", "detalj": t("Ingen forbindelse startet", "No connection started"),
+                    "forklaring": t("Velg nettverkskort øverst til venstre og koble til.", "Pick an adapter at the top left and connect.")}
         try:
             nett = ipaddress.ip_interface(lokal).network
             mal = ipaddress.ip_address(ip)
         except ValueError:
-            return {"status": "ok", "detalj": f"Sender fra {lokal}",
-                    "forklaring": "Adressen er ikke en vanlig IP - trolig en enhet "
-                                  "bak en gateway. Da går trafikken via ruteren, "
-                                  "og samme subnett gjelder ikke."}
+            return {"status": "ok", "detalj": t(f"Sender fra {lokal}", f"Sending from {lokal}"),
+                    "forklaring": t("Adressen er ikke en vanlig IP - trolig en enhet "
+                                    "bak en gateway. Da går trafikken via ruteren, "
+                                    "og samme subnett gjelder ikke.",
+                                    "The address is not a plain IP - probably a device "
+                                    "behind a gateway. Traffic then goes through the router, "
+                                    "and the same subnet does not apply.")}
         try:
             via = kort_for(ip)
         except OSError:
@@ -3301,19 +3351,27 @@ async def diagnose(body: DiagnoseBody):
         bundet = lokal.split("/")[0]
         if via and via != bundet and bundet != "0.0.0.0":
             return {"status": "feil",
-                    "detalj": f"Windows sender til {ip} fra {via}, ikke fra {bundet}",
-                    "forklaring": "Verktøyet er koblet til feil nettverkskort for "
-                                  "denne adressen, så forespørslene kommer aldri "
-                                  "fram. Skann på nytt - da byttes kortet "
-                                  "automatisk - eller velg kortet med " + via + "."}
+                    "detalj": t(f"Windows sender til {ip} fra {via}, ikke fra {bundet}",
+                                f"Windows sends to {ip} from {via}, not from {bundet}"),
+                    "forklaring": t("Verktøyet er koblet til feil nettverkskort for "
+                                    "denne adressen, så forespørslene kommer aldri "
+                                    "fram. Skann på nytt - da byttes kortet "
+                                    "automatisk - eller velg kortet med " + via + ".",
+                                    "The tool is on the wrong adapter for "
+                                    "this address, so the requests never "
+                                    "arrive. Scan again - the adapter is switched "
+                                    "automatically - or pick the adapter with " + via + ".")}
         if mal in nett:
-            return {"status": "ok", "detalj": f"{ip} er i samme subnett som {lokal}",
-                    "forklaring": "Trafikken går direkte, uten ruter."}
+            return {"status": "ok", "detalj": t(f"{ip} er i samme subnett som {lokal}", f"{ip} is in the same subnet as {lokal}"),
+                    "forklaring": t("Trafikken går direkte, uten ruter.", "Traffic goes direct, without a router.")}
         return {"status": "advarsel",
-                "detalj": f"{ip} er utenfor {nett}",
-                "forklaring": "Den må rutes. Det kan gå helt fint, men da må "
-                              "ruteren slippe BACnet gjennom - og kringkasting "
-                              "(Who-Is) stopper som regel her. Bruk sweep."}
+                "detalj": t(f"{ip} er utenfor {nett}", f"{ip} is outside {nett}"),
+                "forklaring": t("Den må rutes. Det kan gå helt fint, men da må "
+                                "ruteren slippe BACnet gjennom - og kringkasting "
+                                "(Who-Is) stopper som regel her. Bruk sweep.",
+                                "It has to be routed. That can work fine, but the "
+                                "router has to let BACnet through - and broadcasts "
+                                "(Who-Is) usually stop here. Use a sweep.")}
 
     if steg == "tjenester":
         return await _tjenester(ip)
@@ -3325,39 +3383,46 @@ async def diagnose(body: DiagnoseBody):
         sem = asyncio.Semaphore(1)
         svar = await _ping_one(ip, body.timeout_ms, sem)
         if svar:
-            return {"status": "ok", "detalj": f"{ip} svarer på ping",
-                    "forklaring": "Adressen er i live og nås herfra."}
-        return {"status": "advarsel", "detalj": f"{ip} svarer ikke på ping",
-                "forklaring": "Det er ikke fasit. Mange regulatorer og brannmurer "
-                              "slipper ikke ICMP, og svarer likevel på BACnet. "
-                              "Se hva neste steg sier før du konkluderer."}
+            return {"status": "ok", "detalj": t(f"{ip} svarer på ping", f"{ip} answers ping"),
+                    "forklaring": t("Adressen er i live og nås herfra.", "The address is alive and reachable from here.")}
+        return {"status": "advarsel", "detalj": t(f"{ip} svarer ikke på ping", f"{ip} does not answer ping"),
+                "forklaring": t("Det er ikke fasit. Mange regulatorer og brannmurer "
+                                "slipper ikke ICMP, og svarer likevel på BACnet. "
+                                "Se hva neste steg sier før du konkluderer.",
+                                "That is not the final word. Many controllers and firewalls "
+                                "do not let ICMP through, and still answer BACnet. "
+                                "See what the next step says before you conclude.")}
 
     if steg == "bacnet":
         bacnet_app = state["app"]
         if bacnet_app is None:
-            return {"status": "feil", "detalj": "Ikke tilkoblet",
-                    "forklaring": "Start forbindelsen først."}
+            return {"status": "feil", "detalj": t("Ikke tilkoblet", "Not connected"),
+                    "forklaring": t("Start forbindelsen først.", "Start the connection first.")}
         sem = asyncio.Semaphore(1)
         try:
             funn = await probe_host_unicast(
                 bacnet_app, ip, max(1.0, body.timeout_ms / 1000.0), sem)
         except Exception as e:
-            return {"status": "feil", "detalj": "Oppslaget feilet",
+            return {"status": "feil", "detalj": t("Oppslaget feilet", "The lookup failed"),
                     "forklaring": str(e)}
         if funn:
-            navn = funn.get("object_name") or "uten navn"
-            lev = funn.get("vendor_name") or "ukjent leverandør"
+            navn = funn.get("object_name") or t("uten navn", "no name")
+            lev = funn.get("vendor_name") or t("ukjent leverandør", "unknown vendor")
             return {"status": "ok",
-                    "detalj": f"Enhet {funn.get('device_instance')} - {navn}",
-                    "forklaring": f"{lev}. Den svarer på BACnet og kan leses.",
+                    "detalj": t(f"Enhet {funn.get('device_instance')} - {navn}", f"Device {funn.get('device_instance')} - {navn}"),
+                    "forklaring": t(f"{lev}. Den svarer på BACnet og kan leses.", f"{lev}. It answers BACnet and can be read."),
                     "enhet": funn}
-        return {"status": "feil", "detalj": f"Ingen BACnet-svar fra {ip}",
-                "forklaring": "Adressen svarer ikke på UDP 47808. Er det riktig "
-                              "IP? Bruker anlegget en annen BACnet-port? Sitter "
-                              "enheten bak en gateway, er det gatewayens IP du "
-                              "skal spørre, ikke enhetens."}
+        return {"status": "feil", "detalj": t(f"Ingen BACnet-svar fra {ip}", f"No BACnet answer from {ip}"),
+                "forklaring": t("Adressen svarer ikke på UDP 47808. Er det riktig "
+                                "IP? Bruker anlegget en annen BACnet-port? Sitter "
+                                "enheten bak en gateway, er det gatewayens IP du "
+                                "skal spørre, ikke enhetens.",
+                                "The address does not answer on UDP 47808. Is the IP "
+                                "right? Does the plant use another BACnet port? If "
+                                "the device sits behind a gateway, ask the gateway's "
+                                "IP, not the device's.")}
 
-    return {"status": "feil", "detalj": "Ukjent steg", "forklaring": steg}
+    return {"status": "feil", "detalj": t("Ukjent steg", "Unknown step"), "forklaring": steg}
 
 
 @app.post("/api/ping")
@@ -3377,11 +3442,11 @@ async def ping_range(body: PingBody):
     try:
         net = ipaddress.ip_network(body.subnet, strict=False)
     except Exception as e:
-        return {"status": "error", "error": f"Ugyldig subnet/IP-range: {e}"}
+        return {"status": "error", "error": t(f"Ugyldig subnet/IP-range: {e}", f"Invalid subnet/IP range: {e}")}
 
     hosts = [str(ip) for ip in net.hosts()] or [str(net.network_address)]
     if len(hosts) > 1024:
-        return {"status": "error", "error": "For stort område for ping (maks 1024 adresser)"}
+        return {"status": "error", "error": t("For stort område for ping (maks 1024 adresser)", "Too large a range for ping (max 1024 addresses)")}
 
     sem = asyncio.Semaphore(max(1, min(200, body.concurrency)))
     svar = await asyncio.gather(

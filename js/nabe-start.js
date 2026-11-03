@@ -8,7 +8,6 @@
    the tool has been used a lot. New text is written in both languages here
    with T(), and the containers are left out of the language sweep, so nothing
    is translated twice. */
-const T = (nb, en) => (SPRAAK === 'en' ? en : nb);
 let NABE_VERSJON = '';
 fetch('/api/status').then(r => r.json()).then(d => { NABE_VERSJON = d.versjon || ''; }).catch(() => {});
 

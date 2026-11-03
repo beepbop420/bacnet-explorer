@@ -1,4 +1,8 @@
 'use strict';
+/* Norwegian or English, said where the text is written. Defined first, so
+   code that runs while this file is still loading can use it too; until
+   the language is set further down, that text is Norwegian. */
+const T = (nb, en) => { try { return SPRAAK === 'en' ? en : nb; } catch { return nb; } };
 /* One collator, made once. localeCompare with a locale argument builds a new
    one for every comparison - measured at 22 ms to sort 528 points, most of the
    time it took to redraw the table. */
@@ -242,7 +246,7 @@ function meldBackend(nede, detalj) {
     el.hidden = !nede;
     if (nede) el.innerHTML = 'Mistet kontakt med NABE på denne PC-en'
       + '<span class="bw-note">Dette er programmet, ikke anlegget. '
-      + 'Kjør <b>start.bat</b> igjen — siden kobler seg på av seg selv.</span>';
+      + T('Kjør <b>start.bat</b> igjen — siden kobler seg på av seg selv.', 'Run <b>start.bat</b> again — the page reconnects by itself.') + '</span>';
   }
   if (nede) {
     // The address indicator must stop claiming a live connection: with the
@@ -258,6 +262,22 @@ function meldBackend(nede, detalj) {
   }
 }
 
+/* The server writes some messages itself - a diagnosis, why a scan found
+   nothing. Every request to it carries the page's language, so they come
+   back in the same one as the rest of the screen. */
+(function sprakTilServer() {
+  const _fetch = window.fetch.bind(window);
+  window.fetch = (u, o) => {
+    if (typeof u === 'string' && u.startsWith('/api/')) {
+      o = Object.assign({}, o);
+      let sp = 'nb';
+      try { sp = SPRAAK; } catch { /* before the language is set */ }
+      o.headers = Object.assign({}, o.headers, {'X-Sprak': sp});
+    }
+    return _fetch(u, o);
+  };
+})();
+
 async function api(path, body) {
   let res;
   try {
@@ -268,7 +288,7 @@ async function api(path, body) {
     });
   } catch (e) {
     meldBackend(true);
-    throw new Error('Ingen kontakt med NABE på denne PC-en — kjører start.bat?');
+    throw new Error(T('Ingen kontakt med NABE på denne PC-en — kjører start.bat?', 'No contact with NABE on this PC — is start.bat running?'));
   }
   meldBackend(false);
   if (!res.ok) {
@@ -570,7 +590,7 @@ async function kortForMaal(maal) {
   if (!bundet || bundet === r.ip) return;
   await connectTo(r.cidr, {quiet: true});
   if (S.connected && String(S.localAddr || '').startsWith(r.ip)) {
-    toast(`Byttet til ${r.interface || r.ip} — det er dit ${maal} rutes`);
+    toast(T(`Byttet til ${r.interface || r.ip} — det er dit ${maal} rutes`, `Switched to ${r.interface || r.ip} — that is where ${maal} is routed`));
   }
 }
 
@@ -612,7 +632,7 @@ async function scanOneRange(subnet, mode, thorough, onProgress) {
        concurrency: 40, thorough};
 
   const started = await api('/api/scan', body);
-  if (started.status !== 'started') throw new Error(started.error || 'Skann feilet');
+  if (started.status !== 'started') throw new Error(started.error || T('Skann feilet', 'Scan failed'));
   S.scanJob = started.job_id;
 
   for (;;) {
@@ -623,7 +643,7 @@ async function scanOneRange(subnet, mode, thorough, onProgress) {
       continue;
     }
     if (j.status === 'cancelled') return {cancelled: true};
-    if (j.status === 'error') throw new Error(j.error || 'Skann feilet');
+    if (j.status === 'error') throw new Error(j.error || T('Skann feilet', 'Scan failed'));
     return j.result;
   }
 }
@@ -657,7 +677,7 @@ async function runScan() {
   const thorough = mode !== 'unicast_fast';
   const b = $('scanBtn');
   if (mode === 'bbmd' && (omraader.length !== 1 || /[\/-]/.test(omraader[0]))) {
-    toast('BBMD-modus tar én IP: adressen til byggets BBMD (som oftest JACE-en).', true);
+    toast(T('BBMD-modus tar én IP: adressen til byggets BBMD (som oftest JACE-en).', 'BBMD mode takes one IP: the building’s BBMD (usually the JACE).'), true);
     return;
   }
   b.disabled = true;
@@ -707,7 +727,7 @@ async function runScan() {
       const d = await scanOneRange(subnet, mode, thorough, (j) => {
         const pct = j.total ? Math.round((j.done / j.total) * 100) : 0;
         skannFramdrift(pct, !j.total, j.phase, n, omraader.length);
-        status(`${merke}${j.phase || 'søker'} · ${j.done}/${j.total} adresser · ${
+        status(`${merke}${j.phase || T('søker', 'searching')} · ${j.done}/${j.total} ${T('adresser', 'addresses')} · ${
           forrige + (j.devices ? j.devices.length : 0)} funnet · ${pct}%`);
         // Devices are published as they answer, so the list fills in while the
         // sweep runs instead of staying empty until it finishes.
@@ -723,7 +743,7 @@ async function runScan() {
         }
       });
 
-      if (d && d.cancelled) { status('Skann avbrutt'); break; }
+      if (d && d.cancelled) { status(T('Skann avbrutt', 'Scan cancelled')); break; }
       if (!d || d.status !== 'done') break;
       if (d.note) toast(d.note, d.bbmd_status !== 0);
       mergeDevices(d.devices, subnet);
@@ -742,7 +762,7 @@ async function runScan() {
     if (omraader.length > 1) {
       status(`${S.devices.length} enhet(er) i ${omraader.length} områder · ${secs}s · ${perOmraade.join(' · ')}`);
     } else {
-      status(`${S.devices.length} enhet(er) · ${secs}s`);
+      status(T(`${S.devices.length} enhet(er) · ${secs}s`, `${S.devices.length} device(s) · ${secs}s`));
     }
     /* Hva som ble skannet, saa manglendeEnheter() vet hvilke savnede enheter
        som hoerer til - ikke enheter paa et helt annet nett. */
@@ -851,7 +871,7 @@ function siteWarnings() {
           + 'kan lande på feil sentral.',
       rader: dup.map(([inst, ips]) => ({
         alvorlig: true, id: inst, adresse: ips.join('  '),
-        tekst: `svarer fra ${ips.length} adresser`, ip: ips[0],
+        tekst: T(`svarer fra ${ips.length} adresser`, `answers from ${ips.length} addresses`), ip: ips[0],
       })),
     });
   }
@@ -870,9 +890,11 @@ function siteWarnings() {
       .map(([l, xs]) => xs.length + ' ' + l).join(' · ');
     ut.push({
       nokkel: 'mangler',
-      tittel: `${mangler.length} ${mangler.length === 1 ? 'enhet' : 'enheter'} svarte ikke`,
-      note: 'Disse har svart her før. Rask sweep prøver hver adresse én gang, og '
-          + 'rekkevidden over VPN driver — «Sweep — grundig» prøver de stille om igjen. '
+      tittel: T(`${mangler.length} ${mangler.length === 1 ? 'enhet' : 'enheter'} svarte ikke`, `${mangler.length} ${mangler.length === 1 ? 'device' : 'devices'} did not answer`),
+      note: T('Disse har svart her før. Rask sweep prøver hver adresse én gang, og '
+          + 'rekkevidden over VPN driver — «Sweep — grundig» prøver de stille om igjen. ',
+          'These have answered here before. A quick sweep tries each address once, and '
+          + 'reach over a VPN drifts — “Sweep — thorough” tries the silent ones again. ')
           + levTekst,
       rader: mangler.map(e => ({
         alvorlig: false,
@@ -893,7 +915,7 @@ function siteWarnings() {
   if (skjeve.length) {
     ut.push({
       nokkel: 'klokke',
-      tittel: `${skjeve.length} ${skjeve.length === 1 ? 'enhet har' : 'enheter har'} feil klokke`,
+      tittel: T(`${skjeve.length} ${skjeve.length === 1 ? 'enhet har' : 'enheter har'} feil klokke`, `${skjeve.length} ${skjeve.length === 1 ? 'device has' : 'devices have'} the wrong clock`),
       note: 'Ukeprogram kjører etter enhetens egen klokke, og trendlogger stemples med den.',
       rader: skjeve.map(({d, sek}) => ({
         alvorlig: Math.abs(sek) > CLOCK_SEVERE,
@@ -920,7 +942,7 @@ function renderSiteWarnings() {
   const alvorlige = seksjoner.reduce((n, s) => n + s.rader.filter(r => r.alvorlig).length, 0);
 
   const hode = `<button class="warn-head${alvorlige ? ' severe' : ''}" id="warnToggle"
-      aria-expanded="${apen}" title="${apen ? 'Skjul' : 'Vis'} detaljer">
+      aria-expanded="${apen}" title="${apen ? T('Skjul detaljer', 'Hide details') : T('Vis detaljer', 'Show details')}">
     <span class="warn-title">${seksjoner.map(s => esc(s.tittel)).join(' · ')}</span>
     <span class="warn-chev">${apen ? '⌃' : '⌄'}</span>
   </button>`;
@@ -928,7 +950,7 @@ function renderSiteWarnings() {
   const kropp = !apen ? '' : '<div class="warn-body">' + seksjoner.map(s => `
     <div class="warn-sect">
       ${s.rader.map(r => `<button class="warn-row${r.alvorlig ? ' severe' : ''}" data-goto="${esc(r.ip)}"
-          title="Gå til ${esc(r.adresse)}">
+          title="${T('Gå til', 'Go to')} ${esc(r.adresse)}">
         <span class="wr-id">${esc(r.id)}</span>
         <span class="wr-ip">${esc(r.adresse)}</span>
         <span class="wr-txt">${esc(r.tekst)}</span>
@@ -986,9 +1008,9 @@ function renderSiteWarnings() {
 async function stillKlokka(ip) {
   const d = S.devices.find(x => x.address === ip);
   const naavaerende = (S.identity[ip] || {})['device-time'];
-  if (!confirm(`Sette klokka på ${d ? (d.device_instance ?? ip) : ip} til denne PC-ens tid?\n\n`
-             + `Enheten står nå på: ${naavaerende || 'ukjent'}\n`
-             + `Denne PC-en:        ${new Date().toLocaleString('no')}\n\n`
+  if (!confirm(T(`Sette klokka på ${d ? (d.device_instance ?? ip) : ip} til denne PC-ens tid?\n\n`, `Set the clock of ${d ? (d.device_instance ?? ip) : ip} to this PC’s time?\n\n`)
+             + T(`Enheten står nå på: ${naavaerende || 'ukjent'}\n`, `The device now says: ${naavaerende || 'unknown'}\n`)
+             + T(`Denne PC-en:        ${new Date().toLocaleString('no')}\n\n`, `This PC:            ${new Date().toLocaleString('en-GB')}\n\n`)
              + `Ukeprogram og trendlogger på enheten følger denne klokka.`)) return;
 
   toast('Stiller klokka…');
@@ -1003,7 +1025,7 @@ async function stillKlokka(ip) {
   if (r.advarsel) {
     toast(r.advarsel, true);
   } else {
-    toast(`Klokka er stilt — enheten er nå ${r.avvik_etter ?? 0} s fra denne PC-en`);
+    toast(T(`Klokka er stilt — enheten er nå ${r.avvik_etter ?? 0} s fra denne PC-en`, `Clock set — the device is now ${r.avvik_etter ?? 0} s from this PC`));
   }
   // Re-read so the warning reflects what the device says now, not what it
   // said when it was first identified.
@@ -1043,7 +1065,7 @@ function devState(ip) {
 function presenceTag(d) {
   const p = presence(d);
   if (!p || p.svar === p.av) return '';
-  const tittel = `Svarte på ${p.svar} av de siste ${p.av} søkene`
+  const tittel = T(`Svarte på ${p.svar} av de siste ${p.av} søkene`, `Answered ${p.svar} of the last ${p.av} searches`)
     + (d._lastSeen ? ` · sist sett ${new Date(d._lastSeen).toLocaleTimeString('no')}` : '');
   return `<em class="dev-seen${p.naa ? '' : ' borte'}" title="${esc(tittel)}">${p.svar}/${p.av}</em>`;
 }
@@ -1099,7 +1121,8 @@ function grupperingsAkse() {
 }
 function grupperingsTekst() {
   const v = grupperingsValg();
-  return v === 'auto' ? `automatisk · ${GROUP_NAVN[grupperingsAkse()]}` : GROUP_NAVN[v];
+  const navn = (k) => T(GROUP_NAVN[k], GROUP_EN[k]);
+  return v === 'auto' ? `${navn('auto')} · ${navn(grupperingsAkse())}` : navn(v);
 }
 
 /* Which adapter a network is reached through, asked once per network and
@@ -1172,7 +1195,7 @@ function renderDevices() {
       </span>
       <span class="dev-l2">
         <span class="dev-ip">${esc(d.address)}</span>
-        <span class="dev-id${dup ? ' dup' : ''}"${dup ? ' title="Flere enheter svarer på denne ID-en"' : ''}>${d.device_instance ?? '?'}</span>
+        <span class="dev-id${dup ? ' dup' : ''}"${dup ? ` title="${T('Flere enheter svarer på denne ID-en', 'Several devices answer to this ID')}"` : ''}>${d.device_instance ?? '?'}</span>
         ${gruppert ? '' : `<span class="dev-lev">${esc(v.label)}</span>`}
         ${presenceTag(d)}
         ${noteFor(d) ? `<span class="dev-note" title="${esc(noteFor(d))}">notat</span>` : ''}
@@ -1270,7 +1293,7 @@ function nettMeta(g) {
   const m = (typeof MINNE !== 'undefined' && MINNE[g.v.label]) || null;
   const navn = m && m.navn ? m.navn : '';
   const stille = g.enheter.filter(d => { const p = presence(d); return p && !p.naa; }).length;
-  const deler = [navn, via && `via ${via}`, stille && `${g.enheter.length - stille} av ${g.enheter.length} svarte`].filter(Boolean);
+  const deler = [navn, via && `via ${via}`, stille && T(`${g.enheter.length - stille} av ${g.enheter.length} svarte`, `${g.enheter.length - stille} of ${g.enheter.length} answered`)].filter(Boolean);
   // Always there, empty or not: it is what pushes the count to the right.
   return `<span class="vgroup-meta">${esc(deler.join(' · '))}</span>`;
 }
@@ -1431,7 +1454,7 @@ function renderPrefetchStatus() {
   const lest = S.devices.filter(d => S.cache[d.address]).length;
   const feilet = S.devices.filter(d => PRE.failed.has(d.address)).length;
   const html = (lest + feilet >= total)
-    ? `<b>${lest}</b> av ${total} enheter lest` + (feilet ? ` · ${feilet} svarte ikke` : '')
+    ? T(`<b>${lest}</b> av ${total} enheter lest`, `<b>${lest}</b> of ${total} devices read`) + (feilet ? T(` · ${feilet} svarte ikke`, ` · ${feilet} did not answer`) : '')
     : `leser anlegget: <b>${lest}</b> av ${total}`;
   el.hidden = false;
   // This runs on a 1.2 s timer whether or not anything moved. Rewriting
@@ -1487,11 +1510,11 @@ function clockDrift(ip) {
 function driftText(sek, deviceTime) {
   const a = Math.abs(sek);
   const retning = sek > 0 ? 'foran' : 'etter';
-  if (a > 2592000 && deviceTime) return `står på ${String(deviceTime).slice(0, 10)}`;
+  if (a > 2592000 && deviceTime) return T(`står på ${String(deviceTime).slice(0, 10)}`, `stuck at ${String(deviceTime).slice(0, 10)}`);
   if (a < 90) return `${Math.round(a)} s ${retning}`;
   if (a < 5400) return `${Math.round(a / 60)} min ${retning}`;
   if (a < 172800) return `${(a / 3600).toFixed(1)} t ${retning}`;
-  return `${Math.round(a / 86400)} døgn ${retning}`;
+  return T(`${Math.round(a / 86400)} døgn ${retning}`, `${Math.round(a / 86400)} days ${retning === 'foran' ? 'ahead' : 'behind'}`);
 }
 
 /* What the wait shows is whatever the device has already told us. The object
@@ -1669,7 +1692,7 @@ async function selectDevice(ip, opts = {}) {
     $('sbPts').textContent = cached.length;
     ['pollBtn', 'expBtn', 'reloadBtn'].forEach(i => $(i).disabled = false);
     const alder = valuesAge(ip);
-    status(`${cached.length} punkter fra hurtiglager · lest ${alder === null ? '?' : ageText(alder)}` + ` · trykk ⟳ for å lese på nytt`);
+    status(T(`${cached.length} punkter fra hurtiglager · lest ${alder === null ? '?' : ageText(alder)} · trykk ⟳ for å lese på nytt`, `${cached.length} points from cache · read ${alder === null ? '?' : ageText(alder)} · press ⟳ to read again`));
     markFreshness();
     return;
   }
@@ -1703,7 +1726,7 @@ async function selectDevice(ip, opts = {}) {
     // the socket until their own timeouts expire. Give them a moment to
     // drain, or the load that follows competes with them and crawls.
     await new Promise(r => setTimeout(r, 4500));
-    status('Skann stoppet — laster enheten');
+    status(T('Skann stoppet — laster enheten', 'Scan stopped — loading the device'));
   }
   S.selected = null; S.detail = null;
   renderDevices(); renderInspector();
@@ -1793,8 +1816,8 @@ async function selectDevice(ip, opts = {}) {
     }
     const secs = ((naa - t0) / 1000).toFixed(1);
     const igjen = partial.total_objects && partial.count < partial.total_objects;
-    status(igjen ? `${partial.count} punkter · ${secs}s · leser fortsatt…`
-                 : `${partial.count} punkter · ${secs}s · leser beskrivelser…`);
+    status(igjen ? T(`${partial.count} punkter · ${secs}s · leser fortsatt…`, `${partial.count} points · ${secs}s · still reading…`)
+                 : T(`${partial.count} punkter · ${secs}s · leser beskrivelser…`, `${partial.count} points · ${secs}s · reading descriptions…`));
   };
 
   try {
@@ -1833,7 +1856,7 @@ async function selectDevice(ip, opts = {}) {
     if (gjelder() && !d.unread && (!d.total_objects || d.count >= d.total_objects)
         && typeof nabeRentAnlegg === 'function') nabeRentAnlegg(dev, S.points);
     const secs = ((performance.now() - t0) / 1000).toFixed(1);
-    const extra = (d.rpm === false ? ' · uten RPM' : '')
+    const extra = (d.rpm === false ? T(' · uten RPM', ' · without RPM') : '')
                 + (d.unread ? ` · ${d.unread} uleste` : '');
     if (gjelder()) status(`${d.count} punkter av ${d.total_objects} objekter · ${secs}s${extra}`);
   } catch (e) {
@@ -1945,15 +1968,15 @@ function renderSelBar() {
    and a failure part-way names exactly which points were already released. */
 async function releaseSelected() {
   const rows = selectedVisible().filter(p => p.writable);
-  if (!rows.length) { toast('Ingen skrivbare punkter valgt', true); return; }
-  if (S.readOnly) { toast('Lesemodus er på — skriving er blokkert', true); return; }
+  if (!rows.length) { toast(T('Ingen skrivbare punkter valgt', 'No writable points selected'), true); return; }
+  if (S.readOnly) { toast(T('Lesemodus er på — skriving er blokkert', 'Read-only is on — writing is blocked'), true); return; }
   const pri = parseInt($('selPri').value, 10);
   const NL = String.fromCharCode(10);
   const vis = rows.slice(0, 8).map(p => '  · ' + (p.name || p.objid)).join(NL)
-            + (rows.length > 8 ? NL + `  … og ${rows.length - 8} til` : '');
-  const msg = `Frigi prioritet ${pri} på ${rows.length} punkter` + NL + NL
+            + (rows.length > 8 ? NL + T(`  … og ${rows.length - 8} til`, `  … and ${rows.length - 8} more`) : '');
+  const msg = T(`Frigi prioritet ${pri} på ${rows.length} punkter`, `Release priority ${pri} on ${rows.length} points`) + NL + NL
             + S.activeDev.address + NL + vis + NL + NL
-            + 'Punktene faller tilbake til anleggets egen styring.' + NL
+            + T('Punktene faller tilbake til anleggets egen styring.', 'The points fall back to the plant’s own control.') + NL
             + 'Dette endrer et anlegg i drift. Fortsette?';
   if (!confirm(msg)) return;
 
@@ -1981,9 +2004,9 @@ async function releaseSelected() {
     slaaPaaNytt(document.querySelector(
       `.dev[data-ip="${CSS.escape(S.activeDev.address)}"]`), 'mottok', 1040);
   }
-  status(`${ok} av ${rows.length} frigitt på prioritet ${pri}`);
-  toast(feil.length ? `${ok} frigitt · ${feil.length} feilet — se skriveloggen`
-                    : `${ok} punkter frigitt på prioritet ${pri}`, feil.length > 0);
+  status(T(`${ok} av ${rows.length} frigitt på prioritet ${pri}`, `${ok} of ${rows.length} released at priority ${pri}`));
+  toast(feil.length ? T(`${ok} frigitt · ${feil.length} feilet — se skriveloggen`, `${ok} released · ${feil.length} failed — see the write log`)
+                    : T(`${ok} punkter frigitt på prioritet ${pri}`, `${ok} points released at priority ${pri}`), feil.length > 0);
   await refreshMany(rows.map(p => p.objid));
 }
 
@@ -2015,7 +2038,7 @@ function pinSelected() {
   rows.slice(0, 3).forEach((p, i) =>
     setTimeout(() => festFly(p.objid, p.name || p.objid), i * 70));
   renderWatch(); renderPoints();
-  toast(added ? added + ' punkt(er) festet' : 'Alle var allerede festet');
+  toast(added ? T(added + ' punkt(er) festet', added + ' point(s) pinned') : T('Alle var allerede festet', 'All were already pinned'));
 }
 
 /* Merker radene som faktisk ble kopiert. */
@@ -2102,7 +2125,7 @@ function renderCtx() {
         <span class="ctx-tall">${S.points.length} ${T('punkter', 'points')}${writable ? ` · ${writable} ${T('skrivbare', 'writable')}` : ''}</span>
       </span>
     </div>
-    ${(S.namePrefix && loadPrefs().shortNames !== false) ? `<span class="ctx-prefix" title="Alle punktnavn på denne enheten starter med dette. Det er utelatt fra tabellen for lesbarhet — hold over et navn for å se det fullt ut.">${esc(S.namePrefix)}…</span>` : ''}
+    ${(S.namePrefix && loadPrefs().shortNames !== false) ? `<span class="ctx-prefix" title="${T('Alle punktnavn på denne enheten starter med dette. Det er utelatt fra tabellen for lesbarhet — hold over et navn for å se det fullt ut.', 'Every point name on this device starts with this. It is left out of the table to keep it readable — hover a name to see it in full.')}">${esc(S.namePrefix)}…</span>` : ''}
     <div class="spacer"></div>
     ${Object.entries(FLAGS).filter(([f]) => flagg[f]).map(([f, m]) =>
       `<button class="ctx-stat ${m.cls}" data-flag="${f}" title="${T('Vis kun punkter ' + esc(m.label), 'Show only points ' + esc(oversettTekst(m.label, true)))}">${flagg[f]} ${esc(m.label)}</button>`).join('')}
@@ -2141,9 +2164,9 @@ function valuesAge(ip) {
 }
 
 function ageText(sek) {
-  if (sek < 60) return 'nå nettopp';
-  if (sek < 5400) return `${Math.round(sek / 60)} min siden`;
-  return `${(sek / 3600).toFixed(1)} t siden`;
+  if (sek < 60) return T('nå nettopp', 'just now');
+  if (sek < 5400) return T(`${Math.round(sek / 60)} min siden`, `${Math.round(sek / 60)} min ago`);
+  return T(`${(sek / 3600).toFixed(1)} t siden`, `${(sek / 3600).toFixed(1)} h ago`);
 }
 
 /* Live polling rewrites the visible values, so while it runs they are current
@@ -2155,8 +2178,8 @@ function markFreshness() {
   document.body.classList.toggle('stale-values', !!gammel);
   const el = $('sbLive');
   if (!el) return;
-  const base = S.live ? el.dataset.live || 'Live på' : 'Live av';
-  el.textContent = gammel ? `${base} · verdier ${ageText(sek)}` : base;
+  const base = S.live ? (el.dataset.live ? oversettTekst(el.dataset.live, SPRAAK === 'en') : T('Live på', 'Live on')) : T('Live av', 'Live off');
+  el.textContent = gammel ? `${base} · ${T('verdier', 'values')} ${ageText(sek)}` : base;
   el.classList.toggle('stale', !!gammel);
 }
 
@@ -2227,17 +2250,21 @@ function emptyResultView() {
 
   let tittel, hjelp = '';
   if (f.q.trim() && !aktive.length) {
-    tittel = `Ingen punkter matcher «${esc(f.q.trim())}»`;
-    hjelp = 'Søket dekker navn, beskrivelse og objekt-ID på denne enheten. '
+    tittel = T(`Ingen punkter matcher «${esc(f.q.trim())}»`, `No points match “${esc(f.q.trim())}”`);
+    hjelp = T('Søket dekker navn, beskrivelse og objekt-ID på denne enheten. '
           + 'Flere ord må alle treffe, uansett rekkefølge — «360.001 RT601» '
           + 'finner punkter som inneholder begge. Sett minus foran et ord for '
-          + 'å utelate det. Trykk Ctrl+F for å søke i alle leste enheter.';
+          + 'å utelate det. Trykk Ctrl+F for å søke i alle leste enheter.',
+          'The search covers name, description and object ID on this device. '
+          + 'Several words must all match, in any order — “360.001 RT601” '
+          + 'finds points that contain both. Put a minus in front of a word to '
+          + 'leave it out. Press Ctrl+F to search every device read.');
   } else if (aktive.length && !f.q.trim()) {
     tittel = aktive.length === 1 && f.flag
-      ? `Ingen punkter ${esc(FLAGS[f.flag].label)} på denne enheten`
-      : `Ingen punkter igjen etter filteret (${esc(aktive.join(' + '))})`;
+      ? T(`Ingen punkter ${esc(FLAGS[f.flag].label)} på denne enheten`, `No points ${esc(oversettTekst(FLAGS[f.flag].label, true))} on this device`)
+      : T(`Ingen punkter igjen etter filteret (${esc(aktive.join(' + '))})`, `No points left after the filter (${esc(aktive.join(' + '))})`);
   } else if (aktive.length) {
-    tittel = `Ingen treff på «${esc(f.q.trim())}» blant ${esc(aktive.join(' + '))}`;
+    tittel = T(`Ingen treff på «${esc(f.q.trim())}» blant ${esc(aktive.join(' + '))}`, `No matches for “${esc(f.q.trim())}” among ${esc(aktive.join(' + '))}`);
   } else {
     tittel = 'Ingen treff';
   }
@@ -2318,10 +2345,10 @@ async function rescanOnce(manuell) {
     renderDevices(); renderRescanStatus();
     if (manuell) {
       const borte = S.devices.filter(d => { const p = presence(d); return p && !p.naa; }).length;
-      toast(`${funnet.size} av ${S.devices.length} svarte` + (borte ? ` · ${borte} svarte ikke` : ''));
+      toast(T(`${funnet.size} av ${S.devices.length} svarte`, `${funnet.size} of ${S.devices.length} answered`) + (borte ? T(` · ${borte} svarte ikke`, ` · ${borte} did not answer`) : ''));
     }
   } catch (e) {
-    if (manuell) toast('Skann feilet: ' + e.message, true);
+    if (manuell) toast(T('Skann feilet: ', 'Scan failed: ') + e.message, true);
   } finally {
     RESCAN.running = false;
   }
@@ -2348,7 +2375,7 @@ function renderRescanStatus() {
   if (!el) return;
   if (!RESCAN.on) { el.hidden = true; return; }
   const borte = S.devices.filter(d => { const p = presence(d); return p && !p.naa; }).length;
-  const html = `overvåker · ${RESCAN.runs} runder` + (borte ? ` · <b>${borte}</b> svarer ikke` : '');
+  const html = T(`overvåker · ${RESCAN.runs} runder`, `watching · ${RESCAN.runs} rounds`) + (borte ? T(` · <b>${borte}</b> svarer ikke`, ` · <b>${borte}</b> not answering`) : '');
   el.hidden = false;
   el.classList.toggle('stale', borte > 0);
   if (el.innerHTML !== html) el.innerHTML = html;
@@ -2681,7 +2708,7 @@ function fiksLesbarhet() {
       savePrefs({bgMorkne: m});
       brukTema();
       tegnTema();
-      toast(`Mørklegging satt til ${m} % — teksten er lesbar igjen`);
+      toast(T(`Mørklegging satt til ${m} % — teksten er lesbar igjen`, `Dimming set to ${m} % — the text is readable again`));
       return;
     }
   }
@@ -3435,18 +3462,18 @@ function nabeEtterSkann(n) {
 
 /* -- device numbers with a story. Only a hover title, nothing on screen. */
 const NABE_INSTANS = {
-  '42': 'Svaret på alt.',
-  '1337': 'l33t.',
-  '4194303': 'Jokertegnet. Hvordan fikk du dette?',
-  '0': 'Den første. Eller den som ingen konfigurerte.',
-  '1234': 'Noen hadde det travelt.',
-  '47808': 'Porten og ID-en. Noen har humor.',
-  '69': 'Nice.',
+  '42': ['Svaret på alt.', 'The answer to everything.'],
+  '1337': ['l33t.', 'l33t.'],
+  '4194303': ['Jokertegnet. Hvordan fikk du dette?', 'The wildcard. How did you get this?'],
+  '0': ['Den første. Eller den som ingen konfigurerte.', 'The first. Or the one nobody configured.'],
+  '1234': ['Noen hadde det travelt.', 'Someone was in a hurry.'],
+  '47808': ['Porten og ID-en. Noen har humor.', 'The port as the ID. Someone has a sense of humour.'],
+  '69': ['Nice.', 'Nice.'],
 };
 function nabeKortEgg() {
   for (const el of document.querySelectorAll('#devList .dev .dev-id')) {
     const t = NABE_INSTANS[el.textContent.trim()];
-    if (t && !el.title) el.title = t;
+    if (t && !el.title) el.title = T(t[0], t[1]);
   }
 }
 
@@ -3550,9 +3577,9 @@ const FASE_GRUPPE = {
   'beskrivelser': 2, 'tilstandstekster': 2, 'av/pa-tekster': 2, 'ukeprogram': 2,
 };
 const FASE_ORD = {
-  'objektliste': 'leser objektlista', 'punkter': 'leser verdier',
-  'beskrivelser': 'leser beskrivelser', 'tilstandstekster': 'leser tilstandstekster',
-  'av/pa-tekster': 'leser av/på-tekster', 'ukeprogram': 'leser ukeprogram',
+  'objektliste': ['leser objektlista', 'reading the object list'], 'punkter': ['leser verdier', 'reading values'],
+  'beskrivelser': ['leser beskrivelser', 'reading descriptions'], 'tilstandstekster': ['leser tilstandstekster', 'reading state texts'],
+  'av/pa-tekster': ['leser av/på-tekster', 'reading on/off texts'], 'ukeprogram': ['leser ukeprogram', 'reading schedules'],
 };
 
 /* Three devices can be read at once in the background, so the state is per
@@ -3578,7 +3605,7 @@ function kortFramdrift(ip, pst, ukjent, fase) {
     el.style.setProperty('--frem', S._laster.andel);
     el.style.setProperty('--frem2', S._laster.andel2);
   }
-  if (fase && FASE_ORD[fase]) el.title = FASE_ORD[fase];
+  if (fase && FASE_ORD[fase]) el.title = T(FASE_ORD[fase][0], FASE_ORD[fase][1]);
 }
 
 function kortFerdig(ip) {
@@ -4263,7 +4290,7 @@ function temaEksporter() {
   a.click();
   URL.revokeObjectURL(a.href);
   const antall = Object.keys(data.bilder).length;
-  toast(`Temaet er lagret (${kb} kB${antall ? `, ${antall} bilde${antall > 1 ? 'r' : ''}` : ''})`);
+  toast(T(`Temaet er lagret (${kb} kB${antall ? `, ${antall} bilde${antall > 1 ? 'r' : ''}` : ''})`, `Theme saved (${kb} kB${antall ? `, ${antall} image${antall > 1 ? 's' : ''}` : ''})`));
 }
 
 function temaImporter() {
@@ -4306,7 +4333,7 @@ function temaImporter() {
 
         brukTema();
         tegnTema();
-        toast(`Temaet er hentet fra fil${bilder ? ` (${bilder} bilde${bilder > 1 ? 'r' : ''})` : ''}`);
+        toast(T(`Temaet er hentet fra fil${bilder ? ` (${bilder} bilde${bilder > 1 ? 'r' : ''})` : ''}`, `Theme loaded from file${bilder ? ` (${bilder} image${bilder > 1 ? 's' : ''})` : ''}`));
       } catch {
         toast('Kunne ikke lese temafilen', true);
       }
@@ -4768,7 +4795,7 @@ const COLS = [
   {k: 'value', label: 'Verdi', menu: 'Verdi', cls: 'c-val', col: 'w-val',
    extraCls: p => fmtVal(p.value).c + (p.unread ? ' unread' : '')
      + (typeof rarVerdi === 'function' && rarVerdi(p) ? ' rar' : ''),
-   attrs: p => p.unread ? ' title="Ingen svar fra enheten på dette punktet"' : '',
+   attrs: p => p.unread ? ` title="${T('Ingen svar fra enheten på dette punktet', 'No answer from the device for this point')}"` : '',
    cell: p => {
      if (p.unread) return '?';
      // A multi-state reading of "3" says nothing; the device already told us
@@ -4822,7 +4849,7 @@ function tegnFilterChips() {
   boks.innerHTML = chips.map(c =>
     `<span class="fchip">${esc(c.e)} <b>${esc(c.v)}</b>` +
     `<button class="fchip-x" data-av="${c.k}" title="Fjern dette filteret"` +
-    ` aria-label="Fjern filter ${esc(c.e)} ${esc(c.v)}">✕</button></span>`).join('')
+    ` aria-label="${T('Fjern filter', 'Remove filter')} ${esc(c.e)} ${esc(c.v)}">✕</button></span>`).join('')
     + (chips.length > 1
         ? '<button class="fchip-alle" id="fchipAlle">Nullstill alle</button>' : '');
 
@@ -5226,26 +5253,26 @@ async function visSesjonsrapport() {
     .filter(([, s]) => s !== null && Math.abs(s) >= CLOCK_WARN)
     .map(([d, s]) => (d.object_name || d.device_instance) + ' (' + d.address + '): ' + driftText(s, (S.identity[d.address] || {})['device-time']));
   visRapport('Sesjonsrapport - ' + new Date().toLocaleString('no'), [
-    {h: 'Står fortsatt overstyrt av deg',
+    {h: T('Står fortsatt overstyrt av deg', 'Still overridden by you'),
      liste: mine.map(o => o.address + ' ' + o.objid + '  P' + o.priority + ' = ' + o.value
        + '  (siden ' + new Date(o.ts * 1000).toLocaleTimeString('no') + ')'),
      tom: 'ingenting - alt du skrev er frigitt'},
-    {h: 'Klokker med avvik', liste: klokker, tom: 'alle klokker går riktig'},
-    {h: 'Okt', linjer: [
-      rapLinje('Varighet', min + ' min'),
-      rapLinje('Nettverkskort', S.localAddr || '-'),
-      rapLinje('Omraade', ($('rangeInput') || {}).value || '-'),
+    {h: T('Klokker med avvik', 'Clocks that are off'), liste: klokker, tom: 'alle klokker går riktig'},
+    {h: T('Økt', 'Session'), linjer: [
+      rapLinje(T('Varighet', 'Duration'), min + ' min'),
+      rapLinje(T('Nettverkskort', 'Adapter'), S.localAddr || '-'),
+      rapLinje(T('Område', 'Range'), ($('rangeInput') || {}).value || '-'),
     ]},
-    {h: 'Enheter', linjer: [
-      rapLinje('Funnet', S.devices.length),
+    {h: T('Enheter', 'Devices'), linjer: [
+      rapLinje(T('Funnet', 'Found'), S.devices.length),
       rapLinje('Lest', lest.length),
-      rapLinje('Punkter lest', alle.length),
+      rapLinje(T('Punkter lest', 'Points read'), alle.length),
     ]},
-    {h: 'Funn', linjer: Object.entries(FLAGS)
+    {h: T('Funn', 'Findings'), linjer: Object.entries(FLAGS)
       .filter(([f]) => flagg[f])
       .map(([f, m]) => rapLinje(m.label, flagg[f])),
-     tom: 'ingen punkter i alarm, med feil eller overstyrt'},
-    {h: 'Skrivinger i denne okta',
+     tom: T('ingen punkter i alarm, med feil eller overstyrt', 'no points in alarm, faulty or overridden')},
+    {h: T('Skrivinger i denne økta', 'Writes this session'),
      liste: skriv.map(e => {
        const t2 = new Date(e.ts * 1000).toLocaleTimeString('no');
        const hva = e.action === 'release' ? 'frigitt'
@@ -5256,7 +5283,7 @@ async function visSesjonsrapport() {
        return t2 + '  ' + e.address + ' ' + e.objid + ' ' + hva + v;
      }),
      tom: 'ingen'},
-    {h: 'Notater', liste: notater, tom: 'ingen'},
+    {h: T('Notater', 'Notes'), liste: notater, tom: 'ingen'},
   ]);
 }
 
@@ -5285,18 +5312,18 @@ function visSnapshotrapport() {
 
   const u = (p) => p.unit_symbol ? ' ' + p.unit_symbol : '';
   visRapport('Endret siden snapshot - ' + (S.activeDev.object_name || ip), [
-    {h: 'Sammendrag', linjer: [
-      rapLinje('Punkter naa', S.points.length),
-      rapLinje('Endret verdi', endret.length),
-      rapLinje('Nye siden snapshot', nye.length),
-      rapLinje('Borte siden snapshot', borte.length),
+    {h: T('Sammendrag', 'Summary'), linjer: [
+      rapLinje(T('Punkter nå', 'Points now'), S.points.length),
+      rapLinje(T('Endret verdi', 'Changed value'), endret.length),
+      rapLinje(T('Nye siden snapshot', 'New since snapshot'), nye.length),
+      rapLinje(T('Borte siden snapshot', 'Gone since snapshot'), borte.length),
     ]},
-    {h: 'Endrede verdier',
+    {h: T('Endrede verdier', 'Changed values'),
      liste: endret.slice(0, 300).map(o =>
        (o.p.name || o.p.objid) + ':  ' + o.foer + u(o.p) + '  ->  ' + o.p.value + u(o.p)),
      tom: 'ingen verdier har endret seg'},
-    {h: 'Nye punkter', liste: nye.slice(0, 100).map(p => p.name || p.objid), tom: 'ingen'},
-    {h: 'Borte', liste: borte.slice(0, 100), tom: 'ingen'},
+    {h: T('Nye punkter', 'New points'), liste: nye.slice(0, 100).map(p => p.name || p.objid), tom: 'ingen'},
+    {h: T('Borte', 'Gone'), liste: borte.slice(0, 100), tom: 'ingen'},
   ]);
 }
 
@@ -5538,8 +5565,8 @@ async function pingOmraade(omraader, boks) {
   } catch (e) {
     const nytt = /404|not found/i.test(e.message || '');
     if (ut) ut.innerHTML = nytt
-      ? 'Ping krever at serveren startes på nytt — kjør <code>start.bat</code> igjen.'
-      : esc('Ping feilet: ' + e.message);
+      ? T('Ping krever at serveren startes på nytt — kjør <code>start.bat</code> igjen.', 'Ping needs the server restarted — run <code>start.bat</code> again.')
+      : esc(T('Ping feilet: ', 'Ping failed: ') + e.message);
     return;
   }
 
@@ -5548,24 +5575,33 @@ async function pingOmraade(omraader, boks) {
 
   if (!ut) return;
   if (!lever.length) {
-    ut.innerHTML = '<b>Ingen av ' + sjekket + ' adresser svarte på ping heller.</b> '
+    ut.innerHTML = T('<b>Ingen av ' + sjekket + ' adresser svarte på ping heller.</b> '
       + 'Det peker mot nettveien — rute, brannmur eller feil nettverkskort. '
       + 'Men vær klar over at mange regulatorer svarer på BACnet uten å svare '
-      + 'på ping, så prøv <b>grundig sweep</b> før du konkluderer.';
+      + 'på ping, så prøv <b>grundig sweep</b> før du konkluderer.',
+      '<b>None of ' + sjekket + ' addresses answered ping either.</b> '
+      + 'That points at the network path — route, firewall or the wrong adapter. '
+      + 'But many controllers answer BACnet without answering ping, '
+      + 'so try a <b>thorough sweep</b> before you conclude.');
     return;
   }
   ut.innerHTML =
-    '<b>' + lever.length + ' av ' + sjekket + ' adresser svarer på ping'
+    T('<b>' + lever.length + ' av ' + sjekket + ' adresser svarer på ping', '<b>' + lever.length + ' of ' + sjekket + ' addresses answer ping')
     + (stille.length
-        ? ', men ' + stille.length + ' av dem svarte ikke på BACnet.</b> '
+        ? T(', men ' + stille.length + ' av dem svarte ikke på BACnet.</b> '
           + 'De adressene er i live — det er BACnet-oppdagelsen som feiler der. '
           + 'Grundig sweep prøver dem om igjen. '
           + '<span class="ping-nb">Merk at ping ikke er fasit andre veien: '
-          + 'en regulator kan svare på BACnet uten å svare på ping.</span>'
-        : '.</b> Alle som svarer på ping svarte også på BACnet.')
+          + 'en regulator kan svare på BACnet uten å svare på ping.</span>',
+          ', but ' + stille.length + ' of them did not answer BACnet.</b> '
+          + 'Those addresses are alive — it is BACnet discovery that fails there. '
+          + 'A thorough sweep tries them again. '
+          + '<span class="ping-nb">Ping is not the answer the other way round: '
+          + 'a controller can answer BACnet without answering ping.</span>')
+        : T('.</b> Alle som svarer på ping svarte også på BACnet.', '.</b> Everything that answers ping also answered BACnet.'))
     + (stille.length
         ? '<div class="ping-liste">' + stille.slice(0, 12).map(esc).join('  ')
-          + (stille.length > 12 ? '  …og ' + (stille.length - 12) + ' til' : '') + '</div>'
+          + (stille.length > 12 ? T('  …og ' + (stille.length - 12) + ' til', '  …and ' + (stille.length - 12) + ' more') : '') + '</div>'
         : '');
 }
 
@@ -5608,36 +5644,53 @@ function tomtSkannResultat(mode, omraader) {
 
   const grunner = [];
   if (mode === 'broadcast') {
-    grunner.push('<b>Who-Is</b> er en kringkasting. Rutere og VPN slipper den '
-      + 'som regel ikke gjennom — derfor svarer ingen, selv om enhetene er der.');
+    grunner.push(T('<b>Who-Is</b> er en kringkasting. Rutere og VPN slipper den '
+      + 'som regel ikke gjennom — derfor svarer ingen, selv om enhetene er der.',
+      '<b>Who-Is</b> is a broadcast. Routers and VPNs usually do not let it '
+      + 'through — so nobody answers, even though the devices are there.'));
   }
   if (mode === 'unicast_fast') {
-    grunner.push('<b>Sweep — rask</b> prøver hver adresse <b>én gang</b>. Over '
+    grunner.push(T('<b>Sweep — rask</b> prøver hver adresse <b>én gang</b>. Over '
       + 'VPN driver rekkevidden fra minutt til minutt — samme regulator kan '
       + 'svare på seks av åtte forsøk, og på null en halvtime senere. Ett '
       + 'stille forsøk betyr derfor lite, og «grundig» prøver de stille '
-      + 'adressene om igjen for deg.');
+      + 'adressene om igjen for deg.',
+      '<b>Sweep — quick</b> tries each address <b>once</b>. Over a '
+      + 'VPN, reach drifts from minute to minute — the same controller can '
+      + 'answer six of eight tries, and none half an hour later. One '
+      + 'silent try means little, and “thorough” tries the silent '
+      + 'addresses again for you.'));
   }
   if (vpn) {
-    grunner.push('Du sender fra <code>' + esc(S.localAddr) + '</code> — et '
-      + '/32 uten eget subnett, altså en VPN-tunnel. Kringkasting virker ikke herfra.');
+    grunner.push(T('Du sender fra <code>' + esc(S.localAddr) + '</code> — et '
+      + '/32 uten eget subnett, altså en VPN-tunnel. Kringkasting virker ikke herfra.',
+      'You are sending from <code>' + esc(S.localAddr) + '</code> — a '
+      + '/32 with no subnet of its own, so a VPN tunnel. Broadcasts do not work from here.'));
   }
   if (mode === 'bbmd') {
-    grunner.push('<b>BBMD</b> trenger IP-en til byggets BBMD — som oftest JACE-en '
+    grunner.push(T('<b>BBMD</b> trenger IP-en til byggets BBMD — som oftest JACE-en '
       + 'eller hovedsentralen, ikke en vilkårlig regulator. Svarer den ikke på '
-      + 'registreringen, leses adressen alene.');
+      + 'registreringen, leses adressen alene.',
+      '<b>BBMD</b> needs the IP of the building’s BBMD — usually the JACE '
+      + 'or the main controller, not just any controller. If it does not answer '
+      + 'the registration, the address is read on its own.'));
   }
   if (!vpn && mode !== 'bbmd') {
-    grunner.push('På anleggsnettet: Windows merker ukjente nett som <b>offentlige</b>, '
+    grunner.push(T('På anleggsnettet: Windows merker ukjente nett som <b>offentlige</b>, '
       + 'og brannmuren stopper da I-Am-svar som kommer som kringkasting. '
-      + 'Sweep går likevel, fordi svarene der er direkte svar på det vi sendte.');
+      + 'Sweep går likevel, fordi svarene der er direkte svar på det vi sendte.',
+      'On the plant network: Windows marks unknown networks as <b>public</b>, '
+      + 'and the firewall then stops I-Am replies sent as broadcasts. '
+      + 'A sweep still works, because its replies are direct answers to what we sent.'));
   }
-  grunner.push('At <b>ping</b> svarer betyr bare at IP-en nås. BACnet-oppdagelse '
-    + 'er en egen samtale på UDP 47808, og den kan blokkeres selv om ping går.');
+  grunner.push(T('At <b>ping</b> svarer betyr bare at IP-en nås. BACnet-oppdagelse '
+    + 'er en egen samtale på UDP 47808, og den kan blokkeres selv om ping går.',
+    'A <b>ping</b> reply only means the IP can be reached. BACnet discovery '
+    + 'is its own conversation on UDP 47808, and it can be blocked while ping works.'));
 
   const knapp = mode !== 'unicast_sweep'
-    ? '<button class="btn primary" id="tomtGrundig">Prøv «Sweep — grundig»</button>'
-    : '<button class="btn" id="tomtIgjen">Skann på nytt</button>';
+    ? `<button class="btn primary" id="tomtGrundig">${T('Prøv «Sweep — grundig»', 'Try “Sweep — thorough”')}</button>`
+    : `<button class="btn" id="tomtIgjen">${T('Skann på nytt', 'Scan again')}</button>`;
 
   el.innerHTML =
     '<div class="tomt-skann">'
@@ -5786,7 +5839,7 @@ function renderPoints() {
       const sys = systemAv(p) || '';
       if (sys !== forrigeSys) {
         forrigeSys = sys;
-        hode = `<tr class="sys-hode"><td colspan="${cols.length + 1}">${esc(sys || 'Uten system')}<span>${sysAntall[sys]}</span></td></tr>`;
+        hode = `<tr class="sys-hode"><td colspan="${cols.length + 1}">${esc(sys || T('Uten system', 'No system'))}<span>${sysAntall[sys]}</span></td></tr>`;
       }
     }
     return hode + `<tr class="${cls}" data-o="${esc(p.objid)}">
@@ -6014,7 +6067,7 @@ function syncMenuStates() {
     $('shortState').textContent = !kort ? 'av'
       : S.namePrefix ? 'på' : 'ingen felles start';
     el.title = !kort ? 'Punktnavn vises fullt ut'
-      : S.namePrefix ? `Utelater «${S.namePrefix}» fra tabellen — fullt navn i tooltip, søk og eksport`
+      : S.namePrefix ? T(`Utelater «${S.namePrefix}» fra tabellen — fullt navn i tooltip, søk og eksport`, `Leaves “${S.namePrefix}” out of the table — full name in the tooltip, search and export`)
                      : 'På, men punktnavnene her har ingen felles start å utelate';
   }
 }
@@ -6115,7 +6168,7 @@ async function loadProject(name) {
 
   renderDevices(); renderCtx(); renderPoints(); renderInspector(); renderWatch();
   savePrefs({lastProject: name});
-  toast(`Åpnet «${name}» · ${S.devices.length} enheter${snaps.length ? ` · snapshot fra ${S.snapAt.toLocaleDateString('no')}` : ''}`);
+  toast(T(`Åpnet «${name}» · ${S.devices.length} enheter${snaps.length ? ` · snapshot fra ${S.snapAt.toLocaleDateString('no')}` : ''}`, `Opened “${name}” · ${S.devices.length} devices${snaps.length ? ` · snapshot from ${S.snapAt.toLocaleDateString('en-GB')}` : ''}`));
 }
 
 /* ------------------------------------------------------------ global search */
@@ -6204,8 +6257,8 @@ function renderGlobal() {
   const loaded = Object.keys(S.cache).length;
   const total = S.devices.length;
   const dekning = loaded < total
-    ? `søker i ${loaded} av ${total} enheter (åpne en enhet for å ta den med)`
-    : `alle ${total} enheter`;
+    ? T(`søker i ${loaded} av ${total} enheter (åpne en enhet for å ta den med)`, `searching ${loaded} of ${total} devices (open a device to include it)`)
+    : T(`alle ${total} enheter`, `all ${total} devices`);
   $('gsMeta').textContent = S.gsFlag
     ? `${hits.length} punkter ${FLAGS[S.gsFlag].label} · ${dekning}`
     : `${hits.length} treff · ${dekning}`;
@@ -6573,9 +6626,9 @@ function renderInspector() {
             // Whether this slot is ours: written by this NABE and not released.
             const min = typeof minHolder === 'function' && minHolder(S.activeDev.address, p.objid, a.p);
             const hvem = min
-              ? `<small class="pri-hvem min">deg · ${new Date(min.ts * 1000).toLocaleTimeString('no', {hour: '2-digit', minute: '2-digit'})}</small>`
-              : `<small class="pri-hvem">ikke fra NABE</small>`;
-            return `<dt>prioritet ${a.p}</dt><dd>${esc(a.v)} ${hvem}</dd>`;
+              ? `<small class="pri-hvem min">${T('deg', 'you')} · ${new Date(min.ts * 1000).toLocaleTimeString(SPRAAK === 'en' ? 'en-GB' : 'no', {hour: '2-digit', minute: '2-digit'})}</small>`
+              : `<small class="pri-hvem">${T('ikke fra NABE', 'not from NABE')}</small>`;
+            return `<dt>${T('prioritet', 'priority')} ${a.p}${PRI_NAVN[a.p] ? ` <small class="pri-navn">${esc(T(PRI_NAVN[a.p][0], PRI_NAVN[a.p][1]))}</small>` : ''}</dt><dd>${esc(a.v)} ${hvem}</dd>`;
           }).join('')}</dl>`
         : `<div style="font-size:11px;color:var(--fg-3)">Ingen aktive kommandoer — styres av lokal logikk</div>`) +
       `</div></div>`;
@@ -6592,7 +6645,7 @@ function renderInspector() {
     </div>
     <div class="insp-sub">${esc(p.description || '')}</div>
     <div class="insp-val${p.writable ? ' adjustable' : ''}" aria-live="off"${
-      p.writable ? ' title="Kommanderbart punkt — kan skrives"' : ''
+      p.writable ? ` title="${T('Kommanderbart punkt — kan skrives', 'Commandable point — can be written')}"` : ''
       } data-rull="${kanRulle(shown) ? '1' : ''}">${
       esc(shown)}<small>${esc(p.unit_symbol || '')}</small></div>
     <div class="insp-sub" style="padding-top:6px;display:flex;align-items:center;gap:6px;flex-wrap:wrap">
@@ -6654,10 +6707,10 @@ function updateInspectorLive() {
 function ukeBlock(p) {
   if (p.type !== 'schedule') return '';
   const st = schedNow(p);
-  const naa = !st ? 'Ukeprogrammet er ikke lest'
-            : st.tom ? 'Ingen skift lagt inn på denne ukedagen'
-            : `Nå: <b>${esc(String(st.verdi))}</b>`
-              + (st.til ? ` · ${esc(schedTekst(p))}` : ' · uendret hele uka');
+  const naa = !st ? T('Ukeprogrammet er ikke lest', 'The schedule has not been read')
+            : st.tom ? T('Ingen skift lagt inn på denne ukedagen', 'No changes set for this weekday')
+            : `${T('Nå', 'Now')}: <b>${esc(String(st.verdi))}</b>`
+              + (st.til ? ` · ${esc(schedTekst(p))}` : T(' · uendret hele uka', ' · unchanged all week'));
   return `<div class="sect"><div class="sect-head">Ukeprogram</div>
     <div class="sect-body">
       <div class="tl-note">${naa}</div>
@@ -6940,9 +6993,10 @@ async function refreshReadOnly() {
 }
 
 function roNotice() {
-  return '<div class="sect"><div class="sect-head">Skriv verdi</div>'
-       + '<div class="wf"><div class="warn-box">Lesemodus er på — skriving er blokkert. '
-       + 'Slå av hengelåsen i verktøylinjen for å skrive.</div></div></div>';
+  return `<div class="sect"><div class="sect-head">${T('Skriv verdi', 'Write value')}</div>`
+       + `<div class="wf"><div class="warn-box">${T('Lesemodus er på — skriving er blokkert. '
+       + 'Slå av hengelåsen i verktøylinjen for å skrive.', 'Read-only is on — writing is blocked. '
+       + 'Turn off the padlock in the toolbar to write.')}</div></div></div>`;
 }
 
 async function showWriteLog() {
@@ -6972,7 +7026,7 @@ function writeForm(p, d) {
       <option value="inactive">inactive${d['inactive-text'] ? ' — ' + esc(d['inactive-text']) : ''}</option>
     </select>`;
   } else {
-    input = `<input id="wVal" class="field" placeholder="verdi">`;
+    input = `<input id="wVal" class="field" placeholder="${T('verdi', 'value')}">`;
   }
   return `<div class="sect"><div class="sect-head">Skriv verdi</div>
     <div class="wf">
@@ -7014,23 +7068,24 @@ function wireWriteForm(p) {
     // what you are about to overwrite, so show the current value too.
     const nowTxt = fmtVal(p.value).t + (p.unit_symbol || '');
     const NL = String.fromCharCode(10);
-    const head = release ? ('Frigi prioritet ' + pri) : ('Skriv verdi @ prioritet ' + pri);
+    const head = release ? T('Frigi prioritet ' + pri, 'Release priority ' + pri) : T('Skriv verdi @ prioritet ' + pri, 'Write value @ priority ' + pri);
+    const naaOrd = T('Nå: ', 'Now: '), nyOrd = T('Ny: ', 'New: ');
     const detail = release
-      ? (NL + NL + 'Nå: ' + nowTxt)
-      : (NL + NL + 'Nå: ' + nowTxt + NL + 'Ny: ' + raw + (p.unit_symbol || ''));
+      ? (NL + NL + naaOrd + nowTxt)
+      : (NL + NL + naaOrd + nowTxt + NL + nyOrd + raw + (p.unit_symbol || ''));
     const tail = release ? ''
-      : (NL + NL + (autoMin ? ('Frigis automatisk etter ' + autoMin + ' min.')
-                            : 'Blir stående til du frigir den.'));
+      : (NL + NL + (autoMin ? T('Frigis automatisk etter ' + autoMin + ' min.', 'Released automatically after ' + autoMin + ' min.')
+                            : T('Blir stående til du frigir den.', 'Stays until you release it.')));
     const msg = head + NL + NL + (p.name || p.objid) + NL + S.activeDev.address
-              + detail + tail + NL + NL + 'Dette endrer et anlegg i drift. Fortsette?';
+              + detail + tail + NL + NL + T('Dette endrer et anlegg i drift. Fortsette?', 'This changes a plant in operation. Continue?');
     if (!confirm(msg)) return;
     const r = await api('/api/write', {
       address: S.activeDev.address, objid: p.objid,
       value, priority: pri, release, auto_release_min: autoMin,
     });
     if (r.status === 'done') {
-      toast(release ? 'Prioritet frigitt'
-        : (r.auto_release_min ? ('Skrevet - frigis om ' + r.auto_release_min + ' min') : 'Skrevet'));
+      toast(release ? T('Prioritet frigitt', 'Priority released')
+        : (r.auto_release_min ? T('Skrevet - frigis om ' + r.auto_release_min + ' min', 'Written - released in ' + r.auto_release_min + ' min') : T('Skrevet', 'Written')));
       skriveEffekt(p.objid);
       merkSkriving(p.objid);
       refreshOne(p.objid);
@@ -7493,7 +7548,7 @@ function startPolling() {
   clearInterval(S.pollTimer);
   S.pollTimer = setInterval(pollTick, ms);
   pollTick();
-  $('pollBtn').textContent = 'Live på';
+  $('pollBtn').textContent = T('Live på', 'Live on');
   $('pollBtn').classList.add('on');
   $('sbLive').dataset.live = 'Live ' + (ms / 1000) + 's';
   markFreshness();
@@ -7501,7 +7556,7 @@ function startPolling() {
 function stopPolling() {
   S.live = false;
   clearInterval(S.pollTimer);
-  $('pollBtn').textContent = 'Live av';
+  $('pollBtn').textContent = T('Live av', 'Live off');
   $('pollBtn').classList.remove('on');
   markFreshness();
 }
@@ -7513,8 +7568,8 @@ function takeSnapshot() {
   S.points.forEach(p => S.snapshot[wkey(S.activeDev.address, p.objid)] = p.value);
   S.snapAt = new Date();
   $('sbSnap').innerHTML = `<b>snapshot</b> ${S.snapAt.toLocaleTimeString('no')}`;
-  $('snapBtn').textContent = 'Nytt snapshot';
-  toast(S.points.length + ' verdier lagret — endringer markeres gult');
+  $('snapBtn').textContent = T('Nytt snapshot', 'New snapshot');
+  toast(T(S.points.length + ' verdier lagret — endringer markeres gult', S.points.length + ' values saved — changes are marked yellow'));
   renderPoints();
 }
 
@@ -7690,15 +7745,16 @@ function spansFromEntries(entries) {
    overridden ones: a priority-array is sixteen values per object, and reading
    it for two thousand points on every load would cost more than it is worth. */
 const PRI_NAVN = {
-  1: 'manuell nød', 2: 'automatisk nød', 5: 'kritisk', 6: 'minimum på',
-  8: 'operatør', 10: 'automatikk', 16: 'laveste',
+  1: ['manuell nød', 'manual life safety'], 2: ['automatisk nød', 'automatic life safety'],
+  5: ['kritisk', 'critical equipment'], 6: ['minimum på', 'minimum on/off'],
+  8: ['operatør', 'manual operator'], 10: ['automatikk', 'automation'], 16: ['laveste', 'lowest'],
 };
 
 function tvungetTekst(p) {
   const f = p._tvunget;
   if (!f) return '';
   if (!f.pri) return f.grunn || '';
-  return `holdt @${f.pri}${PRI_NAVN[f.pri] ? ' · ' + PRI_NAVN[f.pri] : ''}`;
+  return T('holdt', 'held') + ` @${f.pri}${PRI_NAVN[f.pri] ? ' · ' + T(PRI_NAVN[f.pri][0], PRI_NAVN[f.pri][1]) : ''}`;
 }
 
 async function hentTvungne() {
@@ -7724,8 +7780,8 @@ async function hentTvungne() {
   });
   renderPoints();
   const deler = [];
-  if (holdt) deler.push(`${holdt} holdt av en prioritet`);
-  if (lokalt) deler.push(`${lokalt} overstyrt lokalt p\u00e5 enheten`);
+  if (holdt) deler.push(T(`${holdt} holdt av en prioritet`, `${holdt} held by a priority`));
+  if (lokalt) deler.push(T(`${lokalt} overstyrt lokalt p\u00e5 enheten`, `${lokalt} overridden locally on the device`));
   if (deler.length) toast(deler.join(' \u00b7 '));
 }
 
@@ -7860,7 +7916,7 @@ function renderWeekGrid(sch) {
                    data-dag="${i}" data-idx="${idx}" data-til="${sp.to}"
                    style="top:${top}px;height:${Math.max(hgt, 2)}px;background:${schedColor(sp.value, seen)}"
                    title="${esc(label)} ${minToTime(sp.from)}–${minToTime(sp.to === 1440 ? 0 : sp.to)}${
-                     kanRedigere && idx >= 0 ? ' — klikk for å endre nedenfor, dra for å flytte' : ''}">
+                     kanRedigere && idx >= 0 ? T(' — klikk for å endre nedenfor, dra for å flytte', ' — click to change below, drag to move') : ''}">
         ${kanRedigere && idx >= 0 ? '<span class="wk-grep topp"></span>' : ''}
         <b>${esc(label)}</b>
         <i>${minToTime(sp.from)} - ${minToTime(sp.to === 1440 ? 0 : sp.to)}</i>
@@ -7891,8 +7947,9 @@ function tegnUke() {
   const sch = S.ukeKladd;
   if (!sch) return;
   const note = (sch.weekly || []).every(d => !(d.entries || []).length)
-    ? '<div class="wk-note">Dette skjemaet har ingen tidspunkt lagt inn i kontrolleren. '
-      + 'Dra i en tom dag for å legge inn den første perioden.</div>'
+    ? `<div class="wk-note">${T('Dette skjemaet har ingen tidspunkt lagt inn i kontrolleren. '
+      + 'Dra i en tom dag for å legge inn den første perioden.', 'This schedule has no times in the controller. '
+      + 'Drag in an empty day to add the first period.')}</div>`
     : '';
   /* Every edit redraws the whole week, which throws away the field being
      typed in - so remember where the cursor was and put it back. Without this
@@ -8320,9 +8377,11 @@ async function lagreUke() {
   const linjer = dager.map((d, i) => `  ${SCHED_DAYS[i]}: ` +
     (d.length ? d.map(e => `${e.time}=${e.value === null ? 'null' : e.value}`).join('  ')
               : '(ingen)')).join('\n');
-  if (!confirm(`Skrive ukeprogrammet til ${sch.name || sch.objid}?\n\n`
+  if (!confirm(T(`Skrive ukeprogrammet til ${sch.name || sch.objid}?\n\n`
              + `Dette endrer når anlegget går, fra nå av.\n\n${linjer}\n\n`
-             + `${antall} skift totalt.`)) return;
+             + `${antall} skift totalt.`, `Write the schedule to ${sch.name || sch.objid}?\n\n`
+             + `This changes when the plant runs, from now on.\n\n${linjer}\n\n`
+             + `${antall} changes in all.`))) return;
 
   const b = $('ukeLagre');
   if (b) { b.disabled = true; b.textContent = 'Skriver…'; }
@@ -8338,7 +8397,7 @@ async function lagreUke() {
     if (b) { b.disabled = false; b.textContent = 'Lagre til kontroller'; }
     return;
   }
-  toast(`Ukeprogrammet er skrevet (${d.skift} skift, ${d.verdi_type})`);
+  toast(T(`Ukeprogrammet er skrevet (${d.skift} skift, ${d.verdi_type})`, `The schedule is written (${d.skift} changes, ${d.verdi_type})`));
   S.ukeOrig = JSON.parse(JSON.stringify(S.ukeKladd));
   S.ukeRort = false;
   // Read it back: what the controller stored is the truth, not what we sent.
@@ -8428,7 +8487,7 @@ function showSchedule(i) {
   S.ukeRort = false;
   S.ukeValgt = null;
   $('schMeta').textContent =
-    `${s.objid} · ${s.entry_count} tidspunkt · skriver på prioritet ${s.priority ?? '?'}`
+    T(`${s.objid} · ${s.entry_count} tidspunkt · skriver på prioritet ${s.priority ?? '?'}`, `${s.objid} · ${s.entry_count} times · writes at priority ${s.priority ?? '?'}`)
     + (s.description ? ' · ' + s.description : '');
   tegnUke();
 }
@@ -8521,13 +8580,13 @@ function renderEdeResult(r, filename) {
     : '';
 
   $('edeMeta').textContent =
-    `${esc(filename)} · ${r.edeCount} punkter i fil · ${r.liveCount} i anlegg · ${r.same} like`;
+    T(`${esc(filename)} · ${r.edeCount} punkter i fil · ${r.liveCount} i anlegg · ${r.same} like`, `${esc(filename)} · ${r.edeCount} points in the file · ${r.liveCount} in the plant · ${r.same} the same`);
 
   $('edeBody').innerHTML =
     (r.missing.length || r.renamed.length || r.extra.length
       ? ''
-      : '<div class="gs-empty">Ingen avvik — filen stemmer med anlegget.</div>')
-    + sec('Mangler i anlegget', r.missing,
+      : `<div class="gs-empty">${T('Ingen avvik — filen stemmer med anlegget.', 'No differences — the file matches the plant.')}</div>`)
+    + sec(T('Mangler i anlegget', 'Missing in the plant'), r.missing,
         x => `<div class="ede-row"><code>${esc(x.objid)}</code><span>${esc(x.name)}</span>
               <em>${esc(x.description)}</em></div>`, 'bad')
     + sec('Ulikt navn', r.renamed,
@@ -8714,9 +8773,9 @@ function exportEDE() {
   filer.forEach(([tekst, navn], i) =>
     setTimeout(() => downloadText(tekst, navn, false), i * 350));
 
-  toast(`${rows.length} punkter eksportert som EDE i ${filer.length} filer`
-    + (st.tabell.length ? ` · ${st.tabell.length} tilstandslister` : '')
-    + (selectedVisible().length ? ' (kun valgte)' : ''));
+  toast(T(`${rows.length} punkter eksportert som EDE i ${filer.length} filer`, `${rows.length} points exported as EDE in ${filer.length} files`)
+    + (st.tabell.length ? T(` · ${st.tabell.length} tilstandslister`, ` · ${st.tabell.length} state lists`) : '')
+    + (selectedVisible().length ? T(' (kun valgte)', ' (selected only)') : ''));
 }
 
 function downloadText(text, filename, bom = true) {
@@ -8732,8 +8791,8 @@ function downloadText(text, filename, bom = true) {
 
 /* --------------------------------------------------- watch history export */
 function exportWatchHistory() {
-  if (!S.watch.length) { toast('Ingen punkter i overvåkingen', true); return; }
-  const lines = ['ip;objekt;navn;enhet;prove;verdi'];
+  if (!S.watch.length) { toast(T('Ingen punkter i overvåkingen', 'No points being watched'), true); return; }
+  const lines = [T('ip;objekt;navn;enhet;prøve;verdi', 'ip;object;name;unit;sample;value')];
   S.watch.forEach(w => w.hist.forEach((v, i) =>
     lines.push([w.ip, w.objid, `"${(w.name || '').replace(/"/g, '""')}"`, w.unit, i + 1, v].join(';'))));
   downloadText(lines.join('\r\n'), `overvaaking_${new Date().toISOString().slice(0, 10)}.csv`);
@@ -8778,7 +8837,7 @@ function updateZoom() {
   $('zoomMeta').textContent =
     `${p.objid} · ${S.activeDev.address}` +
     (alarm ? ` · ${p.status.join(', ')}` : '') +
-    (S.live ? '' : ' · live er av');
+    (S.live ? '' : T(' · live er av', ' · live is off'));
 }
 
 /* ------------------------------------------------------------------ wiring */
@@ -8886,8 +8945,8 @@ $('colsReset').onclick = () => {
   renderColsList(); renderPoints();
 };
 $('rescanBtn').onclick = () => { RESCAN.on ? rescanStop() : rescanStart();
-  toast(RESCAN.on ? 'Overvåker nettet i bakgrunnen' : 'Overvåking av'); };
-$('rescanNow').onclick = () => { toast('Søker…'); rescanOnce(true); };
+  toast(RESCAN.on ? T('Overvåker nettet i bakgrunnen', 'Watching the network in the background') : T('Overvåking av', 'Watching off')); };
+$('rescanNow').onclick = () => { toast(T('Søker…', 'Searching…')); rescanOnce(true); };
 $('minneBtn').onclick = () => { closeMenus(); openMinne(); };
 $('motionBtn').onclick = () => {
   savePrefs({utenBevegelse: !bevegelseAv()});
@@ -9000,14 +9059,15 @@ function bevegelseAv() {
 
 const GROUP_AKSER = ['auto', 'vendor', 'range', 'none'];
 const GROUP_NAVN = {auto: 'automatisk', vendor: 'leverandør', range: 'nett', none: 'av'};
+const GROUP_EN = {auto: 'automatic', vendor: 'vendor', range: 'network', none: 'off'};
 $('groupBtn').onclick = () => {
   const naa = grupperingsValg();
   const neste = GROUP_AKSER[(GROUP_AKSER.indexOf(naa) + 1) % GROUP_AKSER.length];
   savePrefs({groupBy: neste, groupVendor: neste !== 'none'});
   renderDevices(); syncMenuStates();
   toast(neste === 'none' ? 'Enheter vises i én liste'
-      : neste === 'auto' ? 'Grupperes etter nett når flere er skannet, ellers etter leverandør'
-      : 'Grupperes etter ' + GROUP_NAVN[neste]);
+      : neste === 'auto' ? T('Grupperes etter nett når flere er skannet, ellers etter leverandør', 'Grouped by network when several are scanned, otherwise by vendor')
+      : T('Grupperes etter ', 'Grouped by ') + T(GROUP_NAVN[neste], GROUP_EN[neste]));
 };
 
 /* Schedules, calendars, trend logs and notification classes are objects like
@@ -9059,7 +9119,7 @@ $('wlogBtn').onclick = showWriteLog;
 $('roBtn').onclick = async () => {
   const d = await api('/api/readonly', {enabled: !S.readOnly});
   S.readOnly = !!d.enabled;
-  toast(S.readOnly ? 'Lesemodus på — skriving blokkert' : 'Lesemodus av');
+  toast(S.readOnly ? T('Lesemodus på — skriving blokkert', 'Read-only on — writing blocked') : T('Lesemodus av', 'Read-only off'));
   refreshReadOnly();
 };
 $('selPin').onclick = pinSelected;
@@ -9405,7 +9465,7 @@ function oppdaterDiagKjapp() {
      nothing is worse than the button not being reachable at all. Back in it
      the moment it means something. */
   if (ip) b.removeAttribute('tabindex'); else b.setAttribute('tabindex', '-1');
-  b.title = ip ? 'Sjekk ' + ip + ' — hvorfor svarer den ikke?' : '';
+  b.title = ip ? T('Sjekk ' + ip + ' — hvorfor svarer den ikke?', 'Check ' + ip + ' — why is it not answering?') : '';
 }
 
 let DIAG_GEN = 0;
@@ -9448,27 +9508,38 @@ function diagOppsummer(ip, s) {
   let tekst, knapp = '';
 
   if (bac === 'ok') {
-    tekst = '<b>Enheten svarer.</b> Den er lest herfra nå, så det som ikke '
-          + 'virker ligger et annet sted enn i forbindelsen.';
-    knapp = '<button class="btn primary" id="diagLegg">Legg den i lista</button>';
+    tekst = T('<b>Enheten svarer.</b> Den er lest herfra nå, så det som ikke '
+          + 'virker ligger et annet sted enn i forbindelsen.', '<b>The device answers.</b> It has been read from here now, so whatever '
+          + 'is not working lies somewhere other than the connection.');
+    knapp = `<button class="btn primary" id="diagLegg">${T('Legg den i lista', 'Add it to the list')}</button>`;
   } else if (port === 'feil') {
-    tekst = '<b>Start her: et annet program har porten.</b> Så lenge det holder '
+    tekst = T('<b>Start her: et annet program har porten.</b> Så lenge det holder '
           + 'UDP 47808 er det tilfeldig hvem som får svarene, og du kan lete '
-          + 'etter alt annet forgjeves.';
+          + 'etter alt annet forgjeves.', '<b>Start here: another program has the port.</b> As long as it holds '
+          + 'UDP 47808 it is chance who gets the replies, and looking for '
+          + 'anything else is in vain.');
   } else if (ping === 'ok') {
-    tekst = '<b>Adressen lever, men BACnet svarer ikke.</b> Da er det ikke '
+    tekst = T('<b>Adressen lever, men BACnet svarer ikke.</b> Da er det ikke '
           + 'nettveien. Sjekk at enheten faktisk snakker BACnet/IP på 47808, '
           + 'og prøv «Sweep — grundig» — stille adresser svarer ofte på '
-          + 'andre forsøk.';
+          + 'andre forsøk.', '<b>The address is alive, but BACnet does not answer.</b> Then it is not '
+          + 'the network path. Check that the device really speaks BACnet/IP on 47808, '
+          + 'and try “Sweep — thorough” — silent addresses often answer '
+          + 'the second time.');
   } else if (kort === 'advarsel') {
-    tekst = '<b>Ingenting svarer, og adressen ligger utenfor ditt subnett.</b> '
+    tekst = T('<b>Ingenting svarer, og adressen ligger utenfor ditt subnett.</b> '
           + 'Den må rutes. Sjekk at du står på riktig nettverkskort, og at '
-          + 'ruteren slipper BACnet gjennom.';
+          + 'ruteren slipper BACnet gjennom.', '<b>Nothing answers, and the address is outside your subnet.</b> '
+          + 'It has to be routed. Check that you are on the right adapter, and that '
+          + 'the router lets BACnet through.');
   } else {
-    tekst = '<b>Ingenting svarer.</b> Verken ping eller BACnet. Sjekk kabel, '
+    tekst = T('<b>Ingenting svarer.</b> Verken ping eller BACnet. Sjekk kabel, '
           + 'VLAN, brannmur, og at IP-en er riktig. Merk at en del regulatorer '
           + 'ikke svarer på ping i det hele tatt — prøv «Sweep — grundig» på '
-          + 'området før du konkluderer.';
+          + 'området før du konkluderer.', '<b>Nothing answers.</b> Neither ping nor BACnet. Check the cable, '
+          + 'VLAN, firewall, and that the IP is right. Some controllers '
+          + 'do not answer ping at all — try “Sweep — thorough” on '
+          + 'the range before you conclude.');
   }
 
   boks.innerHTML = tekst + knapp;
@@ -9636,6 +9707,17 @@ function diagLukk() { const o = $('diagOverlay'); if (o) { o.hidden = true; DIAG
    out half-translated. */
 
 const ORDBOK = {
+  'Søk ved oppstart': 'Search on start',
+  'Lest': 'Read',
+  'Mellomrom betyr og: KG32 RT601 finner alle RT601 på KG32. -ord utelater. "to ord" søker som frase.':
+    'A space means and: KG32 RT601 finds every RT601 on KG32. -word leaves out. "two words" searches as a phrase.',
+  'Skanner kabelen inn i anlegget, eller anlegget du var på sist, når NABE åpnes':
+    'Scans the cable into the plant, or the site you were at last, when NABE opens',
+  'Menyer, dialoger, temabytte og NABE selv beveger seg. Følger Windows til du velger her':
+    'Menus, dialogs, the theme switch and NABE himself move. Follows Windows until you choose here',
+  'Grupper punktene etter system - 360.003, 320.001 ...': 'Group the points by system - 360.003, 320.001 ...',
+  'Sammenlign to enheter…': 'Compare two devices…',
+  'Etter nett når flere er skannet, ellers etter leverandør': 'By network when several are scanned, otherwise by vendor',
   'med feil': 'with a fault',
   'Prioritetsarray': 'Priority array',
   'BTG-fil…': 'BTG file…',
