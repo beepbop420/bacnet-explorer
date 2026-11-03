@@ -4693,6 +4693,38 @@ button:focus:not(:focus-visible){outline:none;box-shadow:none}
 .btn.primary{background:var(--accent);border-color:var(--accent);color:#0b1220}
 .btn.primary:hover:not(:disabled){background:color-mix(in srgb,var(--accent) 86%,var(--fg));border-color:color-mix(in srgb,var(--accent) 86%,var(--fg))}
 :root[data-theme="light"] .btn.primary,:root[data-theme="light"] .btn.primary:not(.topbar .btn){color:#fff}
+
+/* ---------- the plant in one line ----------
+   Above the device list. Neutral until something is flagged; then the same
+   thin rule as the site warnings, in the colour of the worst of it. */
+.as-status{flex:0 0 auto;border-bottom:1px solid var(--line)}
+.as-status[hidden]{display:none}
+.as-status.warn{box-shadow:inset 2px 0 0 var(--warn)}
+.as-status.bad{box-shadow:inset 2px 0 0 var(--err)}
+.as-linje{display:flex;align-items:baseline;flex-wrap:wrap;gap:4px 8px;padding:6px 9px 6px 11px;font-size:11px;line-height:1.35}
+.as-tittel{color:var(--fg-3);font-weight:600}
+.as-tallene{display:flex;flex-wrap:wrap;gap:2px 8px}
+.as-tall{font-size:11px;color:var(--fg-2);padding:0;border-bottom:1px solid transparent;cursor:pointer}
+.as-tall b{font-family:var(--mono);font-weight:600}
+.as-tall.bad b{color:var(--err)}
+.as-tall.warn b{color:var(--warn)}
+.as-tall:hover,.as-tall.apen{border-bottom-color:currentColor;color:var(--fg)}
+.as-rolig{color:var(--ok)}
+.as-tom{color:var(--fg-2)}
+.as-fram{color:var(--fg-3);font-size:10px;flex:1 1 auto}
+.as-sist{white-space:nowrap}
+.as-kopier{font-size:10px;color:var(--fg-3);padding:0 2px;margin-left:auto}
+.as-kopier:hover{color:var(--fg)}
+.as-kopier.ok{color:var(--ok)}
+.as-liste{padding:0 9px 7px 11px;max-height:240px;overflow:auto}
+.as-rad{display:grid;grid-template-columns:minmax(60px,.8fr) minmax(0,1.6fr) auto;gap:8px;width:100%;text-align:left;
+  padding:2px 4px;border-radius:var(--radius);font-size:10px;font-family:var(--mono);color:var(--fg-2)}
+.as-rad:hover{background:color-mix(in srgb,var(--fg) 6%,transparent);color:var(--fg)}
+.as-rad>span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.as-dev{color:var(--fg-3)}
+.as-ver{text-align:right}
+.as-mer{font-size:10px;color:var(--fg-3);padding:3px 4px}
+.ss-auto{font-size:12px;color:var(--fg-2);text-align:center;margin-top:6px}
 </style>
 </head>
 <body>
@@ -4952,6 +4984,9 @@ button:focus:not(:focus-visible){outline:none;box-shadow:none}
           <button id="groupBtn" class="sett-rad">Grupper enheter
             <small>Samle listen etter leverandør eller IP-område</small>
             <span id="groupState" class="menu-state"></span></button>
+          <button id="autoSokBtn" class="sett-rad bryter" role="switch">Søk ved oppstart
+            <small>Skanner kabelen inn i anlegget, eller anlegget du var på sist, når NABE åpnes</small>
+            <span id="autoSokState" class="menu-state"></span></button>
           <button id="preBtn" class="sett-rad bryter" role="switch">Forhåndsles enheter
             <small>Leser de andre enhetene i bakgrunnen etter et skann</small>
             <span id="preState" class="menu-state"></span></button>
@@ -5207,6 +5242,7 @@ button:focus:not(:focus-visible){outline:none;box-shadow:none}
 <script src="/js/nabe-figur.js"></script>
 <script src="/js/nabe-finn.js"></script>
 <script src="/js/nabe-skann.js"></script>
+<script src="/js/nabe-anlegg.js"></script>
 <script src="/js/nabo.js"></script>
 <script src="/js/nabo-brodre.js"></script>
 <script src="/js/nabo-fasit.js"></script>

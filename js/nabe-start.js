@@ -178,6 +178,11 @@ const FAKTA = [
   ['COV betyr at regulatoren sier fra selv. Mindre spørring, mer ro.', 'COV means the controller speaks up itself. Less asking, more peace.'],
 ];
 const NYTT = {
+  '1.29': [
+    ['NABE søker selv når den åpnes: kabelen inn i anlegget, eller anlegget du var på sist, og åpner regulatoren du slapp', 'NABE looks for itself when it opens: the cable into the plant, or the site you were at last, and opens the controller you left'],
+    ['Én linje for hele anlegget over enhetslista: overstyrt, i alarm, feil og ute av drift på alle regulatorene. Klikk et tall for punktene', 'One line for the whole plant above the device list: overridden, in alarm, faulty and out of service across every controller. Click a count for the points'],
+    ['Kopier status til servicerapporten, og se hva som er endret siden forrige besøk', 'Copy the status for the service report, and see what changed since the last visit'],
+  ],
   '1.28': [
     ['Romtagger starter med systemnummer og rom: 564.001.288.RT601.WSP, uten OU001 og Plan2', 'Room tags start with system number and room: 564.001.288.RT601.WSP, without OU001 and Plan2'],
     ['Forslag fra beskrivelsen kjenner Børverdi som Settpunkt, og X3 eller Y3 i et kurvepunkt følger med til taggen (RT401.K.X3)', 'Suggestions from the description know Børverdi as Settpunkt, and X3 or Y3 in a curve point comes along to the tag (RT401.K.X3)'],

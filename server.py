@@ -106,7 +106,7 @@ ALLOWED_ORIGINS = {
 READ_ONLY_PATHS = {"/api/sites",
                    
     "/api/status", "/api/interfaces", "/api/readonly", "/api/mine", "/api/ny-versjon",
-    "/api/anlegg", "/api/route", "/api/btg-fasit",
+    "/api/anlegg", "/api/route", "/api/btg-fasit", "/api/kabelnett",
     "/api/writelog", "/api/notes", "/download", "/logo",
 }
 
@@ -171,7 +171,7 @@ async def guard_and_cors(request, call_next):
         response.headers["Vary"] = "Origin"
     return response
 
-VERSJON = "1.28"
+VERSJON = "1.29"
 
 state = {"app": None, "local_address": None, "read_only": False, "bbmd": None}
 
@@ -664,6 +664,36 @@ async def velg_mappe(body: StiBody):
     except Exception as e:
         return {"status": "error", "error": str(e)}
     return {"status": "done", "mappe": valgt or None}
+
+
+KABEL_IKKE = re.compile(r"wi-?fi|wlan|wireless|tr[aå]dl|vpn|forti|tap|tun|wireguard|zerotier|tailscale|"
+                        r"virtual|vethernet|hyper-v|vmware|virtualbox|docker|wsl|loopback|bluetooth|mobil|cellular",
+                        re.IGNORECASE)
+
+
+@app.get("/api/kabelnett")
+def kabelnett():
+    """The networks a cable from this PC goes into, for the search on start.
+
+    Not the adapter with internet (that is the office or 4G), not Wi-Fi,
+    tunnels or virtual switches - what is left is the cable into a plant.
+    A large subnet is narrowed to the /24 the PC sits in: a broadcast there
+    is the whole cabinet, and a /16 would be a long sweep nobody asked for."""
+    try:
+        kort = list_interfaces()
+        primar = detect_local_ip()
+    except Exception:
+        return {"status": "done", "nett": []}
+    ut = []
+    for k in kort:
+        if k["ip"] == primar or KABEL_IKKE.search(k["interface"]) or not (16 <= k["prefix"] <= 30):
+            continue
+        ip = ipaddress.IPv4Address(k["ip"])
+        if not ip.is_private:
+            continue
+        net = ipaddress.IPv4Network(f'{k["ip"]}/{max(k["prefix"], 24)}', strict=False)
+        ut.append({"interface": k["interface"], "ip": k["ip"], "cidr": str(net)})
+    return {"status": "done", "nett": ut[:2]}
 
 
 @app.get("/api/forslag")
@@ -2181,7 +2211,7 @@ def naabar(target: str, kort: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
     if mal.is_loopback:
         # Simulators and a NABE on the same PC: always there.
         return {"ip": "127.0.0.1", "interface": "Loopback", "cidr": "127.0.0.1/8"}
-    oppe = {e["ip"]: e for e in kort}
+    oppe = {e["ip"]: e for e in kort}
     for e in sorted(kort, key=lambda e: -e["prefix"]):
         if e["prefix"] < 32 and mal in ipaddress.IPv4Network(e["cidr"], strict=False):
             return {"ip": e["ip"], "interface": e["interface"], "cidr": e["cidr"]}
