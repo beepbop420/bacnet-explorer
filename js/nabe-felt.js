@@ -36,23 +36,45 @@ async function visLukkVakt() {
   document.getElementById('lukkvakt')?.remove();
   const lag = document.createElement('div');
   lag.id = 'lukkvakt';
-  lag.className = 'startskjerm';
-  lag.innerHTML = `<div class="ss-kort" style="text-align:left">
-    <h2 style="margin:0 0 4px;font-size:18px">${T('Pluggen sitter fast', 'The plug is stuck')}</h2>
-    <p style="margin:0 0 12px;color:var(--fg-2)">${T(
-      `${liste.length} ${liste.length === 1 ? 'punkt står' : 'punkter står'} fortsatt overstyrt av deg. Det er sånn anlegg blir stående i manuell.`,
-      `${liste.length} ${liste.length === 1 ? 'point is' : 'points are'} still overridden by you. That is how plants get left in manual.`)}</p>
-    <div class="ss-liste" style="max-height:220px;overflow:auto">${liste.map(o => `
-      <div class="ss-rad" style="cursor:default"><span class="ss-rad-navn">${esc(o.address)} ${esc(o.objid)}</span>
-      <span class="ss-rad-meta">P${o.priority} = ${esc(String(o.value))}</span></div>`).join('')}</div>
-    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px">
+  lag.className = 'lv-lag';
+  lag.setAttribute('role', 'alertdialog');
+  lag.setAttribute('aria-modal', 'true');
+  const lokal = SPRAAK === 'en' ? 'en-GB' : 'nb-NO';
+  // The point and the controller by name where they are known, the ids as
+  // the small print - the list is read in a hurry, on the way out.
+  const navn = (o) => ((S.cache[o.address] || []).find(p => p.objid === o.objid) || {}).name || o.objid;
+  const enhet = (o) => (S.devices.find(d => d.address === o.address) || {}).object_name || o.address;
+  lag.innerHTML = `<div class="lv-kort">
+    <div class="lv-hode">
+      <div class="lv-fig">${NABE_SVG.replace('width="26" height="26"', 'width="44" height="44"')}</div>
+      <div>
+        <h2 class="lv-tittel">${T('Pluggen sitter fast', 'The plug is stuck')}</h2>
+        <p class="lv-tekst">${T(
+          `${liste.length} ${liste.length === 1 ? 'punkt står' : 'punkter står'} fortsatt overstyrt av deg. Det er sånn anlegg blir stående i manuell.`,
+          `${liste.length} ${liste.length === 1 ? 'point is' : 'points are'} still overridden by you. That is how plants get left in manual.`)}</p>
+      </div>
+    </div>
+    <div class="lv-liste">${liste.map(o => `
+      <div class="lv-rad">
+        <span class="lv-pkt">${esc(navn(o))}<small>${esc(enhet(o))} · ${esc(o.objid)}</small></span>
+        <span class="lv-pri">pri ${esc(String(o.priority))}</span>
+        <span class="lv-ver">${esc(String(o.value))}</span>
+        <span class="lv-tid">${o.ts ? esc(new Date(o.ts * 1000).toLocaleString(lokal, {day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit'})) : ''}</span>
+      </div>`).join('')}</div>
+    <div class="lv-knapper">
       <button class="btn" id="lvAvbryt">${T('Avbryt', 'Cancel')}</button>
+      <span class="lv-rom"></span>
       <button class="btn" id="lvLukk">${T('Lukk likevel', 'Close anyway')}</button>
       <button class="btn primary" id="lvFrigi">${T('Frigi alle og lukk', 'Release all and close')}</button>
     </div></div>`;
   document.body.appendChild(lag);
   nabeKlasse('nervos', 4000);
-  $('lvAvbryt').onclick = () => lag.remove();
+  setTimeout(() => $('lvFrigi')?.focus(), 30);
+  const lukkLag = () => { lag.remove(); document.removeEventListener('keydown', esc_); };
+  const esc_ = (e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); lukkLag(); } };
+  document.addEventListener('keydown', esc_, true);
+  lag.addEventListener('click', (e) => { if (e.target === lag) lukkLag(); });
+  $('lvAvbryt').onclick = lukkLag;
   $('lvLukk').onclick = () => {
     nabeSier(T('Greit. Jeg sa ingenting.', 'Fine. I said nothing.'), 'trist');
     setTimeout(() => window.pywebview?.api?.lukk(), 900);
@@ -142,7 +164,7 @@ function visSistePunkter() {
   const lag = document.createElement('div');
   lag.id = 'sisteLag';
   lag.className = 'startskjerm';
-  lag.innerHTML = `<div class="ss-kort" style="text-align:left">
+  lag.innerHTML = `<div class="ss-kort enkel liste" style="text-align:left">
     <div class="ss-tittel">${T('Siste punkter', 'Recent points')} <kbd style="margin-left:6px">Ctrl E</kbd></div>
     <div class="ss-liste">${liste.length ? liste.map((x, i) => `
       <button class="ss-rad" data-i="${i}"><span class="ss-rad-navn">${esc(x.navn)}</span>

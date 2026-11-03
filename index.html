@@ -4915,6 +4915,40 @@ body.uten-bevegelse .plagg,body.uten-bevegelse .rekv,body.uten-bevegelse .plagg-
 .gd-bar i{display:block;height:100%;background:var(--accent);transform-origin:left}
 .gd-tall{font:10px var(--mono);color:var(--fg-3)}
 @media (max-width:720px){.gd-hoved{grid-template-columns:1fr}.gd-scene{border-right:0;border-bottom:1px solid var(--line)}.gd-topp{flex-wrap:wrap}}
+
+/* ---------- the close guard ----------
+   A Mac alert: who is asking and why at the top, what is still held as a
+   short list, the safe choice as the default button on the right. */
+.lv-lag{position:fixed;inset:0;z-index:9985;display:flex;align-items:center;justify-content:center;
+  background:color-mix(in srgb,var(--bg) 70%,transparent);animation:ss-inn .2s ease-out both}
+.lv-kort{width:min(520px,calc(100vw - 32px));max-height:calc(100vh - 32px);display:flex;flex-direction:column;
+  background:var(--panel);border:1px solid var(--line-2);border-radius:12px;
+  box-shadow:0 24px 70px rgba(0,0,0,.45),0 2px 8px rgba(0,0,0,.2);animation:ss-kort .28s var(--fjaer) both;overflow:hidden}
+.lv-hode{display:flex;gap:14px;align-items:flex-start;padding:20px 20px 12px}
+.lv-fig svg{display:block;width:44px;height:44px}
+.lv-tittel{margin:2px 0 4px;font-size:15px;font-weight:600;color:var(--fg)}
+.lv-tekst{margin:0;font-size:12.5px;line-height:1.5;color:var(--fg-2)}
+.lv-liste{margin:0 20px;border:1px solid var(--line);border-radius:8px;max-height:220px;overflow:auto}
+.lv-rad{display:grid;grid-template-columns:minmax(0,1fr) auto auto auto;gap:12px;align-items:baseline;padding:8px 12px;font-size:12px}
+.lv-rad + .lv-rad{border-top:1px solid var(--line)}
+.lv-pkt{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:var(--mono);color:var(--fg)}
+.lv-pkt small{display:block;font-family:var(--sans);font-size:10.5px;color:var(--fg-3);margin-top:1px}
+.lv-pri{font-family:var(--mono);font-size:11px;color:var(--warn)}
+.lv-ver{font-family:var(--mono);font-weight:600;color:var(--fg)}
+.lv-tid{font-size:10.5px;color:var(--fg-3);white-space:nowrap}
+.lv-knapper{display:flex;align-items:center;gap:8px;padding:16px 20px 18px}
+.lv-knapper .btn{height:28px;padding:0 14px;flex:0 0 auto}
+.lv-rom{flex:1}
+
+/* Small cards on the start screen's dim: the career, recent points. */
+.ss-kort.enkel .ss-tittel{font-size:12px;font-weight:600;color:var(--fg-3);margin:0 0 8px}
+.ss-kort.enkel .ss-liste{display:flex;flex-direction:column;gap:2px}
+.ss-kort.enkel button.ss-rad{display:flex;flex-direction:column;align-items:stretch;gap:1px;width:100%;padding:7px 10px;border-radius:6px;text-align:left}
+.ss-kort.enkel div.ss-rad{display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding:7px 4px;border-bottom:1px solid var(--line)}
+.ss-kort.enkel button.ss-rad:hover{background:var(--hover)}
+.ss-kort.enkel .ss-rad-navn{font-size:13px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ss-kort.enkel .ss-rad-meta{font-size:11px;color:var(--fg-3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ss-kort.enkel.liste{width:min(460px,calc(100vw - 32px));padding:18px 16px 14px}
 </style>
 </head>
 <body>

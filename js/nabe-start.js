@@ -177,6 +177,10 @@ const FAKTA = [
   ['COV betyr at regulatoren sier fra selv. Mindre spørring, mer ro.', 'COV means the controller speaks up itself. Less asking, more peace.'],
 ];
 const NYTT = {
+  '1.34': [
+    ['Lukkevakta er ny: punktene som står overstyrt med navn, regulator, prioritet og når de ble skrevet, og knapper i vanlig størrelse', 'The close guard is new: the points still overridden by name, controller, priority and when they were written, and buttons of a normal size'],
+    ['«Siste punkter» (Ctrl+E) og karrierekortet har fått tilbake sin egen form', '“Recent points” (Ctrl+E) and the career card have their own shape back'],
+  ],
   '1.33': [
     ['Garderoben: klær til NABE og NABO, låst opp av ekte arbeid. Hjelmen kommer når du skriver til et anlegg, hodelykta etter et nattskann. Høyreklikk en av dem', 'The wardrobe: clothes for NABE and NABO, unlocked by real work. The hard hat comes with your first write to a plant, the head torch after a scan at night. Right-click either of them'],
     ['Arbeidsklær etter situasjon: lesebriller og notat i dokumenter, hjelm når du skriver, hodetelefoner på Live', 'Work gear for the moment: reading glasses and a note in documents, a hard hat when you write, headphones on Live'],
