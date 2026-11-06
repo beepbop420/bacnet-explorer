@@ -4837,7 +4837,7 @@ html.peker-egen *:not(input):not(textarea):not(select):not(.splitter):not([conte
 .pk-scene{gap:14px;justify-content:center}
 /* NABO is line art: without this his clothes inherit the outline. */
 .nabo-fig .plagg,.nabo-fig .rekv{stroke:none}
-#fullBtn svg{width:14px;height:14px;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
+#fullBtn svg,#sporBtn svg{width:14px;height:14px;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
 #fullBtn .full-inn,#fullBtn.paa .full-ut{display:none}
 #fullBtn.paa .full-inn{display:inline}
 #sporBoble{position:fixed;z-index:2147483001;padding:5px 11px;font:500 12px var(--sans);color:var(--fg);background:var(--raised);
@@ -4857,6 +4857,7 @@ html.peker-egen *:not(input):not(textarea):not(select):not(.splitter):not([conte
 .op-knapper{display:flex;justify-content:flex-end;gap:8px}
 .sp-panel{position:fixed;right:18px;bottom:40px;z-index:9000;width:min(380px,92vw);max-height:min(520px,80vh);display:flex;flex-direction:column;gap:10px;padding:12px 14px 14px;
   background:var(--raised);border:1px solid var(--line-2);border-radius:var(--r-lg);box-shadow:0 12px 34px rgba(0,0,0,.4)}
+.sp-panel:not(.ved){bottom:auto;top:50px}
 .sp-panel[hidden]{display:none}
 .sp-topp{display:flex;align-items:center;justify-content:space-between}
 .sp-panel .field{width:100%;box-sizing:border-box;font-family:var(--sans)}
@@ -4968,6 +4969,7 @@ button.sp-rad:hover{background:var(--hover)}
     <button id="themeBtn" class="theme-tgl" title="Bytt mellom mørk og lys visning" aria-label="Bytt visning"><i></i></button>
     <button id="langBtn" class="btn btn-icon" title="Switch to English" aria-label="Switch to English">EN</button>
     <button id="helpBtn" class="btn btn-icon" title="Hurtigtaster">?</button>
+    <button id="sporBtn" class="btn btn-icon" title="Spør NABE (Ctrl+J)"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 3.5h11v7.5H7l-3 2.5V11H2.5z"/></svg></button>
     <button id="fullBtn" class="btn btn-icon" title="Fullskjerm (F11)" aria-pressed="false"><svg viewBox="0 0 16 16" aria-hidden="true"><path class="full-ut" d="M2.5 6V2.5H6M10 2.5h3.5V6M13.5 10v3.5H10M6 13.5H2.5V10"/><path class="full-inn" d="M6 2.5V6H2.5M13.5 6H10V2.5M10 13.5V10h3.5M2.5 10H6v3.5"/></svg></button>
   </header>
 
@@ -5202,7 +5204,7 @@ button.sp-rad:hover{background:var(--hover)}
       <dt>Ctrl+K</dt><dd>Kommandopalett — alt verktøyet kan gjøre, ett søkefelt</dd>
       <dt>Ctrl+F</dt><dd>Søk i alle enheter samtidig</dd>
       <dt>Ctrl+L</dt><dd>Hopp til skannefeltet</dd>
-      <dt>Ctrl+S / Ctrl+O</dt><dd>Lagre / åpne anlegg</dd>
+      <dt>Ctrl+J</dt><dd>Spør NABE</dd>
       <dt>Ctrl+,</dt><dd>Innstillinger</dd>
       <dt>N</dt><dd>Åpne NABO, naboen</dd>
       <dt>Ctrl-klikk</dt><dd>Velg enkeltrad · Shift for område · Ctrl+A alle</dd>

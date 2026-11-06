@@ -178,7 +178,7 @@ const FAKTA = [
 ];
 const NYTT = {
   '1.50': [
-    ['Spør NABE følger pila. Stopp litt, så kommer en snakkeboble du kan klikke på, og spørsmålet åpner der', 'Ask NABE follows the arrow. Stop for a moment and a speech bubble comes up to click, and the question opens there'],
+    ['Spør NABE har fått en fast knapp øverst til høyre og Ctrl+J. Med Spør NABE-pekeren kommer også en snakkeboble når du hviler musa', 'Ask NABE has a fixed button at the top right and Ctrl+J. With the Ask NABE pointer a speech bubble also comes up when you rest the mouse'],
   ],
   '1.48': [
     ['Opprydding i koden', 'A tidy-up in the code'],

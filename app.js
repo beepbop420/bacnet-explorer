@@ -9686,7 +9686,6 @@ const ORDBOK = {
 
   /* --- live and watch --- */
   'Live av': 'Live off',
-  'Lagre / åpne anlegg': 'Save / open a site',
   'Fest punkter med ☆ eller mellomrom. De følges live, også fra andre enheter.':
     'Pin points with ☆ or space. They are followed live, from other devices too.',
   'Live på': 'Live on',
@@ -10033,6 +10032,8 @@ const ORDBOK = {
   'Tabellen': 'The table',
   'Enhetslista': 'The device list',
   'Bevegelse': 'Motion',
+  'Spør NABE (Ctrl+J)': 'Ask NABE (Ctrl+J)',
+  'Spør NABE': 'Ask NABE',
   'Lokal KI': 'Local AI',
   'Spør NABE med lokal KI': 'Ask NABE with local AI',
   'Formulerer svar ut fra oppslagsverket. Kjører på denne PC-en, og laster ned 5 GB': 'Words answers from the reference. Runs on this PC, and downloads 5 GB',

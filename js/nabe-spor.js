@@ -153,8 +153,10 @@
   boble.id = 'sporBoble';
   boble.hidden = true;
   document.body.append(boble);
-  const HVILE = 1800, VARER = 7000;
-  let hvile = 0, borte = 0, pause = 15000, ledig = 0;
+  const HVILE = 1200, VARER = 7000;
+  let hvile = 0, borte = 0, pause = 15000, ledig = 0, sistTast = 0, roX = 0, roY = 0;
+  // A field can hold the focus for hours; only typing means you are busy.
+  document.addEventListener('keydown', () => { sistTast = Date.now(); }, true);
   const skjul = (ignorert) => {
     if (boble.hidden) return;
     boble.hidden = true;
@@ -164,7 +166,7 @@
   };
   const opptatt = () => (lag && !lag.hidden) || document.body.classList.contains('skanner')
     || [...document.querySelectorAll('.gs-overlay')].some(o => !o.hidden)
-    || /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName || '');
+    || Date.now() - sistTast < 4000;
   function vis() {
     if (PK.tilstand().id !== 'spor-nabe' || Date.now() < ledig || opptatt()) return;
     const f = PK.fig.getBoundingClientRect();
@@ -178,8 +180,11 @@
     borte = setTimeout(() => skjul(true), VARER);
   }
   document.addEventListener('pointermove', (e) => {
-    clearTimeout(hvile);
     if (e.pointerType !== 'mouse') return;
+    // A hand on a mouse is never quite still: a few pixels is still resting.
+    if (boble.hidden && Math.hypot(e.clientX - roX, e.clientY - roY) < 6) return;
+    roX = e.clientX; roY = e.clientY;
+    clearTimeout(hvile);
     if (!boble.hidden) {
       // Going towards it is fine. Well past it is a no.
       const r = boble.getBoundingClientRect();
@@ -226,5 +231,16 @@
   };
   etter('openTema', kiVis);
   kiVis();
+  /* The way that never depends on timing or on hitting anything that moves: a
+     button that stays in the top bar, and Ctrl+J. */
+  const veksle = () => {
+    if (lag && !lag.hidden) { lukk(); return; }
+    skjul(false);
+    aapne();
+  };
+  $('sporBtn').onclick = veksle;
+  document.addEventListener('keydown', (e) => {
+    if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'j') { e.preventDefault(); e.stopPropagation(); veksle(); }
+  }, true);
   window.aapneSpor = () => aapne();
 })();
