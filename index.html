@@ -4827,15 +4827,17 @@ tbody td{font-variant-numeric:tabular-nums}
    See nabe-peker.js. Text fields and the splitters keep their own cursors. */
 html.peker-paa body,html.peker-paa button,html.peker-paa a,html.peker-paa [role=button],
 html.peker-paa summary,html.peker-paa .dev,html.peker-paa .ss-rad,html.peker-paa tbody tr{cursor:url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%2226%22 height=%2226%22 viewBox=%220 0 26 26%22%3E%3Cpath d=%22M4 3l5.6 17.2c.3 1 1.7 1 2.1.1l2.6-6.1 6.2-2.4c1-.4 1-1.7 0-2.1z%22 fill=%22%2316161a%22 stroke=%22%23fff%22 stroke-width=%221.6%22 stroke-linejoin=%22round%22/%3E%3C/svg%3E") 4 3,auto}
-#peker{position:fixed;left:0;top:0;z-index:2147483000;pointer-events:none;box-sizing:border-box;
-  border:1.5px solid color-mix(in srgb,var(--fg) 42%,transparent);
-  transition:border-color .16s,background-color .16s;will-change:transform,width,height}
-#peker[hidden]{display:none}
-#peker.fast{border-color:color-mix(in srgb,var(--fg) 70%,transparent);background:color-mix(in srgb,var(--fg) 5%,transparent)}
-#peker.fare{border-color:var(--err)}
-body.skanner #peker{border-style:dashed}
-.peker-ping{position:fixed;width:84px;height:84px;border-radius:50%;pointer-events:none;z-index:2147483000;
-  border:1.5px solid var(--fg)}
+#pekerLerret{position:fixed;left:0;top:0;width:100vw;height:100vh;z-index:2147483000;pointer-events:none}
+#pekerFig{position:fixed;left:0;top:0;width:30px;height:30px;z-index:2147483000;pointer-events:none;will-change:transform}
+#pekerFig[hidden]{display:none}
+#pekerFig svg{width:30px;height:30px;display:block;overflow:visible}
+html.peker-egen *:not(input):not(textarea):not(select):not(.splitter):not([contenteditable]){cursor:none!important}
+.pk-ikon{width:44px;height:44px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+.pk-kort .gd-krav{line-height:1.3}
+.pk-scene{gap:14px;justify-content:center}
+.gd-arb[hidden]{display:none}
+.pk-tittel{font-size:12px;color:var(--fg-3)}
+.pk-prove{display:flex;flex-wrap:wrap;gap:12px;justify-content:center}
 </style>
 </head>
 <body>
@@ -5086,8 +5088,8 @@ body.skanner #peker{border-style:dashed}
             <small>Menyer, dialoger, temabytte og NABE selv beveger seg. Følger
               Windows til du velger her</small>
             <span id="motionState" class="menu-state"></span></button>
-          <button id="pekerBtn" class="sett-rad bryter" role="switch">Peker
-            <small>En ring følger musa og legger seg rundt det du peker på</small>
+          <button id="pekerBtn" class="sett-rad">Peker
+            <small>Velg peker i garderoben</small>
             <span id="pekerState" class="menu-state"></span></button>
         </div>
         <div class="sett-gruppe"><div class="tema-tittel">Skriving</div>
@@ -5338,10 +5340,10 @@ body.skanner #peker{border-style:dashed}
 <script src="/js/nabe-tunnel.js"></script>
 <script src="/js/nabe-sammen.js"></script>
 <script src="/js/nabe-flyt.js"></script>
-<script src="/js/nabe-peker.js"></script>
 <script src="/js/nabo.js"></script>
 <script src="/js/nabo-brodre.js"></script>
 <script src="/js/nabo-fasit.js"></script>
+<script src="/js/nabe-peker.js"></script>
 <script src="/js/nabe-garderobe.js"></script>
 </body>
 </html>

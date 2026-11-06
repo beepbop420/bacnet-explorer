@@ -178,7 +178,7 @@ const FAKTA = [
 ];
 const NYTT = {
   '1.44': [
-    ['Ny peker: en tynn ring følger musa på en fjær og legger seg rundt knappen eller enheten du peker på. Et klikk sender ut et ping. Slå den av under Innstillinger → Bevegelse', 'New pointer: a thin ring follows the mouse on a spring and wraps the button or device you point at. A click sends out a ping. Turn it off under Settings → Motion'],
+    ['Pekere: ny fane i garderoben med ni pekere, som ringen på fjær, patchkabel, lille NABE, gnister og skrutrekker. De kommer av arbeid, som plaggene', 'Pointers: a new tab in the wardrobe with nine pointers, such as the ring on a spring, a patch cable, little NABE, sparks and a screwdriver. They come from work, like the items'],
     ['Lexend som skrift, og enhetsoverskriften er satt som tittelfeltet på en tegning', 'Lexend as the typeface, and the device heading set like the title block on a drawing'],
   ],
   '1.43': [

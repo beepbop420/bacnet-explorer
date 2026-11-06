@@ -205,28 +205,30 @@ function tegnGarderobe() {
               : `<span class="gd-krav">${esc(T(tekst[0], tekst[1]))}</span><span class="gd-bar"><i style="transform:scaleX(${har / n})"></i></span><span class="gd-tall">${har} / ${n}</span>`}
     </button>`;
   };
-  const antall = PLAGG.filter(laastOpp).length;
+  const alle = [...PLAGG, ...PEKERE], antall = alle.filter(laastOpp).length;
   lag.innerHTML = `<div class="gs-modal gd-modal">
     <div class="gs-head">
       <span class="gd-tittel">${T('Garderoben', 'The wardrobe')}</span>
-      <span class="gs-meta gd-meta">${T(`${antall} av ${PLAGG.length} låst opp`, `${antall} of ${PLAGG.length} unlocked`)}</span>
+      <span class="gs-meta gd-meta">${T(`${antall} av ${alle.length} låst opp`, `${antall} of ${alle.length} unlocked`)}</span>
       <button class="gs-close" style="margin-left:auto"><span class="lbl">${T('Lukk', 'Close')}</span> ✕</button>
     </div>
     <div class="gd-topp">
       <div class="gd-faner" role="tablist">
         <button type="button" role="tab" data-fane="nabe" aria-selected="${hvem === 'nabe'}">NABE</button>
         <button type="button" role="tab" data-fane="nabo" aria-selected="${hvem === 'nabo'}">NABO</button>
+        <button type="button" role="tab" data-fane="peker" aria-selected="${hvem === 'peker'}">${T('Peker', 'Pointer')}</button>
       </div>
-      <label class="gd-arb"><input type="checkbox" id="gdArb" ${pr.arbeidsklaer ? 'checked' : ''}>
+      <label class="gd-arb"${hvem === 'peker' ? ' hidden' : ''}><input type="checkbox" id="gdArb" ${pr.arbeidsklaer ? 'checked' : ''}>
         <span>${T('Arbeidsklær etter situasjon', 'Work gear for the moment')}<small>${T('Lesebriller i dokumenter, hjelm når du skriver, hodetelefoner på Live, hodelykt om kvelden', 'Reading glasses in documents, a hard hat when you write, headphones on Live, a head torch in the evening')}</small></span></label>
     </div>
-    <div class="gd-hoved">
+    ${hvem === 'peker' ? pekerKatalog() : `<div class="gd-hoved">
       <div class="gd-scene"><div class="gd-stor" id="gdStor">${forhaand(hvem)}</div>
         <div class="gd-scene-tekst">${esc(T('Plaggene kommer av arbeid, ikke av klikking.', 'Items come from work, not from clicking.'))}</div></div>
       <div class="gd-katalog">${PLASSER.map(([plass, navn]) => `
         <div class="gd-plass">${esc(T(navn[0], navn[1]))}</div>
         <div class="gd-rutenett">${PLAGG.filter(p => p.plass === plass).map(kort).join('')}</div>`).join('')}</div>
-    </div></div>`;
+    </div>`}
+    </div>`;
   // Previews: each card wears its own item only; the big one the full outfit.
   lag.querySelectorAll('[data-forhand] svg').forEach(s => {
     s.classList.add('gard-forhånd');
@@ -242,6 +244,14 @@ function gardKlikk(e) {
   if (e.target === lag || e.target.closest('.gs-close')) { lag.hidden = true; return; }
   const fane = e.target.closest('[data-fane]');
   if (fane && fane.getAttribute('role') === 'tab') { lag.dataset.fane = fane.dataset.fane; tegnGarderobe(); return; }
+  const pk = e.target.closest('[data-peker]');
+  if (pk) {
+    if (pk.classList.contains('laast')) return;
+    gardLagre({peker: pk.dataset.peker});
+    PEKER.bruk(pk.dataset.peker);
+    tegnGarderobe();
+    return;
+  }
   if (e.target.id === 'gdArb') { gardLagre({arbeidsklaer: e.target.checked}); kleAlle(); return; }
   const k = e.target.closest('.gd-kort');
   if (!k || k.classList.contains('laast')) return;
@@ -387,7 +397,7 @@ function aktivitet(navn, ms) {
   // A new item unlocked: NABE says so, once.
   function sjekkNye() {
     const pr = gardPrefs();
-    const nye = PLAGG.filter(p => p.krav && laastOpp(p) && !pr.kunngjort.includes(p.id));
+    const nye = [...PLAGG, ...PEKERE].filter(p => p.krav && laastOpp(p) && !pr.kunngjort.includes(p.id));
     if (!nye.length) return;
     gardLagre({kunngjort: pr.kunngjort.concat(nye.map(p => p.id))});
     if (pr.kunngjort.length === 0 && nye.length > 2) return;   // the first visit: no flood
