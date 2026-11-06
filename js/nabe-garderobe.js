@@ -90,6 +90,85 @@ const PLAGG = [
   {id: 'jetpakke', plass: 'ekstra', navn: ['Jetpakke', 'Jetpack'], krav: ['tunnelRekord', 150, ['150 poeng i én tur i Tunnelen', '150 points in one tunnel run']], spill: true, sjelden: true,
    nabe: '<g class="plagg-jet"><rect x="-1.8" y="12" width="4.4" height="13" rx="2" fill="#9aa4b1" stroke="#6b7480" stroke-width=".5"/><rect x="29.4" y="12" width="4.4" height="13" rx="2" fill="#9aa4b1" stroke="#6b7480" stroke-width=".5"/><rect x="-1" y="14.6" width="2.8" height="1" fill="#e63946"/><rect x="30.2" y="14.6" width="2.8" height="1" fill="#e63946"/><path d="M-1.2 25h3.2l-.6 1.6h-2z M30 25h3.2l-.6 1.6h-2z" fill="#4a4f57"/><path class="plagg-flamme" d="M-.6 26.8Q.4 31.6 1.4 26.8Z M30.6 26.8Q31.6 31.6 32.6 26.8Z" fill="#ffb02e"/><path class="plagg-flamme indre" d="M0 26.8Q.4 29.4.8 26.8Z M31.2 26.8Q31.6 29.4 32 26.8Z" fill="#fff4b0"/></g>',
    nabo: '<g class="plagg-jet"><rect x="1" y="29.6" width="30" height="2.2" rx="1.1" fill="#2c6be0"/><rect x="3" y="30.2" width="26" height=".7" rx=".35" fill="#9cc2ff"/><path class="plagg-flamme" d="M5 31.8Q6 34.6 7 31.8Z M25 31.8Q26 34.6 27 31.8Z" fill="#7fd1ff"/></g>'},
+  // --- the second rack: head
+  {id: 'cowboyhatt', plass: 'hode', navn: ['Cowboyhatt', 'Cowboy hat'], krav: ['skann', 15, ['15 skann', '15 scans']],
+   nabe: '<ellipse cx="16" cy="9" rx="15" ry="2.4" fill="#8a5a2b"/><path d="M9 9Q9 1.6 13 2.2Q16 3.4 19 2.2Q23 1.6 23 9Z" fill="#a06b35"/><rect x="9" y="6.8" width="14" height="1.6" fill="#5b3a1e"/>',
+   nabo: '<ellipse cx="16" cy="10.6" rx="11" ry="1.9" fill="#8a5a2b"/><path d="M11 10.6Q11 4.4 13.8 4.8Q16 5.8 18.2 4.8Q21 4.4 21 10.6Z" fill="#a06b35"/><rect x="11" y="8.8" width="10" height="1.2" fill="#5b3a1e"/>'},
+  {id: 'sixpence', plass: 'hode', navn: ['Sixpence', 'Flat cap'], krav: null,
+   nabe: '<path d="M5 9.6Q6 3.6 16 3.4T27.6 8Q28 9.6 26 9.6Z" fill="#6b6f76"/><path d="M4 9.6H20Q19 11.4 6 11.2Z" fill="#54585e"/>',
+   nabo: '<path d="M8.6 10.8Q9.4 5.6 16 5.4T23.6 9.4Q24 10.8 22.6 10.8Z" fill="#6b6f76"/><path d="M8 10.8H19Q18.4 12.2 9.4 12Z" fill="#54585e"/>'},
+  {id: 'nisselue', plass: 'hode', navn: ['Nisselue', 'Santa hat'], krav: ['aapnet', 24, ['Åpne NABE 24 ganger', 'Open NABE 24 times']],
+   nabe: '<path d="M6 9.6Q12 -2 24 1.2Q29 3 28 7Q25 4 23 9.6Z" fill="#d62839"/><rect x="4.4" y="8.4" width="23.2" height="2.6" rx="1.2" fill="#f7f7f7"/><circle cx="28" cy="7.6" r="1.8" fill="#f7f7f7"/>',
+   nabo: '<path d="M9.4 10.8Q13 2.6 21 4.4Q24.6 5.6 24 8.4Q22 6.4 20.6 10.8Z" fill="#d62839"/><rect x="8" y="10" width="16" height="2.2" rx="1" fill="#f7f7f7"/><circle cx="24" cy="8.8" r="1.4" fill="#f7f7f7"/>'},
+  {id: 'vikinghjelm', plass: 'hode', navn: ['Vikinghjelm', 'Viking helmet'], krav: ['enheter', 250, ['Finn 250 enheter', 'Find 250 devices']],
+   nabe: '<path d="M6 10Q6 3 16 3T26 10Z" fill="#8d96a3"/><rect x="5.4" y="8.8" width="21.2" height="2" fill="#6b7480"/><path d="M6.6 8Q1.4 7 2.4 1.2Q4 5 8 5.4Z" fill="#f0e6cf"/><path d="M25.4 8Q30.6 7 29.6 1.2Q28 5 24 5.4Z" fill="#f0e6cf"/>',
+   nabo: '<path d="M9.4 11Q9.4 5.2 16 5.2T22.6 11Z" fill="#8d96a3"/><rect x="9" y="10" width="14" height="1.6" fill="#6b7480"/><path d="M10 9.4Q6 8.4 6.8 4Q8 6.8 11 7.2Z" fill="#f0e6cf"/><path d="M22 9.4Q26 8.4 25.2 4Q24 6.8 21 7.2Z" fill="#f0e6cf"/>'},
+  {id: 'flosshatt', plass: 'hode', navn: ['Flosshatt', 'Top hat'], krav: ['varfil', 10, ['Lag 10 Variabel-filer', 'Make 10 Variabel files']],
+   nabe: '<rect x="9" y="-2" width="14" height="11" rx=".8" fill="#3d3d48"/><rect x="9" y="6.4" width="14" height="1.6" fill="#d62839"/><rect x="5" y="8.8" width="22" height="1.8" rx=".9" fill="#3d3d48"/>',
+   nabo: '<rect x="11" y="1.6" width="10" height="9" rx=".6" fill="#3d3d48"/><rect x="11" y="8.4" width="10" height="1.3" fill="#d62839"/><rect x="8.4" y="10.2" width="15.2" height="1.5" rx=".7" fill="#3d3d48"/>'},
+  {id: 'russelue', plass: 'hode', navn: ['Russelue', 'Graduation cap'], krav: ['aapnet', 17, ['Åpne NABE 17 ganger', 'Open NABE 17 times']],
+   nabe: '<path d="M6 9.6Q6 4.4 16 4.4T26 9.6Z" fill="#d62839"/><rect x="4" y="8.6" width="24" height="2.4" rx="1" fill="#17171a"/><path d="M16 4.4Q24 3 25.6 8" fill="none" stroke="#f7f7f7" stroke-width=".7"/><circle cx="25.6" cy="9.4" r="1.2" fill="#f7f7f7"/>',
+   nabo: '<path d="M9.4 10.8Q9.4 6.4 16 6.4T22.6 10.8Z" fill="#d62839"/><rect x="8" y="10" width="16" height="2" rx=".8" fill="#17171a"/><path d="M16 6.4Q21.4 5.4 22.6 9.4" fill="none" stroke="#f7f7f7" stroke-width=".6"/><circle cx="22.6" cy="10.6" r="1" fill="#f7f7f7"/>'},
+  {id: 'svetteband', plass: 'hode', navn: ['Svettebånd', 'Sweatband'], krav: ['skriv', 20, ['Skriv 20 ganger', 'Write 20 times']],
+   nabe: '<rect x="3.6" y="8.6" width="24.8" height="2.8" fill="#e63946"/><rect x="3.6" y="9.6" width="24.8" height=".8" fill="#fafafa"/>',
+   nabo: '<rect x="8" y="10" width="16" height="2.2" fill="#e63946"/><rect x="8" y="10.8" width="16" height=".6" fill="#fafafa"/>'},
+  {id: 'antenne', plass: 'hode', navn: ['Antenne', 'Antenna'], krav: ['enheter', 25, ['Finn 25 enheter', 'Find 25 devices']],
+   nabe: '<path d="M16 6.4V1.6" stroke="#9aa4b1" stroke-width="1"/><circle cx="16" cy="1.2" r="1.3" fill="#e63946"/><path d="M11.4 3.4Q16 -1 20.6 3.4M13 4.4Q16 1.8 19 4.4" fill="none" stroke="#6aa7ff" stroke-width=".7"/>',
+   nabo: '<path d="M16 7.6V3.8" stroke="#9aa4b1" stroke-width=".8"/><circle cx="16" cy="3.4" r="1" fill="#e63946"/><path d="M12.6 5.2Q16 2 19.4 5.2" fill="none" stroke="#6aa7ff" stroke-width=".6"/>'},
+  // --- face
+  {id: 'sveisemaske', plass: 'ansikt', navn: ['Sveisemaske', 'Welding mask'], krav: ['skriv', 25, ['Skriv 25 ganger', 'Write 25 times']],
+   nabe: '<rect x="5" y="9.8" width="22" height="17" rx="3" fill="#3a3f46"/><rect x="8" y="13" width="16" height="5" rx="1" fill="#1aff9c" opacity=".55"/><rect x="8" y="13" width="16" height="5" rx="1" fill="none" stroke="#111113" stroke-width=".7"/>',
+   nabo: '<rect x="9.4" y="11" width="13.2" height="10" rx="2" fill="#3a3f46"/><rect x="11" y="13" width="10" height="3.2" rx=".8" fill="#1aff9c" opacity=".55"/>'},
+  {id: 'stovmaske', plass: 'ansikt', navn: ['Støvmaske', 'Dust mask'], krav: ['skann', 3, ['3 skann', '3 scans']],
+   nabe: '<path d="M7 19.6Q16 17.6 25 19.6V24Q16 28.4 7 24Z" fill="#f2f4f7" stroke="#c9ced6" stroke-width=".4"/><path d="M7 20.6L4 18M25 20.6L28 18" stroke="#c9ced6" stroke-width=".5"/>',
+   nabo: '<path d="M10.4 17Q16 15.8 21.6 17V19.6Q16 22 10.4 19.6Z" fill="#f2f4f7" stroke="#c9ced6" stroke-width=".3"/>'},
+  {id: 'bart', plass: 'ansikt', navn: ['Bart', 'Moustache'], krav: null,
+   nabe: '<path d="M16 21Q12 19.6 9.6 21.4Q8 22.6 7 21.4Q8 24.4 11.6 23.4Q14.6 22.6 16 22Q17.4 22.6 20.4 23.4Q24 24.4 25 21.4Q24 22.6 22.4 21.4Q20 19.6 16 21Z" fill="#4a2f1a"/>',
+   nabo: '<path d="M16 17.8Q13.6 17 12.2 18Q11.2 18.8 10.6 18Q11.2 19.8 13.4 19.2Q15 18.8 16 18.4Q17 18.8 18.6 19.2Q20.8 19.8 21.4 18Q20.8 18.8 19.8 18Q18.4 17 16 17.8Z" fill="#4a2f1a"/>'},
+  {id: 'skjegg', plass: 'ansikt', navn: ['Skjegg', 'Beard'], krav: ['aapnet', 30, ['Åpne NABE 30 ganger', 'Open NABE 30 times']],
+   nabe: '<path d="M5 19Q5 30 16 30T27 19Q25 24 20 23Q16 22 12 23Q7 24 5 19Z" fill="#6b4226"/>',
+   nabo: '<path d="M9.6 17Q9.6 23.6 16 23.6T22.4 17Q21 20 18.6 19.4Q16 18.8 13.4 19.4Q11 20 9.6 17Z" fill="#6b4226"/>'},
+  {id: 'oyelapp', plass: 'ansikt', navn: ['Øyelapp', 'Eye patch'], krav: ['natt', 2, ['Skann sent to ganger', 'Scan late twice']],
+   nabe: '<path d="M4 11.4L27.6 10" stroke="#111113" stroke-width=".8"/><ellipse cx="20.8" cy="15.8" rx="4.4" ry="4" fill="#111113"/><path d="M20.8 11.8L22 10.4" stroke="#111113" stroke-width=".8"/>',
+   nabo: '<path d="M9 12.4L23 11.6" stroke="#111113" stroke-width=".6"/><ellipse cx="18.9" cy="14.8" rx="2.6" ry="2.4" fill="#111113"/>'},
+  {id: 'skibriller', plass: 'ansikt', navn: ['Skibriller', 'Ski goggles'], krav: ['skann', 40, ['40 skann', '40 scans']],
+   nabe: '<rect x="4.4" y="11.4" width="23.2" height="8.6" rx="4.2" fill="#ff7a1a" fill-opacity=".82" stroke="#17171a" stroke-width="1"/><path d="M7 13.4L12 18M12 13L15 15.6" stroke="#fff" stroke-opacity=".45" stroke-width=".8"/>',
+   nabo: '<rect x="9.6" y="12.4" width="12.8" height="4.8" rx="2.3" fill="#ff7a1a" fill-opacity=".82" stroke="#17171a" stroke-width=".7"/>'},
+  {id: 'rodnese', plass: 'ansikt', navn: ['Rød nese', 'Red nose'], krav: ['kos', 5, ['Klapp NABE 5 ganger', 'Pat NABE 5 times']],
+   nabe: '<circle cx="16" cy="18.6" r="2.4" fill="#e63946"/><circle cx="15.2" cy="17.9" r=".6" fill="#fff" opacity=".7"/>',
+   nabo: '<circle cx="16" cy="16.8" r="1.6" fill="#e63946"/><circle cx="15.5" cy="16.3" r=".4" fill="#fff" opacity=".7"/>'},
+  // --- neck
+  {id: 'adgangskort', plass: 'hals', navn: ['Adgangskort', 'Access card'], krav: null,
+   nabe: '<path d="M10 25.6L16 29L22 25.6" fill="none" stroke="#2c6be0" stroke-width=".8"/><rect x="13.4" y="29" width="5.2" height="3.6" rx=".5" fill="#f7f7f7" stroke="#2c6be0" stroke-width=".4"/><rect x="14" y="29.6" width="1.6" height="1.8" fill="#9aa4b1"/>',
+   nabo: '<path d="M11 21.4L16 24.4L21 21.4" fill="none" stroke="#2c6be0" stroke-width=".7"/><rect x="14" y="24.2" width="4" height="2.8" rx=".4" fill="#f7f7f7" stroke="#2c6be0" stroke-width=".3"/>'},
+  {id: 'medalje', plass: 'hals', navn: ['Medalje', 'Medal'], krav: ['varfil', 25, ['Lag 25 Variabel-filer', 'Make 25 Variabel files']],
+   nabe: '<path d="M12.6 25.4L16 29M19.4 25.4L16 29" stroke="#d62839" stroke-width="1.2"/><circle cx="16" cy="30" r="2.2" fill="#f2c230" stroke="#c99a00" stroke-width=".4"/>',
+   nabo: '<path d="M13.4 21.6L16 24.6M18.6 21.6L16 24.6" stroke="#d62839" stroke-width="1"/><circle cx="16" cy="25.4" r="1.7" fill="#f2c230" stroke="#c99a00" stroke-width=".3"/>'},
+  {id: 'gullkjede', plass: 'hals', navn: ['Gullkjede', 'Gold chain'], krav: ['punkter', 10000, ['Les 10 000 punkter', 'Read 10,000 points']],
+   nabe: '<path d="M6 25.8Q16 31.2 26 25.8" fill="none" stroke="#f2c230" stroke-width="1.1" stroke-dasharray="1.2 .6"/><rect x="14.4" y="28.4" width="3.2" height="3" rx=".5" fill="#f2c230"/>',
+   nabo: '<path d="M10 21.8Q16 25.6 22 21.8" fill="none" stroke="#f2c230" stroke-width=".9" stroke-dasharray="1 .5"/><rect x="14.8" y="23.8" width="2.4" height="2.2" rx=".4" fill="#f2c230"/>'},
+  {id: 'maaleledninger', plass: 'hals', navn: ['Måleledninger', 'Test leads'], krav: ['skriv', 15, ['Skriv 15 ganger', 'Write 15 times']],
+   nabe: '<path d="M7 25.4Q9 32 13.4 32" fill="none" stroke="#d62839" stroke-width="1"/><path d="M25 25.4Q23 32 18.6 32" fill="none" stroke="#17171a" stroke-width="1"/><path d="M7 25.4Q16 28 25 25.4" fill="none" stroke="#6b7480" stroke-width=".7"/><circle cx="13.6" cy="32" r=".8" fill="#cfd0d6"/><circle cx="18.4" cy="32" r=".8" fill="#cfd0d6"/>',
+   nabo: '<path d="M10.4 21.6Q11.6 26 14.4 26" fill="none" stroke="#d62839" stroke-width=".8"/><path d="M21.6 21.6Q20.4 26 17.6 26" fill="none" stroke="#17171a" stroke-width=".8"/>'},
+  {id: 'kamera', plass: 'hals', navn: ['Kamera', 'Camera'], krav: ['enheter', 50, ['Finn 50 enheter', 'Find 50 devices']],
+   nabe: '<path d="M8 25.4Q16 29 24 25.4" fill="none" stroke="#2b2b2e" stroke-width=".7"/><rect x="11.6" y="27" width="8.8" height="5.6" rx=".8" fill="#2b2b2e"/><circle cx="16" cy="29.8" r="1.8" fill="#6aa7ff" stroke="#9aa4b1" stroke-width=".5"/>',
+   nabo: '<path d="M10.6 21.6Q16 24.4 21.4 21.6" fill="none" stroke="#2b2b2e" stroke-width=".6"/><rect x="12.8" y="23" width="6.4" height="4" rx=".6" fill="#2b2b2e"/><circle cx="16" cy="25" r="1.3" fill="#6aa7ff"/>'},
+  // --- extra
+  {id: 'verktoybelte', plass: 'ekstra', navn: ['Verktøybelte', 'Tool belt'], krav: ['skriv', 5, ['Skriv 5 ganger', 'Write 5 times']],
+   nabe: '<rect x="2.6" y="26.6" width="26.8" height="2.4" fill="#8a5a2b"/><rect x="4" y="28.4" width="5.4" height="3.4" rx=".6" fill="#6f4621"/><rect x="22.6" y="28.4" width="5.4" height="3.4" rx=".6" fill="#6f4621"/><rect x="14.6" y="26.4" width="2.8" height="2.8" fill="#c9a227"/>',
+   nabo: '<rect x="7.6" y="22" width="16.8" height="1.8" fill="#8a5a2b"/><rect x="8.6" y="23.4" width="4" height="2.6" rx=".5" fill="#6f4621"/><rect x="19.4" y="23.4" width="4" height="2.6" rx=".5" fill="#6f4621"/>'},
+  {id: 'kappe', plass: 'ekstra', navn: ['Kappe', 'Cape'], krav: ['enheter', 500, ['Finn 500 enheter', 'Find 500 devices']], sjelden: true,
+   nabe: '<path d="M4 24Q-3 28 -1.6 34H7Z" fill="#d62839"/><path d="M28 24Q35 28 33.6 34H25Z" fill="#d62839"/>',
+   nabo: '<path d="M8.4 20Q3 24 4 29H11Z" fill="#d62839"/><path d="M23.6 20Q29 24 28 29H21Z" fill="#d62839"/>'},
+  {id: 'walkie', plass: 'ekstra', navn: ['Walkie-talkie', 'Walkie-talkie'], krav: ['nabo', 5, ['Bruk NABO 5 ganger', 'Use NABO 5 times']],
+   nabe: '<rect x="28.6" y="16" width="4" height="9" rx=".8" fill="#2b2b2e"/><path d="M30 16V10.4" stroke="#2b2b2e" stroke-width=".9"/><rect x="29.2" y="17" width="2.8" height="2.4" fill="#5dff9a"/>',
+   nabo: '<rect x="24.4" y="14" width="3.4" height="7.4" rx=".7" fill="#2b2b2e"/><path d="M25.6 14V9.4" stroke="#2b2b2e" stroke-width=".7"/><rect x="25" y="15" width="2.2" height="2" fill="#5dff9a"/>'},
+  {id: 'vinger', plass: 'ekstra', navn: ['Vinger', 'Wings'], krav: ['tunnelRekord', 50, ['50 poeng i Tunnelen', '50 points in the tunnel']], spill: true,
+   nabe: '<path d="M3.6 16Q-3 10 -4.4 16Q-3 20 3.6 22Z" fill="#f2f4f7" stroke="#c9ced6" stroke-width=".4"/><path d="M28.4 16Q35 10 36.4 16Q35 20 28.4 22Z" fill="#f2f4f7" stroke="#c9ced6" stroke-width=".4"/>',
+   nabo: '<path d="M8 14Q2.6 9.6 1.6 14Q2.6 18 8 19Z" fill="#f2f4f7" stroke="#c9ced6" stroke-width=".3"/><path d="M24 14Q29.4 9.6 30.4 14Q29.4 18 24 19Z" fill="#f2f4f7" stroke="#c9ced6" stroke-width=".3"/>'},
+  {id: 'papegoye', plass: 'ekstra', navn: ['Papegøye', 'Parrot'], krav: ['kos', 30, ['Klapp NABE 30 ganger', 'Pat NABE 30 times']],
+   nabe: '<path d="M28 9Q33 9 33 14Q33 19 29 22L27 14Q27 10 28 9Z" fill="#2a9d8f"/><circle cx="30" cy="11.4" r=".7" fill="#111113"/><path d="M32.6 11.4L34.6 12.6L32.6 13.4Z" fill="#f2c230"/><path d="M29 22l-1.4 4 3-3z" fill="#e63946"/>',
+   nabo: '<path d="M24 8Q28 8 28 12Q28 16 25 18L23 12Q23 9 24 8Z" fill="#2a9d8f"/><circle cx="25.6" cy="10" r=".6" fill="#111113"/><path d="M27.8 10L29.4 11L27.8 11.6Z" fill="#f2c230"/>'},
 ];
 const PLASSER = [['hode', ['Hode', 'Head']], ['ansikt', ['Ansikt', 'Face']], ['hals', ['Hals', 'Neck']], ['ekstra', ['Ekstra', 'Extra']]];
 
@@ -173,14 +252,7 @@ function aapneGarderobe(fane) {
     lag.setAttribute('aria-modal', 'true');
     document.body.appendChild(lag);
     lag.addEventListener('click', gardKlikk);
-    // Pointing at a pointer tries it; leaving the catalog goes back to your own.
-    lag.addEventListener('pointerover', (e) => {
-      if (lag.dataset.fane !== 'peker') return;
-      const k = e.target.closest('[data-peker]');
-      const ny = k ? k.dataset.peker : (e.target.closest('.gd-katalog') ? null : pekerValgt());
-      if (ny && ny !== PK.tilstand().id) PK.bruk(ny);
-    });
-    document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !lag.hidden) { lag.hidden = true; PK.bruk(pekerValgt()); e.stopPropagation(); } }, true);
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !lag.hidden) { lag.hidden = true; e.stopPropagation(); } }, true);
   }
   lag.dataset.fane = fane || lag.dataset.fane || 'nabe';
   tegnGarderobe();
@@ -248,13 +320,14 @@ function tegnGarderobe() {
 
 function gardKlikk(e) {
   const lag = $('gardOverlay');
-  if (e.target === lag || e.target.closest('.gs-close')) { lag.hidden = true; PK.bruk(pekerValgt()); return; }
+  if (e.target === lag || e.target.closest('.gs-close')) { lag.hidden = true; return; }
   const fane = e.target.closest('[data-fane]');
   if (fane && fane.getAttribute('role') === 'tab') { lag.dataset.fane = fane.dataset.fane; tegnGarderobe(); return; }
   const pk = e.target.closest('[data-peker]');
   if (pk) {
     if (pk.classList.contains('laast')) return;
     gardLagre({peker: pk.dataset.peker});
+    PK.bruk(pk.dataset.peker);
     const rull = lag.querySelector('.gd-katalog')?.scrollTop || 0;
     tegnGarderobe();
     if (lag.querySelector('.gd-katalog')) lag.querySelector('.gd-katalog').scrollTop = rull;
@@ -295,6 +368,13 @@ async function samtale(linjer, {tvang = false} = {}) {
 }
 
 const PLAGG_REPLIKK = {
+  vikinghjelm: [['nabo', 'hvem skal du plyndre', 'who are you raiding'], ['nabe', 'Kundens JACE.', 'The client’s JACE.']],
+  flosshatt: [['nabo', 'overlevering igjen?', 'handover again?'], ['nabe', 'Variabel-fil nummer ti. Det skal feires.', 'Variabel file number ten. That calls for a hat.']],
+  bart: [['nabe', 'Jeg er eldre nå.', 'I am older now.'], ['nabo', 'du er en app', 'you are an app']],
+  sveisemaske: [['nabo', 'det er et skriverom', 'this is a write dialog'], ['nabe', 'Det gnister av prioritet 8.', 'Priority 8 throws sparks.']],
+  papegoye: [['nabo', 'hva heter den', 'what is its name'], ['nabe', 'Who-Is. Den gjentar alt.', 'Who-Is. It repeats everything.']],
+  kappe: [['nabo', 'superhelt?', 'superhero?'], ['nabe', '500 enheter. Bedøm selv.', '500 devices. You judge.']],
+  nisselue: [['nabo', 'det er ikke desember', 'it is not december'], ['nabe', 'Det er det i et sted.', 'It is somewhere.']],
   hjelm: [['nabo', 'hjelm? du sitter i en topplinje', 'a hard hat? you live in a toolbar'], ['nabe', 'Ting faller ned. Ikoner, for eksempel.', 'Things fall. Icons, for one.']],
   krone: [['nabo', 'sudo kneel', 'sudo kneel'], ['nabe', 'Tillatelse avslått.', 'Permission denied.']],
   propell: [['nabo', 'kan du fly nå?', 'can you fly now?'], ['nabe', 'Bare når VPN-en faller.', 'Only when the VPN drops.']],
@@ -475,6 +555,6 @@ window.aapneGarderobe = aapneGarderobe;
     addEventListener('pagehide', lagre);
   });
 })();
-document.addEventListener('click', (e) => { if (e.target.closest && e.target.closest('#gardBtn')) { document.body.click(); aapneGarderobe(); } });
+$('gardBtn').onclick = () => { closeMenus(); aapneGarderobe(); };
 // Last script in: the catalog and the brothers' drawings are here now.
 PK.bruk(pekerValgt());

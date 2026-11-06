@@ -1,6 +1,6 @@
 /* NABE - the pointer catalog: forty-five of them, made from the builders in
    nabe-peker.js. Shown in the Peker tab of the wardrobe, and earned like the
-   items. Pointing at a card tries it, locked or not. */
+   items: a click on an open card picks it, a locked one stays locked. */
 'use strict';
 
 // In a function of its own: the short names here would collide with the app's.
@@ -451,7 +451,7 @@ function pekerKatalog() {
   };
   return `<div class="gd-hoved">
     <div class="gd-scene pk-scene">
-      <div class="pk-tittel">${T('Pek på et kort for å prøve det, også de låste', 'Point at a card to try it, locked ones too')}</div>
+      <div class="pk-tittel">${T('Klikk et åpent kort for å bruke det', 'Click an open card to use it')}</div>
       <div class="gd-scene-tekst">${esc(T('Pekerne kommer av arbeid, ikke av klikking.', 'Pointers come from work, not from clicking.'))}</div>
     </div>
     <div class="gd-katalog">${PEKER_GRUPPER.map(([g, navn]) => `
