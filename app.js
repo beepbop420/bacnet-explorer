@@ -1132,7 +1132,7 @@ function grupperingsTekst() {
 }
 
 /* Which adapter a network is reached through, asked once per network and
-   kept: the heading says "via Hoppensprett" without a request per redraw. */
+   kept: the heading says "via <the tunnel>" without a request per redraw. */
 const NETT_VIA = {};
 function nettVia(omr) {
   if (omr in NETT_VIA) return NETT_VIA[omr];
