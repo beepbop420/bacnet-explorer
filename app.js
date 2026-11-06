@@ -4220,6 +4220,7 @@ function commands() {
          const skjult = Object.entries(t).filter(([k]) => !VERDITYPER.has(k))
                               .reduce((n,[,v]) => n+v, 0);
          return skjult ? skjult + ' objekter skjult nå' : ''; }});
+  add('Visning', 'Fullskjerm', () => { closeCmd(); byttFullskjerm(); });
   add('Visning', 'Innstillinger…', () => { closeCmd(); openTema(); });
   add('Eksport', 'NABO — tagger og Variabel-fil…', () => { closeCmd(); aapneNabo(); }, {hint: 'N'});
   add('Visning', 'Utseende — farger, bilder og størrelse…',
@@ -10030,6 +10031,8 @@ const ORDBOK = {
   'Tabellen': 'The table',
   'Enhetslista': 'The device list',
   'Bevegelse': 'Motion',
+  'Fullskjerm': 'Full screen',
+  'Fullskjerm (F11)': 'Full screen (F11)',
   'Peker': 'Pointer',
   'Velg peker i garderoben': 'Choose a pointer in the wardrobe',
   'Animasjoner': 'Animations',

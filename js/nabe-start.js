@@ -177,6 +177,9 @@ const FAKTA = [
   ['COV betyr at regulatoren sier fra selv. Mindre spørring, mer ro.', 'COV means the controller speaks up itself. Less asking, more peace.'],
 ];
 const NYTT = {
+  '1.45': [
+    ['Fullskjerm: knapp øverst til høyre, eller F11', 'Full screen: a button at the top right, or F11'],
+  ],
   '1.44': [
     ['25 nye plagg til NABE og NABO: fra sixpence og sveisemaske til kappe, adgangskort og papegøye', '25 new items for NABE and NABO: from a flat cap and a welding mask to a cape, an access card and a parrot'],
     ['Pekere: ny fane i garderoben med 45 pekere, fra patchkabel og tur og retur til lommelykt, Lille NABE og skrutrekker. De kommer av arbeid, som plaggene', 'Pointers: a new tab in the wardrobe with 45 pointers, from a patch cable and flow and return to a flashlight, Little NABE and a screwdriver. They come from work, like the items'],

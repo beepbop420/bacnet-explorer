@@ -44,6 +44,26 @@
     api.tittellinje(s.getPropertyValue('--bg').trim(), s.getPropertyValue('--fg').trim(),
                     s.getPropertyValue('--line').trim(), document.documentElement.dataset.theme !== 'light');
   };
+  /* ---- full screen: the window's own in the app, the browser's otherwise.
+     Coming back the title bar has lost its colours, so they go on again. */
+  const fullVist = (paa) => {
+    $('fullBtn').classList.toggle('paa', paa);
+    $('fullBtn').setAttribute('aria-pressed', String(paa));
+    $('fullBtn').title = paa ? T('Avslutt fullskjerm (F11)', 'Exit full screen (F11)') : T('Fullskjerm (F11)', 'Full screen (F11)');
+  };
+  window.byttFullskjerm = async () => {
+    const api = window.pywebview && window.pywebview.api;
+    if (api && api.fullskjerm) {
+      const paa = await api.fullskjerm();
+      fullVist(paa);
+      if (!paa) tittellinje();
+    } else if (document.fullscreenElement) document.exitFullscreen();
+    else document.documentElement.requestFullscreen().catch(() => {});
+  };
+  document.addEventListener('fullscreenchange', () => fullVist(!!document.fullscreenElement));
+  $('fullBtn').onclick = byttFullskjerm;
+  document.addEventListener('keydown', (e) => { if (e.key === 'F11') { e.preventDefault(); byttFullskjerm(); } });
+
   etter('applyTheme', tittellinje);
   window.addEventListener('pywebviewready', tittellinje);
   tittellinje();

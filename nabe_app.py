@@ -151,10 +151,24 @@ def main():
     class Api:
         """What the page can ask of the window."""
         tillat_lukking = False
+        full = False
+        var_maks = False
 
         def lukk(self):
             Api.tillat_lukking = True
             vindu.destroy()
+
+        def fullskjerm(self):
+            """Full screen and back; says which it became."""
+            if not Api.full:
+                Api.var_maks = TILSTAND["maks"]
+            vindu.toggle_fullscreen()
+            Api.full = not Api.full
+            # Back it is a normal window at the old size: a maximised one
+            # has to be told, or it stays that with the wrong button.
+            if not Api.full and Api.var_maks:
+                vindu.maximize()
+            return Api.full
 
         def tittellinje(self, bak, tekst, kant, mork):
             sett_tittellinje("NABE", bak, tekst, kant, bool(mork))
@@ -192,10 +206,12 @@ def main():
         """
         try:
             ny = dict(geo)
-            ny["maks"] = TILSTAND["maks"]
+            # Full screen says nothing about the window you came from.
+            if not Api.full:
+                ny["maks"] = TILSTAND["maks"]
             # Minimised or maximised, the size and place are not the window's
             # own: the last normal ones are kept.
-            if not TILSTAND["min"] and not TILSTAND["maks"] and min(vindu.x, vindu.y) > -2000:
+            if not Api.full and not TILSTAND["min"] and not TILSTAND["maks"] and min(vindu.x, vindu.y) > -2000:
                 ny.update({"b": vindu.width, "h": vindu.height, "x": vindu.x, "y": vindu.y})
             json.dump(ny, geo_fil.open("w", encoding="utf-8"))
         except Exception:
