@@ -192,7 +192,7 @@ def t(nb: str, en: str) -> str:
     return en if SPRAAK_VAR.get() == "en" else nb
 
 
-VERSJON = "1.45"
+VERSJON = "1.46"
 
 state = {"app": None, "local_address": None, "read_only": False, "bbmd": None}
 
@@ -2763,6 +2763,92 @@ async def sites_delete(body: SiteKeyBody):
         return {"status": "error", "error": t("Ukjent anlegg", "Unknown site")}
     _save_sites()
     return {"status": "done"}
+
+
+# A recording: the chosen points read on an interval, one CSV row each time,
+# written as it goes so a closed window or a power cut loses nothing. Only ever
+# reads. Semicolons and a decimal comma, which is what Excel wants here.
+OPPTAK_DIR = DATA_DIR / "opptak"
+OPPTAK: Dict[str, Any] = {"task": None, "fil": "", "punkter": [], "start": 0.0, "slutt": None,
+                          "intervall": 30, "rader": 0, "bom": 0}
+
+
+class OpptakBody(BaseModel):
+    punkter: List[Dict[str, str]]
+    intervall: int = 30
+    timer: Optional[float] = None
+
+
+def _opptak_celle(v: Any) -> str:
+    if v is None:
+        return ""
+    if isinstance(v, float):
+        return f"{v:.3f}".rstrip("0").rstrip(".").replace(".", ",")
+    return str(v).replace(";", ",")
+
+
+async def _opptak_les() -> None:
+    bacnet_app = _require_app()
+    grupper: Dict[str, List[str]] = {}
+    for p in OPPTAK["punkter"]:
+        grupper.setdefault(p["address"], []).append(p["objid"])
+    verdier: Dict[str, Dict[str, Any]] = {}
+
+    async def en(ip: str, objids: List[str]) -> None:
+        try:
+            verdier[ip] = await bc.poll_values(bacnet_app, device_address(ip), objids) if bacnet_app else {}
+        except COMM_ERRORS:
+            verdier[ip] = {}
+
+    await asyncio.gather(*[en(ip, o) for ip, o in grupper.items()])
+    celler = [_opptak_celle(verdier.get(p["address"], {}).get(p["objid"])) for p in OPPTAK["punkter"]]
+    OPPTAK["bom"] += sum(1 for c in celler if c == "")
+    with open(OPPTAK["fil"], "a", encoding="utf-8", newline="") as f:
+        f.write(";".join([time.strftime("%Y-%m-%d %H:%M:%S")] + celler) + "\r\n")
+    OPPTAK["rader"] += 1
+
+
+async def _opptak_lokke() -> None:
+    try:
+        while OPPTAK["slutt"] is None or time.time() < OPPTAK["slutt"]:
+            t0 = time.time()
+            await _opptak_les()
+            await asyncio.sleep(max(.2, OPPTAK["intervall"] - (time.time() - t0)))
+    finally:
+        OPPTAK["task"] = None
+
+
+@app.post("/api/opptak/start")
+async def opptak_start(body: OpptakBody):
+    if OPPTAK["task"]:
+        return {"status": "error", "error": t("Et opptak går allerede", "A recording is already running")}
+    if not body.punkter or len(body.punkter) > 500:
+        return {"status": "error", "error": t("Velg mellom 1 og 500 punkter", "Choose between 1 and 500 points")}
+    if _require_app() is None:
+        return {"status": "error", "error": t("Proxy er ikke startet.", "Not connected.")}
+    OPPTAK_DIR.mkdir(parents=True, exist_ok=True)
+    fil = OPPTAK_DIR / f"opptak-{time.strftime('%Y%m%d-%H%M%S')}.csv"
+    navn = [(p.get("navn") or p["objid"]).replace(";", ",") + (f" ({p['enhet']})" if p.get("enhet") else "") for p in body.punkter]
+    fil.write_text("\ufeff" + ";".join([t("Tid", "Time")] + navn) + "\r\n", encoding="utf-8", newline="")
+    OPPTAK.update(fil=str(fil), punkter=body.punkter, start=time.time(), rader=0, bom=0,
+                  intervall=max(1, min(3600, body.intervall)),
+                  slutt=time.time() + min(body.timer, 168) * 3600 if body.timer else None)
+    OPPTAK["task"] = asyncio.create_task(_opptak_lokke())
+    return {"status": "done", "fil": str(fil)}
+
+
+@app.post("/api/opptak/stopp")
+async def opptak_stopp():
+    oppgave = OPPTAK["task"]
+    if oppgave:
+        oppgave.cancel()
+    return {"status": "done", "fil": OPPTAK["fil"], "rader": OPPTAK["rader"]}
+
+
+@app.get("/api/opptak")
+async def opptak_status():
+    return {"aktiv": bool(OPPTAK["task"]), "fil": OPPTAK["fil"], "punkter": len(OPPTAK["punkter"]), "rader": OPPTAK["rader"],
+            "bom": OPPTAK["bom"], "intervall": OPPTAK["intervall"], "varighet": int(time.time() - OPPTAK["start"]) if OPPTAK["start"] else 0}
 
 
 # The counters behind the wardrobe, what NABE and NABO wear, and the tunnel

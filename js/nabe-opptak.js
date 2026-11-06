@@ -1,0 +1,95 @@
+/* NABE - recording. The server reads the chosen points on a fixed interval and
+   writes each row to a CSV in the data folder, so a recording goes on while
+   the window is minimised or you are on another controller. It only ever
+   reads. Started from the … menu or the palette; the status bar shows it. */
+'use strict';
+
+(function opptak() {
+  const sb = document.createElement('button');
+  sb.id = 'sbOpptak';
+  sb.type = 'button';
+  sb.className = 'sb-item sb-opptak';
+  sb.hidden = true;
+  document.querySelector('.statusbar')?.prepend(sb);
+  let puls = 0;
+
+  const kilde = () => {
+    const finn = (ip, objid) => (S.cache[ip] || []).find(p => p.objid === objid) || {};
+    const rad = (ip, objid) => { const p = finn(ip, objid); return {address: ip, objid, navn: p.name || p.object_name || objid, enhet: p.unit_symbol || ''}; };
+    const valgte = [...S.sel].map(k => { const i = k.indexOf('|'); return rad(k.slice(0, i), k.slice(i + 1)); });
+    const fulgte = S.watch.map(w => rad(w.ip, w.objid));
+    return {valgte, fulgte};
+  };
+  const tid = (s) => (s >= 3600 ? `${Math.floor(s / 3600)} t ${Math.floor(s % 3600 / 60)} min` : `${Math.floor(s / 60)} min`);
+
+  async function status() {
+    try { return await (await fetch('/api/opptak')).json(); } catch { return {aktiv: false}; }
+  }
+  function visStatus(o) {
+    sb.hidden = !o.aktiv;
+    if (o.aktiv) {
+      sb.textContent = T(`Opptak ${o.rader} rader · ${tid(o.varighet)}`, `Recording ${o.rader} rows · ${tid(o.varighet).replace(' t ', ' h ')}`);
+      sb.title = T(`${o.punkter} punkter hvert ${o.intervall}. sekund. Klikk for å se`, `${o.punkter} points every ${o.intervall} seconds. Click to see`);
+    }
+    clearTimeout(puls);
+    if (o.aktiv) puls = setTimeout(async () => visStatus(await status()), 5000);
+  }
+
+  async function tegn() {
+    const lag = $('opptakOverlay'), o = await status(), {valgte, fulgte} = kilde();
+    const kilder = [[valgte, T('Valgte punkter', 'Selected points')], [fulgte, T('Overvåkede punkter', 'Watched points')]];
+    const forste = kilder.find(([l]) => l.length);
+    const kort = o.aktiv
+      ? `<p class="op-tekst">${T(`Tar opp ${o.punkter} punkter hvert ${o.intervall}. sekund. ${o.rader} rader så langt, ${o.bom} uten svar.`, `Recording ${o.punkter} points every ${o.intervall} seconds. ${o.rader} rows so far, ${o.bom} with no answer.`)}</p>
+         <div class="op-knapper"><button type="button" class="btn" data-op="vis">${T('Vis fila', 'Show the file')}</button><button type="button" class="btn primary" data-op="stopp">${T('Stopp opptaket', 'Stop recording')}</button></div>`
+      : !forste
+        ? `<p class="op-tekst">${T('Velg punkter i tabellen, eller fest dem i Overvåking, så kan de tas opp.', 'Select points in the table, or pin them in Watch, and they can be recorded.')}</p>`
+        : `<label class="op-felt"><span>${T('Hva', 'What')}</span><select id="opKilde" class="field">${kilder.filter(([l]) => l.length).map(([l, n], i) => `<option value="${i}">${esc(n)} (${l.length})</option>`).join('')}</select></label>
+           <label class="op-felt"><span>${T('Hvor ofte', 'How often')}</span><select id="opHvert" class="field"><option value="5">${T('Hvert 5. sekund', 'Every 5 seconds')}</option><option value="30" selected>${T('Hvert 30. sekund', 'Every 30 seconds')}</option><option value="60">${T('Hvert minutt', 'Every minute')}</option><option value="300">${T('Hvert 5. minutt', 'Every 5 minutes')}</option></select></label>
+           <label class="op-felt"><span>${T('Hvor lenge', 'How long')}</span><select id="opLenge" class="field"><option value="1">${T('1 time', '1 hour')}</option><option value="8">${T('8 timer', '8 hours')}</option><option value="24" selected>${T('24 timer', '24 hours')}</option><option value="168">${T('En uke', 'A week')}</option><option value="">${T('Til jeg stopper', 'Until I stop it')}</option></select></label>
+           <p class="op-tekst">${T('Opptaket leser bare, og går selv om du bytter enhet. NABE må stå åpen og ha kontakt med anlegget.', 'Recording only reads, and goes on when you change device. NABE has to stay open and in touch with the site.')}</p>
+           <div class="op-knapper"><button type="button" class="btn primary" data-op="start">${T('Start opptak', 'Start recording')}</button></div>`;
+    lag.innerHTML = `<div class="gs-modal op-modal"><div class="gs-head"><span class="gd-tittel">${T('Opptak av punkter', 'Recording points')}</span>
+      <button class="gs-close" style="margin-left:auto"><span class="lbl">${T('Lukk', 'Close')}</span> ✕</button></div><div class="op-kropp">${kort}</div></div>`;
+    lag._kilder = kilder.filter(([l]) => l.length);
+    lag._fil = o.fil;
+  }
+
+  async function aapne() {
+    let lag = $('opptakOverlay');
+    if (!lag) {
+      lag = document.createElement('div');
+      lag.id = 'opptakOverlay';
+      lag.className = 'gs-overlay';
+      lag.setAttribute('role', 'dialog');
+      lag.setAttribute('aria-modal', 'true');
+      document.body.append(lag);
+      document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !lag.hidden) { lag.hidden = true; e.stopPropagation(); } }, true);
+      lag.addEventListener('click', async (e) => {
+        if (e.target === lag || e.target.closest('.gs-close')) { lag.hidden = true; return; }
+        const op = e.target.closest('[data-op]')?.dataset.op;
+        if (op === 'start') {
+          const punkter = lag._kilder[Number($('opKilde').value)][0];
+          const r = await api('/api/opptak/start', {punkter, intervall: Number($('opHvert').value), timer: Number($('opLenge').value) || null});
+          if (r.status !== 'done') { toast(r.error || T('Fikk ikke startet opptaket', 'Could not start recording'), true); return; }
+          lag.hidden = true;
+          toast(T(`Opptak startet: ${punkter.length} punkter`, `Recording started: ${punkter.length} points`));
+          visStatus(await status());
+        } else if (op === 'stopp') {
+          const r = await api('/api/opptak/stopp', {});
+          visStatus(await status());
+          lag.hidden = true;
+          toast(T(`Opptak stoppet: ${r.rader} rader`, `Recording stopped: ${r.rader} rows`));
+          if (r.fil) api('/api/vis-fil', {sti: r.fil});
+        } else if (op === 'vis') api('/api/vis-fil', {sti: lag._fil});
+      });
+    }
+    await tegn();
+    lag.hidden = false;
+  }
+
+  window.aapneOpptak = aapne;
+  $('opptakBtn').onclick = () => { closeMenus(); aapne(); };
+  sb.onclick = aapne;
+  status().then(visStatus);
+})();

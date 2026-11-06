@@ -4840,6 +4840,28 @@ html.peker-egen *:not(input):not(textarea):not(select):not(.splitter):not([conte
 #fullBtn svg{width:14px;height:14px;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
 #fullBtn .full-inn,#fullBtn.paa .full-ut{display:none}
 #fullBtn.paa .full-inn{display:inline}
+#pekerFig.klikkbar{pointer-events:auto}
+.sb-opptak{background:none;border:0;color:var(--fg-2);font:inherit;padding:0;margin-right:12px;text-decoration:underline;text-underline-offset:2px}
+.op-modal{width:min(440px,92vw)}
+.op-kropp{padding:14px 16px 16px;display:flex;flex-direction:column;gap:12px}
+.op-felt{display:flex;align-items:center;justify-content:space-between;gap:16px;font-size:12px;color:var(--fg-2)}
+.op-felt .field{width:230px}
+.op-tekst{margin:0;font-size:12px;line-height:1.5;color:var(--fg-3)}
+.op-knapper{display:flex;justify-content:flex-end;gap:8px}
+.sp-panel{position:fixed;right:18px;bottom:40px;z-index:9000;width:min(380px,92vw);max-height:min(520px,80vh);display:flex;flex-direction:column;gap:10px;padding:12px 14px 14px;
+  background:var(--raised);border:1px solid var(--line-2);border-radius:var(--r-lg);box-shadow:0 12px 34px rgba(0,0,0,.4)}
+.sp-panel[hidden]{display:none}
+.sp-topp{display:flex;align-items:center;justify-content:space-between}
+.sp-panel .field{width:100%;box-sizing:border-box;font-family:var(--sans)}
+.sp-svar{overflow:auto;min-height:0;font-size:12px;line-height:1.5;color:var(--fg-2)}
+.sp-svar p{margin:0 0 8px}
+.sp-q{color:var(--fg-3);font-size:11px;margin-bottom:6px}
+.sp-forslag{display:flex;flex-wrap:wrap;gap:6px}
+.sp-liste{display:flex;flex-direction:column;margin-bottom:8px}
+.sp-rad{display:flex;flex-direction:column;gap:1px;text-align:left;padding:5px 6px;background:none;border:0;border-top:1px solid var(--line);color:var(--fg);font:inherit}
+button.sp-rad:hover{background:var(--hover)}
+.sp-rad b{font-family:var(--mono);font-weight:500;font-size:11.5px}
+.sp-rad span{font-size:11px;color:var(--fg-3)}
 .gd-arb[hidden]{display:none}
 .pk-tittel{font-size:12px;color:var(--fg-3)}
 .pk-prove{display:flex;flex-wrap:wrap;gap:12px;justify-content:center}
@@ -4920,6 +4942,7 @@ html.peker-egen *:not(input):not(textarea):not(select):not(.splitter):not([conte
         <div class="menu-gruppe">Nettverk</div>
         <button id="rescanNow" class="menu-item">Søk etter enheter nå</button>
         <button id="diagBtn" class="menu-item">Sjekk en adresse…<span class="menu-hint">Ctrl+D</span></button>
+        <button id="opptakBtn" class="menu-item">Opptak av punkter…</button>
         <button id="reconnBtn" class="menu-item">Koble til på nytt</button>
         <div class="menu-sep"></div>
         <div class="menu-gruppe">Vis</div>
@@ -5352,5 +5375,7 @@ html.peker-egen *:not(input):not(textarea):not(select):not(.splitter):not([conte
 <script src="/js/nabe-peker.js"></script>
 <script src="/js/nabe-pekere.js"></script>
 <script src="/js/nabe-garderobe.js"></script>
+<script src="/js/nabe-opptak.js"></script>
+<script src="/js/nabe-spor.js"></script>
 </body>
 </html>

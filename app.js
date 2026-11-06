@@ -4221,6 +4221,8 @@ function commands() {
                               .reduce((n,[,v]) => n+v, 0);
          return skjult ? skjult + ' objekter skjult nå' : ''; }});
   add('Visning', 'Fullskjerm', () => { closeCmd(); byttFullskjerm(); });
+  add('Handling', 'Spør NABE…', () => { closeCmd(); aapneSpor(); });
+  add('Handling', 'Opptak av punkter…', () => { closeCmd(); aapneOpptak(); });
   add('Visning', 'Innstillinger…', () => { closeCmd(); openTema(); });
   add('Eksport', 'NABO — tagger og Variabel-fil…', () => { closeCmd(); aapneNabo(); }, {hint: 'N'});
   add('Visning', 'Utseende — farger, bilder og størrelse…',
@@ -10031,6 +10033,8 @@ const ORDBOK = {
   'Tabellen': 'The table',
   'Enhetslista': 'The device list',
   'Bevegelse': 'Motion',
+  'Spør NABE…': 'Ask NABE…',
+  'Opptak av punkter…': 'Recording points…',
   'Fullskjerm': 'Full screen',
   'Fullskjerm (F11)': 'Full screen (F11)',
   'Peker': 'Pointer',

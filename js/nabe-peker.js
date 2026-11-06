@@ -105,10 +105,15 @@ const PK = (function motor() {
     const k = o.k || 130, d = o.d || 13, ox = o.ox === undefined ? 20 : o.ox, oy = o.oy === undefined ? 22 : o.oy;
     return {
       ping: o.ping,
-      start() { s.x.x = mus.x + ox; s.y.x = mus.y + oy; s.x.v = s.y.v = 0; if (o.start) o.start(s); },
+      start() { s.x.x = s.mx = mus.x + ox; s.y.x = s.my = mus.y + oy; s.x.v = s.y.v = 0; if (o.start) o.start(s); },
       stopp() { if (o.stopp) o.stopp(s); },
       steg(dt) {
-        fjaer(s.x, mus.x + ox, k, d, dt); fjaer(s.y, mus.y + oy, k, d, dt);
+        // On a leash it stays put until the arrow is far off, so it can be reached.
+        if (o.snor) {
+          const dx = mus.x - s.mx, dy = mus.y - s.my, l = Math.hypot(dx, dy);
+          if (l > o.snor) { s.mx += dx * (1 - o.snor * .7 / l); s.my += dy * (1 - o.snor * .7 / l); }
+        } else { s.mx = mus.x + ox; s.my = mus.y + oy; }
+        fjaer(s.x, s.mx, k, d, dt); fjaer(s.y, s.my, k, d, dt);
         const v = Math.hypot(s.x.v, s.y.v);
         if (v > 40) s.vinkel = Math.atan2(s.y.v, s.x.v);
         s.vei += v * dt;

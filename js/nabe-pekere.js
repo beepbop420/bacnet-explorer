@@ -1,4 +1,4 @@
-/* NABE - the pointer catalog: forty-five of them, made from the builders in
+/* NABE - the pointer catalog: forty-six of them, made from the builders in
    nabe-peker.js. Shown in the Peker tab of the wardrobe, and earned like the
    items: a click on an open card picks it, a locked one stays locked. */
 'use strict';
@@ -131,8 +131,10 @@ const flamme = (p, u) => {
 };
 
 /* ---- company */
-const bror = (hvem) => PK.folger({k: 130, d: 13, ox: 18, oy: 22,
+const bror = (hvem, snor) => PK.folger({k: 130, d: 13, ox: 18, oy: 22, snor,
   start() {
+    PFIG.classList.toggle('klikkbar', !!snor);
+    if (snor) PFIG.title = T('Spør NABE', 'Ask NABE'); else PFIG.removeAttribute('title');
     PFIG.innerHTML = typeof forhaand === 'function' ? forhaand(hvem) : '';
     const s = PFIG.querySelector('svg');
     if (s) { s.classList.add('gard-forhånd'); if (typeof kle === 'function') kle(s, hvem, Object.assign({}, gardPrefs()[hvem])); }
@@ -367,6 +369,7 @@ Object.assign(PK.STIL, {
   }}),
   'lille-nabe': bror('nabe'),
   'lille-nabo': bror('nabo'),
+  'spor-nabe': bror('nabe', 170),
   lommelykt,
   skrutrekker,
   blyant,
@@ -415,6 +418,7 @@ const PEKERE = [
   P_('jet', 'sky', 'Jetflamme', 'Jet flame', 'Fra jetpakka', 'Off the jetpack', K('tunnelRekord', 100, '100 poeng i Tunnelen', '100 points in the tunnel'), '<path d="M16 4c5 7 8 11 8 15a8 8 0 0 1-16 0c0-4 3-8 8-15z"/>', {spill: true, sjelden: true}),
   P_('kabel', 'venn', 'Patchkabel', 'Patch cable', 'Dingler etter pila', 'Swings from the arrow', K('skann', 5, '5 skann', '5 scans'), '<path d="M8 6c0 12 14 6 14 16"/><rect x="18" y="22" width="8" height="6"/>'),
   P_('lille-nabe', 'venn', 'Lille NABE', 'Little NABE', 'Følger etter, med klærne på', 'Tags along, clothes on', K('skann', 10, '10 skann', '10 scans'), '<rect x="8" y="9" width="16" height="15" rx="4"/><circle cx="13" cy="15" r="1.6"/><circle cx="19" cy="15" r="1.6"/>'),
+  P_('spor-nabe', 'venn', 'Spør NABE', 'Ask NABE', 'Sitter i snor ved pila. Klikk på ham for å spørre', 'Sits on a leash by the arrow. Click him to ask', null, '<rect x="6" y="10" width="14" height="13" rx="4"/><path d="M24 8c3 0 4 3 2 5s-2 2-2 4M24 21v1"/>'),
   P_('lille-nabo', 'venn', 'Lille NABO', 'Little NABO', 'Naboen kommer på besøk', 'The neighbour comes along', K('varfil', 1, 'Lag én Variabel-fil', 'Make one Variabel file'), '<path d="M6 16l10-8 10 8v9H6z"/>'),
   P_('drone', 'venn', 'Inspeksjonsdrone', 'Inspection drone', 'Svever og vipper etter pila', 'Hovers and tilts after the arrow', K('enheter', 50, 'Finn 50 enheter', 'Find 50 devices'), '<path d="M5 15h22"/><rect x="12" y="13" width="8" height="6" rx="2"/><path d="M2 11h8M22 11h8"/>'),
   P_('flua', 'venn', 'Flua', 'The fly', 'Surrer rundt og lander når du stopper', 'Buzzes around and lands when you stop', null, '<ellipse cx="16" cy="17" rx="4" ry="6"/><ellipse cx="9" cy="12" rx="5" ry="3"/><ellipse cx="23" cy="12" rx="5" ry="3"/>'),

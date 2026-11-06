@@ -177,6 +177,10 @@ const FAKTA = [
   ['COV betyr at regulatoren sier fra selv. Mindre spørring, mer ro.', 'COV means the controller speaks up itself. Less asking, more peace.'],
 ];
 const NYTT = {
+  '1.46': [
+    ['Opptak av punkter: velg punkter, la NABE logge dem i timevis og åpne CSV-fila i Excel. Under ⋯-menyen', 'Recording points: select points, let NABE log them for hours and open the CSV in Excel. Under the ⋯ menu'],
+    ['Spør NABE: finn overstyrte punkter, alarmer og punkter på navn, og få forklart BACnet-ord. Alt skjer på denne PC-en. I paletten, eller som peker i garderoben', 'Ask NABE: find overridden points, alarms and points by name, and get BACnet words explained. It all happens on this PC. In the palette, or as a pointer in the wardrobe'],
+  ],
   '1.45': [
     ['Fullskjerm: knapp øverst til høyre, eller F11', 'Full screen: a button at the top right, or F11'],
   ],
