@@ -177,6 +177,9 @@ const FAKTA = [
   ['COV betyr at regulatoren sier fra selv. Mindre spørring, mer ro.', 'COV means the controller speaks up itself. Less asking, more peace.'],
 ];
 const NYTT = {
+  '1.48': [
+    ['Opprydding i koden', 'A tidy-up in the code'],
+  ],
   '1.47': [
     ['Oppslagsverk i Spør NABE: TFM og tagger per fabrikat, BACnet, Niagara, Regin, TwinCAT, Distech og WAGO', 'A reference in Ask NABE: TFM and tags by make, BACnet, Niagara, Regin, TwinCAT, Distech and WAGO'],
     ['Lokal KI som valg: kjører på PC-en og formulerer svar ut fra oppslagsverket, alltid med kilden under. Uten kilde svarer den ikke. Under Innstillinger, eller i installasjonen', 'Local AI as a choice: runs on the PC and words answers from the reference, always with the source below. Without a source it does not answer. Under Settings, or in the installer'],
