@@ -177,6 +177,9 @@ const FAKTA = [
   ['COV betyr at regulatoren sier fra selv. Mindre spørring, mer ro.', 'COV means the controller speaks up itself. Less asking, more peace.'],
 ];
 const NYTT = {
+  '1.49': [
+    ['Spør NABE følger pila. Går du rolig bort til ham, står han stille så du kan klikke', 'Ask NABE follows the arrow. Go up to him slowly and he holds still so you can click'],
+  ],
   '1.48': [
     ['Opprydding i koden', 'A tidy-up in the code'],
   ],

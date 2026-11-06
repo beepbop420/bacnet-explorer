@@ -3,7 +3,7 @@
    on a closed plant network, and it says so when it does not know. With the
    local AI on, the AI words the answer, but only from a source shown under it,
    and with no source it is not asked. Opened from the palette or by clicking
-   the little NABE on a leash (Garderobe > Peker > Spør NABE). */
+   the little NABE by the arrow (Garderobe > Peker > Spør NABE). */
 'use strict';
 
 (function sporNabe() {

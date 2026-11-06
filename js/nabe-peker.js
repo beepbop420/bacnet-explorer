@@ -108,11 +108,9 @@ const PK = (function motor() {
       start() { s.x.x = s.mx = mus.x + ox; s.y.x = s.my = mus.y + oy; s.x.v = s.y.v = 0; if (o.start) o.start(s); },
       stopp() { if (o.stopp) o.stopp(s); },
       steg(dt) {
-        // On a leash it stays put until the arrow is far off, so it can be reached.
-        if (o.snor) {
-          const dx = mus.x - s.mx, dy = mus.y - s.my, l = Math.hypot(dx, dy);
-          if (l > o.snor) { s.mx += dx * (1 - o.snor * .7 / l); s.my += dy * (1 - o.snor * .7 / l); }
-        } else { s.mx = mus.x + ox; s.my = mus.y + oy; }
+        // A thing to click follows the arrow like the others, but holds still
+        // when the hand slows down nearby, or it could never be caught.
+        if (!o.snor || fart() > 260 || Math.hypot(mus.x - s.x.x, mus.y - s.y.x) > o.snor) { s.mx = mus.x + ox; s.my = mus.y + oy; }
         fjaer(s.x, s.mx, k, d, dt); fjaer(s.y, s.my, k, d, dt);
         const v = Math.hypot(s.x.v, s.y.v);
         if (v > 40) s.vinkel = Math.atan2(s.y.v, s.x.v);
