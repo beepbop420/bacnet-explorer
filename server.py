@@ -2888,7 +2888,10 @@ def _ki_installer() -> None:
                 raise ValueError("sjekksum")
             os.replace(del_, fil)
         KI["steg"] = "test"
-        r = _ki_spor({"sporsmal": "Hva er en BBMD?", "kilder": ["BBMD sender BACnet-kringkasting videre mellom IP-nett."], "maks": 48})
+        # Twice: the first run pays for loading and reads the prompt, and on a fast
+        # PC measured 2.9 tokens a second where the true figure was 8.
+        for _ in range(2):
+            r = _ki_spor({"sporsmal": "Forklar BBMD i tre setninger.", "kilder": ["BBMD sender BACnet-kringkasting videre mellom IP-nett."], "maks": 64})
         if "feil" in r:
             raise RuntimeError(r["feil"])
         KI.update(tok_s=r["tok_s"], tilstand="klar" if r["tok_s"] >= KI_TREG else "treg", steg="")
