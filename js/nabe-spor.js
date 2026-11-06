@@ -3,7 +3,7 @@
    on a closed plant network, and it says so when it does not know. With the
    local AI on, the AI words the answer, but only from a source shown under it,
    and with no source it is not asked. Opened from the palette or by clicking
-   the little NABE by the arrow (Garderobe > Peker > Spør NABE). */
+   the speech bubble of the little NABE by the arrow (Garderobe > Peker > Spør NABE). */
 'use strict';
 
 (function sporNabe() {
@@ -96,7 +96,7 @@
   }
 
   let lag = null, kiNeste = null;
-  function lukk() { if (lag) lag.hidden = true; }
+  function lukk() { if (lag) lag.hidden = true; PK.ro.hold = false; }
   async function spor(q) {
     if (!q.trim()) return;
     const ut = lag.querySelector('.sp-svar');
@@ -105,7 +105,7 @@
     const n = ++nr;
     if (kiNeste) { kiOver(kiNeste.q, kiNeste.kilder, n); kiNeste = null; }
   }
-  function aapne() {
+  function aapne(ved) {
     if (!lag) {
       lag = document.createElement('div');
       lag.id = 'sporNabe';
@@ -131,8 +131,71 @@
       <input class="field" type="text" placeholder="${esc(T('Spør om anlegget eller et BACnet-ord', 'Ask about the site or a BACnet word'))}" autocomplete="off" spellcheck="false">
       <div class="sp-svar"><div class="sp-forslag">${FORSLAG.map(([nb, en]) => `<button type="button" class="btn" data-forslag="${esc(T(nb, en))}">${esc(T(nb, en))}</button>`).join('')}</div></div>`;
     lag.hidden = false;
+    // From the bubble it opens where the bubble was, as more of the same.
+    const her = ved && ved.left !== undefined;
+    lag.classList.toggle('ved', !!her);
+    lag.style.left = lag.style.top = '';
+    if (her) {
+      const b = lag.offsetWidth, hoyde = Math.min(520, innerHeight * .8);
+      lag.style.left = `${Math.max(12, Math.min(ved.left, innerWidth - b - 12))}px`;
+      lag.style.top = `${Math.max(12, Math.min(ved.top, innerHeight - hoyde - 12))}px`;
+    }
     lag.querySelector('input').focus();
   }
+
+  /* The bubble. It comes when the mouse has rested a moment and NABE is at the
+     arrow, it stands still so it can be hit, and he stands still with it. Left
+     alone it goes, and each time it is left alone it waits longer before
+     the next, up to five minutes. A click starts that over. Nothing here moves
+     unless the Ask NABE pointer is chosen. */
+  const boble = document.createElement('button');
+  boble.type = 'button';
+  boble.id = 'sporBoble';
+  boble.hidden = true;
+  document.body.append(boble);
+  const HVILE = 1800, VARER = 7000;
+  let hvile = 0, borte = 0, pause = 15000, ledig = 0;
+  const skjul = (ignorert) => {
+    if (boble.hidden) return;
+    boble.hidden = true;
+    clearTimeout(borte);
+    if (!lag || lag.hidden) PK.ro.hold = false;
+    if (ignorert) { ledig = Date.now() + pause; pause = Math.min(pause * 2, 300000); }
+  };
+  const opptatt = () => (lag && !lag.hidden) || document.body.classList.contains('skanner')
+    || [...document.querySelectorAll('.gs-overlay')].some(o => !o.hidden)
+    || /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName || '');
+  function vis() {
+    if (PK.tilstand().id !== 'spor-nabe' || Date.now() < ledig || opptatt()) return;
+    const f = PK.fig.getBoundingClientRect();
+    boble.textContent = T('Spør meg', 'Ask me');
+    boble.hidden = false;
+    PK.ro.hold = true;
+    const b = boble.offsetWidth, venstre = f.right + 8 + b > innerWidth - 8;
+    boble.classList.toggle('venstre', venstre);
+    boble.style.left = `${venstre ? f.left - b - 8 : f.right + 8}px`;
+    boble.style.top = `${Math.max(8, f.top - 6)}px`;
+    borte = setTimeout(() => skjul(true), VARER);
+  }
+  document.addEventListener('pointermove', (e) => {
+    clearTimeout(hvile);
+    if (e.pointerType !== 'mouse') return;
+    if (!boble.hidden) {
+      // Going towards it is fine. Well past it is a no.
+      const r = boble.getBoundingClientRect();
+      if (Math.hypot(e.clientX - (r.left + r.width / 2), e.clientY - (r.top + r.height / 2)) > 240) skjul(true);
+      return;
+    }
+    hvile = setTimeout(vis, HVILE);
+  }, {passive: true});
+  document.addEventListener('pointerdown', (e) => { clearTimeout(hvile); if (e.target !== boble) skjul(false); }, {passive: true});
+  boble.onclick = () => {
+    const r = boble.getBoundingClientRect();
+    pause = 15000; ledig = 0;
+    skjul(false);
+    PK.ro.hold = true;
+    aapne(r);
+  };
   /* The setting: install, watch it come, take it away again. */
   const KI_TEKST = {motor: ['henter motor', 'fetching engine'], modell: ['laster ned', 'downloading'], sjekk: ['sjekker fila', 'checking the file'], test: ['måler farten', 'measuring speed']};
   let kiVakt = 0;
@@ -163,6 +226,5 @@
   };
   etter('openTema', kiVis);
   kiVis();
-  window.aapneSpor = aapne;
-  PK.fig.addEventListener('click', aapne);
+  window.aapneSpor = () => aapne();
 })();

@@ -36,6 +36,7 @@ const PK = (function motor() {
 
   // d is how far the mouse went this frame: streams are spent by distance, so
   // they end when the hand stops.
+  const ro = {hold: false};
   const mus = {x: 0, y: 0, px: 0, py: 0, vx: 0, vy: 0, d: 0, inne: false, sist: 0, tekst: false};
   const fjaer = (s, maal, k, d, dt) => { s.v += (k * (maal - s.x) - d * s.v) * dt; s.x += s.v * dt; };
   const f = (x) => ({x, v: 0});
@@ -108,9 +109,8 @@ const PK = (function motor() {
       start() { s.x.x = s.mx = mus.x + ox; s.y.x = s.my = mus.y + oy; s.x.v = s.y.v = 0; if (o.start) o.start(s); },
       stopp() { if (o.stopp) o.stopp(s); },
       steg(dt) {
-        // A thing to click follows the arrow like the others, but holds still
-        // when the hand slows down nearby, or it could never be caught.
-        if (!o.snor || fart() > 260 || Math.hypot(mus.x - s.x.x, mus.y - s.y.x) > o.snor) { s.mx = mus.x + ox; s.my = mus.y + oy; }
+        // Ask NABE stands still while his speech bubble is out.
+        if (!(o.snor && ro.hold)) { s.mx = mus.x + ox; s.my = mus.y + oy; }
         fjaer(s.x, s.mx, k, d, dt); fjaer(s.y, s.my, k, d, dt);
         const v = Math.hypot(s.x.v, s.y.v);
         if (v > 40) s.vinkel = Math.atan2(s.y.v, s.x.v);
@@ -255,5 +255,5 @@ const PK = (function motor() {
   mal(); lesFarger();
   etter('brukBevegelse', () => bruk(pekerValgt()));
   $('pekerBtn').onclick = () => { $('temaOverlay').hidden = true; aapneGarderobe('peker'); };
-  return {c, mus, farge, flate, fig, fjaer, f, klem, fart, tilf, strom, spor, folger, tau, STIL, bruk, tilstand: () => ({id, gaar})};
+  return {c, mus, farge, flate, fig, ro, fjaer, f, klem, fart, tilf, strom, spor, folger, tau, STIL, bruk, tilstand: () => ({id, gaar})};
 })();
