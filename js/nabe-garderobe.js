@@ -173,7 +173,14 @@ function aapneGarderobe(fane) {
     lag.setAttribute('aria-modal', 'true');
     document.body.appendChild(lag);
     lag.addEventListener('click', gardKlikk);
-    document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !lag.hidden) { lag.hidden = true; e.stopPropagation(); } }, true);
+    // Pointing at a pointer tries it; leaving the catalog goes back to your own.
+    lag.addEventListener('pointerover', (e) => {
+      if (lag.dataset.fane !== 'peker') return;
+      const k = e.target.closest('[data-peker]');
+      const ny = k ? k.dataset.peker : (e.target.closest('.gd-katalog') ? null : pekerValgt());
+      if (ny && ny !== PK.tilstand().id) PK.bruk(ny);
+    });
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !lag.hidden) { lag.hidden = true; PK.bruk(pekerValgt()); e.stopPropagation(); } }, true);
   }
   lag.dataset.fane = fane || lag.dataset.fane || 'nabe';
   tegnGarderobe();
@@ -241,15 +248,16 @@ function tegnGarderobe() {
 
 function gardKlikk(e) {
   const lag = $('gardOverlay');
-  if (e.target === lag || e.target.closest('.gs-close')) { lag.hidden = true; return; }
+  if (e.target === lag || e.target.closest('.gs-close')) { lag.hidden = true; PK.bruk(pekerValgt()); return; }
   const fane = e.target.closest('[data-fane]');
   if (fane && fane.getAttribute('role') === 'tab') { lag.dataset.fane = fane.dataset.fane; tegnGarderobe(); return; }
   const pk = e.target.closest('[data-peker]');
   if (pk) {
     if (pk.classList.contains('laast')) return;
     gardLagre({peker: pk.dataset.peker});
-    PEKER.bruk(pk.dataset.peker);
+    const rull = lag.querySelector('.gd-katalog')?.scrollTop || 0;
     tegnGarderobe();
+    if (lag.querySelector('.gd-katalog')) lag.querySelector('.gd-katalog').scrollTop = rull;
     return;
   }
   if (e.target.id === 'gdArb') { gardLagre({arbeidsklaer: e.target.checked}); kleAlle(); return; }
@@ -468,3 +476,5 @@ window.aapneGarderobe = aapneGarderobe;
   });
 })();
 document.addEventListener('click', (e) => { if (e.target.closest && e.target.closest('#gardBtn')) { document.body.click(); aapneGarderobe(); } });
+// Last script in: the catalog and the brothers' drawings are here now.
+PK.bruk(pekerValgt());
