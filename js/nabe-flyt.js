@@ -1,7 +1,7 @@
 /* NABE - flow. The device list is drawn anew each time, so nothing in it can
    move by itself: a row that changes place would jump. Here each row starts
    from where it stood and glides to where it landed. The points glide in when
-   you change controller, and the window's title bar takes the app's colours. */
+   you change controller, and the window's title bar joins the band across the top. */
 (function flyt() {
   const fjaer = getComputedStyle(document.documentElement).getPropertyValue('--fjaer').trim() || 'ease-out';
 
@@ -41,8 +41,8 @@
     const api = window.pywebview && window.pywebview.api;
     if (!api || !api.tittellinje) return;
     const s = getComputedStyle(document.documentElement);
-    api.tittellinje(s.getPropertyValue('--bg').trim(), s.getPropertyValue('--fg').trim(),
-                    s.getPropertyValue('--line').trim(), document.documentElement.dataset.theme !== 'light');
+    const merke = s.getPropertyValue('--merke').trim();
+    api.tittellinje(merke, '#ffffff', merke, true);
   };
   etter('applyTheme', tittellinje);
   window.addEventListener('pywebviewready', tittellinje);

@@ -2123,12 +2123,13 @@ function renderCtx() {
     <div class="ctx-tittel">
       <span class="ctx-name">${esc(d.object_name || String(d.device_instance ?? '?'))}</span>
       <span class="ctx-under">
-        <span class="vendor" style="--vc:${v.color};flex:0 0 auto"><i></i><span>${esc(v.label)}</span></span>
-        <span class="ctx-id">${d.device_instance ?? '?'}</span>
-        <button type="button" class="ctx-ip ctx-web" data-web="${esc(d.address)}" title="${esc(T('Åpne webgrensesnittet til regulatoren', 'Open the controller’s web interface'))}">${esc(d.address)}<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M5 2H2.5v7.5H10V7M7 2h3v3M10 2 5.6 6.4"/></svg></button>
+        <span class="tf"><small>${T('Leverandør', 'Vendor')}</small><span class="vendor" style="--vc:${v.color};flex:0 0 auto"><i></i><span>${esc(v.label)}</span></span></span>
+        <span class="tf"><small>${T('Instans', 'Instance')}</small><span class="ctx-id">${d.device_instance ?? '?'}</span></span>
+        <span class="tf"><small>${T('Adresse', 'Address')}</small><button type="button" class="ctx-ip ctx-web" data-web="${esc(d.address)}" title="${esc(T('Åpne webgrensesnittet til regulatoren', 'Open the controller’s web interface'))}">${esc(d.address)}<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M5 2H2.5v7.5H10V7M7 2h3v3M10 2 5.6 6.4"/></svg></button></span>
+        <span class="tf"><small>${T('Punkter', 'Points')}</small><b>${S.points.length}</b></span>
+        ${writable ? `<span class="tf"><small>${T('Skrivbare', 'Writable')}</small><b>${writable}</b></span>` : ''}
         ${identBadge(d.address)}
         ${clockBadge(d.address)}
-        <span class="ctx-tall">${S.points.length} ${T('punkter', 'points')}${writable ? ` · ${writable} ${T('skrivbare', 'writable')}` : ''}</span>
       </span>
     </div>
     ${(S.namePrefix && loadPrefs().shortNames !== false) ? `<span class="ctx-prefix" title="${T('Alle punktnavn på denne enheten starter med dette. Det er utelatt fra tabellen for lesbarhet — hold over et navn for å se det fullt ut.', 'Every point name on this device starts with this. It is left out of the table to keep it readable — hover a name to see it in full.')}">${esc(S.namePrefix)}…</span>` : ''}

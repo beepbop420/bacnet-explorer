@@ -177,6 +177,11 @@ const FAKTA = [
   ['COV betyr at regulatoren sier fra selv. Mindre spørring, mer ro.', 'COV means the controller speaks up itself. Less asking, more peace.'],
 ];
 const NYTT = {
+  '1.44': [
+    ['NABE har fått sitt eget ansikt: et flatt blått bånd over toppen som går i ett med tittellinja, Lexend som skrift og hvit hovedknapp', 'NABE has its own face now: a flat blue band across the top that runs into the title bar, Lexend as the typeface and a white main button'],
+    ['Enhetsoverskriften er satt som tittelfeltet på en tegning: leverandør, instans, adresse, punkter og skrivbare i egne felt', 'The device heading is set like the title block on a drawing: vendor, instance, address, points and writable in fields of their own'],
+    ['Valgt enhet står i blått, og verdien i inspektøren er større', 'The selected device stands in blue, and the value in the inspector is larger'],
+  ],
   '1.43': [
     ['Alt beveger seg likt nå: dialoger og menyer kommer med en ekte fjær, litt forbi målet og tilbake', 'Everything moves alike now: dialogs and menus arrive on a real spring, a little past the target and back'],
     ['Enheter som bytter plass i lista glir dit i stedet for å hoppe, og punktene glir inn når du bytter enhet', 'Devices that change place in the list glide there instead of jumping, and the points glide in when you change device'],

@@ -4803,6 +4803,43 @@ body.uten-bevegelse .plagg-flamme{animation:none}
 .ss-h{font-size:10.5px;color:var(--fg-3);padding:1px 6px;border-radius:4px;background:var(--panel);border:1px solid var(--line)}
 .ss-h:hover{color:var(--fg);border-color:var(--line-2)}
 .ss-h.fare:hover{color:var(--err)}
+
+/* ---------------------------------------------------------------- the mark
+   NABE's own face, taken from the trade's documents instead of from a dark
+   theme: one flat band of Nordomatic Blue across the top in both themes, Lexend,
+   a white button on dark, and the device heading set like the title block on
+   a drawing - small label over value, hairlines between. Blue means "this is
+   NABE, and this is what you have selected"; nothing else gets it. */
+:root{--merke:#282071;--merke-2:#3a3192;--merke-tekst:#fff;
+  --sans:"Lexend","Segoe UI Variable Text","Segoe UI",system-ui,sans-serif}
+.topbar{background:var(--merke);border-bottom:0;color:#fff}
+.topbar .btn,.topbar a,.topbar button{color:rgba(255,255,255,.86)}
+.topbar .btn:hover:not(:disabled),.topbar button:hover:not(:disabled){color:#fff;background:rgba(255,255,255,.12)}
+.topbar .brand,.topbar .brand-text b{color:#fff}
+.btn.primary{background:#fff;border-color:#fff;color:var(--merke);font-weight:600}
+.btn.primary:hover:not(:disabled){background:#e4e3f3;border-color:#e4e3f3}
+:root[data-theme="light"] .btn.primary,:root[data-theme="light"] .btn.primary:not(.topbar .btn){background:var(--merke);border-color:var(--merke);color:#fff}
+:root[data-theme="light"] .btn.primary:hover:not(:disabled){background:var(--merke-2);border-color:var(--merke-2)}
+#devList .dev.sel,#devList .dev.sel:hover,:root.levfarge #devList .dev.sel{background:var(--merke);box-shadow:none;color:#fff}
+#devList .dev.sel *,:root[data-theme="light"] #devList .dev.sel *{color:rgba(255,255,255,.9)}
+.tb-sok{background:rgba(255,255,255,.1);border-color:rgba(255,255,255,.16);color:rgba(255,255,255,.86)}
+.tb-sok:hover{background:rgba(255,255,255,.16);color:#fff}
+.tb-sok kbd{color:rgba(255,255,255,.7);border-color:rgba(255,255,255,.25)}
+.filterbar{flex-wrap:nowrap;gap:2px}
+.filterbar #q{flex:1 1 150px;min-width:90px;width:auto}
+.filterbar .btn{padding-inline:8px;white-space:nowrap}
+.filterbar #typeSel{flex:0 1 112px;min-width:80px}
+.tf .vendor{background:none!important;border:0;padding:0;font-weight:400}
+.ctx-bar .ctx-name{font-size:24px;font-weight:500;letter-spacing:-.015em}
+.ctx-tittel{gap:9px}
+.ctx-under{gap:0;overflow:visible;flex-wrap:wrap;row-gap:6px}
+.tf{display:flex;flex-direction:column;gap:2px;padding:0 16px;border-left:1px solid var(--line-2);min-width:0}
+.tf:first-child{padding-left:0;border-left:0}
+.tf>small{font-size:10px;line-height:1.2;color:var(--fg-3);font-weight:400}
+.tf>b,.tf .ctx-id,.tf .ctx-ip{font-family:var(--mono);font-size:12px;line-height:1.3;font-weight:500;color:var(--fg);font-variant-numeric:tabular-nums}
+.tf .vendor{font-size:12px;color:var(--fg);padding:0;background:none;border:0}
+.insp-val{font-family:var(--sans);font-size:34px;font-weight:500;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+tbody td{font-variant-numeric:tabular-nums}
 </style>
 </head>
 <body>
@@ -5287,6 +5324,7 @@ body.uten-bevegelse .plagg-flamme{animation:none}
 </div>
 <input id="edeFile" type="file" accept=".csv,.txt" hidden>
 <div id="naboOverlay" class="gs-overlay nabo-overlay" role="dialog" aria-modal="true" aria-label="NABO" hidden></div>
+<script src="/js/nabe-skrift.js"></script>
 <script src="/app.js"></script>
 <script src="/js/nabe-start.js"></script>
 <script src="/js/nabe-verktoy.js"></script>
