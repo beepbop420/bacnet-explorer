@@ -129,10 +129,6 @@ def main():
     server = uvicorn.Server(config)
     traad = threading.Thread(target=server.run, daemon=True)
     traad.start()
-    for _ in range(200):
-        if server.started:
-            break
-        time.sleep(0.05)
 
     # The window comes back where it was left - maximised if it was, and
     # maximised the first time. A position Windows gives a minimised window
@@ -179,7 +175,7 @@ def main():
             return valgt[0] if valgt else None
 
     vindu = webview.create_window(
-        "NABE", base, width=geo.get("b", 1440), height=geo.get("h", 900),
+        "NABE", html="<body style='background:#111113'></body>", width=geo.get("b", 1440), height=geo.get("h", 900),
         x=geo.get("x"), y=geo.get("y"), min_size=(960, 600), maximized=TILSTAND["maks"],
         background_color="#111113", text_select=True, js_api=Api())
 
@@ -242,6 +238,16 @@ def main():
     vindu.events.closing += lukker
     vindu.events.closed += lambda: setattr(server, "should_exit", True)
     vindu.events.shown += lambda: sett_ikon("NABE", HER / "nabe.ico")
+
+    # The window and the server take about a second each, so they start side by
+    # side, and the page is loaded as soon as both are there.
+    def side():
+        for _ in range(400):
+            if server.started:
+                break
+            time.sleep(0.03)
+        vindu.load_url(base)
+    vindu.events.shown += lambda: threading.Thread(target=side, daemon=True).start()
     # Without this, WebView2 in pywebview drops every download from the page
     # without a word - the EDE and CSV exports would go nowhere.
     webview.settings["ALLOW_DOWNLOADS"] = True

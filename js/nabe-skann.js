@@ -537,6 +537,8 @@ function spill(el, k, ms) {
 })();
 
 /* ----------------------------------------------- progress in the field */
+// The count sits inside the field, so the text has to give it room.
+const feltPlass = (el) => { $('rangeInput').style.paddingRight = el.textContent ? `${el.offsetWidth + 16}px` : ''; };
 const _skannEtt = scanOneRange;
 scanOneRange = function (subnet, mode, thorough, onProgress) {
   return _skannEtt.call(this, subnet, mode, thorough, (j) => {
@@ -545,9 +547,10 @@ scanOneRange = function (subnet, mode, thorough, onProgress) {
     if (!el) return;
     const svar = S.devices.length;
     el.textContent = j.total
-      ? T(`${j.done}/${j.total} · ${svar} svar`, `${j.done}/${j.total} · ${svar} replies`)
-      : T(`${svar} svar`, `${svar} replies`);
+      ? `${j.done}/${j.total} · ${svar}`
+      : String(svar);
     el.classList.add('aktiv');
+    feltPlass(el);
     if (svar > SK.svar) { SK.svar = svar; spill(el, 'bump', 260); }
   });
 };
@@ -581,7 +584,8 @@ runScan = async function () {
       el.classList.add('ferdig');
       if (!n) spill(ri, 'nei', 420);
       clearTimeout(el.t);
-      el.t = setTimeout(() => { el.classList.remove('aktiv', 'ferdig'); el.textContent = ''; }, 3200);
+      feltPlass(el);
+      el.t = setTimeout(() => { el.classList.remove('aktiv', 'ferdig'); el.textContent = ''; feltPlass(el); }, 3200);
     }
     tegnListe();
   }

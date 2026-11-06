@@ -3,10 +3,29 @@
    on a closed plant network, and it says so when it does not know. With the
    local AI on, the AI words the answer, but only from a source shown under it,
    and with no source it is not asked. Opened from the palette or by clicking
-   the speech bubble of the little NABE by the arrow (Garderobe > Peker > Spør NABE). */
+   the little NABE by the arrow (Garderobe > Peker > Spør NABE), who then talks in a speech bubble. */
 'use strict';
 
 (function sporNabe() {
+  const pluss = (l) => { const [nb, en] = l[Math.floor(Math.random() * l.length)]; return T(nb, en); };
+  const HILSEN = [
+    ['Ja? Jeg telte akkurat til 47808.', 'Yes? I had just counted to 47808.'],
+    ['Du vekket meg. Håper det er en god grunn.', 'You woke me. I hope it is for a good reason.'],
+    ['Spør i vei. Jeg later som jeg tenker.', 'Ask away. I will pretend to think.'],
+    ['NABO sier du burde spurt ham. Han tar feil.', 'NABO says you should have asked him. He is wrong.'],
+    ['Takk for at du stoppet. Jeg er ikke laget for løping.', 'Thanks for stopping. I was not built for running.'],
+    ['Hvis det gjelder prioritet 8, var det ikke meg.', 'If this is about priority 8, it was not me.'],
+  ];
+  const VET_IKKE = [
+    ['Det står ikke i boka mi. Jeg spurte NABO, og han sa ping.', 'That is not in my book. I asked NABO, and he said ping.'],
+    ['Aner ikke. Men jeg nikker overbevisende.', 'No idea. But I am nodding convincingly.'],
+    ['Der gikk jeg tom. Prøv med et ord fra faget.', 'I am out of ideas. Try a word from the trade.'],
+  ];
+  const INGEN = [
+    ['Mistenkelig stille.', 'Suspiciously quiet.'],
+    ['Enten er alt bra, eller så har noen koblet fra ledningen.', 'Either all is well, or someone has pulled the wire.'],
+    ['Jeg sjekket to ganger. Det ene var på liksom.', 'I checked twice. Once was pretend.'],
+  ];
   const FORSLAG = [['Hva er overstyrt?', 'What is overridden?'], ['Er noe i alarm?', 'Is anything in alarm?'], ['Hvor mange punkter?', 'How many points?'], ['Hva betyr prioritet 8?', 'What does priority 8 mean?'], ['Finn RT401', 'Find RT401']];
 
   /* The reference: words of the question against an article's own words,
@@ -52,7 +71,7 @@
   const flagg = (f, nb, en) => {
     const t = alle().filter(({p}) => hasFlag(p, f));
     return t.length ? `<p>${T(`${t.length} ${nb} ${lestAv()}:`, `${t.length} ${en} ${lestAv()}:`)}</p>${liste(t)}`
-                    : `<p>${T(`Ingen ${nb} ${lestAv()}.`, `None ${en} ${lestAv()}.`)}</p>`;
+                    : `<p>${T(`Ingen ${nb} ${lestAv()}.`, `None ${en} ${lestAv()}.`)} ${pluss(INGEN)}</p>`;
   };
   const sok = (ord) => {
     const o = ord.toLowerCase().split(/\s+/).filter(x => x.length > 1);
@@ -92,11 +111,11 @@
     const treff = sok(ren);
     if (treff.length) return `<p>${T(`${treff.length} treff ${lestAv()}:`, `${treff.length} hits ${lestAv()}:`)}</p>${liste(treff)}`;
     if (kilder.length) return kilde();
-    return `<p>${T('Det vet jeg ikke. Jeg finner bare det NABE har lest, og det som står i oppslagsverket.', 'I do not know that. I only find what NABE has read, and what is in the reference.')}</p>`;
+    return `<p>${pluss(VET_IKKE)}</p>`;
   }
 
   let lag = null, kiNeste = null;
-  function lukk() { if (lag) lag.hidden = true; PK.ro.hold = false; }
+  function lukk() { if (lag) lag.hidden = true; PK.ro.hold = false; PK.fig.classList.remove('klikkbar'); }
   async function spor(q) {
     if (!q.trim()) return;
     const ut = lag.querySelector('.sp-svar');
@@ -129,78 +148,46 @@
     }
     lag.innerHTML = `<div class="sp-topp"><span class="gd-tittel">${T('Spør NABE', 'Ask NABE')}</span><button class="gs-close"><span class="lbl">${T('Lukk', 'Close')}</span> ✕</button></div>
       <input class="field" type="text" placeholder="${esc(T('Spør om anlegget eller et BACnet-ord', 'Ask about the site or a BACnet word'))}" autocomplete="off" spellcheck="false">
-      <div class="sp-svar"><div class="sp-forslag">${FORSLAG.map(([nb, en]) => `<button type="button" class="btn" data-forslag="${esc(T(nb, en))}">${esc(T(nb, en))}</button>`).join('')}</div></div>`;
+      <div class="sp-svar">${ved && ved.left !== undefined ? `<p class="sp-hilsen">${esc(pluss(HILSEN))}</p>` : ''}<div class="sp-forslag">${FORSLAG.map(([nb, en]) => `<button type="button" class="btn" data-forslag="${esc(T(nb, en))}">${esc(T(nb, en))}</button>`).join('')}</div></div>`;
     lag.hidden = false;
     // From the bubble it opens where the bubble was, as more of the same.
     const her = ved && ved.left !== undefined;
     lag.classList.toggle('ved', !!her);
-    lag.style.left = lag.style.top = '';
+    lag.style.left = lag.style.top = lag.style.maxHeight = '';
     if (her) {
-      const b = lag.offsetWidth, hoyde = Math.min(520, innerHeight * .8);
+      const b = lag.offsetWidth, topp = Math.max(12, Math.min(ved.top, innerHeight - 300));
       lag.style.left = `${Math.max(12, Math.min(ved.left, innerWidth - b - 12))}px`;
-      lag.style.top = `${Math.max(12, Math.min(ved.top, innerHeight - hoyde - 12))}px`;
+      lag.style.top = `${topp}px`;
+      lag.style.maxHeight = `${innerHeight - topp - 12}px`;
     }
     lag.querySelector('input').focus();
   }
 
-  /* The bubble. It comes when the mouse has rested a moment and NABE is at the
-     arrow, it stands still so it can be hit, and he stands still with it. Left
-     alone it goes, and each time it is left alone it waits longer before
-     the next, up to five minutes. A click starts that over. Nothing here moves
-     unless the Ask NABE pointer is chosen. */
-  const boble = document.createElement('button');
-  boble.type = 'button';
-  boble.id = 'sporBoble';
-  boble.hidden = true;
-  document.body.append(boble);
-  const HVILE = 1200, VARER = 7000;
-  let hvile = 0, borte = 0, pause = 15000, ledig = 0, sistTast = 0, roX = 0, roY = 0;
-  // A field can hold the focus for hours; only typing means you are busy.
-  document.addEventListener('keydown', () => { sistTast = Date.now(); }, true);
-  const skjul = (ignorert) => {
-    if (boble.hidden) return;
-    boble.hidden = true;
-    clearTimeout(borte);
-    if (!lag || lag.hidden) PK.ro.hold = false;
-    if (ignorert) { ledig = Date.now() + pause; pause = Math.min(pause * 2, 300000); }
-  };
-  const opptatt = () => (lag && !lag.hidden) || document.body.classList.contains('skanner')
-    || [...document.querySelectorAll('.gs-overlay')].some(o => !o.hidden)
-    || Date.now() - sistTast < 4000;
-  function vis() {
-    if (PK.tilstand().id !== 'spor-nabe' || Date.now() < ledig || opptatt()) return;
-    const f = PK.fig.getBoundingClientRect();
-    boble.textContent = T('Spør meg', 'Ask me');
-    boble.hidden = false;
-    PK.ro.hold = true;
-    const b = boble.offsetWidth, venstre = f.right + 8 + b > innerWidth - 8;
-    boble.classList.toggle('venstre', venstre);
-    boble.style.left = `${venstre ? f.left - b - 8 : f.right + 8}px`;
-    boble.style.top = `${Math.max(8, f.top - 6)}px`;
-    borte = setTimeout(() => skjul(true), VARER);
-  }
+  /* Standing still for him. He follows the arrow while the hand moves; rest it
+     a moment and he stops right beside it and can be clicked, and stays until
+     the arrow is well away. Nothing pops up: he is just there to be caught. */
+  const fig = PK.fig, HVILE = 350, SLIPP = 170;
+  let hvile = 0, roX = 0, roY = 0;
+  const stans = () => { if (PK.tilstand().id === 'spor-nabe') { PK.ro.hold = true; fig.classList.add('klikkbar'); } };
+  const slipp = () => { PK.ro.hold = false; fig.classList.remove('klikkbar'); };
   document.addEventListener('pointermove', (e) => {
     if (e.pointerType !== 'mouse') return;
-    // A hand on a mouse is never quite still: a few pixels is still resting.
-    if (boble.hidden && Math.hypot(e.clientX - roX, e.clientY - roY) < 6) return;
-    roX = e.clientX; roY = e.clientY;
-    clearTimeout(hvile);
-    if (!boble.hidden) {
-      // Going towards it is fine. Well past it is a no.
-      const r = boble.getBoundingClientRect();
-      if (Math.hypot(e.clientX - (r.left + r.width / 2), e.clientY - (r.top + r.height / 2)) > 240) skjul(true);
+    if (PK.ro.hold) {
+      if (lag && !lag.hidden) return;
+      const r = fig.getBoundingClientRect();
+      if (Math.hypot(e.clientX - r.left - 15, e.clientY - r.top - 15) > SLIPP) slipp();
       return;
     }
-    hvile = setTimeout(vis, HVILE);
+    // A hand on a mouse is never quite still: a few pixels is still resting.
+    if (Math.hypot(e.clientX - roX, e.clientY - roY) < 6) return;
+    roX = e.clientX; roY = e.clientY;
+    clearTimeout(hvile);
+    hvile = setTimeout(stans, HVILE);
   }, {passive: true});
-  document.addEventListener('pointerdown', (e) => { clearTimeout(hvile); if (e.target !== boble) skjul(false); }, {passive: true});
-  boble.onclick = () => {
-    const r = boble.getBoundingClientRect();
-    pause = 15000; ledig = 0;
-    skjul(false);
-    PK.ro.hold = true;
-    aapne(r);
-  };
+  fig.addEventListener('click', () => {
+    const r = fig.getBoundingClientRect();
+    aapne({left: r.right + 12, top: r.top - 8});
+  });
   /* The setting: install, watch it come, take it away again. */
   const KI_TEKST = {motor: ['henter motor', 'fetching engine'], modell: ['laster ned', 'downloading'], sjekk: ['sjekker fila', 'checking the file'], test: ['måler farten', 'measuring speed']};
   let kiVakt = 0;
@@ -235,7 +222,6 @@
      button that stays in the top bar, and Ctrl+J. */
   const veksle = () => {
     if (lag && !lag.hidden) { lukk(); return; }
-    skjul(false);
     aapne();
   };
   $('sporBtn').onclick = veksle;

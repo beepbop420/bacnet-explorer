@@ -196,7 +196,7 @@ def t(nb: str, en: str) -> str:
     return en if SPRAAK_VAR.get() == "en" else nb
 
 
-VERSJON = "1.50"
+VERSJON = "1.51"
 
 state = {"app": None, "local_address": None, "read_only": False, "bbmd": None}
 
@@ -484,6 +484,21 @@ _RUTE_LINJE = re.compile(
     r"^\s*(\d+\.\d+\.\d+\.\d+)\s+(\d+\.\d+\.\d+\.\d+)\s+(.+?)\s+(\d+\.\d+\.\d+\.\d+)\s+(\d+)\s*$")
 
 
+_RUTETEKST: Dict[str, Any] = {"t": 0.0, "tekst": ""}
+_RUTELAS = threading.Lock()
+
+
+def _rutetabell() -> str:
+    """`route print` takes about a second, and the start page asks once per
+    adapter, twice: measured eight of them side by side. One answer serves all."""
+    with _RUTELAS:
+        if time.time() - _RUTETEKST["t"] > 4:
+            ut = subprocess.run(["route", "print", "-4"], capture_output=True, timeout=4,
+                                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+            _RUTETEKST.update(t=time.time(), tekst=ut.stdout.decode("oem" if os.name == "nt" else "utf-8", errors="replace"))
+        return _RUTETEKST["tekst"]
+
+
 def ruter_via(ip: str) -> List[Dict[str, Any]]:
     """
     The networks Windows sends out through the adapter that has `ip`.
@@ -494,9 +509,7 @@ def ruter_via(ip: str) -> List[Dict[str, Any]]:
     localised, so lines are matched on their shape instead.
     """
     try:
-        ut = subprocess.run(["route", "print", "-4"], capture_output=True, timeout=4,
-                            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
-        tekst = ut.stdout.decode("oem" if os.name == "nt" else "utf-8", errors="replace")
+        tekst = _rutetabell()
     except Exception:
         return []
     egen = ipaddress.IPv4Address(ip)
@@ -1231,7 +1244,9 @@ async def scan_unicast_sweep(bacnet_app, hosts: List[str],
             # long patient pass: measured 104 s against 2-4 minutes for the
             # old 4-concurrent/12-second retry, with more attempts per
             # address rather than fewer.
-            plan += [(6, 1.0, 0.0)] * 3
+            # Twenty at a time is still under a third of the first pass's rate,
+            # and a /24 goes from about two minutes to about thirty seconds.
+            plan += [(20, 0.8, 0.0)] * 3
 
     total_work = sum(len(hosts) if i == 0 else 0 for i in range(len(plan))) or len(hosts)
     if job is not None:
@@ -2244,9 +2259,7 @@ def rutetabell() -> List[tuple]:
         return _RUTER["liste"]
     liste = []
     try:
-        ut = subprocess.run(["route", "print", "-4"], capture_output=True, timeout=4,
-                            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
-        tekst = ut.stdout.decode("oem" if os.name == "nt" else "utf-8", errors="replace")
+        tekst = _rutetabell()
         for linje in tekst.splitlines():
             m = _RUTE_LINJE.match(linje)
             if not m:

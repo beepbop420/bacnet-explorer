@@ -177,8 +177,10 @@ const FAKTA = [
   ['COV betyr at regulatoren sier fra selv. Mindre spørring, mer ro.', 'COV means the controller speaks up itself. Less asking, more peace.'],
 ];
 const NYTT = {
-  '1.50': [
-    ['Spør NABE har fått en fast knapp øverst til høyre og Ctrl+J. Med Spør NABE-pekeren kommer også en snakkeboble når du hviler musa', 'Ask NABE has a fixed button at the top right and Ctrl+J. With the Ask NABE pointer a speech bubble also comes up when you rest the mouse'],
+  '1.51': [
+    ['Spør NABE har fått en fast knapp øverst til høyre og Ctrl+J. Med Spør NABE-pekeren stopper han når du hviler musa, og svarer i en snakkeboble', 'Ask NABE has a fixed button at the top right and Ctrl+J. With the Ask NABE pointer he stops when you rest the mouse, and answers in a speech bubble'],
+    ['Raskere skann: de stille adressene sjekkes tre ganger så fort, med like mange forsøk. NABE åpner også raskere', 'Faster scans: silent addresses are checked three times as fast, with as many attempts. NABE also opens faster'],
+    ['Telleren i IP-feltet legger seg ikke lenger over adressen', 'The counter in the IP field no longer sits on top of the address'],
   ],
   '1.48': [
     ['Opprydding i koden', 'A tidy-up in the code'],
