@@ -177,6 +177,11 @@ const FAKTA = [
   ['COV betyr at regulatoren sier fra selv. Mindre spørring, mer ro.', 'COV means the controller speaks up itself. Less asking, more peace.'],
 ];
 const NYTT = {
+  '1.43': [
+    ['Alt beveger seg likt nå: dialoger og menyer kommer med en ekte fjær, litt forbi målet og tilbake', 'Everything moves alike now: dialogs and menus arrive on a real spring, a little past the target and back'],
+    ['Enheter som bytter plass i lista glir dit i stedet for å hoppe, og punktene glir inn når du bytter enhet', 'Devices that change place in the list glide there instead of jumping, and the points glide in when you change device'],
+    ['Tittellinja i Windows følger fargene i NABE, i både mørkt og lyst tema', 'The Windows title bar follows NABE’s colours, in both dark and light theme'],
+  ],
   '1.42': [
     ['Ryddet bort det gamle: Tagging-fanen i Innstillinger, den gamle Variabel-generatoren, Lagre/Åpne anlegg og «Anlegg jeg har vært på». NABO gjør taggingen, og startsiden husker anleggene', 'Cleared out the old: the Tagging tab in Settings, the old Variabel generator, Save/Open site and “Sites I have visited”. NABO does the tagging, and the start page remembers the sites'],
     ['Gi navn og Glem står nå på hver rad på startsiden', 'Rename and Forget now sit on each row of the start page'],

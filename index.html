@@ -127,7 +127,7 @@
   background:var(--fg-2);
   box-shadow:inset -4px -1px 0 -1px var(--sunken);
   font-size:0;
-  transition:transform 520ms cubic-bezier(.5,.05,.2,1), opacity 300ms ease;
+  transition:transform 520ms var(--bev-flyt), opacity 300ms ease;
 }
 :root[data-theme="light"] .theme-tgl i{
   transform:translateX(34px) scale(.6);opacity:0;
@@ -139,7 +139,7 @@
   border-radius:50%;pointer-events:none;
   background:#f5b301;
   transform:translateX(-30px) scale(.55);opacity:0;
-  transition:transform 520ms cubic-bezier(.5,.05,.2,1), opacity 320ms ease 90ms;
+  transition:transform 520ms var(--bev-flyt), opacity 320ms ease 90ms;
 }
 :root[data-theme="light"] .theme-tgl::after{
   transform:translateX(25px) scale(1);opacity:1;
@@ -197,7 +197,7 @@ button{background:none;border:none;cursor:pointer}
   82% {transform:translateY(-2px)}
   100%{opacity:1;transform:none}
 }
-.backend-warn:not([hidden]){animation:banner-faller 520ms cubic-bezier(.16,1,.3,1)}
+.backend-warn:not([hidden]){animation:banner-faller 520ms var(--bev-ut)}
 
 /* Sammenlikninga mot EDE-fila er et resultat, ikke en liste.
 
@@ -870,7 +870,7 @@ td.c-desc{color:var(--fg-2);font-size:11px}
   18% {background-color:color-mix(in srgb,var(--err) 44%,transparent)}
   100%{background-color:transparent;box-shadow:inset 0 0 0 1px transparent}
 }
-tbody tr.tenn{animation:alarm-tenn 1.15s cubic-bezier(.2,0,.2,1)}
+tbody tr.tenn{animation:alarm-tenn 1.15s var(--bev-flyt)}
 /* Navnet er rodt fordi raden er i alarm - men mens glimtet staar er bakgrunnen
    ogsaa rod, og da faller navnet til 2,68:1. Nettopp naar du vil lese hvilket
    punkt det gjelder. Det loeftes til full tekstfarge saa lenge glimtet varer,
@@ -900,7 +900,7 @@ tbody tr.tenn td.c-name,
   18% {background-color:color-mix(in srgb,var(--warn) 30%,transparent)}
   100%{background-color:transparent;box-shadow:inset 0 0 0 1px transparent}
 }
-tbody tr.tvang{animation:tvang-tenn 1.15s cubic-bezier(.2,0,.2,1)}
+tbody tr.tvang{animation:tvang-tenn 1.15s var(--bev-flyt)}
 /* Navnet er gult; paa gul bakgrunn forsvinner det. Loftes mens glimtet staar,
    samme grunn som paa alarmen. */
 tbody tr.tvang td.c-name,
@@ -936,7 +936,7 @@ tbody tr.drift td.c-val{animation:drift-ut 900ms ease-out}
 .dev.tilbake::after{
   content:'';position:absolute;left:0;right:0;bottom:5px;height:1px;
   background:var(--err);transform-origin:left center;
-  animation:strek-vekk 480ms cubic-bezier(.4,0,.2,1) forwards;
+  animation:strek-vekk 480ms var(--bev-flyt) forwards;
 }
 
 @media (prefers-reduced-motion:reduce){
@@ -1073,7 +1073,7 @@ tbody tr.sender{
     color-mix(in srgb,var(--accent) 62%,transparent) 50%,
     color-mix(in srgb,var(--accent) 30%,transparent) 58%,transparent 70%);
   background-size:200% 100%;background-repeat:no-repeat;
-  animation:skriv-ut 460ms cubic-bezier(.35,0,.2,1);
+  animation:skriv-ut 460ms var(--bev-flyt);
 }
 @keyframes skriv-ok{
   0%  {background-color:color-mix(in srgb,var(--ok) 46%,transparent)}
@@ -1532,7 +1532,7 @@ body.uten-bevegelse *{
   to{transform:scaleY(1)}
 }
 .toast{
-  animation:skaal-inn 420ms cubic-bezier(.16,1,.3,1);overflow:hidden;}
+  animation:skaal-inn 420ms var(--bev-ut);overflow:hidden;}
 .toast::before{
   content:'';position:absolute;left:0;top:0;bottom:0;width:3px;
   background:var(--ok);transform-origin:top center;
@@ -1558,9 +1558,9 @@ tbody tr.flash{animation:blink 1.1s var(--mot-kurve)}
 
    Rekkefolgen under er hva som betyr mest, ikke hva som ser kraftigst ut:
    alarm slaar overstyring slaar skriving slaar "verdien endret seg". */
-tbody tr.sender.flash{animation:skriv-ut 460ms cubic-bezier(.35,0,.2,1)}
-tbody tr.tvang.flash{animation:tvang-tenn 1.15s cubic-bezier(.2,0,.2,1)}
-tbody tr.tenn.flash{animation:alarm-tenn 1.15s cubic-bezier(.2,0,.2,1)}
+tbody tr.sender.flash{animation:skriv-ut 460ms var(--bev-flyt)}
+tbody tr.tvang.flash{animation:tvang-tenn 1.15s var(--bev-flyt)}
+tbody tr.tenn.flash{animation:alarm-tenn 1.15s var(--bev-flyt)}
 /* Og cellene skal ikke vaske turkis over et roedt eller gult glimt. Verdicella
    er unntatt: der kan drift eller en skrivebekreftelse ha noe aa si. */
 tbody tr.tenn.flash td:not(.c-val),
@@ -1630,10 +1630,10 @@ tbody tr.tvang.flash td:not(.c-val){animation:none}
 ::view-transition-old(root){z-index:1}
 ::view-transition-new(root){z-index:2}
 :root[data-theme="light"]::view-transition-new(root){
-  animation:daggry 900ms cubic-bezier(.32,.06,.2,1);
+  animation:daggry 900ms var(--bev-flyt);
 }
 :root:not([data-theme="light"])::view-transition-new(root){
-  animation:skumring 900ms cubic-bezier(.32,.06,.2,1);
+  animation:skumring 900ms var(--bev-flyt);
 }
 @keyframes daggry{
   from{clip-path:inset(0 100% 0 0)}
@@ -1658,12 +1658,12 @@ tbody tr.tvang.flash td:not(.c-val){animation:none}
 #himmel.dag .kropp{
   background:radial-gradient(circle at 38% 34%,#fff9d8,#ffd166 46%,#ff9e2c 74%);
   box-shadow:0 0 90px 30px rgba(255,180,60,.5), 0 0 220px 90px rgba(255,150,40,.22);
-  animation:sol-opp 900ms cubic-bezier(.22,.7,.3,1) both;
+  animation:sol-opp 900ms var(--bev-std) both;
 }
 #himmel.natt .kropp{
   background:radial-gradient(circle at 36% 32%,#ffffff,#dfe6f5 62%,#aeb9d4 84%);
   box-shadow:0 0 70px 24px rgba(190,215,255,.42), 0 0 200px 80px rgba(120,150,220,.2);
-  animation:maane-ned 900ms cubic-bezier(.22,.7,.3,1) both;
+  animation:maane-ned 900ms var(--bev-std) both;
 }
 /* Seen frozen at 430 ms the sun was already down to 33 %: the easing curve
    pulls the opacity along with the position, so a plain 30 %-to-100 % fade
@@ -1750,7 +1750,7 @@ body.uten-bevegelse #himmel{display:none}
 .dev.laster::after{
   content:'';position:absolute;pointer-events:none;
   transform:scaleX(0);transform-origin:left center;
-  transition:transform 260ms cubic-bezier(.16,1,.3,1);}
+  transition:transform 260ms var(--bev-ut);}
 /* Objects and values. */
 .dev.laster::before{
   transform:scaleX(var(--frem,0));}
@@ -1813,8 +1813,8 @@ body.uten-bevegelse #himmel{display:none}
   flex:0 0 auto;overflow:hidden;white-space:nowrap;
   max-width:0;padding-left:0;padding-right:0;margin-left:0;
   opacity:0;pointer-events:none;
-  transition:max-width .22s cubic-bezier(.16,1,.3,1),opacity .18s,
-             padding .22s cubic-bezier(.16,1,.3,1),margin .22s;
+  transition:max-width .22s var(--bev-ut),opacity .18s,
+             padding .22s var(--bev-ut),margin .22s;
 }
 .diag-kjapp.vis{
   max-width:120px;opacity:1;pointer-events:auto;
@@ -2072,7 +2072,7 @@ tbody tr{position:relative}
   70% {opacity:1}
   100%{opacity:0;transform:translateX(105%)}
 }
-.dev.ny{animation:enhet-inn 520ms cubic-bezier(.16,1,.3,1) both}
+.dev.ny{animation:enhet-inn 520ms var(--bev-ut) both}
 .dev.ny::after{
   content:'';position:absolute;inset:0;pointer-events:none;
   background:linear-gradient(90deg,transparent 10%,
@@ -2255,7 +2255,7 @@ body.skanner .pane-devices .pane-head::after{
   background:radial-gradient(circle,
     color-mix(in srgb,var(--accent) 60%,transparent) 0%,
     color-mix(in srgb,var(--accent) 22%,transparent) 55%,transparent 72%);
-  animation:klikkbolge 620ms cubic-bezier(.2,.7,.3,1) forwards;
+  animation:klikkbolge 620ms var(--bev-std) forwards;
 }
 .dev{position:relative;overflow:hidden}
 
@@ -2429,7 +2429,7 @@ body.skanner .pane-devices .pane-head::after{
   background:linear-gradient(180deg,transparent,
     color-mix(in srgb,var(--live) 22%,transparent) 55%,
     color-mix(in srgb,var(--live) 40%,transparent) 82%,transparent);
-  animation:vaakne-bolge 900ms cubic-bezier(.35,0,.3,1) forwards;
+  animation:vaakne-bolge 900ms var(--bev-flyt) forwards;
 }
 @keyframes vaakne-bolge{
   from{transform:translateY(-130px);opacity:0}
@@ -2521,7 +2521,7 @@ tbody tr.kopiert td{animation:kopiert 800ms ease-out}
   color:var(--accent);background:var(--panel);
   border:1px solid var(--accent-edge,var(--accent));border-radius:var(--radius);
   padding:2px 7px;white-space:nowrap;
-  animation:fest-flyr var(--flytid,560ms) cubic-bezier(.4,0,.2,1) forwards;
+  animation:fest-flyr var(--flytid,560ms) var(--bev-flyt) forwards;
 }
 @keyframes fest-flyr{
   0%  {opacity:0;transform:translate(0,0) scale(1)}
@@ -2621,7 +2621,7 @@ tbody tr.picked > td:first-child::before{
   70% {transform:scaleX(1);opacity:1}
   100%{transform:scaleX(1);opacity:0}
 }
-#ctxBar.byttet{animation:ctx-inn 380ms cubic-bezier(.16,1,.3,1) both;position:relative}
+#ctxBar.byttet{animation:ctx-inn 380ms var(--bev-ut) both;position:relative}
 #ctxBar.byttet::after{
   content:'';position:absolute;left:0;right:0;bottom:0;height:2px;transform-origin:left center;
   animation:ctx-stripe 620ms var(--mot-kurve) both;pointer-events:none;}
@@ -2648,7 +2648,7 @@ tbody tr.picked > td:first-child::before{
   content:'';position:absolute;top:50%;left:50%;
   width:46px;height:46px;margin:-23px 0 0 -23px;border-radius:50%;
   border:1.5px solid var(--nm-red);pointer-events:none;
-  animation:ping-ut 900ms cubic-bezier(.2,.7,.3,1) both;
+  animation:ping-ut 900ms var(--bev-std) both;
 }
 #scanBtn.sender::after{animation-delay:220ms}
 
@@ -2664,7 +2664,7 @@ tbody tr.picked > td:first-child::before{
     rgba(255,255,255,.24) calc(100% - 14px),
     rgba(255,255,255,.62) 100%);
   transform:scaleX(var(--skann,0));transform-origin:left center;
-  transition:transform 320ms cubic-bezier(.16,1,.3,1);
+  transition:transform 320ms var(--bev-ut);
 }
 /* Before the sweep has a denominator, a band paces instead of a bar guessing. */
 @keyframes skann-pacer{
@@ -3191,7 +3191,7 @@ body{font-family:var(--sans)}
   background:color-mix(in srgb,var(--warn) 8%,transparent)}
 .rutevakt.av{border-left-color:var(--line-2);background:var(--sunken)}
 .rutevakt b{font-weight:500;color:var(--fg)}
-.rutevakt.inn{animation:sk-inn .4s cubic-bezier(.2,.8,.3,1)}
+.rutevakt.inn{animation:sk-inn .4s var(--bev-std)}
 .bbmd-seg{display:inline-flex;justify-self:start;border:1px solid var(--line-2);border-radius:var(--radius);overflow:hidden;height:24px}
 .bbmd-seg[hidden]{display:none}
 .bbmd-seg button{background:none;border:0;border-right:1px solid var(--line-2);padding:0 10px;font:inherit;font-size:11px;color:var(--fg-3);cursor:pointer}
@@ -3200,7 +3200,7 @@ body{font-family:var(--sans)}
 .skann-ny .sk-verktoy{grid-column:1 / -1;display:flex;align-items:center;gap:6px;min-width:0}
 .skann-ny .sk-verktoy:not(:has(.bbmd-seg:not([hidden]),.diag-kjapp.vis)){display:none}
 .skann-ny .sk-verktoy .diag-kjapp{height:24px;padding:0 10px;font-size:11px;width:auto;margin:0}
-.kort-panel{display:flex;flex-direction:column;gap:6px;padding:8px 0 2px;border-top:1px solid var(--line);animation:sk-inn .3s cubic-bezier(.2,.8,.3,1)}
+.kort-panel{display:flex;flex-direction:column;gap:6px;padding:8px 0 2px;border-top:1px solid var(--line);animation:sk-inn .3s var(--bev-std)}
 .kort-panel[hidden]{display:none}
 .kort-panel #localAddr{display:none}
 .kp-kort{display:flex;flex-direction:column;gap:2px}
@@ -3233,8 +3233,8 @@ body{font-family:var(--sans)}
 .an-ip{flex:0 0 auto;font:11px var(--mono);color:var(--fg-3)}
 .an-tips{font-size:11.5px;color:var(--fg-3);padding:4px 6px;line-height:1.45}
 
-.skann-ny #rangeInput.nei{animation:sk-nei .42s cubic-bezier(.3,.7,.4,1)}
-.an-rad.nei{animation:sk-nei .42s cubic-bezier(.3,.7,.4,1)}
+.skann-ny #rangeInput.nei{animation:sk-nei .42s var(--bev-std)}
+.an-rad.nei{animation:sk-nei .42s var(--bev-std)}
 .skann-ny #rangeInput.ryddet{animation:sk-ryddet .7s ease-out}
 .skann-ny #rangeInput.hint{animation:sk-hint .9s ease-in-out}
 .skann-ny #rangeInput.sveip{animation:sk-hint .6s ease-in-out}
@@ -3979,7 +3979,7 @@ body.skanner .nabe-led{fill:var(--ok)}
 .nabe-mark.nervos .nabe-munn{d:path('M12.6 23.6 Q14.3 22.6 16 23.6 Q17.7 24.6 19.4 23.6')}
 .nabe-mark.trist .nabe-led{fill:var(--err)}
 .nabe-mark.sover .nabe-led{fill:var(--fg-3)}
-.nabe-oyne{transform-box:fill-box;transform-origin:center;transition:transform .2s cubic-bezier(.2,.8,.2,1)}
+.nabe-oyne{transform-box:fill-box;transform-origin:center;transition:transform .2s var(--bev-std)}
 .nabe-mark.nervos .nabe-oyne,.nabe-mark.skvatt .nabe-oyne{transform:scale(1.14)}
 .nabe-svette{fill:#6aa7ff;opacity:0;transform:translateY(-2px);transition:opacity .2s,transform .4s}
 .nabe-mark.nervos .nabe-svette{opacity:1;transform:translateY(1.5px)}
@@ -3996,7 +3996,7 @@ body.skanner .nabe-led{fill:var(--ok)}
 .nabe-mark.svimmel .nabe-munn{d:path('M12.6 23.6 Q14.3 22.6 16 23.6 Q17.7 24.6 19.4 23.6')}
 /* Light mode is bright. NABE came prepared. */
 .nabe-briller{fill:#111113;transform:translateY(-9px);opacity:0;
-  transition:transform .55s cubic-bezier(.3,1.4,.5,1),opacity .25s}
+  transition:transform .55s var(--fjaer),opacity .25s}
 :root[data-theme="light"] .nabe-briller{transform:none;opacity:1}
 :root[data-theme="light"] .nabe-lokk{opacity:0}
 @media (prefers-reduced-motion:reduce){
@@ -4008,7 +4008,7 @@ body.skanner .nabe-led{fill:var(--ok)}
    One curve for everything that settles. Colour in motion only where it
    means something: a value going up or down is not good or bad, so its flash
    is neutral and the direction is in the movement. */
-:root{--mot-kurve:cubic-bezier(.2,.8,.2,1)}
+:root{--mot-kurve:var(--bev-std)}
 /* The progress line is the scan's signal now; the radar sweep over the
    heading, the rings off the button and its squash were three more. */
 body.skanner .pane-devices .pane-head::after{display:none}
@@ -4048,7 +4048,7 @@ td.c-val.ned{animation:verdi-lb-ned 700ms var(--mot-kurve)}
   border:1px solid var(--line-2);box-shadow:0 12px 32px rgba(0,0,0,.35);
   font:400 13px/1.45 var(--sans);cursor:pointer;
   opacity:0;transform:translate(-6px,-50%) scale(.96);transform-origin:-6px 50%;pointer-events:none;
-  transition:opacity .18s ease,transform .25s cubic-bezier(.2,.8,.2,1)}
+  transition:opacity .18s ease,transform .25s var(--bev-std)}
 .nabe-boble::before{content:'';position:absolute;left:-6px;top:50%;width:10px;height:10px;margin-top:-5px;
   background:var(--panel);border-left:1px solid var(--line-2);border-bottom:1px solid var(--line-2);
   transform:rotate(45deg)}
@@ -4120,7 +4120,11 @@ td.c-val.ned{animation:verdi-lb-ned 700ms var(--mot-kurve)}
    Exceptions are kept on purpose: the row flash for a new alarm or override
    (it means something), loading indicators while something is loading, and
    NABE himself, whose sunglasses are allowed to drop with a bounce. */
-:root{--fjaer:cubic-bezier(.2,.8,.2,1)}
+/* One set of curves for the whole app, so everything moves as if by the same
+   hand. --fjaer is a real damped spring, a little past the target and back;
+   --bev-ut comes to rest, --bev-std is for what goes both ways. */
+:root{--fjaer:linear(0,.058,.191,.351,.511,.653,.77,.861,.927,.972,1,1.016,1.024,1.025,1.024,1.02,1.016,1.012,1.008,1.006,1.003,1.002,1.001,1,1);
+  --bev-ut:cubic-bezier(.16,1,.3,1);--bev-std:cubic-bezier(.2,.8,.2,1);--bev-flyt:cubic-bezier(.4,0,.2,1)}
 /* No frosted glass: a plain dim behind dialogs, menus and the start screen.
    Blur is also the single most expensive thing to draw over remote desktop. */
 .gs-overlay,.gs-overlay:not([hidden]){backdrop-filter:none!important}
@@ -4190,7 +4194,7 @@ button.ctx-stat:hover{text-decoration:underline}
    and dances a little when the scan goes well. The body moves on the outer
    span, the face inside the svg, so the two never fight over one transform.
    Everything stands still with reduced motion. */
-.brand-mark.nabe-mark{transform-origin:50% 100%;transition:transform .35s cubic-bezier(.3,1.4,.5,1)}
+.brand-mark.nabe-mark{transform-origin:50% 100%;transition:transform .35s var(--fjaer)}
 .nabe-mark .nabe{transform-origin:50% 100%;animation:nabe-pust 4.2s ease-in-out infinite}
 .nabe-mark.sover .nabe{animation-duration:6.5s}
 .nabe-mark.snurr .nabe{transform-origin:50% 50%}
@@ -4213,7 +4217,7 @@ button.ctx-stat:hover{text-decoration:underline}
 @keyframes nabe-nys{0%{transform:none}45%{transform:rotate(-8deg) scale(1,1.05)}58%{transform:rotate(-10deg) scale(1,1.07)}
   64%{transform:rotate(9deg) scale(1.05,.92)}82%{transform:rotate(-2deg)}100%{transform:none}}
 @keyframes nabe-hikk{0%,100%{transform:none}30%{transform:translateY(-2.5px) scale(.97,1.04)}}
-.nabe-mark.klem{animation:nabe-klem .38s cubic-bezier(.3,1.4,.5,1)}
+.nabe-mark.klem{animation:nabe-klem .38s var(--fjaer)}
 .nabe-mark.hopp{animation:nabe-hopp .55s ease-out}
 .nabe-mark.dans{animation:nabe-dans 1.4s ease-in-out}
 .nabe-mark.strekk{animation:nabe-strekk 1.6s ease-in-out}
@@ -4272,7 +4276,7 @@ body.uten-bevegelse .nabe-mark,body.uten-bevegelse .nabe-mark *{animation:none!i
    at him fast, gets shy if you rest on him, feels hot and cold points,
    flashes when you copy, and has a few more things to do when he is bored. */
 @keyframes nabe-dukk{0%,100%{transform:none}35%{transform:translateY(1.5px) scale(1.12,.8)}}
-.nabe-mark.dukk{animation:nabe-dukk .45s cubic-bezier(.3,1.4,.5,1)}
+.nabe-mark.dukk{animation:nabe-dukk .45s var(--fjaer)}
 .nabe-mark.dukk .nabe-oyne{transform:scale(.86)}
 /* Shy, and warm. */
 .nabe-mark.rodmer .nabe-kinn{opacity:.85}
@@ -4475,7 +4479,7 @@ button:focus:not(:focus-visible){outline:none;box-shadow:none}
    button; the list on a slightly sunken side like a source list. */
 .startskjerm{position:fixed;inset:0;z-index:9980;display:flex;align-items:center;justify-content:center;
   background:color-mix(in srgb,var(--bg) 88%,transparent);
-  animation:ss-inn .28s cubic-bezier(.2,.8,.2,1) both}
+  animation:ss-inn .28s var(--bev-std) both}
 .startskjerm.ut{animation:ss-ut .22s ease-in forwards}
 @keyframes ss-inn{from{opacity:0}to{opacity:1}}
 @keyframes ss-ut{to{opacity:0}}
@@ -4484,7 +4488,7 @@ button:focus:not(:focus-visible){outline:none;box-shadow:none}
 .ss-kort{display:grid;grid-template-columns:320px minmax(0,1fr);width:min(780px,calc(100vw - 32px));
   height:min(560px,calc(100vh - 32px));background:var(--panel);border:1px solid var(--line-2);border-radius:12px;
   box-shadow:0 1px 0 color-mix(in srgb,#fff 6%,transparent) inset,0 24px 70px rgba(0,0,0,.42),0 2px 8px rgba(0,0,0,.18);
-  overflow:hidden;animation:ss-kort .36s cubic-bezier(.2,.8,.2,1) both;text-align:left}
+  overflow:hidden;animation:ss-kort .36s var(--bev-std) both;text-align:left}
 .startskjerm.igjen,.startskjerm.igjen .ss-kort,.startskjerm.igjen .ss-rad{animation:none}
 
 .ss-venstre{display:flex;flex-direction:column;padding:30px 28px 18px;min-height:0;overflow:auto}
@@ -4530,7 +4534,7 @@ button:focus:not(:focus-visible){outline:none;box-shadow:none}
 .ss-tom{padding:10px;font-size:12px;color:var(--fg-3)}
 .ss-rad{display:grid;grid-template-columns:10px minmax(0,1fr) auto;align-items:start;gap:10px;width:100%;
   padding:8px 10px;border:0;border-radius:7px;background:none;color:var(--fg);cursor:pointer;text-align:left;
-  animation:ss-rad-inn .3s cubic-bezier(.2,.8,.2,1) both;animation-delay:calc(var(--i,0) * 35ms + 120ms)}
+  animation:ss-rad-inn .3s var(--bev-std) both;animation-delay:calc(var(--i,0) * 35ms + 120ms)}
 .ss-rad[aria-selected="true"]{background:color-mix(in srgb,var(--accent) 16%,transparent)}
 .ss-rad:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
 .ss-rad-tekst{display:flex;flex-direction:column;gap:2px;min-width:0}
@@ -5296,6 +5300,7 @@ body.uten-bevegelse .plagg-flamme{animation:none}
 <script src="/js/nabe-graf.js"></script>
 <script src="/js/nabe-tunnel.js"></script>
 <script src="/js/nabe-sammen.js"></script>
+<script src="/js/nabe-flyt.js"></script>
 <script src="/js/nabo.js"></script>
 <script src="/js/nabo-brodre.js"></script>
 <script src="/js/nabo-fasit.js"></script>

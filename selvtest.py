@@ -241,7 +241,7 @@ def kjor_tester():
     sjekk("NABO lagrer i valgt mappe, aldri utenfor", r1.get("status") == "done"
           and Path(r1.get("sti", "")).is_file() and r2.get("status") == "error", f"{r1} / {r2}")
 
-    for fil in ("nabe-start", "nabe-verktoy", "nabe-felt", "nabe-moro", "nabe-finn", "nabe-skann", "nabe-anlegg", "nabe-bunn", "nabe-graf", "nabe-tunnel", "nabe-sammen", "nabo", "nabo-brodre", "nabo-fasit", "nabe-garderobe"):
+    for fil in ("nabe-start", "nabe-verktoy", "nabe-felt", "nabe-moro", "nabe-finn", "nabe-skann", "nabe-anlegg", "nabe-bunn", "nabe-graf", "nabe-tunnel", "nabe-sammen", "nabe-flyt", "nabo", "nabo-brodre", "nabo-fasit", "nabe-garderobe"):
         try:
             with urllib.request.urlopen(f"{BASE}/js/{fil}.js", timeout=5) as rr:
                 ok = rr.status == 200

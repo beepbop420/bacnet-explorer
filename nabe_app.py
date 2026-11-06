@@ -36,6 +36,29 @@ def ledig_port(foretrukket: int = 8092) -> int:
     return foretrukket
 
 
+def sett_tittellinje(tittel: str, bak: str, tekst: str, kant: str, mork: bool):
+    """Paint Windows' own title bar in the app's colours, so the window reads
+    as one surface. Colours the system takes are hex; anything else is left."""
+    try:
+        def ref(f):
+            f = f.strip().lstrip("#")
+            return int(f[4:6] + f[2:4] + f[0:2], 16) if len(f) == 6 else None
+        u = ctypes.windll.user32
+        u.FindWindowW.restype = ctypes.c_void_p
+        hwnd = u.FindWindowW(None, tittel)
+        if not hwnd:
+            return
+        dwm = ctypes.windll.dwmapi
+        dwm.DwmSetWindowAttribute.argtypes = [ctypes.c_void_p, ctypes.c_uint, ctypes.c_void_p, ctypes.c_uint]
+        # 20 dark mode, 34 border, 35 caption, 36 caption text.
+        for attr, verdi in ((20, 1 if mork else 0), (34, ref(kant)), (35, ref(bak)), (36, ref(tekst))):
+            if verdi is not None:
+                v = ctypes.c_int(verdi)
+                dwm.DwmSetWindowAttribute(hwnd, attr, ctypes.byref(v), 4)
+    except Exception:
+        pass
+
+
 def sett_ikon(tittel: str, ikon: Path):
     """Put NABE's own icon on the window and its taskbar button. WebView2
     windows otherwise carry the icon of the program that opened them -
@@ -132,6 +155,9 @@ def main():
         def lukk(self):
             Api.tillat_lukking = True
             vindu.destroy()
+
+        def tittellinje(self, bak, tekst, kant, mork):
+            sett_tittellinje("NABE", bak, tekst, kant, bool(mork))
 
         def velg_mappe(self, start=""):
             """Windows' folder dialog, owned by this window."""
