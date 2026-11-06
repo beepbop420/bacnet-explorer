@@ -32,6 +32,10 @@ const KUNNSKAP = [
    x: ['%, (, ), [, \\ og : blir omskrevet i Niagara og skal ikke brukes. Æ, ø og å ødelegger i navnekolonnen, men overlever i beskrivelsen. Niagara bygger mappetreet av navneprefikset.',
        '%, (, ), [, \\ and : get escaped in Niagara and should not be used. Æ, ø and å break in the name column, but survive in the description. Niagara builds the folder tree from the name prefix.']},
 
+  {emne: 'TFM', t: ['TFM-koder', 'TFM codes'], n: 'tfm koder kode komponent rt rp rh ry rf jv jp sb ka ss sz lx lr lv lk qd qp qt',
+   x: ['RT temperatur, RP trykk, RH fukt, RY luftkvalitet og CO2, RF luftmengde eller vannmengde. JV vifte, JP pumpe, SB reguleringsventil, KA spjeld, SS omluftspjeld, SZ brannspjeld. LX varmegjenvinner, LR frekvensomformer, LV varmebatteri, LK kjølebatteri. QD filtervakt, QP trykkvakt, QT frostvakt eller termostat. Nummeret følger lufta: 4xx tilluft, 5xx avtrekk, 6xx rom, 9xx ute.',
+       'RT temperature, RP pressure, RH humidity, RY air quality and CO2, RF air or water flow. JV fan, JP pump, SB control valve, KA damper, SS recirculation damper, SZ fire damper. LX heat recovery, LR frequency converter, LV heating coil, LK cooling coil. QD filter guard, QP pressure switch, QT frost guard or thermostat. The number follows the air: 4xx supply, 5xx extract, 6xx room, 9xx outdoor.']},
+
   // --- BACnet
   {emne: 'BACnet', t: ['Prioritet', 'Priority'], n: 'prioritet priority array 16 pri 8 skrive overstyre sterkest',
    x: ['BACnet har 16 prioriteter for skriving, der 1 er sterkest. Den høyeste aktive vinner. Operatører bruker gjerne 8. Det du setter, står til du frigir det.',

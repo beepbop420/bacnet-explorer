@@ -178,7 +178,7 @@ const FAKTA = [
 ];
 const NYTT = {
   '1.52': [
-    ['Spør NABE ser punktet du står på: spør hva det burde tagges, så kommer et forslag som RT501_Sp, med lignende punkter du har tagget før', 'Ask NABE sees the point you are on: ask what it should be tagged and you get a suggestion like RT501_Sp, with similar points you have tagged before'],
+    ['Spør NABE leser punktet du står på, navn og beskrivelse, på norsk og engelsk, og foreslår tag også når navnet er AV5. Spør om alle punkter for å få hele enheten', 'Ask NABE reads the point you are on, name and description, in Norwegian and English, and suggests a tag even when the name is AV5. Ask about all points to get the whole device'],
   ],
   '1.51': [
     ['Spør NABE har fått en fast knapp øverst til høyre og Ctrl+J. Med Spør NABE-pekeren stopper han når du hviler musa, og svarer i en snakkeboble', 'Ask NABE has a fixed button at the top right and Ctrl+J. With the Ask NABE pointer he stops when you rest the mouse, and answers in a speech bubble'],

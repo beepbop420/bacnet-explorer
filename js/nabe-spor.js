@@ -26,7 +26,7 @@
     ['Enten er alt bra, eller så har noen koblet fra ledningen.', 'Either all is well, or someone has pulled the wire.'],
     ['Jeg sjekket to ganger. Det ene var på liksom.', 'I checked twice. Once was pretend.'],
   ];
-  const FORSLAG = [['Hva burde dette punktet tagges?', 'What should this point be tagged?'], ['Hva er overstyrt?', 'What is overridden?'], ['Er noe i alarm?', 'Is anything in alarm?'], ['Hvor mange punkter?', 'How many points?'], ['Hva betyr prioritet 8?', 'What does priority 8 mean?'], ['Finn RT401', 'Find RT401']];
+  const FORSLAG = [['Hva burde dette punktet tagges?', 'What should this point be tagged?'], ['Foreslå tagger på alle punkter', 'Suggest tags for all points'], ['Hva er overstyrt?', 'What is overridden?'], ['Er noe i alarm?', 'Is anything in alarm?'], ['Hvor mange punkter?', 'How many points?'], ['Hva betyr prioritet 8?', 'What does priority 8 mean?'], ['Finn RT401', 'Find RT401']];
 
   /* The reference: words of the question against an article's own words,
      title and text. A question that hits nothing strongly gets nothing. */
@@ -81,36 +81,71 @@
   /* The point you are on. Ask NABE reads the question with it in mind, so
      «what should this be tagged» is about the row that is selected. */
   const punktet = () => (S.selected && S.pointIndex.get(S.selected)) || null;
-  const KODE = /\b[A-Z]{2,3}\d{3}\b/;
-  /* The trade's own rule of thumb: which air, what is measured, and whether
-     it is a setpoint. Only a proposal, and only when the words are clear. */
-  function regelTag(p) {
-    const ord = `${p.name || ''} ${p.description || ''}`.replace(/([a-z])([A-Z])/g, '$1 $2').toLowerCase();
+  /* Reading a point. The name is often worth nothing (AV5), so the words are
+     taken from the name and the description together, English turned into
+     Norwegian, and matched against the components as this company tags them
+     (counted from its own exports). First match wins: what is measured goes
+     before the equipment it sits on, so a fan's pressure is RP, not JV. */
+  const TIL_NORSK = [[/supply air|supply|inlet air/g, 'tilluft'], [/extract air|extract|exhaust|return air/g, 'avtrekk'], [/\bsaf\b/g, 'tilluft vifte'], [/\beaf\b/g, 'avtrekk vifte'],
+    [/outdoor|outside/g, 'ute'], [/\broom\b/g, 'rom'], [/temperature|\btemp\b/g, 'temperatur'], [/set ?point|\bsetp\b|\bsp\b/g, 'settpunkt'], [/pressure/g, 'trykk'],
+    [/humidity|\brh\b/g, 'fukt'], [/air ?flow|\bflow\b/g, 'mengde'], [/\bfan\b/g, 'vifte'], [/\bpump\b/g, 'pumpe'], [/\bvalve\b/g, 'ventil'], [/\bdamper\b/g, 'spjeld'],
+    [/heat recovery|heat exchanger|\brotor\b|\brecovery\b/g, 'gjenvinner'], [/heating|heater|\bheat\b/g, 'varme'], [/cooling|cooler|\bcool\b/g, 'kjøling'], [/efficiency/g, 'virkningsgrad'],
+    [/alarm|fault|malfunction|\berror\b/g, 'feil'], [/running|\brun\b/g, 'drift'], [/output|control signal/g, 'pådrag'], [/frequency converter|\bvfd\b|\binverter\b/g, 'frekvensomformer'], [/\bfrost\b|freeze/g, 'frost']];
+  const KOMPONENTER = [[/brannspjeld/, 'SZ', 'brannspjeld', 'fire damper'], [/filtervakt|filter/, 'QD', 'filter', 'filter'],
+    [/co2|co₂|luftkvalitet|ppm/, 'RY', 'luftkvalitet', 'air quality'], [/fukt/, 'RH', 'fukt', 'humidity'], [/trykk/, 'RP', 'trykk', 'pressure'], [/mengde/, 'RF', 'luftmengde', 'air flow'],
+    [/temperatur|temp/, 'RT', 'temperatur', 'temperature'], [/vifte/, 'JV', 'vifte', 'fan'], [/pumpe/, 'JP', 'pumpe', 'pump'], [/ventil|pådrag.*(varme|kjøl)|(varme|kjøl).*pådrag/, 'SB', 'ventil', 'valve'],
+    [/virkningsgrad|gjenvinner/, 'LX', 'gjenvinner', 'heat recovery'], [/frekvensomformer/, 'LR', 'frekvensomformer', 'frequency converter'], [/omluft|resirk/, 'SS', 'omluftspjeld', 'recirculation damper'],
+    [/spjeld/, 'KA', 'spjeld', 'damper'], [/frost|overoppheting|termostat/, 'QT', 'frostvakt', 'frost guard'], [/kjøl/, 'LK', 'kjølebatteri', 'cooling coil'], [/varmebatteri|varme/, 'LV', 'varmebatteri', 'heating coil']];
+  const ENHET = [[/°c|celsius/, 'RT', 'temperatur', 'temperature'], [/^k?pa$|pascal/, 'RP', 'trykk', 'pressure'], [/ppm/, 'RY', 'luftkvalitet', 'air quality'], [/m.?\/h|l\/s|m³/, 'RF', 'luftmengde', 'air flow']];
+  const STEDER = [[/tilluft/, 4, 'tilluft', 'supply'], [/avtrekk/, 5, 'avtrekk', 'extract'], [/\brom|romtemp/, 6, 'rom', 'room'], [/\bute|utetemp|utekomp/, 9, 'ute', 'outdoor']];
+  const HALER = [[/settpunkt|børverdi/, 'SP', 'settpunkt', 'setpoint'], [/feil|alarm/, 'Feil', 'feil', 'fault'], [/pådrag/, 'Gn', 'pådrag', 'output'], [/\bdrift\b/, 'Drift', 'drift', 'running'],
+    [/\bstart\b|startsignal/, 'Start', 'start', 'start'], [/\bmanuell\b|\bhand\b/, 'Man', 'manuell', 'manual'], [/\bauto\b/, 'Auto', 'auto', 'auto'], [/posisjon|tilbakemelding/, 'POS', 'posisjon', 'position']];
+  const HALE_PER = {beckhoff: {SP: '_SP', Gn: '_AU'}, distech: {SP: '_Sp', Feil: '_Err', Gn: '_C', Drift: '_D', Start: '_S', POS: '_FB'}, annet: {SP: '_Sp', Gn: '_Gn'}};
+  function tolk(p) {
+    let ord = `${p.name || ''} ${p.description || ''}`.replace(/([a-zæøå])([A-ZÆØÅ])/g, '$1 $2').replace(/[_.\-/]/g, ' ').toLowerCase();
+    for (const [re, no] of TIL_NORSK) ord = ord.replace(re, no);
     const enhet = String(p.unit_symbol || p.units || '').toLowerCase();
-    const sted = /extract|exhaust|avtrekk|\beaf\b/.test(ord) ? [5, T('avtrekk', 'extract')] : /supply|tilluft|\bsaf\b/.test(ord) ? [4, T('tilluft', 'supply')]
-      : /\broom\b|\brom\b/.test(ord) ? [6, T('rom', 'room')] : /outdoor|outside|\bute\b|uteluft/.test(ord) ? [9, T('ute', 'outdoor')] : null;
-    if (!sted) return null;
-    const maal = /°c|celsius/.test(enhet) || /temp/.test(ord) ? ['RT', T('temperatur', 'temperature')] : /^k?pa$|pascal/.test(enhet) || /pressure|trykk/.test(ord) ? ['RP', T('trykk', 'pressure')] : null;
-    if (!maal) return null;
-    const sp = /set.?p|setpoint|settpunkt/.test(ord);
-    const leverandor = String(S.activeDev?.vendor_name || '').toLowerCase();
-    const hale = sp ? (/beckhoff/.test(leverandor) ? '_SP' : '_Sp') : '';
-    return {tag: `${maal[0]}${sted[0]}01${hale}`, hvorfor: T(`${sted[1]}, ${maal[1]}${sp ? ', settpunkt' : ''}`, `${sted[1]}, ${maal[1]}${sp ? ', setpoint' : ''}`)};
+    let k = KOMPONENTER.find(([re]) => re.test(ord)), bareEnhet = false;
+    if (!k) { k = ENHET.find(([re]) => re.test(enhet)); bareEnhet = !!k; }
+    if (!k) return null;
+    const sted = STEDER.find(([re]) => re.test(ord));
+    const hale = HALER.find(([re]) => re.test(ord));
+    const lev = String(S.activeDev?.vendor_name || '').toLowerCase();
+    const tabell = HALE_PER[/beckhoff/.test(lev) ? 'beckhoff' : /distech/.test(lev) ? 'distech' : 'annet'];
+    const slutt = hale ? (tabell[hale[1]] || '_' + hale[1]) : '';
+    const deler = [T(k[2], k[3]), sted && T(sted[2], sted[3]), hale && T(hale[2], hale[3])].filter(Boolean);
+    return {tag: `${k[1]}${sted ? sted[1] : 'x'}01${slutt}`, kode: k[1], hvorfor: deler.join(', '), usikker: bareEnhet || !sted};
   }
+  const KODE = /(?:^|[^A-Za-z])([A-Z]{2,3})\d{3}(?![0-9])/;
   function tagSvar(p, q) {
     const navn = p.name || p.objid;
-    if (KODE.test(navn)) return `<p>${T(`${esc(navn)} har allerede en komponentkode, så jeg ville latt den være.`, `${esc(navn)} already has a component code, so I would leave it.`)}</p>`;
-    const regel = regelTag(p);
+    const r = tolk(p);
+    const har = KODE.exec(navn);
     const like = typeof fasitTopp === 'function' ? fasitTopp(p.description || p.name, p.type) : [];
-    if (!regel && !like.length) return `<p>${T(`Jeg finner ikke noe godt forslag til ${esc(navn)}. Beskrivelsen sier for lite om hvilken komponent det er.`, `I find no good suggestion for ${esc(navn)}. The description says too little about the component.`)}</p>`;
+    if (har && (!r || r.kode === har[1])) return `<p>${T(`${esc(navn)} ser riktig tagget ut, så jeg ville latt den være.`, `${esc(navn)} looks correctly tagged, so I would leave it.`)}</p>`;
+    if (!r && !like.length) {
+      // Nothing to go on by rule: the AI may try, from the code table.
+      const tabell = KUNNSKAP.find(k => k.t[0] === 'TFM-koder');
+      kiNeste = {q: T(`Hvilken TFM-kode passer punktet ${navn}: ${p.description || ''}?`, `Which TFM code fits the point ${navn}: ${p.description || ''}?`), kilder: [tabell]};
+      return `<div class="sp-ki"></div><p>${T(`Jeg finner ikke noe sikkert forslag til ${esc(navn)} ut fra ordene.`, `I find no sure suggestion for ${esc(navn)} from the words.`)}</p>`;
+    }
     const tekst = [];
-    if (regel) tekst.push(T(`${navn}: forslag ${regel.tag}, fordi det er ${regel.hvorfor}.`, `${navn}: suggestion ${regel.tag}, because it is ${regel.hvorfor}.`));
+    if (r) tekst.push(T(`Punktet ${navn}: ${p.description || ''}. Forslag ${r.tag}, fordi det er ${r.hvorfor}.`, `The point ${navn}: ${p.description || ''}. Suggestion ${r.tag}, because it is ${r.hvorfor}.`));
     for (const l of like) tekst.push(T(`Lignende punkt har fått ${l.f}: ${l.b}.`, `A similar point got ${l.f}: ${l.b}.`));
-    tekst.push(T('Nummeret må stemme med komponenten på anlegget.', 'The number has to match the component on site.'));
     kiNeste = {q, kilder: [{x: [tekst.join(' '), tekst.join(' ')]}]};
-    return `<div class="sp-ki"></div><div class="sp-tag">${regel ? `<b>${esc(regel.tag)}</b><span>${esc(regel.hvorfor)}</span><button type="button" class="btn" data-kopier="${esc(regel.tag)}">${T('Kopier', 'Copy')}</button>` : ''}</div>
+    const merk = r && har ? `<p>${T(`Navnet sier ${esc(har[1])}, men beskrivelsen peker på ${esc(r.kode)}.`, `The name says ${esc(har[1])}, but the description points to ${esc(r.kode)}.`)}</p>` : '';
+    return `<div class="sp-ki"></div>${merk}<div class="sp-tag">${r ? `<b>${esc(r.tag)}</b><span>${esc(r.hvorfor)}${r.usikker ? T(' · usikker', ' · unsure') : ''}</span><button type="button" class="btn" data-kopier="${esc(r.tag)}">${T('Kopier', 'Copy')}</button>` : ''}</div>
       ${like.length ? `<div class="sp-liste">${like.map(l => `<div class="sp-rad"><b>${esc(l.f)}</b><span>${esc(l.b)}</span></div>`).join('')}</div>` : ''}
-      <p>${T('Nummeret må stemme med komponenten på anlegget.', 'The number has to match the component on site.')}</p>`;
+      <p>${T('Nummeret må stemme med komponenten på anlegget. x betyr at jeg ikke vet det.', 'The number has to match the component on site. x means I do not know it.')}</p>`;
+  }
+  /* Every point on the device at once. */
+  function alleSvar() {
+    const rader = (S.points || []).map(p => ({p, r: tolk(p)})).filter(x => x.r && !(KODE.exec(x.p.name || '')?.[1] === x.r.kode));
+    if (!rader.length) return `<p>${T('Jeg har ingen forslag her. Enten er alt tagget, eller så sier beskrivelsene for lite.', 'I have no suggestions here. Either all is tagged, or the descriptions say too little.')}</p>`;
+    const tsv = rader.map(({p, r}) => `${p.objid}\t${p.name || ''}\t${r.tag}\t${p.description || ''}`).join('\n');
+    return `<p>${T(`${rader.length} av ${S.points.length} punkter har forslag:`, `${rader.length} of ${S.points.length} points have suggestions:`)}</p>
+      <button type="button" class="btn" data-kopier="${esc(tsv)}">${T('Kopier alle', 'Copy all')}</button>
+      <div class="sp-liste" style="margin-top:8px">${rader.slice(0, 40).map(({p, r}) => `<button type="button" class="sp-rad" data-ip="${esc(S.activeDev.address)}" data-objid="${esc(p.objid)}"><b>${esc(r.tag)}</b><span>${esc(p.name || p.objid)} · ${esc(r.hvorfor)}</span></button>`).join('')}</div>`;
   }
   function punktSvar(p) {
     const fl = (p.status || []).filter(f => FLAGS[f]).map(f => FLAGS[f].label);
@@ -121,6 +156,7 @@
   async function svar(q) {
     const s = q.toLowerCase().trim();
     const p = punktet();
+    if (S.points?.length && /(alle|hele).*(tag|punkt|enhet)|(tag|tagg).*(alle|hele)|all points|tag all/.test(s)) return alleSvar();
     if (p && /tagg|\btag\b|hete|kalle|navngi|rename|what should|hva burde/.test(s)) return tagSvar(p, q);
     if (p && /dette punktet|denne?\b.*punkt|this point|hva er dette|what is this|hva gjør dette/.test(s)) return punktSvar(p);
     const kilder = slaaOpp(s);
