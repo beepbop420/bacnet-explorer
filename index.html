@@ -4862,6 +4862,11 @@ html.peker-egen *:not(input):not(textarea):not(select):not(.splitter):not([conte
 button.sp-rad:hover{background:var(--hover)}
 .sp-rad b{font-family:var(--mono);font-weight:500;font-size:11.5px}
 .sp-rad span{font-size:11px;color:var(--fg-3)}
+.sp-kilde{border-top:1px solid var(--line);padding:7px 0 8px}
+.sp-kilde b{display:block;color:var(--fg);font-weight:500}
+.sp-kilde small{display:block;color:var(--fg-3);font-size:10px;margin-bottom:2px}
+.sp-ki{margin-bottom:8px;color:var(--fg)}
+.sp-ki small{display:block;color:var(--fg-3);font-size:10px;margin-top:3px}
 .gd-arb[hidden]{display:none}
 .pk-tittel{font-size:12px;color:var(--fg-3)}
 .pk-prove{display:flex;flex-wrap:wrap;gap:12px;justify-content:center}
@@ -5121,6 +5126,11 @@ button.sp-rad:hover{background:var(--hover)}
             <small>Velg peker i garderoben</small>
             <span id="pekerState" class="menu-state"></span></button>
         </div>
+        <div class="sett-gruppe"><div class="tema-tittel">Lokal KI</div>
+          <button id="kiBtn" class="sett-rad">Spør NABE med lokal KI
+            <small>Formulerer svar ut fra oppslagsverket. Kjører på denne PC-en, og laster ned 5 GB</small>
+            <span id="kiState" class="menu-state"></span></button>
+        </div>
         <div class="sett-gruppe"><div class="tema-tittel">Skriving</div>
           <button id="roBtn" class="sett-rad bryter" role="switch">Lesemodus
             <small>Blokkerer all skriving til anlegget</small>
@@ -5376,6 +5386,7 @@ button.sp-rad:hover{background:var(--hover)}
 <script src="/js/nabe-pekere.js"></script>
 <script src="/js/nabe-garderobe.js"></script>
 <script src="/js/nabe-opptak.js"></script>
+<script src="/js/nabe-kunnskap.js"></script>
 <script src="/js/nabe-spor.js"></script>
 </body>
 </html>

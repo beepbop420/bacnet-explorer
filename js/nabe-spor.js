@@ -1,28 +1,47 @@
-/* NABE - ask NABE. Answers from what NABE has already read and from a small
-   glossary of the trade. Runs on this PC: nothing leaves it, it works on a
-   closed plant network, and it only knows what it is listed here to know, so
-   it says so instead of guessing. Opened from the palette or by clicking
+/* NABE - ask NABE. Answers from what NABE has already read and from the
+   reference in nabe-kunnskap.js. Runs on this PC: nothing leaves it, it works
+   on a closed plant network, and it says so when it does not know. With the
+   local AI on, the AI words the answer, but only from a source shown under it,
+   and with no source it is not asked. Opened from the palette or by clicking
    the little NABE on a leash (Garderobe > Peker > Spør NABE). */
 'use strict';
 
 (function sporNabe() {
-  const ORD = [
-    [/prioritet|priority/, 'Prioritet', 'BACnet har 16 prioriteter for skriving, der 1 er sterkest. Høyeste aktive vinner. Operatører bruker gjerne 8. Det du setter, står til du frigir det.', 'BACnet has 16 write priorities, 1 being strongest. The highest active one wins. Operators usually use 8. What you set stays until you release it.'],
-    [/relinquish/, 'Relinquish default', 'Verdien punktet faller tilbake på når ingen prioritet er satt.', 'The value a point falls back to when no priority is set.'],
-    [/\bcov\b/, 'COV', 'Change of value: regulatoren sier fra selv når verdien endrer seg, i stedet for at noen spør hele tiden.', 'Change of value: the controller reports by itself when the value changes, instead of being asked all the time.'],
-    [/\bbbmd\b/, 'BBMD', 'Sender BACnet-kringkasting videre mellom IP-nett. Uten den når ikke Who-Is forbi en ruter. På et anlegg er det ofte JACE-en.', 'Forwards BACnet broadcasts between IP networks. Without it Who-Is stops at a router. On a site it is often the JACE.'],
-    [/ms\/?tp/, 'MS/TP', 'BACnet over RS-485, altså tvunnet par mellom regulatorene. Du når dem gjennom en ruter.', 'BACnet over RS-485, twisted pair between the controllers. You reach them through a router.'],
-    [/who-?is|i-?am\b/, 'Who-Is', 'Spørsmålet «hvem er der?». Enhetene svarer med I-Am og forteller instansnummeret sitt.', 'The question “who is there?”. Devices answer with I-Am and give their instance number.'],
-    [/\bede\b/, 'EDE', 'Engineering Data Exchange: et regnearkformat for å utveksle punktlister mellom verktøy.', 'Engineering Data Exchange: a spreadsheet format for passing point lists between tools.'],
-    [/out.of.service|ute av drift/, 'Out of service', 'Punktet er koblet fra den fysiske verdien, og present value kan settes for hånd.', 'The point is cut off from the physical value, and present value can be set by hand.'],
-    [/instans|instance/, 'Instans', 'Enhetens nummer på BACnet-nettet. Det må være unikt på hele nettet, ellers svarer feil enhet.', 'The device’s number on the BACnet network. It has to be unique on the whole network, or the wrong device answers.'],
-    [/47808|bac0/, 'Port 47808', 'Standardporten for BACnet/IP, BAC0 i heksadesimal. Bare ett program på PC-en kan binde den om gangen.', 'The default BACnet/IP port, BAC0 in hexadecimal. Only one program on the PC can bind it at a time.'],
-    [/tfm/, 'TFM', 'Tverrfaglig merkesystem: navnestrukturen som sier hvilket system og hvilken komponent et punkt hører til.', 'The Norwegian tagging system: the name structure that says which system and component a point belongs to.'],
-    [/present.?value/, 'Present value', 'Verdien punktet har akkurat nå. Det er den du leser og skriver.', 'The value the point has right now. That is the one you read and write.'],
-  ];
   const FORSLAG = [['Hva er overstyrt?', 'What is overridden?'], ['Er noe i alarm?', 'Is anything in alarm?'], ['Hvor mange punkter?', 'How many points?'], ['Hva betyr prioritet 8?', 'What does priority 8 mean?'], ['Finn RT401', 'Find RT401']];
 
-  const tittel = (o) => T(o[1], {Prioritet: 'Priority', Instans: 'Instance'}[o[1]] || o[1]);
+  /* The reference: words of the question against an article's own words,
+     title and text. A question that hits nothing strongly gets nothing. */
+  const STOPP = new Set('hva hvor hvem hvordan hvorfor når er det den de en et på i og å til for med av om kan jeg du vi skal må har betyr står the a an is are what how why when where do does of to in on and can i you'.split(' '));
+  const ordene = (s) => s.toLowerCase().replace(/[?.,!:;()]/g, ' ').split(/\s+/).filter(w => w.length > 1 && !STOPP.has(w));
+  const INDEKS = KUNNSKAP.map(k => ({k, n: k.n.toLowerCase().split(/\s+/), t: (k.t[0] + ' ' + k.t[1]).toLowerCase(), x: (k.x[0] + ' ' + k.x[1]).toLowerCase()}));
+  const slaaOpp = (q) => {
+    const w = ordene(q);
+    return INDEKS.map(i => {
+      let p = 0;
+      for (const o of w) {
+        if (i.n.includes(o)) p += 4;
+        else if (o.length > 3 && i.n.some(n => n.startsWith(o) || o.startsWith(n) && n.length > 3)) p += 3;
+        if (i.t.includes(o)) p += 2;
+        if (o.length > 2 && i.x.includes(o)) p += 1;
+      }
+      return {k: i.k, p};
+    }).filter(r => r.p >= 4).sort((a, b) => b.p - a.p).filter((r, _, l) => r.p >= l[0].p * .6).slice(0, 2).map(r => r.k);
+  };
+  const artikkel = (k) => `<div class="sp-kilde"><small>${esc(k.emne)}</small><b>${esc(T(k.t[0], k.t[1]))}</b>${esc(T(k.x[0], k.x[1]))}</div>`;
+  let nr = 0;
+  // The source stands by itself at once; the AI's wording arrives above it.
+  async function kiOver(q, kilder, n) {
+    let s = {};
+    try { s = await (await fetch('/api/ki')).json(); } catch {}
+    const ut = lag.querySelector('.sp-ki');
+    if (s.tilstand !== 'klar' || !ut) { ut?.remove(); return; }
+    ut.innerHTML = `<small>${T('Lokal KI formulerer…', 'The local AI is wording it…')}</small>`;
+    const r = await api('/api/ki/svar', {sporsmal: q, kilder: kilder.map(k => T(k.x[0], k.x[1]))}).catch(() => ({}));
+    if (n !== nr) return;
+    if (r.status !== 'done') { ut.remove(); return; }
+    ut.innerHTML = `${esc(r.tekst)}<small>${T('Forslag fra lokal KI. Sjekk mot kilden under.', 'A suggestion from the local AI. Check it against the source below.')}</small>`;
+  }
+
   const alle = () => Object.entries(S.cache || {}).flatMap(([ip, pts]) => (pts || []).map(p => ({ip, p})));
   const enhet = (ip) => { const d = S.devices.find(x => x.address === ip); return (d && d.object_name) || ip; };
   const navn = (p) => p.name || p.object_name || p.objid;
@@ -42,8 +61,9 @@
 
   async function svar(q) {
     const s = q.toLowerCase().trim();
-    const forklar = /betyr|hva er|what is|what does|mean|forklar|explain/.test(s) && ORD.find(([r]) => r.test(s));
-    if (forklar) return `<p><b>${esc(tittel(forklar))}.</b> ${esc(T(forklar[2], forklar[3]))}</p>`;
+    const kilder = slaaOpp(s);
+    const kilde = () => { kiNeste = {q, kilder}; return `<div class="sp-ki"></div>${kilder.map(artikkel).join('')}`; };
+    if (/betyr|hva er|what is|what does|mean|forklar|explain|hvordan|how|forskjell|difference/.test(s) && kilder.length) return kilde();
     if (/overstyr|override|manuell|manual/.test(s)) {
       let mine = [];
       try { mine = (await (await fetch('/api/mine')).json()).overstyrt || []; } catch {}
@@ -64,24 +84,26 @@
     }
     if (/opptak|record/.test(s)) { lukk(); aapneOpptak(); return ''; }
     if (/svarer ikke|ikke svar|not respond|no answer|nede\b/.test(s))
-      return `<p>${T('Sjekk først at du er på riktig nett og at ingen andre program holder port 47808. Så kan jeg teste adressen for deg.', 'First check you are on the right network and that nothing else holds port 47808. Then I can test the address for you.')}</p><button type="button" class="btn" data-spor-diag>${T('Sjekk en adresse', 'Check an address')}</button>`;
+      return `${kilde()}<button type="button" class="btn" data-spor-diag>${T('Sjekk en adresse', 'Check an address')}</button>`;
     if (/hjelp|help|hva kan du|what can you/.test(s))
       return `<p>${T('Jeg ser det NABE har lest: overstyrte punkter, alarmer, feil, antall, og hvor et punkt er. Jeg kan også forklare BACnet-ord og vise det du har skrevet. Alt skjer på denne PC-en.', 'I see what NABE has read: overridden points, alarms, faults, counts, and where a point is. I can also explain BACnet words and show what you have written. It all happens on this PC.')}</p>`;
     const ren = s.replace(/^(hvor er|finn|søk etter|søk|where is|find|search for|search|hva er verdien på|verdien på|what is the value of)\s+/, '').replace(/[?.!]+$/, '');
+    if (kilder.length && !/^(hvor er|finn|find|where is)\b/.test(s)) return kilde();
     const treff = sok(ren);
     if (treff.length) return `<p>${T(`${treff.length} treff ${lestAv()}:`, `${treff.length} hits ${lestAv()}:`)}</p>${liste(treff)}`;
-    const ord = ORD.find(([r]) => r.test(s));
-    if (ord) return `<p><b>${esc(tittel(ord))}.</b> ${esc(T(ord[2], ord[3]))}</p>`;
-    return `<p>${T('Det vet jeg ikke. Jeg finner bare det NABE har lest, og ord jeg kan.', 'I do not know that. I only find what NABE has read, and words I know.')}</p>`;
+    if (kilder.length) return kilde();
+    return `<p>${T('Det vet jeg ikke. Jeg finner bare det NABE har lest, og det som står i oppslagsverket.', 'I do not know that. I only find what NABE has read, and what is in the reference.')}</p>`;
   }
 
-  let lag = null;
+  let lag = null, kiNeste = null;
   function lukk() { if (lag) lag.hidden = true; }
   async function spor(q) {
     if (!q.trim()) return;
     const ut = lag.querySelector('.sp-svar');
     const kropp = await svar(q).catch(() => `<p>${T('Noe gikk galt der.', 'Something went wrong there.')}</p>`);
     if (kropp) ut.innerHTML = `<div class="sp-q">${esc(q)}</div>${kropp}`;
+    const n = ++nr;
+    if (kiNeste) { kiOver(kiNeste.q, kiNeste.kilder, n); kiNeste = null; }
   }
   function aapne() {
     if (!lag) {
@@ -111,6 +133,36 @@
     lag.hidden = false;
     lag.querySelector('input').focus();
   }
+  /* The setting: install, watch it come, take it away again. */
+  const KI_TEKST = {motor: ['henter motor', 'fetching engine'], modell: ['laster ned', 'downloading'], sjekk: ['sjekker fila', 'checking the file'], test: ['måler farten', 'measuring speed']};
+  let kiVakt = 0;
+  async function kiVis() {
+    const s = await (await fetch('/api/ki')).json().catch(() => ({}));
+    const el = $('kiState');
+    clearTimeout(kiVakt);
+    if (s.tilstand === 'laster') kiVakt = setTimeout(kiVis, 2000);
+    if (!el) return s;
+    const st = KI_TEKST[s.steg];
+    el.textContent = s.tilstand === 'laster' ? `${st ? T(st[0], st[1]) : ''}${s.steg === 'modell' ? ` ${Math.round(s.fremdrift * 100)} %` : ''}`
+      : s.tilstand === 'klar' ? T('på', 'on') : s.tilstand === 'treg' ? T('for treg', 'too slow')
+      : s.tilstand === 'feil' ? T('feilet', 'failed') : T('av', 'off');
+    return s;
+  }
+  $('kiBtn').onclick = async () => {
+    const s = await kiVis();
+    if (s.tilstand === 'laster') return;
+    if (s.tilstand === 'klar' || s.tilstand === 'treg') {
+      const tekst = s.tilstand === 'treg'
+        ? T(`Denne PC-en klarer bare ${s.tok_s} tokens i sekundet, så NABE lar KI-en stå av. Fjerne den og få igjen 5 GB?`, `This PC only manages ${s.tok_s} tokens a second, so NABE leaves the AI off. Remove it and get 5 GB back?`)
+        : T(`Lokal KI er på (${s.tok_s} tokens i sekundet). Fjerne den og få igjen 5 GB?`, `The local AI is on (${s.tok_s} tokens a second). Remove it and get 5 GB back?`);
+      if (confirm(tekst)) { await api('/api/ki/fjern', {}); kiVis(); }
+    } else if (confirm(T('Laste ned lokal KI? Det er 5 GB, og alt kjører på denne PC-en. Svarene er forslag og vises med kilden sin.', 'Download the local AI? It is 5 GB, and all of it runs on this PC. Answers are suggestions and shown with their source.'))) {
+      await api('/api/ki/installer', {});
+      setTimeout(kiVis, 400);
+    }
+  };
+  etter('openTema', kiVis);
+  kiVis();
   window.aapneSpor = aapne;
   PK.fig.addEventListener('click', aapne);
 })();

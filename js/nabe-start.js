@@ -177,6 +177,10 @@ const FAKTA = [
   ['COV betyr at regulatoren sier fra selv. Mindre spørring, mer ro.', 'COV means the controller speaks up itself. Less asking, more peace.'],
 ];
 const NYTT = {
+  '1.47': [
+    ['Oppslagsverk i Spør NABE: TFM og tagger per fabrikat, BACnet, Niagara, Regin, TwinCAT, Distech og WAGO', 'A reference in Ask NABE: TFM and tags by make, BACnet, Niagara, Regin, TwinCAT, Distech and WAGO'],
+    ['Lokal KI som valg: kjører på PC-en og formulerer svar ut fra oppslagsverket, alltid med kilden under. Uten kilde svarer den ikke. Under Innstillinger, eller i installasjonen', 'Local AI as a choice: runs on the PC and words answers from the reference, always with the source below. Without a source it does not answer. Under Settings, or in the installer'],
+  ],
   '1.46': [
     ['Opptak av punkter: velg punkter, la NABE logge dem i timevis og åpne CSV-fila i Excel. Under ⋯-menyen', 'Recording points: select points, let NABE log them for hours and open the CSV in Excel. Under the ⋯ menu'],
     ['Spør NABE: finn overstyrte punkter, alarmer og punkter på navn, og få forklart BACnet-ord. Alt skjer på denne PC-en. I paletten, eller som peker i garderoben', 'Ask NABE: find overridden points, alarms and points by name, and get BACnet words explained. It all happens on this PC. In the palette, or as a pointer in the wardrobe'],

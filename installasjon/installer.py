@@ -100,6 +100,11 @@ def installer(mappe: Path, valg: dict, fremdrift=lambda n, av, tekst: None):
         winreg.SetValueEx(k, "NoRepair", 0, winreg.REG_DWORD, 1)
         storrelse = sum(f.stat().st_size for f in filer) // 1024
         winreg.SetValueEx(k, "EstimatedSize", 0, winreg.REG_DWORD, storrelse)
+    # The local AI is fetched by NABE on its first start, with progress in Settings.
+    if valg.get("ki"):
+        data = Path(os.environ.get("LOCALAPPDATA", str(Path.home()))) / "NABE"
+        data.mkdir(parents=True, exist_ok=True)
+        (data / "ki.json").write_text(json.dumps({"valgt": True}), encoding="utf-8")
     (mappe / "snarveier.json").write_text(json.dumps([str(p) for p in laget]), encoding="utf-8")
     return mappe
 

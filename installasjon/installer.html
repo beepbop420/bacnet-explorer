@@ -85,6 +85,7 @@ button:disabled{opacity:.35;cursor:default}
     <label><input type="checkbox" id="meny" checked><span>Start-menyen<small>Så du finner NABE når du trykker Windows-tasten.</small></span></label>
     <label><input type="checkbox" id="skrivebord" checked><span>Skrivebordet<small>For de som har orden på skrivebordet. Eller ikke.</small></span></label>
     <label><input type="checkbox" id="nettleser"><span>Også nettleserversjonen<small>Samme NABE, i nettleseren din, for deg som savner faner.</small></span></label>
+    <label><input type="checkbox" id="ki"><span>Lokal KI (5 GB)<small>Spør NABE formulerer svar ut fra oppslagsverket. Lastes ned når NABE starter, og alt kjører på PC-en.</small></span></label>
   </div>
   <div class="knapper"><button onclick="gaa(2)">Tilbake</button><button class="primar" onclick="installer()">Installer</button></div>
 </section>
@@ -125,7 +126,7 @@ function avslaa() {
 function installer() {
   MAPPE = $('mappe').value.trim();
   gaa(4);
-  api('installer', MAPPE, {meny: $('meny').checked, skrivebord: $('skrivebord').checked, nettleser: $('nettleser').checked});
+  api('installer', MAPPE, {meny: $('meny').checked, skrivebord: $('skrivebord').checked, nettleser: $('nettleser').checked, ki: $('ki').checked});
 }
 let sisteStatus = 0;
 function fremdrift(n, av, fil) {

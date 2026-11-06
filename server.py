@@ -24,6 +24,10 @@ Endpoints:
 """
 import asyncio
 import errno
+import hashlib
+import shutil
+import sys
+import threading
 import datetime
 import ipaddress
 import re
@@ -192,7 +196,7 @@ def t(nb: str, en: str) -> str:
     return en if SPRAAK_VAR.get() == "en" else nb
 
 
-VERSJON = "1.46"
+VERSJON = "1.47"
 
 state = {"app": None, "local_address": None, "read_only": False, "bbmd": None}
 
@@ -2763,6 +2767,189 @@ async def sites_delete(body: SiteKeyBody):
         return {"status": "error", "error": t("Ukjent anlegg", "Unknown site")}
     _save_sites()
     return {"status": "done"}
+
+
+# The local AI, for those who choose it. Nothing of it ships with NABE: the engine
+# (a Python package, so no program of its own for the PC's security to judge)
+# and the model are fetched into the data folder. It only ever words an answer
+# from the sources it is handed; without a source it is not asked at all.
+# Measured: a 4B model contradicted its source, this 8B one held to it, and
+# neither can be trusted without one.
+KI_DIR = DATA_DIR / "ki"
+KI_VALG = DATA_DIR / "ki.json"
+KI_MOTOR = "llama-cpp-python==0.3.36"
+KI_INDEKS = "https://abetlen.github.io/llama-cpp-python/whl/cpu"
+KI_MODELL = "qwen3-8b-q4.gguf"
+KI_URL = "https://huggingface.co/Qwen/Qwen3-8B-GGUF/resolve/main/Qwen3-8B-Q4_K_M.gguf"
+KI_STOR = 5027783488
+KI_SHA = "d98cdcbd03e17ce47681435b5150e34c1417f50b5c0019dd560e4882c5745785"
+KI_TREG = 3.0        # tokens a second; below this it is more wait than help
+KI: Dict[str, Any] = {"tilstand": "av", "steg": "", "fremdrift": 0.0, "tok_s": 0.0, "feil": ""}
+KI_PROSESS: Dict[str, Any] = {"p": None, "sist": 0.0}
+KI_LAS = threading.Lock()
+
+
+def _ki_lagre() -> None:
+    KI_VALG.write_text(json.dumps({"valgt": KI["tilstand"] != "av", "tok_s": KI["tok_s"]}), encoding="utf-8")
+
+
+def _ki_lest() -> Dict[str, Any]:
+    try:
+        return json.loads(KI_VALG.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+
+
+def _ki_python() -> str:
+    p = Path(sys.executable)
+    return str(p.with_name("python.exe")) if p.name.lower() == "pythonw.exe" else str(p)
+
+
+def _ki_uten_vindu() -> Dict[str, Any]:
+    return {"creationflags": 0x08000000 | 0x00004000} if os.name == "nt" else {}   # no window, below normal
+
+
+def _ki_stopp() -> None:
+    p = KI_PROSESS["p"]
+    KI_PROSESS["p"] = None
+    if p:
+        try:
+            p.stdin.close()
+            p.wait(timeout=3)
+        except (OSError, subprocess.TimeoutExpired):
+            p.kill()
+
+
+def _ki_spor(melding: Dict[str, Any], tidsfrist: float = 180) -> Dict[str, Any]:
+    """Ask the worker, starting it if it sleeps. One question at a time."""
+    with KI_LAS:
+        p = KI_PROSESS["p"]
+        if p is None or p.poll() is not None:
+            p = subprocess.Popen([_ki_python(), "-s", str(Path(__file__).parent / "nabe_ki_arbeider.py"), str(KI_DIR), str(KI_DIR / KI_MODELL)],
+                                 stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, encoding="utf-8",
+                                 **_ki_uten_vindu())
+            KI_PROSESS["p"] = p
+            if not json.loads(p.stdout.readline() or "{}").get("klar"):
+                _ki_stopp()
+                return {"feil": "start"}
+        vakt = threading.Timer(tidsfrist, p.kill)
+        vakt.start()
+        try:
+            p.stdin.write(json.dumps(melding, ensure_ascii=False) + "\n")
+            p.stdin.flush()
+            svar = p.stdout.readline()
+        except OSError:
+            svar = ""
+        vakt.cancel()
+        KI_PROSESS["sist"] = time.time()
+        return json.loads(svar) if svar else {"feil": "stopp"}
+
+
+def _ki_sover() -> None:
+    """Gives the memory back after ten quiet minutes."""
+    while True:
+        time.sleep(60)
+        if KI_PROSESS["p"] and time.time() - KI_PROSESS["sist"] > 600 and not KI_LAS.locked():
+            with KI_LAS:
+                _ki_stopp()
+
+
+def _ki_installer() -> None:
+    try:
+        KI_DIR.mkdir(parents=True, exist_ok=True)
+        KI.update(tilstand="laster", feil="", fremdrift=0.0, steg="motor")
+        if not (KI_DIR / "pakker" / "llama_cpp").is_dir():
+            subprocess.run([_ki_python(), "-m", "pip", "install", "--quiet", "--disable-pip-version-check", "--target", str(KI_DIR / "pakker"),
+                            "--only-binary=:all:", "--extra-index-url", KI_INDEKS, KI_MOTOR], check=True, capture_output=True, timeout=900,
+                           **_ki_uten_vindu())
+        fil = KI_DIR / KI_MODELL
+        if not fil.exists():
+            KI["steg"] = "modell"
+            del_ = fil.with_suffix(".del")
+            har = del_.stat().st_size if del_.exists() else 0
+            req = urllib.request.Request(KI_URL, headers={"Range": f"bytes={har}-"} if har else {})
+            with urllib.request.urlopen(req, timeout=60) as r, open(del_, "ab" if har and r.status == 206 else "wb") as f:
+                if r.status != 206:
+                    har = 0
+                while True:
+                    biter = r.read(1 << 20)
+                    if not biter:
+                        break
+                    f.write(biter)
+                    har += len(biter)
+                    KI["fremdrift"] = har / KI_STOR
+            KI["steg"] = "sjekk"
+            h = hashlib.sha256()
+            with open(del_, "rb") as f:
+                for biter in iter(lambda: f.read(1 << 22), b""):
+                    h.update(biter)
+            if h.hexdigest() != KI_SHA:
+                del_.unlink()
+                raise ValueError("sjekksum")
+            os.replace(del_, fil)
+        KI["steg"] = "test"
+        r = _ki_spor({"sporsmal": "Hva er en BBMD?", "kilder": ["BBMD sender BACnet-kringkasting videre mellom IP-nett."], "maks": 48})
+        if "feil" in r:
+            raise RuntimeError(r["feil"])
+        KI.update(tok_s=r["tok_s"], tilstand="klar" if r["tok_s"] >= KI_TREG else "treg", steg="")
+    except Exception as e:
+        print(f"ADVARSEL: lokal KI: {e}")
+        KI.update(tilstand="feil", feil=str(e)[:200], steg="")
+    _ki_lagre()
+
+
+def ki_start() -> None:
+    """On start: pick up where the installer's choice or last run left it."""
+    valg = _ki_lest()
+    threading.Thread(target=_ki_sover, daemon=True).start()
+    if not valg.get("valgt"):
+        return
+    if (KI_DIR / KI_MODELL).exists() and (KI_DIR / "pakker" / "llama_cpp").is_dir() and valg.get("tok_s"):
+        KI.update(tok_s=valg["tok_s"], tilstand="klar" if valg["tok_s"] >= KI_TREG else "treg")
+    else:
+        threading.Thread(target=_ki_installer, daemon=True).start()
+
+
+class KiBody(BaseModel):
+    sporsmal: str
+    kilder: List[str] = []
+
+
+@app.get("/api/ki")
+async def ki_status():
+    return dict(KI, stor=KI_STOR)
+
+
+@app.post("/api/ki/installer")
+async def ki_installer_start():
+    if KI["tilstand"] != "laster":
+        threading.Thread(target=_ki_installer, daemon=True).start()
+    return {"status": "done"}
+
+
+@app.post("/api/ki/fjern")
+async def ki_fjern():
+    with KI_LAS:
+        _ki_stopp()
+    shutil.rmtree(KI_DIR, ignore_errors=True)
+    KI.update(tilstand="av", steg="", fremdrift=0.0, tok_s=0.0, feil="")
+    _ki_lagre()
+    return {"status": "done"}
+
+
+@app.post("/api/ki/svar")
+async def ki_svar(body: KiBody):
+    if not body.kilder:
+        return {"status": "error", "error": t("Ingen kilde, ingen KI", "No source, no AI")}
+    if KI["tilstand"] != "klar":
+        return {"status": "error", "error": t("Lokal KI er ikke klar", "The local AI is not ready")}
+    r = await asyncio.to_thread(_ki_spor, {"sporsmal": body.sporsmal[:400], "kilder": body.kilder[:3], "sprak": SPRAAK_VAR.get()})
+    if "feil" in r:
+        return {"status": "error", "error": t("Lokal KI svarte ikke", "The local AI did not answer")}
+    return {"status": "done", "tekst": r["tekst"]}
+
+
+ki_start()
 
 
 # A recording: the chosen points read on an interval, one CSV row each time,

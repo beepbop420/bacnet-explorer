@@ -241,6 +241,10 @@ def kjor_tester():
     sjekk("NABO lagrer i valgt mappe, aldri utenfor", r1.get("status") == "done"
           and Path(r1.get("sti", "")).is_file() and r2.get("status") == "error", f"{r1} / {r2}")
 
+    # The local AI: never asked without a source, and off until chosen.
+    r5 = kall("/api/ki/svar", {"sporsmal": "x", "kilder": []})
+    sjekk("KI svarer aldri uten kilde", r5.get("status") == "error", str(r5))
+
     # A recording reads on its own and writes rows as it goes.
     r3 = kall("/api/opptak/start", {"punkter": [{"address": "127.0.0.2", "objid": "analog-input,1", "navn": "T"}], "intervall": 1})
     time.sleep(2.3)
@@ -248,7 +252,7 @@ def kjor_tester():
     linjer = Path(r3.get("fil", "x")).read_text(encoding="utf-8-sig").splitlines() if r3.get("status") == "done" else []
     sjekk("opptak skriver rader med verdi", len(linjer) >= 3 and r4.get("rader", 0) >= 2 and linjer[1].split(";")[1] != "", str(linjer[:3]))
 
-    for fil in ("nabe-start", "nabe-verktoy", "nabe-felt", "nabe-moro", "nabe-finn", "nabe-skann", "nabe-anlegg", "nabe-bunn", "nabe-graf", "nabe-tunnel", "nabe-sammen", "nabe-flyt", "nabe-peker", "nabe-pekere", "nabe-skrift", "nabo", "nabo-brodre", "nabo-fasit", "nabe-garderobe", "nabe-opptak", "nabe-spor"):
+    for fil in ("nabe-start", "nabe-verktoy", "nabe-felt", "nabe-moro", "nabe-finn", "nabe-skann", "nabe-anlegg", "nabe-bunn", "nabe-graf", "nabe-tunnel", "nabe-sammen", "nabe-flyt", "nabe-peker", "nabe-pekere", "nabe-skrift", "nabo", "nabo-brodre", "nabo-fasit", "nabe-garderobe", "nabe-opptak", "nabe-kunnskap", "nabe-spor"):
         try:
             with urllib.request.urlopen(f"{BASE}/js/{fil}.js", timeout=5) as rr:
                 ok = rr.status == 200

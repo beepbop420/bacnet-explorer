@@ -1,0 +1,108 @@
+/* NABE - what NABE knows of the trade. Short articles in our own words, read
+   by Ask NABE; the local AI may only word its answers from these. Each is
+   {emne, t: [title nb, en], n: words it is found by, x: [text nb, en]}. Keep them
+   true and plain: a wrong line here becomes a wrong answer on site. No customer
+   or site names. Distech and WAGO are general so far. */
+'use strict';
+
+const KUNNSKAP = [
+  // --- tagging
+  {emne: 'TFM', t: ['Navnestruktur på punkter', 'Point name structure'], n: 'tag tagging navn navnestruktur tfm struktur system mappe byggnavn bygg name structure',
+   x: ['Felles for alle fabrikat: {system}.{mappe}.{tag}, for eksempel 360.003.JV401.JV_AU. Her er 360.003 systemet, JV401 mappa (TFM-komponenten) og JV_AU taggen. Aldri byggnavn i taggen. Mappa er TFM-komponenten, pluss System for aggregatnivå og Diverse for givere.',
+       'Common to all makes: {system}.{folder}.{tag}, for example 360.003.JV401.JV_AU. Here 360.003 is the system, JV401 the folder (the TFM component) and JV_AU the tag. Never a building name in the tag. The folder is the TFM component, plus System for unit level and Diverse for sensors.']},
+  {emne: 'TFM', t: ['Taggene varierer med fabrikat', 'Tags differ by make'], n: 'fabrikat beckhoff distech wago johnson swegon regin like forskjell standard make differ same',
+   x: ['Det finnes ikke én felles standard for selve taggene. Beckhoff har sin, og Distech, Johnson og WAGO gjør det annerledes. Spør hvilken PLS det er før du tagger. Å dra Beckhoff-ordene over på et Distech-anlegg blir feil.',
+       'There is no single standard for the tags themselves. Beckhoff has its own, and Distech, Johnson and WAGO do it differently. Ask which PLC it is before tagging. Carrying Beckhoff words over to a Distech site is wrong.']},
+  {emne: 'TFM', t: ['Beckhoff-tagger', 'Beckhoff tags'], n: 'beckhoff au jv_au sb_au kv kmd kmd_sp sp sp_akt wsp feil start drift auto man pådrag virkningsgrad suffiks suffix',
+   x: ['AU analog utgang, JV_AU viftepådrag, SB_AU ventilpådrag, C pådrag på gjenvinner eller regulator, KV virkningsgrad. Feil, Start, Drift, Auto (modusvelger), Man (manuell verdi). KMD driftsmodus som ikke kan endres, KMD_SP modus som kan endres. SP settpunkt, SP_Akt eller WSp arbeidende settpunkt.',
+       'AU analog output, JV_AU fan output, SB_AU valve output, C output of recovery or controller, KV efficiency. Feil (fault), Start, Drift (running), Auto (mode selector), Man (manual value). KMD operating mode that cannot be changed, KMD_SP mode that can. SP setpoint, SP_Akt or WSp working setpoint.']},
+  {emne: 'TFM', t: ['Batterier og doble vifter', 'Coils and twin fans'], n: 'batteri lv lk pumpe jp ventil dobbel dobbeltvifte jv401_jv402 autoa aub coil twin pump',
+   x: ['I en batterimappe (LV eller LK) eier pumpa de bare taggene Auto, Drift, Feil og Start, og ventilen får SB_-prefiks. Annet sekundærutstyr får sin egen kode som prefiks, som JP_Feil. Dobbeltvifter og -pumper: mappa heter JV401_JV402, og punktene får A eller B, som AutoA, AUB, StartA og FeilB.',
+       'In a coil folder (LV or LK) the pump owns the bare tags Auto, Drift, Feil and Start, and the valve gets an SB_ prefix. Other secondary equipment gets its own code as a prefix, like JP_Feil. Twin fans and pumps: the folder is JV401_JV402, and the points get A or B, like AutoA, AUB, StartA and FeilB.']},
+  {emne: 'TFM', t: ['Distech-tagger', 'Distech tags'], n: 'distech understrek _s _d _a _err _c _fb _sw _st _sp _wsp kurvepunkt tagger suffiks',
+   x: ['Understrek gjennomgående, i formen 320_001_RT901. _S start, _D drift, _A alarm fra felt, _Err kalkulert feil, _C pådrag, _FB posisjonstilbakemelding, _Sw SD-vender, _St status, _Sp settpunkt, _WSp arbeidende settpunkt, _K_X1 og _K_Y1 kurvepunkt.',
+       'Underscores throughout, in the form 320_001_RT901. _S start, _D running, _A alarm from field, _Err calculated fault, _C output, _FB position feedback, _Sw SD switch, _St status, _Sp setpoint, _WSp working setpoint, _K_X1 and _K_Y1 curve points.']},
+  {emne: 'TFM', t: ['Swegon-tagger', 'Swegon tags'], n: 'swegon flat _gn _eff _st _wsp swtmpreg reguleringsform',
+   x: ['Flat punktliste. JV401_Gn viftepådrag, LX001_Eff virkningsgrad, SB501_Gn ventilpådrag, KAx01_St spjeld, RT401_WSp arbeidende settpunkt. IV001_SwTmpReg velger reguleringsform: 4 fast tilluftssettpunkt, 5 avtrekk med tilluftsbegrensning, 6 utekompensert tilluft, 7 utekompensert avtrekk.',
+       'A flat point list. JV401_Gn fan output, LX001_Eff efficiency, SB501_Gn valve output, KAx01_St damper, RT401_WSp working setpoint. IV001_SwTmpReg selects the control mode: 4 fixed supply setpoint, 5 extract with supply limit, 6 outdoor-compensated supply, 7 outdoor-compensated extract.']},
+  {emne: 'TFM', t: ['Settpunkter og prefikser', 'Setpoints and prefixes'], n: 'settpunkt setpoint navngi prefiks kollisjon sb m filter ventil grense hoy lav rt401_sp',
+   x: ['Finn ikke på prefikser: flere kolliderer med ekte TFM-koder. SB er reguleringsventil, ikke settpunkt, og M er filter. Navngi settpunkt etter variabelen de virker på, som RT401_SP. Det gjelder også grenser, som RT401_Hoy og RT401_Lav.',
+       'Do not invent prefixes: several collide with real TFM codes. SB is a control valve, not a setpoint, and M is a filter. Name setpoints after the variable they act on, like RT401_SP. That goes for limits too, like RT401_Hoy and RT401_Lav.']},
+  {emne: 'TFM', t: ['Tegn som ikke skal i navn', 'Characters to keep out of names'], n: 'tegn escape prosent parentes æøå spesialtegn characters navn',
+   x: ['%, (, ), [, \\ og : blir omskrevet i Niagara og skal ikke brukes. Æ, ø og å ødelegger i navnekolonnen, men overlever i beskrivelsen. Niagara bygger mappetreet av navneprefikset.',
+       '%, (, ), [, \\ and : get escaped in Niagara and should not be used. Æ, ø and å break in the name column, but survive in the description. Niagara builds the folder tree from the name prefix.']},
+
+  // --- BACnet
+  {emne: 'BACnet', t: ['Prioritet', 'Priority'], n: 'prioritet priority array 16 pri 8 skrive overstyre sterkest',
+   x: ['BACnet har 16 prioriteter for skriving, der 1 er sterkest. Den høyeste aktive vinner. Operatører bruker gjerne 8. Det du setter, står til du frigir det.',
+       'BACnet has 16 write priorities, 1 being strongest. The highest active one wins. Operators usually use 8. What you set stays until you release it.']},
+  {emne: 'BACnet', t: ['Relinquish default', 'Relinquish default'], n: 'relinquish default frigi release',
+   x: ['Verdien punktet faller tilbake på når ingen prioritet er satt.', 'The value a point falls back to when no priority is set.']},
+  {emne: 'BACnet', t: ['COV', 'COV'], n: 'cov change of value abonnement subscribe',
+   x: ['Change of value: regulatoren sier fra selv når verdien endrer seg, i stedet for at noen spør hele tiden.', 'Change of value: the controller reports by itself when the value changes, instead of being asked all the time.']},
+  {emne: 'BACnet', t: ['BBMD', 'BBMD'], n: 'bbmd broadcast kringkasting ruter router subnett foreign device fdr',
+   x: ['BACnet/IP Broadcast Management Device. Sender BACnet-kringkasting videre mellom IP-nett. Uten den stopper Who-Is ved ruteren. Du trenger den når enhetene står på et annet subnett enn deg. På et anlegg er det ofte JACE-en. NABE kan registrere seg som foreign device hos den.',
+       'BACnet/IP Broadcast Management Device. Forwards BACnet broadcasts between IP networks. Without it Who-Is stops at the router. You need it when the devices sit on another subnet than you. On a site it is often the JACE. NABE can register with it as a foreign device.']},
+  {emne: 'BACnet', t: ['MS/TP', 'MS/TP'], n: 'mstp ms/tp rs485 rs-485 tvunnet par buss bus baud mac',
+   x: ['BACnet over RS-485, altså tvunnet par mellom regulatorene. Du når dem gjennom en ruter, ofte en JACE eller IP-regulator. Hvert MS/TP-nett har sitt eget nettnummer.',
+       'BACnet over RS-485, twisted pair between the controllers. You reach them through a router, often a JACE or an IP controller. Each MS/TP network has its own network number.']},
+  {emne: 'BACnet', t: ['Who-Is og I-Am', 'Who-Is and I-Am'], n: 'who-is whois i-am iam oppdage scan finne discover',
+   x: ['Who-Is er spørsmålet «hvem er der?». Enhetene svarer med I-Am og forteller instansnummeret sitt. Who-Is er kringkasting, så det når ikke over en ruter uten BBMD.',
+       'Who-Is is the question “who is there?”. Devices answer with I-Am and give their instance number. Who-Is is a broadcast, so it does not cross a router without a BBMD.']},
+  {emne: 'BACnet', t: ['Instansnummer', 'Instance number'], n: 'instans instance device id duplikat unik',
+   x: ['Enhetens nummer på BACnet-nettet. Det må være unikt på hele nettet. To enheter med samme instans gir svar fra feil enhet.',
+       'The device’s number on the BACnet network. It has to be unique on the whole network. Two devices with the same instance give answers from the wrong one.']},
+  {emne: 'BACnet', t: ['Port 47808', 'Port 47808'], n: '47808 bac0 port udp opptatt svarer ikke',
+   x: ['Standardporten for BACnet/IP, BAC0 i heksadesimal, over UDP. Bare ett program på PC-en kan binde den om gangen, så en annen BACnet-klient kan stoppe NABE.',
+       'The default BACnet/IP port, BAC0 in hexadecimal, over UDP. Only one program on the PC can bind it at a time, so another BACnet client can stop NABE.']},
+  {emne: 'BACnet', t: ['Out of service', 'Out of service'], n: 'out-of-service out of service ute av drift oos',
+   x: ['Punktet er koblet fra den fysiske verdien, og present value kan settes for hånd.', 'The point is cut off from the physical value, and present value can be set by hand.']},
+  {emne: 'BACnet', t: ['Present value', 'Present value'], n: 'present value present-value verdi',
+   x: ['Verdien punktet har akkurat nå. Det er den du leser og skriver.', 'The value the point has right now. That is the one you read and write.']},
+  {emne: 'BACnet', t: ['Statusflagg', 'Status flags'], n: 'status flags statusflagg in-alarm fault overridden',
+   x: ['Fire flagg på et punkt: in-alarm, fault, overridden og out-of-service. Overridden betyr at noe lokalt overstyrer punktet, ikke nødvendigvis en skriving over BACnet.',
+       'Four flags on a point: in-alarm, fault, overridden and out-of-service. Overridden means something local overrides the point, not necessarily a write over BACnet.']},
+  {emne: 'BACnet', t: ['EDE', 'EDE'], n: 'ede engineering data exchange punktliste csv',
+   x: ['Engineering Data Exchange: et regnearkformat for å utveksle punktlister mellom verktøy.', 'Engineering Data Exchange: a spreadsheet format for passing point lists between tools.']},
+  {emne: 'BACnet', t: ['Når en enhet ikke svarer', 'When a device does not answer'], n: 'svarer ikke feilsøke feilsøking ping nett vpn nede not respond',
+   x: ['Sjekk i rekkefølge: er du på riktig nett og riktig nettverkskort, svarer adressen på ping, holder et annet program port 47808, og står enheten bak en ruter som krever BBMD. Sjekk en adresse i NABE går gjennom dette.',
+       'Check in order: are you on the right network and adapter, does the address answer ping, does another program hold port 47808, and is the device behind a router that needs a BBMD. Check an address in NABE goes through this.']},
+
+  // --- Niagara
+  {emne: 'Niagara', t: ['Fallback på proxy-punkter', 'Fallback on proxy points'], n: 'fallback proxy punkt skrivbar levering kontroller niagara bog',
+   x: ['Fjern fallback fra alle skrivbare proxy-punkter før levering. Fallback skrives til kontrolleren ved innliming. Unntak er SD-vender som skal styres fra tidkanal.',
+       'Remove fallback from all writable proxy points before delivery. Fallback is written to the controller on pasting. The exception is an SD switch driven by a schedule.']},
+  {emne: 'Niagara', t: ['Urikon på ventil vises ikke', 'Clock icon on a valve does not show'], n: 'urikon tidkanal schedule n:sched n:childpoint relation neql px komponentbilde',
+   x: ['Ikonet vises bare når mappa har et punkt med taggen n:sched og relasjonen n:childPoint. Tag punktet med n:sched. Høyreklikk punktet og velg Relation Mark, høyreklikk mappa og velg Relate To med Id n:childPoint. Test med |neql:traverse n:childPoint-> where n:sched.',
+       'The icon only shows when the folder has a point tagged n:sched and the relation n:childPoint. Tag the point with n:sched. Right-click the point and choose Relation Mark, right-click the folder and choose Relate To with Id n:childPoint. Test with |neql:traverse n:childPoint-> where n:sched.']},
+  {emne: 'Niagara', t: ['Mapper i stasjonen', 'Folders in the station'], n: 'mappe struktur diverse system komponent slot niagara station',
+   x: ['Standard er Diverse og SYSTEM, og én mappe per komponent med underkomponentene inni, for eksempel SB, JP, RT og QT i LV.',
+       'The standard is Diverse and SYSTEM, and one folder per component with its sub-components inside, for example SB, JP, RT and QT in LV.']},
+
+  // --- Regin
+  {emne: 'Regin', t: ['Corrigo over Modbus', 'Corrigo over Modbus'], n: 'corrigo regin modbus register decimal skalering r-type',
+   x: ['Decimal i Niagara er eksportnummeret minus 1. R-typene skaleres med 0,1, med unntak for trykksettpunkt. Corrigo har ingen velger for reguleringsform over BACnet slik Swegon har, så Swegon-bilder kan ikke gjenbrukes rett.',
+       'Decimal in Niagara is the export number minus 1. R types are scaled by 0.1, except pressure setpoints. Corrigo has no control mode selector over BACnet the way Swegon has, so Swegon graphics cannot be reused directly.']},
+  {emne: 'Regin', t: ['Alarmer på Corrigo', 'Alarms on Corrigo'], n: 'corrigo alarm normal tilstandstekst beskrivelse',
+   x: ['Corrigo setter tilstandstekst NORMAL/ALARM også på manuell-statuser. Finn derfor alarmer på beskrivelsen, ikke tilstandsteksten.',
+       'Corrigo sets the state text NORMAL/ALARM on manual statuses too. So find alarms by the description, not the state text.']},
+
+  // --- Beckhoff
+  {emne: 'Beckhoff', t: ['TwinCAT 2 og TwinCAT 3', 'TwinCAT 2 and TwinCAT 3'], n: 'twincat tc2 tc3 forskjell versjon visual studio plc control system manager twincat2 twincat3 difference',
+   x: ['Begge programmeres etter IEC 61131-3. TwinCAT 2 har egne program, System Manager og PLC Control. TwinCAT 3 samler alt i Visual Studio, har objektorienterte tillegg som metoder og grensesnitt, og kan bruke C/C++-moduler. PLS-porten over ADS er 801 på TC2 og 851 på TC3.',
+       'Both are programmed to IEC 61131-3. TwinCAT 2 has separate programs, System Manager and PLC Control. TwinCAT 3 gathers everything in Visual Studio, adds object-oriented features like methods and interfaces, and can use C/C++ modules. The PLC port over ADS is 801 on TC2 and 851 on TC3.']},
+  {emne: 'Beckhoff', t: ['Structured Text i TwinCAT', 'Structured Text in TwinCAT'], n: 'st structured text kode navngiving funksjonsblokk iec 61131 skannsyklus',
+   x: ['Koden skal være forutsigbar og trygg i skannsyklusen, og lett å feilsøke online. Variabler i camelCase, funksjonsblokker og typer i PascalCase, grensesnitt med I foran, konstanter med store bokstaver. Bruk komposisjon fremfor arv. All minnebruk er statisk.',
+       'Code should be deterministic and safe in the scan cycle, and easy to debug online. Variables in camelCase, function blocks and types in PascalCase, interfaces with an I in front, constants in capitals. Prefer composition over inheritance. All memory is static.']},
+  {emne: 'Beckhoff', t: ['M-Bus-måler i TwinCAT', 'M-Bus meter in TwinCAT'], n: 'mbus m-bus kl6781 måler sekundæradresse bcd stcom stsetup energimåler vannmåler',
+   x: ['Målerne deler M-Bus-masteren (FB_MBUSKL6781 på KL6781), som kobles inn med stCom. Sekundæradressen er sifrene fra etiketten skrevet som BCD med 16# foran. Sett primæradressen til 16#FD når du adresserer på sekundæradresse. stSetup beskriver hvor verdiene ligger for den målertypen.',
+       'The meters share the M-Bus master (FB_MBUSKL6781 on a KL6781), connected through stCom. The secondary address is the digits on the label written as BCD with 16# in front. Set the primary address to 16#FD when addressing by secondary address. stSetup says where the values sit for that meter type.']},
+
+  // --- general so far
+  {emne: 'Distech', t: ['Distech-familiene', 'The Distech families'], n: 'distech eclypse ecb ec-net ec-gfx ecy regulator controller',
+   x: ['ECLYPSE er IP-regulatorene med BACnet/IP, ECB er BACnet MS/TP-regulatorene, og EC-Net bygger på Niagara. Programmering skjer med EC-gfxProgram. Dette er generelt, så sjekk mot dokumentasjonen for regulatoren.',
+       'ECLYPSE are the IP controllers with BACnet/IP, ECB the BACnet MS/TP controllers, and EC-Net builds on Niagara. Programming is done in EC-gfxProgram. This is general, so check against the controller’s documentation.']},
+  {emne: 'WAGO', t: ['WAGO-kontrollere', 'WAGO controllers'], n: 'wago 750 750-831 750-881 pfc200 pfc codesys e!cockpit i/o sluttmodul',
+   x: ['750-serien er modulær I/O med en kontroller først og en sluttmodul (750-600) sist. 750-831 er BACnet-kontrolleren, 750-881 en Ethernet-kontroller, og PFC200 er den nyere generasjonen. De programmeres i CODESYS eller e!COCKPIT. Dette er generelt, så sjekk artikkelnummer i dokumentasjonen.',
+       'The 750 series is modular I/O with a controller first and an end module (750-600) last. 750-831 is the BACnet controller, 750-881 an Ethernet controller, and PFC200 the newer generation. They are programmed in CODESYS or e!COCKPIT. This is general, so check article numbers in the documentation.']},
+];
