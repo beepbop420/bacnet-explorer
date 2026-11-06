@@ -178,9 +178,8 @@ const FAKTA = [
 ];
 const NYTT = {
   '1.44': [
-    ['NABE har fått sitt eget ansikt: et flatt blått bånd over toppen som går i ett med tittellinja, Lexend som skrift og hvit hovedknapp', 'NABE has its own face now: a flat blue band across the top that runs into the title bar, Lexend as the typeface and a white main button'],
-    ['Enhetsoverskriften er satt som tittelfeltet på en tegning: leverandør, instans, adresse, punkter og skrivbare i egne felt', 'The device heading is set like the title block on a drawing: vendor, instance, address, points and writable in fields of their own'],
-    ['Valgt enhet står i blått, og verdien i inspektøren er større', 'The selected device stands in blue, and the value in the inspector is larger'],
+    ['Ny peker: en tynn ring følger musa på en fjær og legger seg rundt knappen eller enheten du peker på. Et klikk sender ut et ping. Slå den av under Innstillinger → Bevegelse', 'New pointer: a thin ring follows the mouse on a spring and wraps the button or device you point at. A click sends out a ping. Turn it off under Settings → Motion'],
+    ['Lexend som skrift, og enhetsoverskriften er satt som tittelfeltet på en tegning', 'Lexend as the typeface, and the device heading set like the title block on a drawing'],
   ],
   '1.43': [
     ['Alt beveger seg likt nå: dialoger og menyer kommer med en ekte fjær, litt forbi målet og tilbake', 'Everything moves alike now: dialogs and menus arrive on a real spring, a little past the target and back'],

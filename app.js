@@ -10030,6 +10030,8 @@ const ORDBOK = {
   'Tabellen': 'The table',
   'Enhetslista': 'The device list',
   'Bevegelse': 'Motion',
+  'Peker': 'Pointer',
+  'En ring følger musa og legger seg rundt det du peker på': 'A ring follows the mouse and wraps what you point at',
   'Animasjoner': 'Animations',
   'Tett visning': 'Dense view',
   'Forkort punktnavn': 'Shorten point names',

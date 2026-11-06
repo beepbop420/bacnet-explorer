@@ -4804,32 +4804,10 @@ body.uten-bevegelse .plagg-flamme{animation:none}
 .ss-h:hover{color:var(--fg);border-color:var(--line-2)}
 .ss-h.fare:hover{color:var(--err)}
 
-/* ---------------------------------------------------------------- the mark
-   NABE's own face, taken from the trade's documents instead of from a dark
-   theme: one flat band of Nordomatic Blue across the top in both themes, Lexend,
-   a white button on dark, and the device heading set like the title block on
-   a drawing - small label over value, hairlines between. Blue means "this is
-   NABE, and this is what you have selected"; nothing else gets it. */
-:root{--merke:#282071;--merke-2:#3a3192;--merke-tekst:#fff;
-  --sans:"Lexend","Segoe UI Variable Text","Segoe UI",system-ui,sans-serif}
-.topbar{background:var(--merke);border-bottom:0;color:#fff}
-.topbar .btn,.topbar a,.topbar button{color:rgba(255,255,255,.86)}
-.topbar .btn:hover:not(:disabled),.topbar button:hover:not(:disabled){color:#fff;background:rgba(255,255,255,.12)}
-.topbar .brand,.topbar .brand-text b{color:#fff}
-.btn.primary{background:#fff;border-color:#fff;color:var(--merke);font-weight:600}
-.btn.primary:hover:not(:disabled){background:#e4e3f3;border-color:#e4e3f3}
-:root[data-theme="light"] .btn.primary,:root[data-theme="light"] .btn.primary:not(.topbar .btn){background:var(--merke);border-color:var(--merke);color:#fff}
-:root[data-theme="light"] .btn.primary:hover:not(:disabled){background:var(--merke-2);border-color:var(--merke-2)}
-#devList .dev.sel,#devList .dev.sel:hover,:root.levfarge #devList .dev.sel{background:var(--merke);box-shadow:none;color:#fff}
-#devList .dev.sel *,:root[data-theme="light"] #devList .dev.sel *{color:rgba(255,255,255,.9)}
-.tb-sok{background:rgba(255,255,255,.1);border-color:rgba(255,255,255,.16);color:rgba(255,255,255,.86)}
-.tb-sok:hover{background:rgba(255,255,255,.16);color:#fff}
-.tb-sok kbd{color:rgba(255,255,255,.7);border-color:rgba(255,255,255,.25)}
-.filterbar{flex-wrap:nowrap;gap:2px}
-.filterbar #q{flex:1 1 150px;min-width:90px;width:auto}
-.filterbar .btn{padding-inline:8px;white-space:nowrap}
-.filterbar #typeSel{flex:0 1 112px;min-width:80px}
-.tf .vendor{background:none!important;border:0;padding:0;font-weight:400}
+/* ---------------------------------------------------------------- the type
+   Lexend, and the device heading set like the title block on a drawing: small
+   label over value, hairlines between. Colours are the theme's own. */
+:root{--sans:"Lexend","Segoe UI Variable Text","Segoe UI",system-ui,sans-serif}
 .ctx-bar .ctx-name{font-size:24px;font-weight:500;letter-spacing:-.015em}
 .ctx-tittel{gap:9px}
 .ctx-under{gap:0;overflow:visible;flex-wrap:wrap;row-gap:6px}
@@ -4837,9 +4815,27 @@ body.uten-bevegelse .plagg-flamme{animation:none}
 .tf:first-child{padding-left:0;border-left:0}
 .tf>small{font-size:10px;line-height:1.2;color:var(--fg-3);font-weight:400}
 .tf>b,.tf .ctx-id,.tf .ctx-ip{font-family:var(--mono);font-size:12px;line-height:1.3;font-weight:500;color:var(--fg);font-variant-numeric:tabular-nums}
-.tf .vendor{font-size:12px;color:var(--fg);padding:0;background:none;border:0}
+.tf .vendor{font-size:12px;color:var(--fg);background:none!important;border:0;padding:0;font-weight:400}
 .insp-val{font-family:var(--sans);font-size:34px;font-weight:500;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
 tbody td{font-variant-numeric:tabular-nums}
+.filterbar{flex-wrap:nowrap;gap:2px}
+.filterbar #q{flex:1 1 150px;min-width:90px;width:auto}
+.filterbar .btn{padding-inline:8px;white-space:nowrap}
+.filterbar #typeSel{flex:0 1 112px;min-width:80px}
+
+/* ---------------------------------------------------------------- the pointer
+   See nabe-peker.js. Text fields and the splitters keep their own cursors. */
+html.peker-paa body,html.peker-paa button,html.peker-paa a,html.peker-paa [role=button],
+html.peker-paa summary,html.peker-paa .dev,html.peker-paa .ss-rad,html.peker-paa tbody tr{cursor:url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%2226%22 height=%2226%22 viewBox=%220 0 26 26%22%3E%3Cpath d=%22M4 3l5.6 17.2c.3 1 1.7 1 2.1.1l2.6-6.1 6.2-2.4c1-.4 1-1.7 0-2.1z%22 fill=%22%2316161a%22 stroke=%22%23fff%22 stroke-width=%221.6%22 stroke-linejoin=%22round%22/%3E%3C/svg%3E") 4 3,auto}
+#peker{position:fixed;left:0;top:0;z-index:2147483000;pointer-events:none;box-sizing:border-box;
+  border:1.5px solid color-mix(in srgb,var(--fg) 42%,transparent);
+  transition:border-color .16s,background-color .16s;will-change:transform,width,height}
+#peker[hidden]{display:none}
+#peker.fast{border-color:color-mix(in srgb,var(--fg) 70%,transparent);background:color-mix(in srgb,var(--fg) 5%,transparent)}
+#peker.fare{border-color:var(--err)}
+body.skanner #peker{border-style:dashed}
+.peker-ping{position:fixed;width:84px;height:84px;border-radius:50%;pointer-events:none;z-index:2147483000;
+  border:1.5px solid var(--fg)}
 </style>
 </head>
 <body>
@@ -5090,6 +5086,9 @@ tbody td{font-variant-numeric:tabular-nums}
             <small>Menyer, dialoger, temabytte og NABE selv beveger seg. Følger
               Windows til du velger her</small>
             <span id="motionState" class="menu-state"></span></button>
+          <button id="pekerBtn" class="sett-rad bryter" role="switch">Peker
+            <small>En ring følger musa og legger seg rundt det du peker på</small>
+            <span id="pekerState" class="menu-state"></span></button>
         </div>
         <div class="sett-gruppe"><div class="tema-tittel">Skriving</div>
           <button id="roBtn" class="sett-rad bryter" role="switch">Lesemodus
@@ -5339,6 +5338,7 @@ tbody td{font-variant-numeric:tabular-nums}
 <script src="/js/nabe-tunnel.js"></script>
 <script src="/js/nabe-sammen.js"></script>
 <script src="/js/nabe-flyt.js"></script>
+<script src="/js/nabe-peker.js"></script>
 <script src="/js/nabo.js"></script>
 <script src="/js/nabo-brodre.js"></script>
 <script src="/js/nabo-fasit.js"></script>
