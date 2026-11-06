@@ -26,7 +26,7 @@
     ['Enten er alt bra, eller så har noen koblet fra ledningen.', 'Either all is well, or someone has pulled the wire.'],
     ['Jeg sjekket to ganger. Det ene var på liksom.', 'I checked twice. Once was pretend.'],
   ];
-  const FORSLAG = [['Hva er overstyrt?', 'What is overridden?'], ['Er noe i alarm?', 'Is anything in alarm?'], ['Hvor mange punkter?', 'How many points?'], ['Hva betyr prioritet 8?', 'What does priority 8 mean?'], ['Finn RT401', 'Find RT401']];
+  const FORSLAG = [['Hva burde dette punktet tagges?', 'What should this point be tagged?'], ['Hva er overstyrt?', 'What is overridden?'], ['Er noe i alarm?', 'Is anything in alarm?'], ['Hvor mange punkter?', 'How many points?'], ['Hva betyr prioritet 8?', 'What does priority 8 mean?'], ['Finn RT401', 'Find RT401']];
 
   /* The reference: words of the question against an article's own words,
      title and text. A question that hits nothing strongly gets nothing. */
@@ -78,8 +78,51 @@
     return o.length ? alle().filter(({p}) => { const s = `${navn(p)} ${p.description || ''} ${p.objid}`.toLowerCase(); return o.every(w => s.includes(w)); }) : [];
   };
 
+  /* The point you are on. Ask NABE reads the question with it in mind, so
+     «what should this be tagged» is about the row that is selected. */
+  const punktet = () => (S.selected && S.pointIndex.get(S.selected)) || null;
+  const KODE = /\b[A-Z]{2,3}\d{3}\b/;
+  /* The trade's own rule of thumb: which air, what is measured, and whether
+     it is a setpoint. Only a proposal, and only when the words are clear. */
+  function regelTag(p) {
+    const ord = `${p.name || ''} ${p.description || ''}`.replace(/([a-z])([A-Z])/g, '$1 $2').toLowerCase();
+    const enhet = String(p.unit_symbol || p.units || '').toLowerCase();
+    const sted = /extract|exhaust|avtrekk|\beaf\b/.test(ord) ? [5, T('avtrekk', 'extract')] : /supply|tilluft|\bsaf\b/.test(ord) ? [4, T('tilluft', 'supply')]
+      : /\broom\b|\brom\b/.test(ord) ? [6, T('rom', 'room')] : /outdoor|outside|\bute\b|uteluft/.test(ord) ? [9, T('ute', 'outdoor')] : null;
+    if (!sted) return null;
+    const maal = /°c|celsius/.test(enhet) || /temp/.test(ord) ? ['RT', T('temperatur', 'temperature')] : /^k?pa$|pascal/.test(enhet) || /pressure|trykk/.test(ord) ? ['RP', T('trykk', 'pressure')] : null;
+    if (!maal) return null;
+    const sp = /set.?p|setpoint|settpunkt/.test(ord);
+    const leverandor = String(S.activeDev?.vendor_name || '').toLowerCase();
+    const hale = sp ? (/beckhoff/.test(leverandor) ? '_SP' : '_Sp') : '';
+    return {tag: `${maal[0]}${sted[0]}01${hale}`, hvorfor: T(`${sted[1]}, ${maal[1]}${sp ? ', settpunkt' : ''}`, `${sted[1]}, ${maal[1]}${sp ? ', setpoint' : ''}`)};
+  }
+  function tagSvar(p, q) {
+    const navn = p.name || p.objid;
+    if (KODE.test(navn)) return `<p>${T(`${esc(navn)} har allerede en komponentkode, så jeg ville latt den være.`, `${esc(navn)} already has a component code, so I would leave it.`)}</p>`;
+    const regel = regelTag(p);
+    const like = typeof fasitTopp === 'function' ? fasitTopp(p.description || p.name, p.type) : [];
+    if (!regel && !like.length) return `<p>${T(`Jeg finner ikke noe godt forslag til ${esc(navn)}. Beskrivelsen sier for lite om hvilken komponent det er.`, `I find no good suggestion for ${esc(navn)}. The description says too little about the component.`)}</p>`;
+    const tekst = [];
+    if (regel) tekst.push(T(`${navn}: forslag ${regel.tag}, fordi det er ${regel.hvorfor}.`, `${navn}: suggestion ${regel.tag}, because it is ${regel.hvorfor}.`));
+    for (const l of like) tekst.push(T(`Lignende punkt har fått ${l.f}: ${l.b}.`, `A similar point got ${l.f}: ${l.b}.`));
+    tekst.push(T('Nummeret må stemme med komponenten på anlegget.', 'The number has to match the component on site.'));
+    kiNeste = {q, kilder: [{x: [tekst.join(' '), tekst.join(' ')]}]};
+    return `<div class="sp-ki"></div><div class="sp-tag">${regel ? `<b>${esc(regel.tag)}</b><span>${esc(regel.hvorfor)}</span><button type="button" class="btn" data-kopier="${esc(regel.tag)}">${T('Kopier', 'Copy')}</button>` : ''}</div>
+      ${like.length ? `<div class="sp-liste">${like.map(l => `<div class="sp-rad"><b>${esc(l.f)}</b><span>${esc(l.b)}</span></div>`).join('')}</div>` : ''}
+      <p>${T('Nummeret må stemme med komponenten på anlegget.', 'The number has to match the component on site.')}</p>`;
+  }
+  function punktSvar(p) {
+    const fl = (p.status || []).filter(f => FLAGS[f]).map(f => FLAGS[f].label);
+    return `<div class="sp-kilde"><small>${esc(S.activeDev?.object_name || '')}</small><b>${esc(p.name || p.objid)}</b>${esc(p.description || T('Ingen beskrivelse.', 'No description.'))}</div>
+      <p>${esc(p.objid)} · ${T('verdi', 'value')} ${esc(String(p.value ?? '–'))}${p.unit_symbol ? ' ' + esc(p.unit_symbol) : ''} · ${p.writable ? T('skrivbart', 'writable') : T('kun lesing', 'read only')}${fl.length ? ' · ' + esc(fl.join(', ')) : ''}</p>`;
+  }
+
   async function svar(q) {
     const s = q.toLowerCase().trim();
+    const p = punktet();
+    if (p && /tagg|\btag\b|hete|kalle|navngi|rename|what should|hva burde/.test(s)) return tagSvar(p, q);
+    if (p && /dette punktet|denne?\b.*punkt|this point|hva er dette|what is this|hva gjør dette/.test(s)) return punktSvar(p);
     const kilder = slaaOpp(s);
     const kilde = () => { kiNeste = {q, kilder}; return `<div class="sp-ki"></div>${kilder.map(artikkel).join('')}`; };
     if (/betyr|hva er|what is|what does|mean|forklar|explain|hvordan|how|forskjell|difference/.test(s) && kilder.length) return kilde();
@@ -133,6 +176,8 @@
       document.body.append(lag);
       lag.addEventListener('click', async (e) => {
         if (e.target.closest('.gs-close')) return lukk();
+        const kp = e.target.closest('[data-kopier]');
+        if (kp) { navigator.clipboard?.writeText(kp.dataset.kopier); toast(T('Kopiert', 'Copied')); return; }
         const f = e.target.closest('[data-forslag]');
         if (f) { lag.querySelector('input').value = f.dataset.forslag; return spor(f.dataset.forslag); }
         if (e.target.closest('[data-spor-diag]')) { lukk(); return $('diagBtn').click(); }
@@ -148,7 +193,7 @@
     }
     lag.innerHTML = `<div class="sp-topp"><span class="gd-tittel">${T('Spør NABE', 'Ask NABE')}</span><button class="gs-close"><span class="lbl">${T('Lukk', 'Close')}</span> ✕</button></div>
       <input class="field" type="text" placeholder="${esc(T('Spør om anlegget eller et BACnet-ord', 'Ask about the site or a BACnet word'))}" autocomplete="off" spellcheck="false">
-      <div class="sp-svar">${ved && ved.left !== undefined ? `<p class="sp-hilsen">${esc(pluss(HILSEN))}</p>` : ''}<div class="sp-forslag">${FORSLAG.map(([nb, en]) => `<button type="button" class="btn" data-forslag="${esc(T(nb, en))}">${esc(T(nb, en))}</button>`).join('')}</div></div>`;
+      <div class="sp-punkt"></div><div class="sp-svar">${ved && ved.left !== undefined ? `<p class="sp-hilsen">${esc(pluss(HILSEN))}</p>` : ''}<div class="sp-forslag">${FORSLAG.map(([nb, en]) => `<button type="button" class="btn" data-forslag="${esc(T(nb, en))}">${esc(T(nb, en))}</button>`).join('')}</div></div>`;
     lag.hidden = false;
     // From the bubble it opens where the bubble was, as more of the same.
     const her = ved && ved.left !== undefined;
@@ -160,6 +205,9 @@
       lag.style.top = `${topp}px`;
       lag.style.maxHeight = `${innerHeight - topp - 12}px`;
     }
+    const pk = punktet();
+    lag.querySelector('.sp-punkt').textContent = pk ? T(`Ser på ${pk.name || pk.objid}`, `Looking at ${pk.name || pk.objid}`) : '';
+    if (typeof hentFasit === 'function') hentFasit();
     lag.querySelector('input').focus();
   }
 

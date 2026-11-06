@@ -83,6 +83,27 @@ async function hentFasit() {
   finally { FASIT.henter = false; }
 }
 
+function fsPoeng(f, t, n, ix) {
+  let felles = 0;
+  for (const g of t) if (f.tri.has(g)) felles++;
+  let s = 2 * felles / (t.size + f.tri.size);
+  for (const k of FS_NOKKEL) if (n.includes(k) !== f.n.includes(k)) s -= 0.2;
+  // A curve point wants a curve point of the same letter (X with X).
+  if (ix) s += f.ix && f.ix[0] === ix[0] ? 0.25 : -0.15;
+  else if (f.ix) s -= 0.1;
+  return s;
+}
+
+/* The closest tags to a description, for Ask NABE. */
+function fasitTopp(beskr, type, antall = 2) {
+  if (!FASIT.klar || !beskr) return [];
+  const kl = type <= 2 ? 'a' : type <= 5 ? 'b' : 'm';
+  const ren = fsRen(varUtenSd(beskr)), t = fsTri(ren), n = fsNokler(ren), ix = fsIndeks(beskr);
+  if (t.size < 3) return [];
+  const treff = FASIT.liste.filter(f => f.kl === kl).map(f => ({f: f.f, b: f.b, s: fsPoeng(f, t, n, ix)})).filter(x => x.s >= .55).sort((a, b) => b.s - a.s);
+  return treff.filter((x, i) => treff.findIndex(y => y.f === x.f) === i).slice(0, antall);
+}
+
 /* The suggestion for one row, or null. */
 function naboForslag(x) {
   if (!FASIT.klar || x.system || !x.beskr) return null;
@@ -96,13 +117,7 @@ function naboForslag(x) {
     if (t.size >= 3) {
       for (const f of FASIT.liste) {
         if (f.kl !== kl) continue;
-        let felles = 0;
-        for (const g of t) if (f.tri.has(g)) felles++;
-        let s = 2 * felles / (t.size + f.tri.size);
-        for (const k of FS_NOKKEL) if (n.includes(k) !== f.n.includes(k)) s -= 0.2;
-        // A curve point wants a curve point of the same letter (X with X).
-        if (ix) s += f.ix && f.ix[0] === ix[0] ? 0.25 : -0.15;
-        else if (f.ix) s -= 0.1;
+        const s = fsPoeng(f, t, n, ix);
         if (!best || s > best.s) best = {s, f: f.f, b: f.b, ix: f.ix};
       }
     }

@@ -177,6 +177,9 @@ const FAKTA = [
   ['COV betyr at regulatoren sier fra selv. Mindre spørring, mer ro.', 'COV means the controller speaks up itself. Less asking, more peace.'],
 ];
 const NYTT = {
+  '1.52': [
+    ['Spør NABE ser punktet du står på: spør hva det burde tagges, så kommer et forslag som RT501_Sp, med lignende punkter du har tagget før', 'Ask NABE sees the point you are on: ask what it should be tagged and you get a suggestion like RT501_Sp, with similar points you have tagged before'],
+  ],
   '1.51': [
     ['Spør NABE har fått en fast knapp øverst til høyre og Ctrl+J. Med Spør NABE-pekeren stopper han når du hviler musa, og svarer i en snakkeboble', 'Ask NABE has a fixed button at the top right and Ctrl+J. With the Ask NABE pointer he stops when you rest the mouse, and answers in a speech bubble'],
     ['Raskere skann: de stille adressene sjekkes tre ganger så fort, med like mange forsøk. NABE åpner også raskere', 'Faster scans: silent addresses are checked three times as fast, with as many attempts. NABE also opens faster'],
