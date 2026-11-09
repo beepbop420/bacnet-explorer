@@ -177,6 +177,9 @@ const FAKTA = [
   ['COV betyr at regulatoren sier fra selv. Mindre spørring, mer ro.', 'COV means the controller speaks up itself. Less asking, more peace.'],
 ];
 const NYTT = {
+  '1.54': [
+    ['Tunnelen spør nå BACnet-enhetene selv om de er der. En ruter med samme adresse hjemme teller ikke lenger som anlegget', 'The tunnel now asks the BACnet devices themselves whether they are there. A router at home with the same address no longer counts as the site'],
+  ],
   '1.53': [
     ['Tunnelen kommer når ingen anlegg faktisk svarer, også når VPN-en henger med ruter, men uten forbindelse. Den kan alltid startes fra paletten: Tunnelen (spill)', 'The tunnel comes up when no site actually answers, also when the VPN keeps its routes without a connection. It can always be started from the palette: Tunnelen (spill)'],
   ],

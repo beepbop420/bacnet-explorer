@@ -196,7 +196,7 @@ def t(nb: str, en: str) -> str:
     return en if SPRAAK_VAR.get() == "en" else nb
 
 
-VERSJON = "1.53"
+VERSJON = "1.54"
 
 state = {"app": None, "local_address": None, "read_only": False, "bbmd": None}
 
@@ -2303,51 +2303,48 @@ def naabar(target: str, kort: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
 
 # A route is not an answer. A WireGuard tunnel keeps its routes while the
 # other end is gone, so every site behind it looked in reach and the tunnel
-# game never came. Each site with a route gets a real knock on a device it
-# remembers: ping, then the web port. In the background, every half minute at
-# most, so the list stays instant. A device that ignores both looks gone;
-# that only ever offers the game, it changes nothing else.
+# game never came. And a ping is not an answer either: at home the router is
+# often 192.168.2.1 too, so a site there answered from the wrong building.
+# So each site with a route is asked over BACnet whether one of the devices
+# it remembers is still there, by its instance. In the background, every
+# half minute at most, so the list stays instant. Only the game listens.
 _SVARER: Dict[str, Any] = {}
 _SVARER_LAS = threading.Lock()
+_LOKKE: Dict[str, Any] = {"l": None}
 
 
-def _banker(ip: str) -> bool:
-    try:
-        r = subprocess.run(["ping", "-n", "1", "-w", "600", ip] if os.name == "nt" else ["ping", "-c", "1", "-W", "1", ip],
-                           capture_output=True, timeout=3, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
-        if r.returncode == 0 and b"TTL=" in r.stdout.upper():
-            return True
-    except Exception:
-        pass
-    for port in (80, 443):
-        try:
-            with socket.create_connection((ip, port), timeout=.6):
-                return True
-        except OSError:
-            continue
-    return False
+@app.on_event("startup")
+async def _husk_lokka():
+    _LOKKE["l"] = asyncio.get_running_loop()
 
 
-def _sjekk_svar(key: str, ips: List[str]) -> None:
-    ok = any(_banker(ip) for ip in ips[:2])
+async def _sjekk_svar(key: str, enheter: List[Dict[str, Any]]) -> None:
+    ok = False
+    app_ = _require_app()
+    if app_ is not None:
+        sem = asyncio.Semaphore(2)
+        for d in enheter[:2]:
+            try:
+                r = await probe_host_unicast(app_, d["address"], 1.2, sem)
+            except Exception:
+                r = None
+            if r and (d.get("device_instance") is None or r.get("device_instance") == d.get("device_instance")):
+                ok = True
+                break
     _SVARER[key] = {"t": time.time(), "ok": ok, "gaar": False}
 
 
 def svarer(key: str, site: Dict[str, Any]) -> Optional[bool]:
-    """True, False, or None while the first knock is still out."""
+    """True, False, or None while the first question is still out. A site
+    that never had a device has nothing to answer with: False."""
+    enheter = [d for d in (site.get("enheter") or []) if d.get("address")]
+    if not enheter:
+        return False
     with _SVARER_LAS:
         s = _SVARER.get(key)
-        if not s or (time.time() - s["t"] > 30 and not s["gaar"]):
-            ips = [d.get("address") for d in (site.get("enheter") or []) if d.get("address")]
-            if not ips:
-                try:
-                    hosts, _ = parse_target((site.get("ranges") or key.split(" "))[0])
-                    ips = hosts[:1]
-                except Exception:
-                    ips = []
-            if ips:
-                _SVARER[key] = dict(s or {"ok": None}, t=time.time(), gaar=True)
-                threading.Thread(target=_sjekk_svar, args=(key, ips), daemon=True).start()
+        if _LOKKE["l"] and (not s or (time.time() - s["t"] > 30 and not s["gaar"])):
+            _SVARER[key] = dict(s or {"ok": None}, t=time.time(), gaar=True)
+            asyncio.run_coroutine_threadsafe(_sjekk_svar(key, enheter), _LOKKE["l"])
         return (_SVARER.get(key) or {}).get("ok")
 
 
