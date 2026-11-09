@@ -196,7 +196,7 @@ def t(nb: str, en: str) -> str:
     return en if SPRAAK_VAR.get() == "en" else nb
 
 
-VERSJON = "1.52"
+VERSJON = "1.53"
 
 state = {"app": None, "local_address": None, "read_only": False, "bbmd": None}
 
@@ -2301,6 +2301,56 @@ def naabar(target: str, kort: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
     return {"ip": ip, "interface": e["interface"], "cidr": e["cidr"]}
 
 
+# A route is not an answer. A WireGuard tunnel keeps its routes while the
+# other end is gone, so every site behind it looked in reach and the tunnel
+# game never came. Each site with a route gets a real knock on a device it
+# remembers: ping, then the web port. In the background, every half minute at
+# most, so the list stays instant. A device that ignores both looks gone;
+# that only ever offers the game, it changes nothing else.
+_SVARER: Dict[str, Any] = {}
+_SVARER_LAS = threading.Lock()
+
+
+def _banker(ip: str) -> bool:
+    try:
+        r = subprocess.run(["ping", "-n", "1", "-w", "600", ip] if os.name == "nt" else ["ping", "-c", "1", "-W", "1", ip],
+                           capture_output=True, timeout=3, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+        if r.returncode == 0 and b"TTL=" in r.stdout.upper():
+            return True
+    except Exception:
+        pass
+    for port in (80, 443):
+        try:
+            with socket.create_connection((ip, port), timeout=.6):
+                return True
+        except OSError:
+            continue
+    return False
+
+
+def _sjekk_svar(key: str, ips: List[str]) -> None:
+    ok = any(_banker(ip) for ip in ips[:2])
+    _SVARER[key] = {"t": time.time(), "ok": ok, "gaar": False}
+
+
+def svarer(key: str, site: Dict[str, Any]) -> Optional[bool]:
+    """True, False, or None while the first knock is still out."""
+    with _SVARER_LAS:
+        s = _SVARER.get(key)
+        if not s or (time.time() - s["t"] > 30 and not s["gaar"]):
+            ips = [d.get("address") for d in (site.get("enheter") or []) if d.get("address")]
+            if not ips:
+                try:
+                    hosts, _ = parse_target((site.get("ranges") or key.split(" "))[0])
+                    ips = hosts[:1]
+                except Exception:
+                    ips = []
+            if ips:
+                _SVARER[key] = dict(s or {"ok": None}, t=time.time(), gaar=True)
+                threading.Thread(target=_sjekk_svar, args=(key, ips), daemon=True).start()
+        return (_SVARER.get(key) or {}).get("ok")
+
+
 @app.get("/api/anlegg")
 def anlegg_liste():
     """The sites panel: every remembered site, newest first, with its
@@ -2328,6 +2378,7 @@ def anlegg_liste():
             "leverandorer": sorted(lev.items(), key=lambda kv: -kv[1])[:3],
             "overstyrt": sum(n for a, n in overstyrt.items() if a in adr),
             "naabar": naabar(ranges[0], kort) if ranges else None,
+            "svarer": svarer(key, s) if ranges and naabar(ranges[0], kort) else False,
             "navnliste": [d.get("object_name") for d in enheter if d.get("object_name")][:60],
         })
     return {"status": "done", "anlegg": ut[:40]}

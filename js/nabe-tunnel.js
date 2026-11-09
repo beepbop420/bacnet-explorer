@@ -30,7 +30,10 @@ const TUN_SLUTT = [
 function tunnelTid() {
   // Not a single site in reach, nothing read, no device open.
   const anlegg = (typeof SK !== 'undefined' && SK.anlegg) || [];
-  return anlegg.length > 0 && !anlegg.some(a => a.naabar) && !S.devices.length && !S.activeDev;
+  // A route is not an answer: a dead WireGuard tunnel keeps its routes. Only a
+  // site whose devices answer counts as in reach; while the first knock is
+  // still out it counts as in reach, so the game never flashes up wrongly.
+  return anlegg.length > 0 && !anlegg.some(a => a.naabar && a.svarer !== false) && !S.devices.length && !S.activeDev;
 }
 
 function tunnelVakt() {

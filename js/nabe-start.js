@@ -177,6 +177,9 @@ const FAKTA = [
   ['COV betyr at regulatoren sier fra selv. Mindre spørring, mer ro.', 'COV means the controller speaks up itself. Less asking, more peace.'],
 ];
 const NYTT = {
+  '1.53': [
+    ['Tunnelen kommer når ingen anlegg faktisk svarer, også når VPN-en henger med ruter, men uten forbindelse. Den kan alltid startes fra paletten: Tunnelen (spill)', 'The tunnel comes up when no site actually answers, also when the VPN keeps its routes without a connection. It can always be started from the palette: Tunnelen (spill)'],
+  ],
   '1.52': [
     ['Spør NABE leser punktet du står på, navn og beskrivelse, på norsk og engelsk, og foreslår tag også når navnet er AV5. Spør om alle punkter for å få hele enheten', 'Ask NABE reads the point you are on, name and description, in Norwegian and English, and suggests a tag even when the name is AV5. Ask about all points to get the whole device'],
   ],
