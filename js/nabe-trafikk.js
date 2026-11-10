@@ -24,6 +24,7 @@
   };
   const SVAR = {ok: 'OK', feil: T('feil', 'error'), avvist: T('avvist', 'rejected'),
                 avbrutt: T('avbrutt', 'aborted'), tidsgrense: T('tidsgrense', 'timeout'), sendt: T('sendt', 'sent')};
+  const kortFlere = () => new Set(rader.map(r => r.kort).filter(Boolean)).size > 1;
   const filtrert = () => rader.filter(r =>
     (!fEnhet || r.til === fEnhet) && (!fTjeneste || r.tjeneste === fTjeneste)
     && (!fFeil || !['ok', 'sendt'].includes(r.svar)));
@@ -70,8 +71,9 @@
       || `<div class="sp-meta">${T('Ingen trafikk ennå.', 'No traffic yet.')}</div>`;
     const alle = filtrert();
     $('trAnt').textContent = T(`${alle.length} av ${rader.length}`, `${alle.length} of ${rader.length}`);
+    const flere = kortFlere();
     $('trRader').innerHTML = alle.slice(-300).reverse().map(r => `<tr>
-      <td class="tr-mono">${esc(tid(r.t))}</td><td>${esc(r.til)}</td><td>${esc(r.tjeneste)}</td>
+      <td class="tr-mono">${esc(tid(r.t))}</td><td>${esc(r.til)}${flere && r.kort ? `<div class="sp-meta">${T('via', 'via')} ${esc(r.kort)}</div>` : ''}</td><td>${esc(r.tjeneste)}</td>
       <td>${esc(r.obj)}${r.prop ? `<span class="sp-meta"> ${esc(r.prop)}</span>` : ''}</td>
       <td class="t">${r.svar === 'sendt' ? '' : r.ms}</td>
       <td class="${r.svar === 'ok' || r.svar === 'sendt' ? 'sp-meta' : 'tr-ugreit'}">${esc(SVAR[r.svar] || r.svar)}</td>
@@ -91,8 +93,8 @@
     const stamp = new Date().toISOString().slice(0, 19).replace(/[T:]/g, '-');
     if (type === 'json') { downloadText(JSON.stringify(alle, null, 1), `nabe-trafikk-${stamp}.json`, false); return; }
     const celle = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
-    const linjer = [['tid', 'enhet', 'tjeneste', 'objekt', 'egenskap', 'ms', 'svar', 'kode', 'forsok'].join(';')]
-      .concat(alle.map(r => [new Date(r.t * 1000).toISOString(), r.til, r.tjeneste, r.obj, r.prop, String(r.ms).replace('.', ','),
+    const linjer = [['tid', 'enhet', 'kort', 'tjeneste', 'objekt', 'egenskap', 'ms', 'svar', 'kode', 'forsok'].join(';')]
+      .concat(alle.map(r => [new Date(r.t * 1000).toISOString(), r.til, r.kort || '', r.tjeneste, r.obj, r.prop, String(r.ms).replace('.', ','),
                              r.svar, r.kode, r.forsok].map(celle).join(';')));
     downloadText(linjer.join('\r\n'), `nabe-trafikk-${stamp}.csv`);
   }

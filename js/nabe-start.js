@@ -562,12 +562,8 @@ async function visStartskjerm(igjen = false) {
   };
   // A network row: bind that adapter first, so the scan goes out where the
   // route is rather than wherever Windows last sent it.
-  const skannVia = async (omr, cidr) => {
-    if (cidr && S.localAddr !== cidr && !kortLaast()) {
-      try { await connectTo(cidr, {quiet: true}); } catch {}
-    }
-    skann(omr);
-  };
+  // The server sends the scan out of the adapter the range is routed through.
+  const skannVia = async (omr) => { skann(omr); };
   const rader = () => [...lag.querySelectorAll('.ss-rad')];
   const marker = (i) => {
     const r = rader();

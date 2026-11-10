@@ -78,8 +78,8 @@ const SK = {
     k.classList.add('plugg');
     figur('klem', 400);
     await connectTo(k.dataset.cidr);
-    if (S.connected) laasKort(true);
-    nabeSier(T(`Sender fra ${k.dataset.navn} nå, og kortet står fast.`, `Sending from ${k.dataset.navn} now, and the adapter stays put.`), 'fornoyd');
+    if (S.connected && kortLaast()) laasKort(true);
+    nabeSier(T(`Hovedkort: ${k.dataset.navn}.`, `Main adapter: ${k.dataset.navn}.`), 'fornoyd');
     tegnKort(); tegnVei();
   });
   liste.addEventListener('click', (e) => {

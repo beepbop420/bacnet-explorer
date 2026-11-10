@@ -49,7 +49,8 @@ async function kortvakt() {
     }
     if (!maal) maal = (liste[0] || {}).cidr;
     if (maal) {
-      await connectTo(maal, {quiet: true});
+      // An adapter that came back has a dead socket on its old address: that one starts over.
+      await connectTo(maal, {quiet: true, restart: bundetTilbake});
       const navn = (liste.find(i => maal.startsWith(i.ip)) || {}).interface || maal;
       nabeSier(bundetBorte
         ? T(`Tunnelen forsvant. Byttet til ${navn}.`, `The tunnel went away. Switched to ${navn}.`)
@@ -59,12 +60,8 @@ async function kortvakt() {
   }
   if (nye.length) {
     const navn = nye.map(i => i.interface).join(', ');
-    // A new adapter: take it if the range is routed through it now.
-    const foer = S.localAddr;
-    if (omr) await kortForMaal(omr);
-    nabeSier(S.localAddr !== foer
-      ? T(`Ny forbindelse: ${navn}. Jeg bruker den.`, `New connection: ${navn}. Using it.`)
-      : T(`Ny forbindelse: ${navn}.`, `New connection: ${navn}.`), 'skvatt');
+    // A new adapter is used by itself, for the addresses routed through it.
+    nabeSier(T(`Ny forbindelse: ${navn}. Brukes der adressene rutes dit.`, `New connection: ${navn}. Used where addresses are routed to it.`), 'skvatt');
   }
 }
 setInterval(kortvakt, 3000);

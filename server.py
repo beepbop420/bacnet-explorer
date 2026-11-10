@@ -202,7 +202,7 @@ def t(nb: str, en: str) -> str:
 
 VERSJON = "1.55"
 
-state = {"app": None, "local_address": None, "read_only": False, "bbmd": None}
+state = {"app": None, "local_address": None, "read_only": False, "bbmd": None, "primary": None}
 
 
 def route_source_ip(target: str) -> str:
@@ -399,6 +399,9 @@ class ScanBody(BaseModel):
     concurrency: int = 40
     thorough: bool = True
     plan: Optional[List[List[float]]] = None
+    # The adapter to send from. Left out, the routing table decides, so a cable
+    # range and a VPN range each go out of their own.
+    via: Optional[str] = None
 
 
 MAX_SWEEP_HOSTS = 4096
@@ -450,6 +453,9 @@ def status():
         "local_address": state["local_address"],
         "bbmd": state.get("bbmd"),
         "port_advarsel": port_advarsel(port_naboer()) if state["app"] else None,
+        # Every adapter in use, and which one each device is read through.
+        "kort": _kort_liste(),
+        "via": dict(DEVICE_KORT),
     }
 
 
@@ -809,7 +815,8 @@ def port_naboer(port: int = None) -> List[Dict[str, Any]]:
         import psutil
     except Exception:
         return ut
-    min_ip = (state.get("local_address") or "").split("/")[0].split(":")[0]
+    mine = set(POOL) or {(state.get("local_address") or "").split("/")[0].split(":")[0]}
+    mine.discard("")
     try:
         for c in psutil.net_connections(kind="udp4"):
             if not c.laddr or c.laddr.port != port:
@@ -817,7 +824,7 @@ def port_naboer(port: int = None) -> List[Dict[str, Any]]:
             if not c.pid or c.pid == meg:
                 continue
             deres = c.laddr.ip
-            if min_ip and deres not in (min_ip, "0.0.0.0") and min_ip != "0.0.0.0":
+            if mine and deres not in mine and deres != "0.0.0.0" and "0.0.0.0" not in mine:
                 continue
             try:
                 navn = psutil.Process(c.pid).name()
@@ -874,7 +881,46 @@ def device_address(spec) -> Address:
     return Address(str(spec).strip())
 
 
-async def _open_app(local_address: str, bbmd: Optional[str] = None):
+# ------------------------------------------------------------------ adapters
+# One BACnet stack per network adapter in use. A PC with a cable, a FortiClient
+# tunnel and a WireGuard tunnel can talk to a plant behind each of them at the
+# same time: every address is sent from the adapter it is routed through, and
+# each adapter keeps its own socket, BBMD registration and traffic.
+#
+# `state` still names the main adapter, the one picked in the page. It is where
+# a broadcast goes when nothing says otherwise, and what the rest of the page
+# calls "the adapter". POOL holds all of them, keyed by the adapter's own IP.
+POOL: Dict[str, Dict[str, Any]] = {}
+DEVICE_KORT: Dict[str, str] = {}      # device address -> adapter IP it was found through
+_POOL_LAS: Dict[str, asyncio.Lock] = {}
+TILLAT_LOOPBACK = _env("TILLAT_LOOPBACK", "") == "1"      # the self-test binds 127.0.0.x
+
+
+def _ip_of(spec) -> str:
+    return str(spec or "").split("/")[0].split(":")[0]
+
+
+def _pool_las(ip: str) -> asyncio.Lock:
+    return _POOL_LAS.setdefault(ip, asyncio.Lock())
+
+
+def _kort_navn(ip: str) -> str:
+    try:
+        return next((e["interface"] for e in list_interfaces() if e["ip"] == ip), "")
+    except Exception:
+        return ""
+
+
+def _kort_liste() -> List[Dict[str, Any]]:
+    ut = []
+    for ip, e in POOL.items():
+        ut.append({"ip": ip, "local_address": e["local"], "interface": e.get("interface") or "",
+                   "bbmd": e.get("bbmd"), "primary": ip == state.get("primary"),
+                   "enheter": sum(1 for v in DEVICE_KORT.values() if v == ip)})
+    return ut
+
+
+async def _open_app(local_address: str, bbmd: Optional[str] = None, primary: bool = True):
     """
     Bind the BACnet stack, as an ordinary device or as a foreign device.
 
@@ -890,46 +936,146 @@ async def _open_app(local_address: str, bbmd: Optional[str] = None):
         bacnet_app.register(IPv4Address(bbmd), 300)
     else:
         bacnet_app = NormalApplication(device_obj, addr)
+    ip = _ip_of(local_address)
+    bacnet_app._nabe_ip, bacnet_app._nabe_local, bacnet_app._nabe_bbmd = ip, local_address, bbmd
     _trafikk_installer(bacnet_app)
     # The transports are created asynchronously; give them a moment to
     # exist before resizing their buffers.
     await asyncio.sleep(0.3)
     rcvbuf = _enlarge_socket_buffers(bacnet_app)
-    state["app"] = bacnet_app
-    state["local_address"] = local_address
-    state["bbmd"] = bbmd
+    POOL[ip] = {"app": bacnet_app, "local": local_address, "bbmd": bbmd, "interface": _kort_navn(ip)}
+    if primary or state["app"] is None:
+        state["app"], state["local_address"], state["bbmd"], state["primary"] = bacnet_app, local_address, bbmd, ip
     return bacnet_app, rcvbuf
 
 
-def _close_app() -> None:
-    a = state["app"]
-    if a is None:
+def _close_app(ip: Optional[str] = None) -> None:
+    """Close one adapter's stack, or all of them."""
+    ips = [ip] if ip else list(POOL)
+    if not ip:
+        _cov_stopp_alle()
+    for i in ips:
+        e = POOL.pop(i, None)
+        if e is None:
+            continue
+        a = e["app"]
+        if ip:
+            _cov_stopp_for(a)
+        try:
+            if e.get("bbmd"):
+                a.unregister()
+        except Exception:
+            pass
+        try:
+            a.close()
+        except Exception:
+            pass
+    if not POOL:
+        state["app"] = state["local_address"] = state["bbmd"] = state["primary"] = None
+    elif state.get("primary") not in POOL:
+        # The main adapter went away; the next one takes over.
+        nytt = next(iter(POOL))
+        e = POOL[nytt]
+        state["app"], state["local_address"], state["bbmd"], state["primary"] = e["app"], e["local"], e.get("bbmd"), nytt
+
+
+def _lokal_for(ip: str) -> Optional[str]:
+    """The CIDR (with the configured port) an adapter should be bound as."""
+    for e in list_interfaces():
+        if e["ip"] == ip:
+            return _with_port(e["cidr"])
+    if TILLAT_LOOPBACK and ip.startswith("127."):
+        return _with_port(f"{ip}/8")
+    return None
+
+
+async def _switch_bbmd(bbmd: Optional[str], ip: Optional[str] = None):
+    """Rebind one adapter, registered with `bbmd` or not. Default: the main one."""
+    ip = ip or state.get("primary")
+    async with _pool_las(ip):
+        e = POOL.get(ip)
+        if e is not None and e.get("bbmd") == bbmd:
+            return e["app"]
+        local = e["local"] if e else _lokal_for(ip)
+        primary = ip == state.get("primary")
+        _close_app(ip)
+        # The old socket has to be gone before the same port is bound again.
+        await asyncio.sleep(0.2)
+        bacnet_app, _ = await _open_app(local, bbmd, primary=primary)
+        return bacnet_app
+
+
+def _adapter_for(address, via: Optional[str] = None) -> Optional[str]:
+    """The adapter IP an address should be sent from: where it was found, else
+    where the routing table sends it. Gateways and other non-IP addresses stay
+    on the main adapter."""
+    if via:
+        return via
+    k = DEVICE_KORT.get(str(address)) or DEVICE_KORT.get(_ip_of(address))
+    if k:
+        return k
+    host = _ip_of(address)
+    try:
+        ipaddress.IPv4Address(host)
+        return kort_for(host)
+    except Exception:
+        return state.get("primary")
+
+
+async def _app_for(address, via: Optional[str] = None):
+    """The BACnet stack for an address, opened when it is needed. None while
+    not connected at all. An adapter that cannot be bound (the port is taken on
+    it, or it is gone) falls back to the main one, as before."""
+    prim = state["app"]
+    if prim is None:
+        return None
+    ip = _adapter_for(address, via)
+    if not ip or ip == state.get("primary"):
+        return prim
+    e = POOL.get(ip)
+    if e is not None:
+        return e["app"]
+    async with _pool_las(ip):
+        e = POOL.get(ip)
+        if e is not None:
+            return e["app"]
+        try:
+            local = _lokal_for(ip)
+            if not local:
+                return prim
+            bacnet_app, _ = await _open_app(local, None, primary=False)
+            return bacnet_app
+        except Exception:
+            return prim
+
+
+def _noter_enheter(devices: List[Dict[str, Any]], ip: Optional[str]) -> None:
+    """Remember which adapter found each device, so reads go the same way."""
+    if not ip:
         return
-    _cov_stopp_alle()
-    try:
-        if state.get("bbmd"):
-            a.unregister()
-    except Exception:
-        pass
-    try:
-        a.close()
-    except Exception:
-        pass
-    state["app"] = None
-    state["local_address"] = None
-    state["bbmd"] = None
+    for d in devices:
+        if d.get("address"):
+            DEVICE_KORT[str(d["address"])] = ip
 
 
-async def _switch_bbmd(bbmd: Optional[str]):
-    """Rebind on the same local address, registered with `bbmd` or not."""
-    if state["app"] is not None and state.get("bbmd") == bbmd:
-        return state["app"]
-    local = state["local_address"]
-    _close_app()
-    # The old socket has to be gone before the same port is bound again.
-    await asyncio.sleep(0.2)
-    bacnet_app, _ = await _open_app(local, bbmd)
-    return bacnet_app
+async def _vakt_kort() -> None:
+    """An adapter that has gone (a tunnel taken down, a cable pulled) leaves a
+    dead socket behind. It is closed here, so the next request binds afresh
+    instead of sending into nothing."""
+    while True:
+        await asyncio.sleep(3)
+        try:
+            oppe = {e["ip"] for e in list_interfaces()}
+        except Exception:
+            continue
+        for ip in list(POOL):
+            if ip not in oppe and not (TILLAT_LOOPBACK and ip.startswith("127.")):
+                _close_app(ip)
+
+
+@app.on_event("startup")
+async def _start_kortvakt():
+    asyncio.get_running_loop().create_task(_vakt_kort())
 
 
 async def _wait_registration(bacnet_app, timeout: float = 6.0) -> int:
@@ -947,6 +1093,24 @@ async def _wait_registration(bacnet_app, timeout: float = 6.0) -> int:
 @app.post("/api/start")
 async def start_proxy(body: StartBody):
     if state["app"] is not None:
+        # Asking for another adapter makes it the main one. The others stay
+        # up: devices already found keep being read through theirs.
+        if body.local_address and _ip_of(resolve_local_address(body.local_address)) != state.get("primary"):
+            try:
+                local_address = resolve_local_address(body.local_address)
+                ip = _ip_of(local_address)
+                async with _pool_las(ip):
+                    if ip not in POOL:
+                        await _open_app(local_address, None, primary=True)
+                    else:
+                        e = POOL[ip]
+                        state["app"], state["local_address"], state["bbmd"], state["primary"] = (
+                            e["app"], e["local"], e.get("bbmd"), ip)
+                naboer = port_naboer()
+                return {"status": "done", "local_address": local_address, "rcvbuf": 0,
+                        "port_naboer": naboer, "port_advarsel": port_advarsel(naboer)}
+            except Exception as e:
+                return {"status": "error", "error": str(e)}
         return {"status": "already-running", "local_address": state["local_address"]}
     try:
         local_address = resolve_local_address(body.local_address)
@@ -991,9 +1155,9 @@ async def stop_proxy():
     return {"status": "done"}
 
 
-def _local_network() -> Optional[ipaddress.IPv4Network]:
-    """The subnet we are bound on, or None for a /32 tunnel address."""
-    lokal = state.get("local_address")
+def _local_network(lokal: Optional[str] = None) -> Optional[ipaddress.IPv4Network]:
+    """The subnet an adapter is bound on, or None for a /32 tunnel address."""
+    lokal = lokal or state.get("local_address")
     if not lokal:
         return None
     try:
@@ -1003,8 +1167,8 @@ def _local_network() -> Optional[ipaddress.IPv4Network]:
     return nett if nett.prefixlen < 32 else None
 
 
-def _is_local(net: ipaddress.IPv4Network) -> bool:
-    lokal = _local_network()
+def _is_local(net: ipaddress.IPv4Network, lokal_adresse: Optional[str] = None) -> bool:
+    lokal = _local_network(lokal_adresse)
     return lokal is not None and net.subnet_of(lokal)
 
 
@@ -1023,17 +1187,18 @@ async def scan_broadcast(bacnet_app, net: ipaddress.IPv4Network, timeout: float,
     Through a BBMD it is handed to the BBMD to repeat in its own building.
     Off-subnet without one, the directed .255 is the only thing left to try.
     """
-    if state.get("bbmd"):
+    bbmd = getattr(bacnet_app, "_nabe_bbmd", None)
+    if bbmd:
         destination = Address("*:*")
-        broadcast_ip = f"BBMD {state['bbmd']}"
-    elif _is_local(net):
+        broadcast_ip = f"BBMD {bbmd}"
+    elif _is_local(net, getattr(bacnet_app, "_nabe_local", None)):
         destination = Address("*:*")
         broadcast_ip = "*:* (lokal kringkasting)"
     else:
         destination = None
         broadcast_ip = str(net.broadcast_address)
     devices = await _who_is(bacnet_app, destination or device_address(broadcast_ip), timeout)
-    if hosts is not None and not state.get("bbmd"):
+    if hosts is not None and not bbmd:
         # A range like .10-40 still gets a whole-subnet broadcast; keep what
         # was asked for. Devices behind a router have no IP and are kept.
         wanted = set(hosts)
@@ -1333,7 +1498,7 @@ def _les_bdt(bbmd: str, timeout: float = 2.0) -> Optional[List[str]]:
         s.close()
 
 
-async def _scan_via_bbmd(job, body: "ScanBody", hosts: List[str]):
+async def _scan_via_bbmd(job, body: "ScanBody", hosts: List[str], kort: Optional[str] = None):
     """
     Register with the BBMD at the one address given and Who-Is through it.
 
@@ -1348,7 +1513,7 @@ async def _scan_via_bbmd(job, body: "ScanBody", hosts: List[str]):
     bdt = await loop.run_in_executor(None, _les_bdt, bbmd)
     job["bdt"] = bdt
     job["phase"] = t(f"registrerer hos BBMD {bbmd}", f"registering with BBMD {bbmd}")
-    bacnet_app = await _switch_bbmd(bbmd)
+    bacnet_app = await _switch_bbmd(bbmd, kort)
     status = await _wait_registration(bacnet_app)
     if status == 0:
         job["phase"] = "who-is via BBMD"
@@ -1360,7 +1525,7 @@ async def _scan_via_bbmd(job, body: "ScanBody", hosts: List[str]):
                 devices.append(r)
         return devices, t(f"Registrert hos BBMD {bbmd}", f"Registered with BBMD {bbmd}") + _bdt_tekst(bbmd, bdt), status
 
-    bacnet_app = await _switch_bbmd(None)
+    bacnet_app = await _switch_bbmd(None, kort)
     if status == -1:
         note = t(f"{bbmd} svarte ikke på registrering som foreign device - "
                  "den er trolig ikke BBMD. Leste adressen alene.",
@@ -1391,7 +1556,9 @@ def _bdt_tekst(bbmd: str, bdt: Optional[List[str]]) -> str:
              + ", ".join(andre) + ". Scan them in BBMD mode for the rest of the plant.")
 
 
-async def _run_scan(job, body: "ScanBody", hosts: List[str], net):
+async def _run_scan(job, body: "ScanBody", hosts: List[str], net, kort: Optional[str] = None):
+    kort = kort or state.get("primary")
+    lokal_adresse = (POOL.get(kort) or {}).get("local") or _lokal_for(kort) or state.get("local_address")
     mode = body.mode
     note = None
     bbmd_status = None
@@ -1402,18 +1569,21 @@ async def _run_scan(job, body: "ScanBody", hosts: List[str], net):
     only = hosts if "-" in body.subnet else None
 
     if mode == "bbmd":
-        devices, note, bbmd_status = await _scan_via_bbmd(job, body, hosts)
+        devices, note, bbmd_status = await _scan_via_bbmd(job, body, hosts, kort)
         broadcast_ip = f"BBMD {hosts[0]}" if bbmd_status == 0 else None
+        bacnet_app = POOL[kort]["app"]
     else:
         # Anything else is a scan of addresses, not of a building behind a
         # BBMD, so a registration left over from earlier would only send the
         # Who-Is to the wrong place.
-        bacnet_app = await _switch_bbmd(None)
+        bacnet_app = await _app_for("", via=kort) if kort not in POOL else POOL[kort]["app"]
+        if getattr(bacnet_app, "_nabe_bbmd", None):
+            bacnet_app = await _switch_bbmd(None, kort)
         if mode == "auto":
             # On our own subnet a broadcast reaches everything in seconds and
             # the link does not drift, so the patient VPN passes buy nothing.
             # Anywhere else broadcasts do not arrive and the sweep is the scan.
-            mode = "lokal" if _is_local(net) else "unicast_sweep"
+            mode = "lokal" if _is_local(net, lokal_adresse) else "unicast_sweep"
         if mode == "lokal":
             job["phase"] = "who-is"
             devices, broadcast_ip = await scan_broadcast(bacnet_app, net, body.timeout, only)
@@ -1435,9 +1605,10 @@ async def _run_scan(job, body: "ScanBody", hosts: List[str], net):
             devices, broadcast_ip = await scan_broadcast(bacnet_app, net, body.timeout, only)
             hosts_scanned = net.num_addresses
 
-    if state["app"] is not None and any(d.get("object_name") is None for d in devices):
+    if any(d.get("object_name") is None for d in devices):
         job["phase"] = t("henter navn", "fetching names")
-        await berik_navn(state["app"], devices)
+        await berik_navn(bacnet_app, devices)
+    _noter_enheter(devices, kort)
 
     devices.sort(key=lambda d: (d["device_instance"] is None, d["device_instance"]))
     for d in devices:
@@ -1455,7 +1626,24 @@ async def _run_scan(job, body: "ScanBody", hosts: List[str], net):
         "note": note,
         "bbmd_status": bbmd_status,
         "bdt": job.get("bdt"),
+        "via": {"ip": kort, "interface": (POOL.get(kort) or {}).get("interface") or _kort_navn(kort),
+                "cidr": lokal_adresse},
     }
+
+
+def _velg_kort(via: Optional[str], mal: str) -> str:
+    """The adapter a scan goes out of: the one asked for, else the one the
+    address is routed through, else the main one."""
+    gyldig = {e["ip"] for e in list_interfaces()}
+    if via and (_ip_of(via) in gyldig or _ip_of(via) in POOL or (TILLAT_LOOPBACK and via.startswith("127."))):
+        return _ip_of(via)
+    try:
+        ip = kort_for(mal)
+        if ip in gyldig or ip in POOL or (TILLAT_LOOPBACK and ip.startswith("127.")):
+            return ip
+    except Exception:
+        pass
+    return state.get("primary")
 
 
 @app.post("/api/scan")
@@ -1484,7 +1672,9 @@ async def scan_subnet(body: ScanBody):
                            "som oftest JACE-en eller hovedsentralen.",
                            "BBMD mode takes one IP: the building's BBMD, "
                            "usually the JACE or the main controller.")}
-    sweep = body.mode == "unicast_sweep" or (body.mode == "auto" and not _is_local(net))
+    kort = _velg_kort(body.via, hosts[0] if hosts else str(net.network_address + 1))
+    kort_lokal = (POOL.get(kort) or {}).get("local") or _lokal_for(kort) or state.get("local_address")
+    sweep = body.mode == "unicast_sweep" or (body.mode == "auto" and not _is_local(net, kort_lokal))
     if sweep and (hosts is None or len(hosts) > MAX_SWEEP_HOSTS):
         return {
             "status": "error",
@@ -1499,7 +1689,7 @@ async def scan_subnet(body: ScanBody):
 
     async def run():
         try:
-            job["result"] = await _run_scan(job, body, hosts, net)
+            job["result"] = await _run_scan(job, body, hosts, net, kort)
             job["status"] = "done"
         except asyncio.CancelledError:
             job["status"] = "cancelled"
@@ -2029,7 +2219,7 @@ async def _load_points(job, bacnet_app, body: "LoadPointsBody"):
 @app.post("/api/device/points")
 async def device_points(body: LoadPointsBody):
     """Start the load as a job; the UI polls /api/job/{id} for progress."""
-    bacnet_app = _require_app()
+    bacnet_app = await _app_for(body.address)
     if bacnet_app is None:
         return {"status": "error", "error": t("Proxy er ikke startet.", "Not connected.")}
 
@@ -2093,11 +2283,12 @@ async def poll(body: PollBody):
 
     async def one_device(ip: str, objids: List[str]):
         addr = device_address(ip)
-        fra_cov, les = _cov_del(bacnet_app, ip, objids)
+        enhet_app = await _app_for(ip) or bacnet_app
+        fra_cov, les = _cov_del(enhet_app, ip, objids)
         if fra_cov:
             cov_ok[ip] = list(fra_cov)
         try:
-            out[ip] = await bc.poll_values(bacnet_app, addr, les) if les else {}
+            out[ip] = await bc.poll_values(enhet_app, addr, les) if les else {}
         except COMM_ERRORS:
             out[ip] = {}
         out[ip].update(fra_cov)
@@ -2110,7 +2301,7 @@ async def poll(body: PollBody):
 
 @app.post("/api/object/detail")
 async def object_detail(body: DetailBody):
-    bacnet_app = _require_app()
+    bacnet_app = await _app_for(body.address)
     if bacnet_app is None:
         return {"status": "error", "error": t("Proxy er ikke startet.", "Not connected.")}
     addr = device_address(body.address)
@@ -2124,7 +2315,7 @@ async def object_detail(body: DetailBody):
 @app.post("/api/object/all")
 async def object_all(body: DetailBody):
     """Every property of one object, for «Alle egenskaper» in the inspector."""
-    bacnet_app = _require_app()
+    bacnet_app = await _app_for(body.address)
     if bacnet_app is None:
         return {"status": "error", "error": t("Proxy er ikke startet.", "Not connected.")}
     addr = device_address(body.address)
@@ -2155,7 +2346,7 @@ async def _auto_release(addr: Address, objid: str, prop: str,
     frist = time.time() + RELEASE_MAX_WAIT
     forsok = 0
     while True:
-        bacnet_app = state["app"]
+        bacnet_app = await _app_for(ip)
         if bacnet_app is not None:
             try:
                 result = await bc.write_value(
@@ -2330,11 +2521,11 @@ async def _husk_lokka():
 
 async def _sjekk_svar(key: str, enheter: List[Dict[str, Any]]) -> None:
     ok = False
-    app_ = _require_app()
-    if app_ is not None:
+    if state["app"] is not None:
         sem = asyncio.Semaphore(2)
         for d in enheter[:2]:
             try:
+                app_ = await _app_for(d["address"])
                 r = await probe_host_unicast(app_, d["address"], 1.2, sem)
             except Exception:
                 r = None
@@ -2459,7 +2650,7 @@ class TrendBody(BaseModel):
 
 @app.post("/api/device/schedules")
 async def device_schedules(body: SchedBody):
-    bacnet_app = _require_app()
+    bacnet_app = await _app_for(body.address)
     if bacnet_app is None:
         return {"status": "error", "error": t("Proxy er ikke startet.", "Not connected.")}
     addr = device_address(body.address)
@@ -2479,7 +2670,7 @@ async def device_schedules(body: SchedBody):
 
 @app.post("/api/object/trendlog")
 async def object_trendlog(body: TrendBody):
-    bacnet_app = _require_app()
+    bacnet_app = await _app_for(body.address)
     if bacnet_app is None:
         return {"status": "error", "error": t("Proxy er ikke startet.", "Not connected.")}
     addr = device_address(body.address)
@@ -2501,7 +2692,7 @@ async def schedule_write(body: SchedWriteBody):
     """Write a whole weekly schedule back to the controller."""
     if state["read_only"]:
         return {"status": "error", "error": t("Lesemodus er pa - skriving er blokkert.", "Read-only is on - writing is blocked.")}
-    bacnet_app = _require_app()
+    bacnet_app = await _app_for(body.address)
     if bacnet_app is None:
         return {"status": "error", "error": t("Proxy er ikke startet.", "Not connected.")}
     addr = device_address(body.address)
@@ -2542,7 +2733,7 @@ async def points_forced(body: ForcedBody):
     a handful of points rather than for every point on every load: a
     priority-array is sixteen values per object.
     """
-    bacnet_app = _require_app()
+    bacnet_app = await _app_for(body.address)
     if bacnet_app is None:
         return {"status": "error", "error": t("Proxy er ikke startet.", "Not connected.")}
     if not body.objids:
@@ -2586,7 +2777,7 @@ async def device_clock(body: ClockBody):
     """Set one controller's clock from this PC."""
     if state["read_only"]:
         return {"status": "error", "error": t("Lesemodus er pa - skriving er blokkert.", "Read-only is on - writing is blocked.")}
-    bacnet_app = _require_app()
+    bacnet_app = await _app_for(body.address)
     if bacnet_app is None:
         return {"status": "error", "error": t("Proxy er ikke startet.", "Not connected.")}
     addr = device_address(body.address)
@@ -2609,7 +2800,7 @@ async def device_clock(body: ClockBody):
 
 @app.post("/api/write")
 async def write(body: WriteBody):
-    bacnet_app = _require_app()
+    bacnet_app = await _app_for(body.address)
     if bacnet_app is None:
         return {"status": "error", "error": t("Proxy er ikke startet.", "Not connected.")}
     if state["read_only"]:
@@ -3058,7 +3249,8 @@ async def _opptak_les() -> None:
 
     async def en(ip: str, objids: List[str]) -> None:
         try:
-            verdier[ip] = await bc.poll_values(bacnet_app, device_address(ip), objids) if bacnet_app else {}
+            a = await _app_for(ip) if bacnet_app else None
+            verdier[ip] = await bc.poll_values(a, device_address(ip), objids) if a else {}
         except COMM_ERRORS:
             verdier[ip] = {}
 
@@ -3662,7 +3854,7 @@ async def device_alarms(body: AlarmBody):
     Devices that do not implement the service say so, and the page falls back
     to the flags it already has.
     """
-    bacnet_app = _require_app()
+    bacnet_app = await _app_for(body.address)
     if bacnet_app is None:
         return {"status": "error", "error": t("Ikke tilkoblet.", "Not connected.")}
     addr = device_address(body.address)
@@ -3705,14 +3897,14 @@ async def routers():
 
     On our own subnet one broadcast asks everybody. Over a VPN broadcasts do
     not arrive, so each device already found is asked directly instead -
-    routers answer a unicast too.
+    routers answer a unicast too. Every adapter in use is asked through its
+    own stack, so a router behind the tunnel and one on the cable both show.
     """
-    bacnet_app = _require_app()
-    if bacnet_app is None:
+    if _require_app() is None:
         return {"status": "error", "error": t("Ikke tilkoblet.", "Not connected.")}
     funn: Dict[str, set] = {}
 
-    async def spor(dest):
+    async def spor(bacnet_app, dest):
         try:
             svar = await asyncio.wait_for(
                 bacnet_app.nse.who_is_router_to_network(destination=dest), timeout=3)
@@ -3722,12 +3914,16 @@ async def routers():
             nett = getattr(npdu, "iartnNetworkList", None) or []
             funn.setdefault(str(npdu.pduSource), set()).update(int(n) for n in nett)
 
-    lokal = _local_network()
-    if lokal is not None and not state.get("bbmd"):
-        await spor(None)
-    else:
-        ips = [d for d in SISTE_ENHETER if _plain_ip(d)][:64]
-        await asyncio.gather(*[spor(Address(ip)) for ip in ips])
+    jobber = []
+    for ip, e in list(POOL.items()):
+        lokal = _local_network(e["local"])
+        if lokal is not None and not e.get("bbmd"):
+            jobber.append(spor(e["app"], None))
+        else:
+            for adr in [d for d in SISTE_ENHETER if _plain_ip(d)][:64]:
+                if (DEVICE_KORT.get(adr) or state.get("primary")) == ip:
+                    jobber.append(spor(e["app"], Address(adr)))
+    await asyncio.gather(*jobber)
     return {"status": "done",
             "rutere": [{"ruter": r, "nett": sorted(n)} for r, n in sorted(funn.items()) if n]}
 
@@ -3887,7 +4083,7 @@ def _cov_del(bacnet_app, ip: str, objids: List[str]):
         k = (ip, oid)
         c = COV.get(k)
         if c is None or (not c.get("ok") and naa - c.get("feilet", 0) > COV_IKKE_FOR and not c.get("task")):
-            COV[k] = c = {"ok": False, "verdi": None, "sist_spurt": naa, "status": "ny"}
+            COV[k] = c = {"ok": False, "verdi": None, "sist_spurt": naa, "status": "ny", "app": bacnet_app}
             c["task"] = asyncio.ensure_future(_cov_lytt(bacnet_app, ip, oid, c))
         c["sist_spurt"] = naa
         if c.get("ok") and c.get("har") and c.get("status") != "stille":
@@ -3920,6 +4116,16 @@ def _cov_stille_i(targets: Dict[str, List[str]]) -> Dict[str, List[str]]:
     return ut
 
 
+def _cov_stopp_for(bacnet_app) -> None:
+    """Stop what is watched through one adapter's stack, when it is closed."""
+    for k, c in list(COV.items()):
+        if c.get("app") is bacnet_app:
+            t = c.get("task")
+            if t:
+                t.cancel()
+            COV.pop(k, None)
+
+
 def _cov_stopp_alle() -> None:
     for c in COV.values():
         t = c.get("task")
@@ -3938,7 +4144,7 @@ TRAFIKK: "collections.deque" = collections.deque(maxlen=TRAFIKK_MAKS)
 _TRAFIKK_SEQ = [0]
 
 
-def _trafikk_rad(apdu, t0: float, ms: float, svar: str, kode: str) -> None:
+def _trafikk_rad(apdu, t0: float, ms: float, svar: str, kode: str, kort: str = "") -> None:
     _TRAFIKK_SEQ[0] += 1
     tjeneste = type(apdu).__name__
     tjeneste = tjeneste[:-7] if tjeneste.endswith("Request") else tjeneste
@@ -3953,7 +4159,7 @@ def _trafikk_rad(apdu, t0: float, ms: float, svar: str, kode: str) -> None:
     TRAFIKK.append({
         "n": _TRAFIKK_SEQ[0], "t": round(t0, 3), "til": str(getattr(apdu, "pduDestination", "") or "broadcast"),
         "tjeneste": tjeneste, "obj": str(obj) if obj is not None else "", "prop": str(prop) if prop is not None else "",
-        "ms": round(ms, 1), "svar": svar, "kode": kode, "forsok": bc.FORSOK.get(),
+        "ms": round(ms, 1), "svar": svar, "kode": kode, "forsok": bc.FORSOK.get(), "kort": kort,
     })
 
 
@@ -3971,7 +4177,7 @@ def _trafikk_svar(x) -> tuple:
     return "ok", ""
 
 
-def _trafikk_ferdig(apdu, t0: float, m0: float, forsok: int, fut) -> None:
+def _trafikk_ferdig(apdu, t0: float, m0: float, forsok: int, fut, kort: str = "") -> None:
     ms = (time.perf_counter() - m0) * 1000
     if fut.cancelled():
         svar, kode = "tidsgrense", ""
@@ -3979,7 +4185,7 @@ def _trafikk_ferdig(apdu, t0: float, m0: float, forsok: int, fut) -> None:
         svar, kode = _trafikk_svar(fut.exception())
     else:
         svar, kode = _trafikk_svar(fut.result())
-    _trafikk_rad(apdu, t0, ms, svar, kode)
+    _trafikk_rad(apdu, t0, ms, svar, kode, kort)
     TRAFIKK[-1]["forsok"] = forsok
 
 
@@ -3989,14 +4195,15 @@ def _trafikk_installer(bacnet_app) -> None:
     orig = bacnet_app.request
     if getattr(orig, "_nabe_trafikk", False):
         return
+    kort = getattr(bacnet_app, "_nabe_ip", "")
 
     def request(apdu):
         t0, m0, forsok = time.time(), time.perf_counter(), bc.FORSOK.get()
         fut = orig(apdu)
         if fut.done() and not fut.cancelled() and fut.exception() is None and fut.result() is None:
-            _trafikk_rad(apdu, t0, 0.0, "sendt", "")        # unconfirmed: nothing comes back
+            _trafikk_rad(apdu, t0, 0.0, "sendt", "", kort)        # unconfirmed: nothing comes back
         else:
-            fut.add_done_callback(lambda f: _trafikk_ferdig(apdu, t0, m0, forsok, f))
+            fut.add_done_callback(lambda f: _trafikk_ferdig(apdu, t0, m0, forsok, f, kort))
         return fut
     request._nabe_trafikk = True
     bacnet_app.request = request
@@ -4179,7 +4386,7 @@ async def diagnose(body: DiagnoseBody):
                                 "See what the next step says before you conclude.")}
 
     if steg == "bacnet":
-        bacnet_app = state["app"]
+        bacnet_app = await _app_for(ip)
         if bacnet_app is None:
             return {"status": "feil", "detalj": t("Ikke tilkoblet", "Not connected"),
                     "forklaring": t("Start forbindelsen først.", "Start the connection first.")}

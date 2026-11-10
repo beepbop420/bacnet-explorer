@@ -3808,6 +3808,7 @@ body.uten-bevegelse .nabo-term,body.uten-bevegelse .nabo-pakke,body.uten-bevegel
 .dev .dev-id{font-family:var(--mono);font-size:11px;font-weight:400;color:var(--fg-3)}
 .dev .dev-id::before{content:'· ';color:var(--line-2)}
 .dev-lev{color:var(--fg-3)}
+.dev-kort{color:var(--fg-3);font-size:10px;letter-spacing:.02em;padding:0 5px;border:1px solid var(--line);border-radius:8px;white-space:nowrap;max-width:90px;overflow:hidden;text-overflow:ellipsis}
 .dev-pkt{margin-left:auto;font-style:normal;color:var(--fg-3);white-space:nowrap}
 .dev .dev-note{font-size:10px;color:var(--fg-2);border:1px solid var(--line-2);border-radius:var(--r-sm);padding:0 4px}
 .dev .dev-seen{font-style:normal}
@@ -5157,7 +5158,7 @@ button.sp-rad:hover{background:var(--hover)}
             <small>Skanner kabelen inn i anlegget, eller anlegget du var på sist, når NABE åpnes</small>
             <span id="autoSokState" class="menu-state"></span></button>
           <button id="kortAutoBtn" class="sett-rad bryter" role="switch">Velg nettverkskort automatisk
-            <small>NABE bytter kort etter hvor adressen rutes. Når du velger kort selv, står det fast</small>
+            <small>Hver adresse går ut av kortet den rutes gjennom, flere kort samtidig. Av: alt går ut av kortet du velger</small>
             <span id="kortAutoState" class="menu-state"></span></button>
           <button id="preBtn" class="sett-rad bryter" role="switch">Forhåndsles enheter
             <small>Leser de andre enhetene i bakgrunnen etter et skann</small>
