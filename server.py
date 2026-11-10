@@ -200,7 +200,7 @@ def t(nb: str, en: str) -> str:
     return en if SPRAAK_VAR.get() == "en" else nb
 
 
-VERSJON = "1.55"
+VERSJON = "1.56"
 
 state = {"app": None, "local_address": None, "read_only": False, "bbmd": None, "primary": None}
 
@@ -4175,7 +4175,7 @@ def _trafikk_rad(apdu, t0: float, ms: float, svar: str, kode: str, kort: str = "
     liste = getattr(apdu, "listOfReadAccessSpecs", None)
     if liste is not None:
         try:
-            obj = f"{len(liste)} objekter"
+            obj = f"{len(liste)} obj"
         except TypeError:
             pass
     prop = getattr(apdu, "propertyIdentifier", None)
@@ -4248,7 +4248,21 @@ async def trafikk(etter: int = 0):
         ms.sort()
         oppsummering[til] = {"antall": len(ms), "feil": feil.get(til, 0),
                              "snitt": round(sum(ms) / len(ms), 1), "p95": ms[min(len(ms) - 1, int(len(ms) * 0.95))]}
-    return {"status": "done", "seq": _TRAFIKK_SEQ[0], "rader": rader, "oppsummering": oppsummering}
+    # The same per adapter, since each has its own link and its own troubles.
+    pk: Dict[str, List[float]] = {}
+    pkf: Dict[str, int] = {}
+    for r in TRAFIKK:
+        if r["svar"] == "sendt" or not r.get("kort"):
+            continue
+        pk.setdefault(r["kort"], []).append(r["ms"])
+        if r["svar"] != "ok":
+            pkf[r["kort"]] = pkf.get(r["kort"], 0) + 1
+    kort = {}
+    for k, ms in pk.items():
+        ms.sort()
+        kort[k] = {"antall": len(ms), "feil": pkf.get(k, 0), "snitt": round(sum(ms) / len(ms), 1),
+                   "p95": ms[min(len(ms) - 1, int(len(ms) * 0.95))]}
+    return {"status": "done", "seq": _TRAFIKK_SEQ[0], "rader": rader, "oppsummering": oppsummering, "kort": kort}
 
 
 @app.post("/api/trafikk/tom")

@@ -7,7 +7,7 @@
 'use strict';
 
 (function trafikklogg() {
-  let rader = [], seq = 0, oppsummering = {}, pause = false, timer = 0;
+  let rader = [], seq = 0, oppsummering = {}, perKort = {}, pause = false, timer = 0;
   let fEnhet = '', fTjeneste = '', fFeil = false, valgNokkel = '';
 
   const lag = document.createElement('div');
@@ -25,6 +25,7 @@
   const SVAR = {ok: 'OK', feil: T('feil', 'error'), avvist: T('avvist', 'rejected'),
                 avbrutt: T('avbrutt', 'aborted'), tidsgrense: T('tidsgrense', 'timeout'), sendt: T('sendt', 'sent')};
   const kortFlere = () => new Set(rader.map(r => r.kort).filter(Boolean)).size > 1;
+  const kortNavn = (ip) => ((S.kort || []).find(k => k.ip === ip) || {}).interface || ip;
   const filtrert = () => rader.filter(r =>
     (!fEnhet || r.til === fEnhet) && (!fTjeneste || r.tjeneste === fTjeneste)
     && (!fFeil || !['ok', 'sendt'].includes(r.svar)));
@@ -36,6 +37,7 @@
       rader = rader.concat(d.rader).slice(-5000);
       seq = d.seq;
       oppsummering = d.oppsummering || {};
+      perKort = d.kort || {};
     } catch { /* the next tick tries again */ }
   }
 
@@ -64,16 +66,19 @@
       valg($('trEnhet'), T('Alle enheter', 'All devices'), enheter, fEnhet);
       valg($('trTjeneste'), T('Alle tjenester', 'All services'), tjenester, fTjeneste);
     }
-    $('trSum').innerHTML = Object.entries(oppsummering)
-      .sort((a, b) => b[1].feil - a[1].feil || b[1].snitt - a[1].snitt).slice(0, 8)
-      .map(([ip, o]) => `<div class="tr-sum-rad"><span>${esc(ip)}</span><span>${o.antall}</span>
-        <span class="${o.feil ? 'tr-feil-tall' : ''}">${o.feil} ${T('feil', 'errors')}</span><span>${o.snitt} ms</span><span>p95 ${o.p95} ms</span></div>`).join('')
+    const sumRad = (navn, o, klasse = '') => `<div class="tr-sum-rad ${klasse}"><span>${esc(navn)}</span><span>${o.antall}</span>
+        <span class="${o.feil ? 'tr-feil-tall' : ''}">${o.feil} ${T('feil', 'errors')}</span><span>${o.snitt} ms</span><span>p95 ${o.p95} ms</span></div>`;
+    const kortRader = Object.entries(perKort).map(([ip, o]) => sumRad(kortNavn(ip), o, 'tr-sum-kort'));
+    const enhetRader = Object.entries(oppsummering)
+      .sort((a, b) => b[1].feil - a[1].feil || b[1].snitt - a[1].snitt).slice(0, 5)
+      .map(([ip, o]) => sumRad(ip, o));
+    $('trSum').innerHTML = (kortRader.length > 1 ? kortRader.join('') : '') + enhetRader.join('')
       || `<div class="sp-meta">${T('Ingen trafikk ennå.', 'No traffic yet.')}</div>`;
     const alle = filtrert();
     $('trAnt').textContent = T(`${alle.length} av ${rader.length}`, `${alle.length} of ${rader.length}`);
     const flere = kortFlere();
     $('trRader').innerHTML = alle.slice(-300).reverse().map(r => `<tr>
-      <td class="tr-mono">${esc(tid(r.t))}</td><td>${esc(r.til)}${flere && r.kort ? `<div class="sp-meta">${T('via', 'via')} ${esc(r.kort)}</div>` : ''}</td><td>${esc(r.tjeneste)}</td>
+      <td class="tr-mono">${esc(tid(r.t))}</td><td>${esc(r.til)}${flere && r.kort ? `<div class="sp-meta">${T('via', 'via')} ${esc(kortNavn(r.kort))}</div>` : ''}</td><td>${esc(r.tjeneste)}</td>
       <td>${esc(r.obj)}${r.prop ? `<span class="sp-meta"> ${esc(r.prop)}</span>` : ''}</td>
       <td class="t">${r.svar === 'sendt' ? '' : r.ms}</td>
       <td class="${r.svar === 'ok' || r.svar === 'sendt' ? 'sp-meta' : 'tr-ugreit'}">${esc(SVAR[r.svar] || r.svar)}</td>

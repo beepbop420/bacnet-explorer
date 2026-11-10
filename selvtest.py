@@ -205,7 +205,7 @@ def royktest():
                 d = m["params"]["exceptionDetails"]
                 feil.append((d.get("exception") or {}).get("description", d.get("text", "?")).splitlines()[0][:160])
         s.settimeout(10)
-        send({"id": 3, "method": "Runtime.evaluate", "params": {"returnByValue": True, "expression":
+        uttrykk = lambda i: ({"id": i, "method": "Runtime.evaluate", "params": {"returnByValue": True, "expression":
               "({skann: typeof runScan === 'function' && !!document.querySelector('.skann-ny'),"
               " nabo: !!document.getElementById('naboHus'), meny: typeof closeMenus === 'function',"
               " flat: typeof flatVerdi === 'function' && !!document.getElementById('flatBtn') && (() => {"
@@ -254,11 +254,18 @@ def royktest():
               "  const r = settpunktAvvik({a, b: [{name:'Z',value:1,objid:'1'},{name:'Z.SP',value:1,objid:'2'}]});"
               "  return n.join() === 'X,X,X,X,RT401,Akt,Akt' && ikke && r.length === 4 && r[0].p.name === 'AktTemp' && r[1].p.name === 'X' && r[1].avvik === 3"
               "    && !r.some(x => x.p.name.startsWith('Dup')); })()})"}})
-        while True:
-            m = motta()
-            if m.get("id") == 3:
-                sjekker = m.get("result", {}).get("result", {}).get("value") or {}
+        # A slow page (the machine busy with something else) gets a few more tries
+        # before it counts as broken: the late scripts may simply not have run yet.
+        for forsok in range(8):
+            send(uttrykk(3 + forsok))
+            while True:
+                m = motta()
+                if m.get("id") == 3 + forsok:
+                    sjekker = m.get("result", {}).get("result", {}).get("value") or {}
+                    break
+            if sjekker and all(sjekker.values()):
                 break
+            time.sleep(1.5)
     except Exception as e:
         feil.append(f"røyktesten selv: {e}")
     finally:

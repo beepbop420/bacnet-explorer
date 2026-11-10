@@ -177,8 +177,13 @@ const FAKTA = [
   ['COV betyr at regulatoren sier fra selv. Mindre spørring, mer ro.', 'COV means the controller speaks up itself. Less asking, more peace.'],
 ];
 const NYTT = {
+  '1.56': [
+    ['Flere nettverkskort samtidig: hver adresse går ut av kortet den rutes gjennom, og områder bak ulike kort skannes samtidig. Enhetene viser hvilket kort de leses via, og statuslinja viser +1 når flere kort er i bruk', 'Several network adapters at once: every address goes out of the adapter it is routed through, and ranges behind different adapters are scanned at the same time. Devices show which adapter they are read through, and the status bar shows +1 when more than one is in use'],
+    ['Et anlegg bak FortiClient med bare standardrute regnes som nåbart når en av enhetene det husker svarer, så oppstarten går til anlegget du var på sist', 'A site behind FortiClient with only the default route counts as in reach once one of its remembered devices answers, so start-up goes to the site you were on last'],
+    ['Trafikkloggen viser kortet per forespørsel og et sammendrag per kort, så det er lett å se hvilken forbindelse som er stille', 'The traffic log shows the adapter per request and a summary per adapter, so it is easy to see which connection is silent'],
+  ],
   '1.55': [
-    ['Et nettverkskort du velger selv står fast, så NABE hopper ikke til et annet. Automatisk valg av kort slår du på i innstillinger', 'An adapter you pick yourself stays put, so NABE does not jump to another. Turn automatic adapter choice back on in Settings'],
+    ['Slår du av automatisk valg av nettverkskort i innstillinger, går alt ut av kortet du velger. Oppstarten flytter deg ikke til et anlegg på et annet kort', 'Turn automatic adapter choice off in Settings and everything goes out of the adapter you pick. Start-up does not move you to a site on another adapter'],
     ['COV-vakt: når varslene uteblir, merkes punktet «COV stille», leses i stedet og abonneres på nytt. COV leverer nå verdier, det gjorde den ikke før', 'COV guard: when notifications stop, the point is marked "COV silent", read instead and subscribed again. COV now delivers values, which it did not before'],
     ['Flat linje, feil sommertid/vintertid, avvik fra settpunkt, trafikklogg og pendlingsdetektor for RT mot SB', 'Flatline, wrong summer/winter time, deviation from setpoint, a traffic log and a hunting detector for RT against SB'],
   ],
