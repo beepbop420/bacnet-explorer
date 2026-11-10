@@ -206,7 +206,18 @@ def royktest():
               "    && !flatVerdi({...a, type:'analog-value'}, 36e5, 18e5); })(),"
               " sommer: typeof sommertidAvvik === 'function' && sommertidAvvik(3600) === 1 && sommertidAvvik(-3590) === -1"
               "   && sommertidAvvik(3000) === 0 && sommertidAvvik(7200) === 0 && sommertidAvvik(0) === 0"
-              "   && /sommertid|summer/.test(klokkeTekst(3600)) && !/sommertid|summer/.test(klokkeTekst(1800))})"}})
+              "   && /sommertid|summer/.test(klokkeTekst(3600)) && !/sommertid|summer/.test(klokkeTekst(1800)),"
+              " settpunkt: typeof aapneAvvik === 'function' && !!document.getElementById('avvikBtn') && (() => {"
+              "  const n = ['X-SP','X_SP','X.sp','XSp','RT401SP','Akt_Sp','AktSP'].map(erSettpunktNavn);"
+              "  const ikke = ['Spenning','Spjeld','Display','X','Sp'].every(x => erSettpunktNavn(x) === null);"
+              "  const c = u => ({objid:u, name:u, value:1, units:'degrees-celsius'});"
+              "  const a = [{name:'X',value:24,units:'degrees-celsius',objid:'1'},{name:'X-SP',value:21,units:'degrees-celsius',objid:'2'},"
+              "             {name:'Y',value:20,units:'percent',objid:'3'},{name:'y_sp',value:20.5,units:'percent',objid:'4'},"
+              "             {name:'AktTemp',value:5,units:'pascals',objid:'5'},{name:'AktSp',value:4,units:'pascals',objid:'6'},"
+              "             {name:'Dup1',value:1,objid:'7'},{name:'Dup2',value:1,objid:'8'},{name:'Dup_SP',value:2,objid:'9'}];"
+              "  const r = settpunktAvvik({a, b: [{name:'Z',value:1,objid:'1'},{name:'Z.SP',value:1,objid:'2'}]});"
+              "  return n.join() === 'X,X,X,X,RT401,Akt,Akt' && ikke && r.length === 4 && r[0].p.name === 'AktTemp' && r[1].p.name === 'X' && r[1].avvik === 3"
+              "    && !r.some(x => x.p.name.startsWith('Dup')); })()})"}})
         while True:
             m = motta()
             if m.get("id") == 3:

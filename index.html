@@ -4855,6 +4855,20 @@ html.peker-egen *:not(input):not(textarea):not(select):not(.splitter):not([conte
 .op-felt .field{width:230px}
 .op-tekst{margin:0;font-size:12px;line-height:1.5;color:var(--fg-3)}
 .op-knapper{display:flex;justify-content:flex-end;gap:8px}
+.sp-modal{width:min(760px,94vw)}
+.sp-kropp{padding:12px 16px 16px;display:flex;flex-direction:column;gap:10px;min-height:0}
+.sp-topp{display:flex;align-items:center;justify-content:space-between;font-size:12px;color:var(--fg-3)}
+.sp-topp .field{width:110px}
+.sp-rull{overflow:auto;max-height:min(62vh,560px)}
+.sp-tab{width:100%;border-collapse:collapse;font-size:12px}
+.sp-tab th{text-align:left;padding:4px 8px;color:var(--fg-3);font-weight:500;border-bottom:1px solid var(--line)}
+.sp-tab td{padding:6px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+.sp-tab tbody tr[data-ip]{cursor:pointer}
+.sp-tab tbody tr[data-ip]:hover{background:var(--hover)}
+.sp-tab .t{text-align:right;font-family:var(--mono);white-space:nowrap}
+.sp-meta{color:var(--fg-3);font-size:11px}
+.sp-avvik.stor{color:var(--warn)}
+.sp-tom{color:var(--fg-3);padding:18px 8px!important;text-align:center}
 .sp-panel{position:fixed;right:18px;bottom:40px;z-index:9000;width:min(380px,92vw);max-height:min(520px,80vh);display:flex;flex-direction:column;gap:10px;padding:12px 14px 14px;
   background:var(--raised);border:1px solid var(--line-2);border-radius:var(--r-lg);box-shadow:0 12px 34px rgba(0,0,0,.4)}
 .sp-panel:not(.ved){bottom:auto;top:50px}
@@ -4957,6 +4971,7 @@ button.sp-rad:hover{background:var(--hover)}
       <div id="toolsPop" class="menu-pop menu-right" hidden>
         <div class="menu-gruppe">Anlegg</div>
         <button id="cmpBtn" class="menu-item">Sammenlign to enheter…</button>
+        <button id="avvikBtn" class="menu-item">Avvik fra settpunkt…</button>
         <div class="menu-sep"></div>
         <div class="menu-gruppe">Nettverk</div>
         <button id="rescanNow" class="menu-item">Søk etter enheter nå</button>

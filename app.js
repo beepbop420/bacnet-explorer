@@ -4240,6 +4240,7 @@ function commands() {
   add('Visning', 'Fullskjerm', () => { closeCmd(); byttFullskjerm(); });
   add('Handling', 'Spør NABE…', () => { closeCmd(); aapneSpor(); });
   add('Handling', 'Opptak av punkter…', () => { closeCmd(); aapneOpptak(); });
+  add('Handling', 'Avvik fra settpunkt…', () => { closeCmd(); aapneAvvik(); });
   add('Visning', 'Innstillinger…', () => { closeCmd(); openTema(); });
   add('Eksport', 'NABO — tagger og Variabel-fil…', () => { closeCmd(); aapneNabo(); }, {hint: 'N'});
   add('Visning', 'Utseende — farger, bilder og størrelse…',
@@ -6653,14 +6654,66 @@ function eksporterLogg(d) {
    Uten dette maa man aapne to punkter etter hverandre og huske det ene. */
 function finnSettpunkt(p) {
   if (!p || !p.name || !S.pointIndex) return null;
-  const n = p.name;
-  // Er dette allerede settpunktet, er det ingenting aa vise mot.
-  if (/-SP$/i.test(n)) return null;
-  for (const q of S.pointIndex.values()) {
-    if (q.name && q.name.toLowerCase() === (n + '-SP').toLowerCase()
-        && typeof q.value === 'number') return q;
+  const sp = settpunktParFor([...S.pointIndex.values()]).get(p);
+  return sp && typeof sp.value === 'number' ? sp : null;
+}
+
+/* Settpunktene heter ikke det samme overalt: X-SP, X_SP, X.SP, XSp, Akt_Sp.
+   Sp/SP/SPT regnes bare som settpunkt naar det staar som siste ord, saa
+   Spenning og Spjeld er aldri det. Gir navnet uten endelsen, ellers null.
+   Brukes av kurva og av listen over avvik, saa de aldri glir fra hverandre. */
+function erSettpunktNavn(navn) {
+  const n = String(navn || '').trim();
+  let m = /^(.+?)[-_.\s]SPT?$/i.exec(n);
+  if (m) return m[1];
+  // XSp, AktSp: Sp som eget ord. AktSP og RT401SP: SP etter liten bokstav eller tall,
+  // ellers ville ASP og WASP vaert settpunkt.
+  m = /^(.+)(Sp|Spt)$/.exec(n) || /^(.+[a-zæøå0-9])(SPT?)$/.exec(n);
+  return m ? m[1] : null;
+}
+const _spNorm = s => String(s || '').toLowerCase().replace(/[^a-z0-9æøå]/g, '');
+
+/* Maalt verdi -> settpunkt, for punktene til en enhet. Ett treff eller ingen:
+   to punkter som passer like godt hoppes over, det er bedre enn aa gjette.
+   Foerst nøyaktig samme navn, saa (for AktSp mot AktTemp) et punkt som
+   begynner likt og har samme enhet, hvis det bare er ett. */
+let _spCache = null;
+function settpunktParFor(liste) {
+  if (_spCache && _spCache.liste.length === liste.length
+      && _spCache.nokkel === (liste[0] && liste[0].objid) + '|' + (liste[liste.length - 1] && liste[liste.length - 1].objid)) return _spCache.par;
+  const par = new Map(), sps = [], mal = new Map(), alle = [];
+  for (const q of liste) {
+    if (!q || !q.name) continue;
+    const b = erSettpunktNavn(q.name);
+    if (b) { sps.push([q, _spNorm(b)]); continue; }
+    alle.push(q);
+    const k = _spNorm(q.name);
+    if (!mal.has(k)) mal.set(k, []);
+    mal.get(k).push(q);
   }
-  return null;
+  for (const [sp, b] of sps) {
+    if (!b) continue;
+    let kand = mal.get(b) || [];
+    if (!kand.length && b.length >= 2) kand = alle.filter(q => _spNorm(q.name).startsWith(b) && q.units === sp.units);
+    if (kand.length === 1 && !par.has(kand[0])) par.set(kand[0], sp);
+  }
+  _spCache = {liste, par, nokkel: (liste[0] && liste[0].objid) + '|' + (liste[liste.length - 1] && liste[liste.length - 1].objid)};
+  return par;
+}
+
+/* Alle leste enheter paa en gang, sortert etter relativt avvik (avvik delt paa
+   settpunktet, minst 1) slik at grader, Pa og prosent kan staa i samme liste. */
+function settpunktAvvik(cache) {
+  const ut = [];
+  for (const [ip, liste] of Object.entries(cache || {})) {
+    if (!Array.isArray(liste)) continue;
+    for (const [p, sp] of settpunktParFor(liste)) {
+      if (typeof p.value !== 'number' || typeof sp.value !== 'number' || p.unread || sp.unread) continue;
+      const avvik = p.value - sp.value;
+      ut.push({ip, p, sp, avvik, rel: Math.abs(avvik) / Math.max(Math.abs(sp.value), 1)});
+    }
+  }
+  return ut.sort((a, b) => b.rel - a.rel);
 }
 
 /* C2 - hvor i kurva du skrev noe.
@@ -10058,6 +10111,7 @@ const ORDBOK = {
   'Formulerer svar ut fra oppslagsverket. Kjører på denne PC-en, og laster ned 5 GB': 'Words answers from the reference. Runs on this PC, and downloads 5 GB',
   'Spør NABE…': 'Ask NABE…',
   'Opptak av punkter…': 'Recording points…',
+  'Avvik fra settpunkt…': 'Deviation from setpoint…',
   'Fullskjerm': 'Full screen',
   'Fullskjerm (F11)': 'Full screen (F11)',
   'Peker': 'Pointer',
