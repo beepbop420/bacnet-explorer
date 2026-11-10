@@ -393,6 +393,59 @@ def pendling():
     sjekk("pendling: opptaket gir en sløyfe som pendler", [p["dom"] for p in e.get("par", [])] == ["sloyfe"], str(e.get("par")))
 
 
+def flere_kort():
+    """Two adapters at once: each address is sent from its own, scans on
+    different adapters run side by side, and changing the main adapter leaves
+    the others (and the devices read through them) alone. The second adapter is
+    127.0.0.7, which the test server is allowed to bind."""
+    forst = kall("/api/status")
+    sjekk("flere kort: starter med ett kort", len(forst.get("kort", [])) == 1, str(forst.get("kort")))
+
+    def skann(omr, via):
+        return kall("/api/scan", {"subnet": omr, "mode": "unicast_sweep", "thorough": False,
+                                  "per_host_timeout": 1.0, "concurrency": 8, "via": via})["job_id"]
+
+    # Two scans started together, each out of its own adapter.
+    t0 = time.time()
+    a, b = skann("127.0.0.2-4", "127.0.0.1"), skann("127.0.0.6", "127.0.0.7")
+    ja, jb = vent_jobb(a), vent_jobb(b)
+    ra, rb = ja.get("result") or {}, jb.get("result") or {}
+    sjekk("flere kort: to skann samtidig, hver ut av sitt kort",
+          ra.get("count") == 3 and rb.get("count") == 1
+          and (ra.get("via") or {}).get("ip") == "127.0.0.1" and (rb.get("via") or {}).get("ip") == "127.0.0.7",
+          f"{ra.get('count')}+{rb.get('count')} via {(ra.get('via') or {}).get('ip')}/{(rb.get('via') or {}).get('ip')}")
+
+    st = kall("/api/status")
+    ips = {k["ip"] for k in st.get("kort", [])}
+    sjekk("flere kort: status lister begge kortene og hvilket som leser hvilken enhet",
+          ips == {"127.0.0.1", "127.0.0.7"} and st["via"].get("127.0.0.6") == "127.0.0.7"
+          and st["via"].get("127.0.0.3") == "127.0.0.1", f"{sorted(ips)} {st.get('via')}")
+
+    # One poll, two devices, two adapters.
+    p = kall("/api/poll", {"targets": {"127.0.0.6": ["analog-input,1"], "127.0.0.3": ["analog-input,1"]}})
+    v = p.get("values") or {}
+    sjekk("flere kort: ett poll leser begge enhetene hver via sitt kort",
+          "analog-input,1" in v.get("127.0.0.6", {}) and "analog-input,1" in v.get("127.0.0.3", {}), str(v))
+    rader = kall("/api/trafikk")["rader"]
+    k6 = {r["kort"] for r in rader if r["til"].startswith("127.0.0.6") and r["n"] > 0 and r["svar"] != "sendt"}
+    k3 = {r["kort"] for r in rader if r["til"].startswith("127.0.0.3") and r["svar"] != "sendt"}
+    sjekk("flere kort: trafikkloggen viser kortet per forespørsel",
+          "127.0.0.7" in k6 and "127.0.0.1" in k3 and "127.0.0.7" not in k3, f"{k6} / {k3}")
+
+    # The main adapter changes; nothing else does.
+    r1 = kall("/api/start", {"local_address": "127.0.0.7/8"})
+    st = kall("/api/status")
+    p = kall("/api/poll", {"targets": {"127.0.0.3": ["analog-input,1"]}})
+    sjekk("flere kort: nytt hovedkort slipper de andre og enhetene beholder sitt kort",
+          r1.get("status") == "done" and st["local_address"].startswith("127.0.0.7")
+          and len(st["kort"]) == 2 and "analog-input,1" in (p.get("values") or {}).get("127.0.0.3", {}),
+          f"{r1.get('status')} {st.get('local_address')} {len(st.get('kort', []))}")
+    kall("/api/start", {"local_address": "127.0.0.1/8"})
+    st = kall("/api/status")
+    sjekk("flere kort: tilbake til første kort", st["local_address"].startswith("127.0.0.1")
+          and any(k["primary"] and k["ip"] == "127.0.0.1" for k in st["kort"]))
+
+
 def kjor_tester():
     s = kall("/api/start", {"local_address": "127.0.0.1/8"})
     sjekk("kobler til", s.get("status") == "done", s.get("local_address", s.get("error", "")))
@@ -440,6 +493,7 @@ def kjor_tester():
     cov_vakt()
     sommertid()
     trafikklogg()
+    flere_kort()
 
     j = vent_jobb(kall("/api/scan", {"subnet": "127.0.0.5:47820", "mode": "bbmd", "timeout": 4})["job_id"])
     r = j.get("result") or {}
@@ -540,7 +594,7 @@ async def main():
     import tempfile
     data = tempfile.mkdtemp(prefix="nabe-selvtest-")
     env = dict(os.environ, NABE_ALLOWED_ORIGINS=BASE, NABE_DATA=data,
-               NABE_COV_LIFETIME="6", NABE_COV_PAA_NYTT="3")
+               NABE_COV_LIFETIME="6", NABE_COV_PAA_NYTT="3", NABE_TILLAT_LOOPBACK="1")
     server = subprocess.Popen([sys.executable, "-m", "uvicorn", "server:app", "--host", "127.0.0.1",
                                "--port", str(PORT), "--log-level", "warning"], cwd=HER, env=env)
     try:

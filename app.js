@@ -47,7 +47,10 @@ const S = {
   sel: new Set(),           // "ip|objid" picked for bulk actions
   selAnchor: null,          // last plainly-clicked row, for shift-range
   job: null,                // id of the running load job
-  scanJob: null,            // id of the running scan job
+  scanJob: null,            // id of a running scan job
+  scanJobs: new Set(),      // every running scan job: ranges on different adapters run side by side
+  kort: [],                 // adapters in use, from /api/status
+  via: {},                  // device address -> adapter IP it is read through
   rowIndex: null,           // objid -> <tr>, rebuilt on render
   gsFlag: '',               // global search: filter by status flag instead of text
   cache: {},                // ip -> points, reused when revisiting a device
@@ -516,11 +519,12 @@ async function loadInterfaces() {
 /* Bind to a specific interface. Called on startup and whenever the user
    picks a different one — there is no reason to make them press a separate
    connect button when choosing the interface already says what they want. */
-async function connectTo(cidr, {quiet = false} = {}) {
+async function connectTo(cidr, {quiet = false, restart = false} = {}) {
   $('connText').textContent = 'Kobler til…';
   try {
-    if (S.connected) await api('/api/stop');
-    stopPolling();
+    // Another adapter becomes the main one while the rest stay up: devices
+    // already found keep being read through theirs. Only a reconnect starts over.
+    if (S.connected && restart) { await api('/api/stop'); stopPolling(); }
     const d = await api('/api/start', {local_address: cidr || null});
     if (d.status === 'error') {
       if (!quiet) toast(d.error || 'Tilkobling feilet', true);
@@ -534,12 +538,14 @@ async function connectTo(cidr, {quiet = false} = {}) {
 }
 
 
-/* An adapter picked by hand stays picked. NABE moves between adapters on its
-   own when an address is routed somewhere else, which is right until the one
-   you want is the one Windows does not prefer - a VPN that holds only a
-   default route, say - and then it jumps away from your choice every time.
-   Picking by hand therefore locks the adapter; the switch in Settings turns
-   automatic choice back on. A lock on an adapter that is gone lets go. */
+/* Every address goes out of the adapter it is routed through, several adapters
+   at once, and the server opens each when it is needed. The page's adapter is
+   only the main one, where a broadcast goes when nothing says otherwise.
+
+   Some jobs want the opposite: a plant that is reachable through two adapters,
+   and Windows prefers the wrong one. The switch in Settings (automatic choice
+   off) sends everything out of one adapter; the lock follows the main adapter
+   while it is on. A lock on an adapter that is gone lets go. */
 function kortLaast() {
   const k = loadPrefs().kortLast;
   return !!k && [...$('localAddr').options].some(o => o.value === k);
@@ -548,8 +554,8 @@ function laasKort(stille) {
   savePrefs({kortLast: S.localAddr || $('localAddr').value});
   if (typeof syncKortAuto === 'function') syncKortAuto();
   const navn = ($('localAddr').selectedOptions[0]?.textContent || '').split(' · ')[1] || S.localAddr;
-  if (!stille) toast(T(`Sender fra ${navn}. Kortet står fast. Automatisk valg slår du på i innstillinger.`,
-                       `Sending from ${navn}. The adapter stays put. Turn automatic choice back on in Settings.`));
+  if (!stille) toast(T(`Alt går nå ut av ${navn}. Automatisk valg slår du på i innstillinger.`,
+                       `Everything now goes out of ${navn}. Turn automatic choice back on in Settings.`));
 }
 
 /* ------------------------------------------------- another program on 47808
@@ -584,13 +590,17 @@ async function refreshStatus() {
     const d = await (await fetch('/api/status')).json();
     S.connected = !!d.running;
     S.localAddr = d.local_address;
+    S.kort = d.kort || [];
+    S.via = d.via || {};
     meldPort(d.port_advarsel);
   } catch { S.connected = false; }
   const c = $('conn');
   // Nothing to announce while it works; only speak up when it does not.
   c.classList.toggle('down', !S.connected);
   $('connText').textContent = S.connected ? '' : 'Ikke tilkoblet';
-  $('connAddr').textContent = S.connected ? (S.localAddr || '') : '';
+  const flere = S.connected && S.kort.length > 1;
+  $('connAddr').textContent = S.connected ? (S.localAddr || '') + (flere ? ` +${S.kort.length - 1}` : '') : '';
+  $('connAddr').title = flere ? S.kort.map(k => `${k.interface || k.ip} ${k.local_address}${k.primary ? ' ·  ' + T('hovedkort', 'main') : ''}${k.enheter ? ' · ' + k.enheter + ' ' + T('enheter', 'devices') : ''}`).join('\n') : '';
   $('scanBtn').disabled = !S.connected;
   $('scanBtn').title = S.connected ? '' : 'Velg et nettverkskort først';
   // Keep the dropdown showing what is actually bound, not a stale pick.
@@ -615,7 +625,9 @@ async function refreshStatus() {
    address to scan and the tool moves there - saying so, since a silent switch
    would be its own kind of surprise. */
 async function kortForMaal(maal) {
-  if (!maal || !S.connected || kortLaast()) return;
+  // The server sends every address out of the adapter it is routed through,
+  // and opens the adapter when it is needed, so there is nothing to switch.
+  return;
   let r;
   try { r = await (await fetch('/api/route?target=' + encodeURIComponent(maal))).json(); }
   catch { return; }
@@ -653,7 +665,7 @@ function parseRanges(text) {
     .filter(Boolean);
 }
 
-async function scanOneRange(subnet, mode, thorough, onProgress) {
+async function scanOneRange(subnet, mode, thorough, onProgress, via) {
   const body = mode === 'broadcast' || mode === 'bbmd'
     ? {subnet, mode, timeout: mode === 'bbmd' ? 6 : 4}
     : mode === 'auto'
@@ -665,21 +677,48 @@ async function scanOneRange(subnet, mode, thorough, onProgress) {
     : {subnet, mode: 'unicast_sweep', per_host_timeout: 0.6,
        concurrency: 40, thorough};
 
+  // Left out, the routing table picks the adapter; a locked adapter is sent along.
+  if (via) body.via = via;
   const started = await api('/api/scan', body);
   if (started.status !== 'started') throw new Error(started.error || T('Skann feilet', 'Scan failed'));
   S.scanJob = started.job_id;
+  S.scanJobs.add(started.job_id);
 
-  for (;;) {
-    await new Promise(r => setTimeout(r, 250));
-    const j = await (await fetch('/api/job/' + started.job_id)).json();
-    if (j.status === 'running') {
-      onProgress(j);
-      continue;
+  try {
+    for (;;) {
+      await new Promise(r => setTimeout(r, 250));
+      const j = await (await fetch('/api/job/' + started.job_id)).json();
+      if (j.status === 'running') {
+        onProgress(j);
+        continue;
+      }
+      if (j.status === 'cancelled') return {cancelled: true};
+      if (j.status === 'error') throw new Error(j.error || T('Skann feilet', 'Scan failed'));
+      return j.result;
     }
-    if (j.status === 'cancelled') return {cancelled: true};
-    if (j.status === 'error') throw new Error(j.error || T('Skann feilet', 'Scan failed'));
-    return j.result;
+  } finally {
+    S.scanJobs.delete(started.job_id);
   }
+}
+
+/* Which adapter each range goes out of, so ranges behind different adapters
+   can be scanned at the same time and ranges behind one still go in turn. A
+   locked adapter takes them all. */
+async function gruppeEtterKort(omraader, via) {
+  const grupper = new Map();
+  const ruter = await Promise.all(omraader.map(async (subnet) => {
+    if (via) return via;
+    try {
+      const r = await (await fetch('/api/route?target=' + encodeURIComponent(subnet))).json();
+      return r && r.status === 'done' ? r.ip : '';
+    } catch { return ''; }
+  }));
+  omraader.forEach((subnet, n) => {
+    const k = ruter[n] || '';
+    if (!grupper.has(k)) grupper.set(k, []);
+    grupper.get(k).push([n, subnet]);
+  });
+  return grupper;
 }
 
 /* Devices from a previous range are kept; a second range adds to the list
@@ -750,22 +789,29 @@ async function runScan() {
   b.onclick = () => cancelScan();
 
   try {
-    for (let n = 0; n < omraader.length; n++) {
-      const subnet = omraader[n];
-      // Each range goes out of the adapter it is routed through - a cable
-      // range and a VPN range in one scan each get their own.
-      await kortForMaal(subnet);
-      const forrige = S.devices.length;
-      const merke = omraader.length > 1 ? `[${n + 1}/${omraader.length}] ${subnet} · ` : '';
+    // Ranges behind different adapters run side by side, each out of its own;
+    // ranges behind one adapter go in turn, as before. A locked adapter takes all.
+    const via = kortLaast() ? String(loadPrefs().kortLast).split(/[\/:]/)[0] : '';
+    const grupper = await gruppeEtterKort(omraader, via);
+    const samtidig = grupper.size > 1;
+    const frak = omraader.map(() => 0);
+    S._viaOmr = S._viaOmr || {};
 
+    const skannOmraade = async (n, subnet, kort) => {
+      let sist = 0;
+      const merke = omraader.length > 1 ? `[${n + 1}/${omraader.length}] ${subnet} · ` : '';
       const d = await scanOneRange(subnet, mode, thorough, (j) => {
         const pct = j.total ? Math.round((j.done / j.total) * 100) : 0;
-        skannFramdrift(pct, !j.total, j.phase, n, omraader.length);
+        if (samtidig) {
+          frak[n] = j.total ? j.done / j.total : 0;
+          skannFramdrift(frak.reduce((a, x) => a + x, 0) / frak.length * 100, false, j.phase, 0, 1);
+        } else skannFramdrift(pct, !j.total, j.phase, n, omraader.length);
         status(`${merke}${j.phase || T('søker', 'searching')} · ${j.done}/${j.total} ${T('adresser', 'addresses')} · ${
-          forrige + (j.devices ? j.devices.length : 0)} funnet · ${pct}%`);
+          S.devices.length + (j.devices ? Math.max(0, j.devices.length - sist) : 0)} funnet · ${pct}%`);
         // Devices are published as they answer, so the list fills in while the
         // sweep runs instead of staying empty until it finishes.
-        if (j.devices && forrige + j.devices.length !== S.devices.length) {
+        if (j.devices && j.devices.length !== sist) {
+          sist = j.devices.length;
           // Something answered - the button says so before the list redraws.
           skannSvar();
           mergeDevices(j.devices, subnet);
@@ -775,11 +821,12 @@ async function runScan() {
           S._flyr = false;
           flyInnNye(foer);
         }
-      });
+      }, kort || via);
 
-      if (d && d.cancelled) { status(T('Skann avbrutt', 'Scan cancelled')); break; }
-      if (!d || d.status !== 'done') break;
+      if (d && d.cancelled) { status(T('Skann avbrutt', 'Scan cancelled')); return false; }
+      if (!d || d.status !== 'done') return false;
       if (d.note) toast(d.note, d.bbmd_status !== 0);
+      if (d.via && d.via.cidr) S._viaOmr[subnet] = d.via.cidr;
       mergeDevices(d.devices, subnet);
       // Record who answered this round so a device kept from an earlier scan
       // is shown as remembered rather than as answering now.
@@ -789,12 +836,21 @@ async function runScan() {
       }
       renderDevices();
       rememberRange(subnet);
-      perOmraade.push(`${subnet}: ${d.count}`);
-    }
+      perOmraade[n] = `${subnet}: ${d.count}`;
+      frak[n] = 1;
+      return true;
+    };
+
+    await Promise.all([...grupper.entries()].map(async ([kort, liste]) => {
+      for (const [n, subnet] of liste) {
+        if (!await skannOmraade(n, subnet, kort)) break;
+      }
+    }));
+    refreshStatus();
 
     const secs = ((performance.now() - t0) / 1000).toFixed(0);
     if (omraader.length > 1) {
-      status(`${S.devices.length} enhet(er) i ${omraader.length} områder · ${secs}s · ${perOmraade.join(' · ')}`);
+      status(`${S.devices.length} enhet(er) i ${omraader.length} områder · ${secs}s · ${perOmraade.filter(Boolean).join(' · ')}`);
     } else {
       status(T(`${S.devices.length} enhet(er) · ${secs}s`, `${S.devices.length} device(s) · ${secs}s`));
     }
@@ -823,9 +879,11 @@ async function runScan() {
 }
 
 async function cancelScan() {
-  if (!S.scanJob) return;
+  if (!S.scanJob && !S.scanJobs.size) return;
   LINJE.avbrutt = true;
-  await api('/api/job/' + S.scanJob + '/cancel');
+  const alle = new Set(S.scanJobs);
+  if (S.scanJob) alle.add(S.scanJob);
+  await Promise.all([...alle].map(id => api('/api/job/' + id + '/cancel')));
 }
 
 /* Two devices answering to the same instance number is a real and nasty
@@ -1162,6 +1220,17 @@ function nettVia(omr) {
   return '';
 }
 
+/* Which adapter a device is read through; only said when more than one is in
+   use, because with one it is the same for every card. */
+function kortChip(d) {
+  if (!S.kort || S.kort.length < 2) return '';
+  const ip = S.via && S.via[d.address];
+  const k = ip && S.kort.find(x => x.ip === ip);
+  if (!k) return '';
+  const navn = k.interface || k.ip;
+  return `<span class="dev-kort" title="${esc(T('Leses via ', 'Read via ') + navn + ' ' + k.local_address)}">${esc(navn)}</span>`;
+}
+
 function renderDevices() {
   BORTE_NAA = new Set();
   $('devCount').textContent = S.devices.length;
@@ -1221,6 +1290,7 @@ function renderDevices() {
         <span class="dev-ip">${esc(d.address)}</span>
         <span class="dev-id${dup ? ' dup' : ''}"${dup ? ` title="${T('Flere enheter svarer på denne ID-en', 'Several devices answer to this ID')}"` : ''}>${d.device_instance ?? '?'}</span>
         ${gruppert ? '' : `<span class="dev-lev">${esc(v.label)}</span>`}
+        ${kortChip(d)}
         ${presenceTag(d)}
         ${noteFor(d) ? `<span class="dev-note" title="${esc(noteFor(d))}">notat</span>` : ''}
         ${S.cache[d.address] ? `<em class="dev-pkt">${S.cache[d.address].length} pkt</em>` : ''}
@@ -3717,7 +3787,7 @@ async function husk(omraader, enheter) {
   try {
     const d = await api('/api/sites', {
       ranges: omraader,
-      local_address: S.localAddr || null,
+      local_address: (S._viaOmr && S._viaOmr[omraader[0]]) || S.localAddr || null,
       mode: $('modeSel').value,
       devices: (enheter || []).map(x => ({
         address: x.address, device_instance: x.device_instance,
@@ -8740,12 +8810,14 @@ function updateZoom() {
 
 /* ------------------------------------------------------------------ wiring */
 $('localAddr').onchange = async e => {
-  clearDiscovery();
   await connectTo(e.target.value);
-  if (S.connected) laasKort();
+  // A lock (everything out of one adapter) follows the adapter picked here.
+  if (S.connected && kortLaast()) laasKort(true);
+  const navn = ($('localAddr').selectedOptions[0]?.textContent || '').split(' · ')[1] || S.localAddr;
+  if (S.connected) toast(T(`Hovedkort: ${navn}. Andre kort brukes der adressene rutes.`, `Main adapter: ${navn}. Other adapters are used where the addresses are routed.`));
 };
 $('reconnBtn').onclick = async () => {
-  await connectTo($('localAddr').value);
+  await connectTo($('localAddr').value, {restart: true});
   toast(S.connected ? 'Tilkoblet på nytt' : 'Klarte ikke koble til', !S.connected);
 };
 $('cmpBtn').onclick = () => { closeMenus(); openSammenlign(); };
@@ -10141,7 +10213,7 @@ const ORDBOK = {
   'Forkort punktnavn': 'Shorten point names',
   'Flat linje': 'Flatline',
   'Velg nettverkskort automatisk': 'Pick the network adapter automatically',
-  'NABE bytter kort etter hvor adressen rutes. Når du velger kort selv, står det fast': 'NABE switches adapter by where the address is routed. When you pick one yourself, it stays',
+  'Hver adresse går ut av kortet den rutes gjennom, flere kort samtidig. Av: alt går ut av kortet du velger': 'Every address goes out of the adapter it is routed through, several at once. Off: everything goes out of the adapter you pick',
   'Markerer analoge innganger som ikke har beveget seg': 'Marks analog inputs that have not moved',
   'Objekttyper i tabellen': 'Object types in the table',
   'Tilbakestill alt': 'Restore defaults',
