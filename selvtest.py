@@ -69,6 +69,15 @@ def lag_enhet(siste_oktett: int, instans: int, navn: str, skjev_klokke: bool = F
     app.add_object(BinaryValueObject(objectIdentifier=("binary-value", 1), objectName=f"{navn}_DRIFT",
                                      presentValue="active", description="Drift",
                                      statusFlags=[0, 0, 0, 0]))
+    if skjev_klokke:
+        # A loop that hunts on purpose: room temperature and valve swing with
+        # a period of five seconds, the valve a quarter turn ahead.
+        app.add_object(AnalogInputObject(objectIdentifier=("analog-input", 2), objectName=f"{navn}_RT402",
+                                         presentValue=21.0, units="degreesCelsius", covIncrement=0.5,
+                                         description="Pendler", statusFlags=[0, 0, 0, 0]))
+        app.add_object(AnalogInputObject(objectIdentifier=("analog-input", 3), objectName=f"{navn}_SB402",
+                                         presentValue=50.0, units="percent", covIncrement=1.0,
+                                         description="Pendler pådrag", statusFlags=[0, 0, 0, 0]))
     # Lets a test make the device go quiet: it keeps the subscription but
     # stops pushing, which is what a restarted controller looks like.
     app.stum = False
@@ -207,6 +216,14 @@ def royktest():
               " sommer: typeof sommertidAvvik === 'function' && sommertidAvvik(3600) === 1 && sommertidAvvik(-3590) === -1"
               "   && sommertidAvvik(3000) === 0 && sommertidAvvik(7200) === 0 && sommertidAvvik(0) === 0"
               "   && /sommertid|summer/.test(klokkeTekst(3600)) && !/sommertid|summer/.test(klokkeTekst(1800)),"
+              " pendling: !!window.nabePendling && (() => {"
+              "  S.cache['9.9.9.9'] = [{objid:'analog-input,1', name:'360.003-RT401', unit_symbol:'C', value:21},"
+              "    {objid:'analog-output,1', name:'360.003-SB401'}, {objid:'analog-value,1', name:'360.003-RT401-SP', value:21},"
+              "    {objid:'analog-output,2', name:'360.004-SB401'}];"
+              "  const p = nabePendling.partnere([{address:'9.9.9.9', objid:'analog-input,1'}]).map(x => x.objid).join();"
+              "  const h = nabePendling.pendlingHtml({serier:[{navn:'360.003-RT401 (C)', enhet:'C', score:90, periode_s:300, amplitude:1.2, sykluser:5, dom:'pendler'}],"
+              "    par:[{maling:'360.003-RT401 (C)', padrag:'360.003-SB401 (%)', dom:'sloyfe', forsinkelse_s:12}]});"
+              "  return p === 'analog-output,1,analog-value,1' && !/undefined|NaN/.test(h) && /360.003-RT401/.test(h) && /5,0 min/.test(h); })(),"
               " trafikk: typeof aapneTrafikk === 'function' && !!document.getElementById('trafikkBtn'),"
               " settpunkt: typeof aapneAvvik === 'function' && !!document.getElementById('avvikBtn') && (() => {"
               "  const n = ['X-SP','X_SP','X.sp','XSp','RT401SP','Akt_Sp','AktSP'].map(erSettpunktNavn);"
@@ -320,6 +337,44 @@ def trafikklogg():
           str(list(ny["oppsummering"])[:4]))
 
 
+def pendling():
+    """Hunting is found on a recording, with its amplitude and period, and the
+    loop is named when the sensor (RT) and the valve (SB) swing together."""
+    import math, random
+    rng = random.Random(1)
+    n = 90
+    ren = {"360.003-RT401 (°C)": [21 + math.sin(2 * math.pi * i / 6) + rng.uniform(-.05, .05) for i in range(n)],
+           "360.003-SB401 (%)": [50 + 20 * math.sin(2 * math.pi * i / 6 + 1.5) + rng.uniform(-.5, .5) for i in range(n)],
+           "Rolig (°C)": [21 + rng.uniform(-.05, .05) for _ in range(n)],
+           "Rampe (°C)": [15 + .05 * i + rng.uniform(-.05, .05) for i in range(n)],
+           "Bare støy (°C)": [21 + rng.uniform(-1, 1) for _ in range(n)]}
+    r = kall("/api/pendling", {"serier": ren, "intervall": 1})
+    s = {x["navn"]: x for x in r.get("serier", [])}
+    rt = s.get("360.003-RT401 (°C)", {})
+    sjekk("pendling: svingende RT gir høy poeng, riktig periode og amplitude",
+          rt.get("score", 0) >= 60 and abs((rt.get("periode_s") or 0) - 6) <= 1 and abs(rt.get("amplitude", 0) - 1) < .2, str(rt))
+    sjekk("pendling: rolig, rampe og støy gir lav poeng",
+          all(s.get(k, {}).get("score", 100) < 35 for k in ("Rolig (°C)", "Rampe (°C)", "Bare støy (°C)")),
+          str({k: s.get(k, {}).get("score") for k in ("Rolig (°C)", "Rampe (°C)", "Bare støy (°C)")}))
+    sjekk("pendling: RT og SB som svinger sammen blir en sløyfe som pendler",
+          [p["dom"] for p in r.get("par", [])] == ["sloyfe"], str(r.get("par")))
+    sjekk("pendling: stien til opptak kan ikke peke utenfor mappa",
+          kall("/api/pendling", {"fil": str(HER / "server.py")}).get("status") == "error")
+
+    # Recorded for real from the simulated loop that hunts on purpose.
+    punkter = [{"address": "127.0.0.6", "objid": "analog-input,2", "navn": "360.003-RT402", "enhet": "°C"},
+               {"address": "127.0.0.6", "objid": "analog-input,3", "navn": "360.003-SB402", "enhet": "%"}]
+    st = kall("/api/opptak/start", {"punkter": punkter, "intervall": 1})
+    time.sleep(28)
+    kall("/api/opptak/stopp", {})
+    e = kall("/api/pendling", {})
+    s = {x["navn"].split(" (")[0]: x for x in e.get("serier", [])}
+    rt = s.get("360.003-RT402", {})
+    sjekk("pendling: opptak av simulert enhet som svinger, periode 5 s",
+          st.get("status") == "done" and rt.get("score", 0) >= 60 and abs((rt.get("periode_s") or 0) - 5) <= 1.5, str(rt))
+    sjekk("pendling: opptaket gir en sløyfe som pendler", [p["dom"] for p in e.get("par", [])] == ["sloyfe"], str(e.get("par")))
+
+
 def kjor_tester():
     s = kall("/api/start", {"local_address": "127.0.0.1/8"})
     sjekk("kobler til", s.get("status") == "done", s.get("local_address", s.get("error", "")))
@@ -407,6 +462,8 @@ def kjor_tester():
     linjer = Path(r3.get("fil", "x")).read_text(encoding="utf-8-sig").splitlines() if r3.get("status") == "done" else []
     sjekk("opptak skriver rader med verdi", len(linjer) >= 3 and r4.get("rader", 0) >= 2 and linjer[1].split(";")[1] != "", str(linjer[:3]))
 
+    pendling()
+
     for fil in ("nabe-start", "nabe-verktoy", "nabe-felt", "nabe-moro", "nabe-finn", "nabe-skann", "nabe-anlegg", "nabe-bunn", "nabe-graf", "nabe-tunnel", "nabe-sammen", "nabe-flyt", "nabe-peker", "nabe-pekere", "nabe-skrift", "nabo", "nabo-brodre", "nabo-fasit", "nabe-garderobe", "nabe-opptak", "nabe-trafikk", "nabe-kunnskap", "nabe-spor"):
         try:
             with urllib.request.urlopen(f"{BASE}/js/{fil}.js", timeout=5) as rr:
@@ -442,6 +499,17 @@ async def main():
     # Outside the scanned range 127.0.0.2-4, so the scan tests do not see it.
     APPS["127.0.0.6"] = lag_enhet(6, 9004, "SIM-AVVIK", skjev_klokke=True)
     apps.append(APPS["127.0.0.6"])
+
+    async def sving():
+        import math
+        rt = APPS["127.0.0.6"].get_object_name("SIM-AVVIK_RT402")
+        sb = APPS["127.0.0.6"].get_object_name("SIM-AVVIK_SB402")
+        while True:
+            t = time.time()
+            rt.presentValue = 21.0 + 1.0 * math.sin(2 * math.pi * t / 5)
+            sb.presentValue = 50.0 + 30.0 * math.sin(2 * math.pi * t / 5 + math.pi / 2)
+            await asyncio.sleep(0.2)
+    svinger = asyncio.create_task(sving())
     # A BBMD with one peer - itself. More peers that do not exist make the
     # bacpypes3 BBMD stop answering, which is the simulator, not NABE.
     from bacpypes3.ipv4.app import BBMDApplication
