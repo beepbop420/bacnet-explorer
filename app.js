@@ -504,7 +504,7 @@ async function loadInterfaces() {
     // adapter name is what gets cut when the field is narrow.
     sel.innerHTML = list.map(i =>
       `<option value="${esc(i.cidr)}" title="${esc(i.interface + ' · ' + i.cidr)}">${esc(i.cidr.split('/')[0])} · ${esc(i.interface)}</option>`).join('');
-    const saved = loadPrefs().iface;
+    const saved = loadPrefs().kortLast || loadPrefs().iface;
     if (saved && list.some(i => i.cidr === saved)) sel.value = saved;
     return list;
   } catch {
@@ -533,6 +533,24 @@ async function connectTo(cidr, {quiet = false} = {}) {
   await refreshStatus();
 }
 
+
+/* An adapter picked by hand stays picked. NABE moves between adapters on its
+   own when an address is routed somewhere else, which is right until the one
+   you want is the one Windows does not prefer - a VPN that holds only a
+   default route, say - and then it jumps away from your choice every time.
+   Picking by hand therefore locks the adapter; the switch in Settings turns
+   automatic choice back on. A lock on an adapter that is gone lets go. */
+function kortLaast() {
+  const k = loadPrefs().kortLast;
+  return !!k && [...$('localAddr').options].some(o => o.value === k);
+}
+function laasKort(stille) {
+  savePrefs({kortLast: S.localAddr || $('localAddr').value});
+  if (typeof syncKortAuto === 'function') syncKortAuto();
+  const navn = ($('localAddr').selectedOptions[0]?.textContent || '').split(' · ')[1] || S.localAddr;
+  if (!stille) toast(T(`Sender fra ${navn}. Kortet står fast. Automatisk valg slår du på i innstillinger.`,
+                       `Sending from ${navn}. The adapter stays put. Turn automatic choice back on in Settings.`));
+}
 
 /* ------------------------------------------------- another program on 47808
    BACnet/IP is a fixed port. When a second program takes it, Windows does not
@@ -597,7 +615,7 @@ async function refreshStatus() {
    address to scan and the tool moves there - saying so, since a silent switch
    would be its own kind of surprise. */
 async function kortForMaal(maal) {
-  if (!maal || !S.connected) return;
+  if (!maal || !S.connected || kortLaast()) return;
   let r;
   try { r = await (await fetch('/api/route?target=' + encodeURIComponent(maal))).json(); }
   catch { return; }
@@ -8724,7 +8742,7 @@ function updateZoom() {
 $('localAddr').onchange = async e => {
   clearDiscovery();
   await connectTo(e.target.value);
-  if (S.connected) toast('Sender fra ' + S.localAddr);
+  if (S.connected) laasKort();
 };
 $('reconnBtn').onclick = async () => {
   await connectTo($('localAddr').value);
@@ -10122,6 +10140,8 @@ const ORDBOK = {
   'Tett visning': 'Dense view',
   'Forkort punktnavn': 'Shorten point names',
   'Flat linje': 'Flatline',
+  'Velg nettverkskort automatisk': 'Pick the network adapter automatically',
+  'NABE bytter kort etter hvor adressen rutes. Når du velger kort selv, står det fast': 'NABE switches adapter by where the address is routed. When you pick one yourself, it stays',
   'Markerer analoge innganger som ikke har beveget seg': 'Marks analog inputs that have not moved',
   'Objekttyper i tabellen': 'Object types in the table',
   'Tilbakestill alt': 'Restore defaults',
