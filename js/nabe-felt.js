@@ -336,3 +336,96 @@ setInterval(() => {
     if (S.activeDev) renderPoints();
   };
 })();
+
+/* ------------------------------------------------ avvik fra settpunkt
+   One list across every device that has been read: where the measured value
+   stands away from its setpoint, worst first. The pairing is the same one the
+   trend uses (finnSettpunkt), so the two never disagree. */
+(function avvikFraSettpunkt() {
+  const GRENSER = [0, 0.02, 0.05, 0.1];
+  let grense = 0.02, sist = 0;
+  const lag = document.createElement('div');
+  lag.id = 'avvikOverlay';
+  lag.className = 'gs-overlay';
+  lag.setAttribute('role', 'dialog');
+  lag.setAttribute('aria-modal', 'true');
+  lag.hidden = true;
+  document.body.append(lag);
+
+  const alder = (ip) => {
+    const t = S.cacheMeta[ip] && S.cacheMeta[ip].readAt;
+    if (!t) return '';
+    const m = Math.round((Date.now() - t) / 60000);
+    return m < 1 ? T('nå', 'now') : T(`${m} min siden`, `${m} min ago`);
+  };
+  const enhetNavn = (ip) => {
+    const d = (S.devices || []).find(x => x.address === ip);
+    return d ? (d.object_name || String(d.device_instance)) : ip;
+  };
+  const tall = (v) => fmtVal(Math.round(v * 100) / 100).t;
+
+  function rader() {
+    const alle = settpunktAvvik(S.cache);
+    return {alle: alle.length, vist: alle.filter(r => r.rel >= grense).slice(0, 200)};
+  }
+  function kropp(r) {
+    if (!r.vist.length) {
+      return `<tr><td colspan="4" class="sp-tom">${r.alle
+        ? T('Ingen avvik over grensen.', 'No deviations above the limit.')
+        : T('Fant ingen punkter med settpunkt i enhetene som er lest.', 'No points with a setpoint in the devices read so far.')}</td></tr>`;
+    }
+    return r.vist.map(x => {
+      const u = esc(x.p.unit_symbol || '');
+      return `<tr data-ip="${esc(x.ip)}" data-o="${esc(x.p.objid)}">
+        <td><div class="sp-navn">${esc(x.p.name || x.p.objid)}</div>
+            <div class="sp-meta">${esc(enhetNavn(x.ip))}${alder(x.ip) ? ' · ' + esc(alder(x.ip)) : ''}</div></td>
+        <td class="t">${esc(tall(x.p.value))} ${u}</td>
+        <td class="t">${esc(tall(x.sp.value))} ${u}</td>
+        <td class="t sp-avvik${x.rel >= 0.1 ? ' stor' : ''}">${x.avvik > 0 ? '+' : ''}${esc(tall(x.avvik))} ${u}</td></tr>`;
+    }).join('');
+  }
+  function tegn() {
+    const r = rader();
+    lag.innerHTML = `<div class="gs-modal sp-modal"><div class="gs-head"><span class="gd-tittel">${T('Avvik fra settpunkt', 'Deviation from setpoint')}</span>
+      <button class="gs-close" style="margin-left:auto"><span class="lbl">${T('Lukk', 'Close')}</span> ✕</button></div>
+      <div class="sp-kropp"><div class="sp-topp"><span id="spAnt"></span>
+        <select id="spGrense" class="field">${GRENSER.map(g => `<option value="${g}"${g === grense ? ' selected' : ''}>${g ? '≥ ' + g * 100 + ' %' : T('Alle', 'All')}</option>`).join('')}</select></div>
+        <div class="sp-rull"><table class="sp-tab"><thead><tr><th>${T('Punkt', 'Point')}</th><th class="t">${T('Verdi', 'Value')}</th><th class="t">${T('Settpunkt', 'Setpoint')}</th><th class="t">${T('Avvik', 'Deviation')}</th></tr></thead>
+        <tbody id="spRader"></tbody></table></div></div></div>`;
+    oppdater(r);
+  }
+  function oppdater(r = rader()) {
+    $('spAnt').textContent = T(`${r.vist.length} av ${r.alle}`, `${r.vist.length} of ${r.alle}`);
+    $('spRader').innerHTML = kropp(r);
+  }
+  async function gaaTil(ip, objid) {
+    if (!S.activeDev || S.activeDev.address !== ip) {
+      document.querySelector(`#devList .dev[data-ip="${CSS.escape(ip)}"]`)?.click();
+      for (let i = 0; i < 80 && !(S.activeDev && S.activeDev.address === ip && S.pointIndex && S.pointIndex.get(objid)); i++)
+        await new Promise(r => setTimeout(r, 150));
+    }
+    if (typeof selectPoint === 'function') selectPoint(objid);
+    document.querySelector(`#pointsWrap tr[data-o="${CSS.escape(objid)}"]`)?.scrollIntoView({block: 'center'});
+  }
+
+  lag.addEventListener('click', (e) => {
+    if (e.target === lag || e.target.closest('.gs-close')) { lag.hidden = true; return; }
+    const tr = e.target.closest('tr[data-ip]');
+    if (tr) { lag.hidden = true; gaaTil(tr.dataset.ip, tr.dataset.o); }
+  });
+  lag.addEventListener('change', (e) => {
+    if (e.target.id === 'spGrense') { grense = Number(e.target.value); oppdater(); }
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && !lag.hidden) { lag.hidden = true; e.stopPropagation(); }
+  }, true);
+  // Live values move the list while it is open, at most every other second.
+  etter('pollTick', () => {
+    if (lag.hidden || Date.now() - sist < 2000 || !$('spRader')) return;
+    sist = Date.now();
+    oppdater();
+  });
+
+  window.aapneAvvik = () => { tegn(); lag.hidden = false; };
+  if ($('avvikBtn')) $('avvikBtn').onclick = () => { closeMenus(); window.aapneAvvik(); };
+})();
