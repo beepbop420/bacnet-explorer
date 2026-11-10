@@ -30,6 +30,7 @@ import sys
 import threading
 import datetime
 import ipaddress
+import random
 import re
 import subprocess
 import json
@@ -48,6 +49,7 @@ from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel
 
 from bacpypes3.pdu import Address, IPv4Address
+from bacpypes3.primitivedata import ObjectIdentifier
 from bacpypes3.object import DeviceObject
 from bacpypes3.ipv4.app import NormalApplication, ForeignApplication
 from bacpypes3.apdu import WhoIsRequest, GetEventInformationRequest
@@ -2084,10 +2086,13 @@ async def poll(body: PollBody):
         return {"status": "error", "error": t("Proxy er ikke startet.", "Not connected.")}
 
     out: Dict[str, Dict[str, Any]] = {}
+    cov_ok: Dict[str, List[str]] = {}
 
     async def one_device(ip: str, objids: List[str]):
         addr = device_address(ip)
         fra_cov, les = _cov_del(bacnet_app, ip, objids)
+        if fra_cov:
+            cov_ok[ip] = list(fra_cov)
         try:
             out[ip] = await bc.poll_values(bacnet_app, addr, les) if les else {}
         except COMM_ERRORS:
@@ -2096,7 +2101,8 @@ async def poll(body: PollBody):
 
     await asyncio.gather(*[one_device(ip, oids) for ip, oids in body.targets.items() if oids])
     return {"status": "done", "ts": time.time(), "values": out,
-            "cov": sum(1 for c in COV.values() if c.get("ok"))}
+            "cov": sum(1 for c in COV.values() if c.get("ok") and c.get("har") and c.get("status") != "stille"),
+            "cov_stille": _cov_stille_i(body.targets), "cov_ok": cov_ok}
 
 
 @app.post("/api/object/detail")
@@ -2154,6 +2160,7 @@ async def _auto_release(addr: Address, objid: str, prop: str,
                 )
             except COMM_ERRORS as e:
                 result = {"status": "error", "error": f"{type(e).__name__}: {e}"}
+            _cov_glem(ip, objid)
             if result.get("status") == "done":
                 _pending_remove(key)
                 log_write({
@@ -2624,6 +2631,7 @@ async def write(body: WriteBody):
         bacnet_app, addr, body.objid, value,
         prop=body.prop, priority=body.priority,
     )
+    _cov_glem(body.address, body.objid)
 
     key = f"{body.address}|{body.objid}|{body.priority}"
     existing = _release_tasks.pop(key, None)
@@ -3563,6 +3571,143 @@ async def routers():
 COV: Dict[tuple, Dict[str, Any]] = {}
 COV_IKKE_FOR = 600.0          # a refusal is not asked again for ten minutes
 COV_STILLE = 90.0             # unpolled this long: the subscription is dropped
+COV_LEVETID = float(_env("COV_LIFETIME", "300") or 300)
+COV_FORSTE = min(10.0, COV_LEVETID / 2)     # a renewal is answered with a first notification
+COV_PAA_NYTT = float(_env("COV_PAA_NYTT", "60") or 60)   # wait before subscribing again
+COV_SEM: Dict[str, asyncio.Semaphore] = {}
+
+
+class _CovStille(Exception):
+    """The device stopped pushing: poll the point, subscribe again later."""
+
+
+class _CovPoll(Exception):
+    """The device never pushes, but nothing is wrong: poll without a warning."""
+
+
+def _cov_likt(a: Any, b: Any, tol: Optional[float]) -> bool:
+    tall = (int, float)
+    if isinstance(a, tall) and isinstance(b, tall) and not isinstance(a, bool) and not isinstance(b, bool):
+        return abs(a - b) <= (tol if tol and tol > 0 else max(1e-6, abs(b) * 1e-3))
+    return a == b
+
+
+async def _cov_kryss(bacnet_app, ip: str, oid: str):
+    """One ordinary read of the point and its COV increment, to tell a quiet
+    point from a subscription the device has forgotten. None if it failed."""
+    sem = COV_SEM.setdefault(ip, asyncio.Semaphore(2))
+    async with sem:
+        try:
+            r = await bc._rpm_chunk(bacnet_app, device_address(ip), [oid],
+                                    ["present-value", "cov-increment"], 5.0)
+        except Exception:
+            return None
+    egne = next(iter((r or {}).values()), None)
+    if not egne:
+        return None
+    pv = egne.get("present-value", egne.get("presentValue"))
+    if pv is None or bc.is_error(pv):
+        return None
+    tol = None
+    inc = egne.get("cov-increment", egne.get("covIncrement"))
+    if inc is not None and not bc.is_error(inc):
+        try:
+            tol = float(bc.serialize(inc))
+        except (TypeError, ValueError):
+            tol = None
+    return bc.serialize(pv), tol
+
+
+def _cov_stille(c: Dict[str, Any]) -> None:
+    c["har"] = False
+    if c.get("status") != "stille":
+        c["stille_siden"] = time.time()
+    c["status"] = "stille"
+    raise _CovStille()
+
+
+def _cov_ikke_skjult_fornyelse(scm) -> None:
+    """bacpypes3 renews in a task nobody waits for, so a failed renewal
+    vanishes. NABE renews itself and sees the failure."""
+    h = getattr(scm, "refresh_subscription_handle", None)
+    if h:
+        h.cancel()
+
+
+async def _cov_okt(bacnet_app, ip: str, oid: str, c: Dict[str, Any]) -> None:
+    # An ObjectIdentifier, not the text: bacpypes3 compares what a notification
+    # names with this, and "analog-input,1" never equals it, so every
+    # notification used to be dropped as unknown.
+    async with bacnet_app.change_of_value(
+            device_address(ip), ObjectIdentifier(oid), issue_confirmed_notifications=False,
+            lifetime=int(COV_LEVETID)) as scm:
+        c["ok"] = True
+        _cov_ikke_skjult_fornyelse(scm)
+        venter, bom = True, 0
+        naa = time.time()
+        forste = naa + COV_FORSTE
+        forny = naa + COV_LEVETID * random.uniform(0.75, 0.85)
+        while True:
+            frist = forste if venter else forny
+            try:
+                prop, verdi = await asyncio.wait_for(scm.get_value(), max(0.1, frist - time.time()))
+            except asyncio.TimeoutError:
+                if venter:
+                    # A renewal should have been answered by now.
+                    if c.get("status") == "stille":
+                        venter = False          # still unproven: keep polling it
+                        continue
+                    k = await _cov_kryss(bacnet_app, ip, oid)
+                    if k is None:
+                        _cov_stille(c)
+                    if c.get("har") and not _cov_likt(c["verdi"], k[0], k[1]):
+                        _cov_stille(c)
+                    # Same value: a quiet point, not a dead subscription.
+                    c["verdi"], c["har"] = k[0], True
+                    bom += 1
+                    if bom >= 3:
+                        raise _CovPoll()
+                    venter = False
+                else:
+                    try:
+                        await asyncio.wait_for(scm.refresh_subscription(), 6.0)
+                    except Exception:
+                        _cov_stille(c)
+                    _cov_ikke_skjult_fornyelse(scm)
+                    venter = True
+                    naa = time.time()
+                    forste = naa + COV_FORSTE
+                    forny = naa + COV_LEVETID * random.uniform(0.75, 0.85)
+                continue
+            if str(prop) in ("present-value", "presentValue"):
+                c["verdi"] = bc.serialize(verdi)
+                c["har"] = True
+                c["sist_varsel"] = time.time()
+                c["status"] = "ok"
+                venter, bom = False, 0
+
+
+async def _cov_lytt(bacnet_app, ip: str, oid: str, c: Dict[str, Any]):
+    try:
+        while True:
+            try:
+                await _cov_okt(bacnet_app, ip, oid, c)
+            except _CovStille:
+                pass
+            except _CovPoll:
+                c["ok"], c["har"], c["status"] = False, False, "poll"
+                c["feilet"] = time.time()
+                return
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                if c.get("status") != "stille":
+                    c["ok"], c["har"] = False, False
+                    c["feilet"] = time.time()
+                    return
+            await asyncio.sleep(COV_PAA_NYTT)
+    finally:
+        c["task"] = None
 
 
 def _cov_del(bacnet_app, ip: str, objids: List[str]):
@@ -3573,10 +3718,10 @@ def _cov_del(bacnet_app, ip: str, objids: List[str]):
         k = (ip, oid)
         c = COV.get(k)
         if c is None or (not c.get("ok") and naa - c.get("feilet", 0) > COV_IKKE_FOR and not c.get("task")):
-            COV[k] = c = {"ok": False, "verdi": None, "sist_spurt": naa}
+            COV[k] = c = {"ok": False, "verdi": None, "sist_spurt": naa, "status": "ny"}
             c["task"] = asyncio.ensure_future(_cov_lytt(bacnet_app, ip, oid, c))
         c["sist_spurt"] = naa
-        if c.get("ok") and c.get("har"):
+        if c.get("ok") and c.get("har") and c.get("status") != "stille":
             fra_cov[oid] = c["verdi"]
         else:
             les.append(oid)
@@ -3589,23 +3734,21 @@ def _cov_del(bacnet_app, ip: str, objids: List[str]):
     return fra_cov, les
 
 
-async def _cov_lytt(bacnet_app, ip: str, oid: str, c: Dict[str, Any]):
-    try:
-        async with bacnet_app.change_of_value(
-                device_address(ip), oid, issue_confirmed_notifications=False, lifetime=300) as scm:
-            c["ok"] = True
-            while True:
-                prop, verdi = await scm.get_value()
-                if str(prop) in ("present-value", "presentValue"):
-                    c["verdi"] = bc.serialize(verdi)
-                    c["har"] = True
-    except asyncio.CancelledError:
-        raise
-    except Exception:
-        c["ok"] = False
-        c["feilet"] = time.time()
-    finally:
-        c["task"] = None
+def _cov_glem(ip: str, objid: str) -> None:
+    """After a write the stored value may be out of date, and not every device
+    pushes when a release changes it back. Read it until it pushes again."""
+    c = COV.get((ip, objid))
+    if c:
+        c["har"] = False
+
+
+def _cov_stille_i(targets: Dict[str, List[str]]) -> Dict[str, List[str]]:
+    ut: Dict[str, List[str]] = {}
+    for ip, oids in targets.items():
+        lst = [o for o in oids if (COV.get((ip, o)) or {}).get("status") == "stille"]
+        if lst:
+            ut[ip] = lst
+    return ut
 
 
 def _cov_stopp_alle() -> None:

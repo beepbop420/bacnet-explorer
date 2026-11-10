@@ -44,6 +44,35 @@
   // Hairlines between groups.
   for (const id of ['sbRescan', 'sbSnap']) $(id)?.classList.add('sb-grense');
 
+  /* COV: how many points the plant pushes by itself, and a quiet warning for
+     the ones that stopped. Hidden while nothing is subscribed. */
+  const cov = document.createElement('div');
+  cov.className = 'sb-item sb-grense';
+  cov.id = 'sbCov';
+  cov.hidden = true;
+  $('sbSnap').after(cov);
+  etter('api', (d, sti) => {
+    if (sti !== '/api/poll' || !d || d.status !== 'done') return;
+    const stille = d.cov_stille || {};
+    const navn = [];
+    for (const [ip, ider] of Object.entries(stille)) {
+      for (const id of ider) {
+        const p = (S.cache[ip] || []).find?.(x => x.objid === id);
+        navn.push(`${ip} ${(p && p.name) || id}`);
+      }
+    }
+    const n = d.cov || 0;
+    cov.hidden = !n && !navn.length;
+    cov.classList.toggle('stille', navn.length > 0);
+    cov.textContent = navn.length
+      ? T(`COV ${n} · ${navn.length} stille`, `COV ${n} · ${navn.length} silent`)
+      : `COV ${n}`;
+    cov.title = navn.length
+      ? T('Varslene har sluttet å komme. Punktene leses i stedet, og NABE abonnerer på nytt.\n',
+          'The notifications stopped. These points are read instead, and NABE subscribes again.\n') + navn.join('\n')
+      : T('Punkter anlegget melder selv, uten at NABE spør', 'Points the plant reports by itself, without NABE asking');
+  });
+
   /* The beat: restarted on every read, as long as the interval. */
   foer('pollTick', () => {
     if (S.live) {

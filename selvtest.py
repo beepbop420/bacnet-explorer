@@ -39,7 +39,7 @@ def lag_enhet(siste_oktett: int, instans: int, navn: str):
                        segmentationSupported="noSegmentation", vendorName="NABE Simulator")
     app = NormalApplication(dev, IPv4Address(f"127.0.0.{siste_oktett}/8"))
     app.add_object(AnalogInputObject(objectIdentifier=("analog-input", 1), objectName=f"{navn}_RT401",
-                                     presentValue=21.5, units="degreesCelsius",
+                                     presentValue=21.5, units="degreesCelsius", covIncrement=0.5,
                                      description="Romtemperatur", statusFlags=[0, 0, 0, 0]))
     app.add_object(AnalogValueObjectCmd(objectIdentifier=("analog-value", 1), objectName=f"{navn}_SP",
                                         presentValue=21.0, relinquishDefault=21.0,
@@ -48,7 +48,31 @@ def lag_enhet(siste_oktett: int, instans: int, navn: str):
     app.add_object(BinaryValueObject(objectIdentifier=("binary-value", 1), objectName=f"{navn}_DRIFT",
                                      presentValue="active", description="Drift",
                                      statusFlags=[0, 0, 0, 0]))
+    # Lets a test make the device go quiet: it keeps the subscription but
+    # stops pushing, which is what a restarted controller looks like.
+    app.stum = False
+    orig = app.cov_notification
+    def _cn(cov, apdu):
+        return None if app.stum else orig(cov, apdu)
+    app.cov_notification = _cn
     return app
+
+
+LOOP = None
+APPS = {}
+
+
+def i_loop(fn):
+    """Change a simulated device from the test thread, on the loop it lives in."""
+    ferdig = __import__("threading").Event()
+
+    def kjor():
+        try:
+            fn()
+        finally:
+            ferdig.set()
+    LOOP.call_soon_threadsafe(kjor)
+    ferdig.wait(5)
 
 
 def kall(sti, data=None, timeout=30):
@@ -168,6 +192,66 @@ def royktest():
           bool(sjekker) and all(sjekker.values()), json.dumps(sjekker))
 
 
+def cov_vakt():
+    """COV guard: a point that stops pushing is marked, read instead, and
+    subscribed again. A quiet point that still pushes when asked is not."""
+    ip, ai, bv = "127.0.0.6", "analog-input,1", "binary-value,1"
+    mal = {ip: [ai, bv]}
+
+    def poll():
+        return kall("/api/poll", {"targets": mal})
+
+    def kald():
+        d = poll()
+        return d, set(d.get("cov_ok", {}).get(ip, []))
+
+    slutt = time.time() + 20
+    d, ok = kald()
+    while time.time() < slutt and len(ok) < 2:
+        time.sleep(0.5)
+        d, ok = kald()
+    sjekk("COV: begge punktene abonnert", len(ok) == 2, f"{sorted(ok)}")
+
+    def sett(v):
+        i_loop(lambda: setattr(APPS[ip].get_object_name("SIM-AVVIK_RT401"), "presentValue", v))
+
+    # While the device pushes, a change reaches the page by itself.
+    sett(25.0)
+    slutt, v = time.time() + 6, None
+    while time.time() < slutt and v != 25.0:
+        time.sleep(0.4)
+        d = poll()
+        v = d["values"][ip].get(ai)
+    sjekk("COV: endring kommer som varsel", v == 25.0 and ai in d.get("cov_ok", {}).get(ip, []), f"verdi={v}")
+
+    APPS[ip].stum = True
+    sett(30.0)
+    slutt, falsk, verdi = time.time() + 30, False, None
+    while time.time() < slutt:
+        d = poll()
+        st = d.get("cov_stille", {}).get(ip, [])
+        falsk = falsk or bv in st
+        if ai in st:
+            verdi = d["values"][ip].get(ai)
+            break
+        time.sleep(0.5)
+    sjekk("COV stille: oppdages, og polling tar over", verdi == 30.0, f"verdi={verdi}")
+    time.sleep(7)
+    d = poll()
+    falsk = falsk or bv in d.get("cov_stille", {}).get(ip, [])
+    sjekk("COV: konstant punkt som ikke melder er ikke stille", not falsk)
+
+    APPS[ip].stum = False
+    slutt, tilbake = time.time() + 25, False
+    while time.time() < slutt:
+        d = poll()
+        if ai not in d.get("cov_stille", {}).get(ip, []) and d.get("cov", 0) >= 1:
+            tilbake = True
+            break
+        time.sleep(0.5)
+    sjekk("COV: abonnerer på nytt og varslene kommer igjen", tilbake)
+
+
 def kjor_tester():
     s = kall("/api/start", {"local_address": "127.0.0.1/8"})
     sjekk("kobler til", s.get("status") == "done", s.get("local_address", s.get("error", "")))
@@ -212,6 +296,7 @@ def kjor_tester():
 
     p = kall("/api/poll", {"targets": {"127.0.0.2": ["analog-input,1"]}})
     sjekk("live svarer med COV-telling", isinstance(p.get("cov"), int), f"cov={p.get('cov')}")
+    cov_vakt()
 
     j = vent_jobb(kall("/api/scan", {"subnet": "127.0.0.5:47820", "mode": "bbmd", "timeout": 4})["job_id"])
     r = j.get("result") or {}
@@ -281,7 +366,12 @@ async def main():
     loop = asyncio.get_event_loop()
     loop.set_exception_handler(lambda l, c: None if isinstance(c.get("exception"), ConnectionResetError)
                                else l.default_exception_handler(c))
+    global LOOP
+    LOOP = loop
     apps = [lag_enhet(*e) for e in ENHETER]
+    # Outside the scanned range 127.0.0.2-4, so the scan tests do not see it.
+    APPS["127.0.0.6"] = lag_enhet(6, 9004, "SIM-AVVIK")
+    apps.append(APPS["127.0.0.6"])
     # A BBMD with one peer - itself. More peers that do not exist make the
     # bacpypes3 BBMD stop answering, which is the simulator, not NABE.
     from bacpypes3.ipv4.app import BBMDApplication
@@ -293,7 +383,8 @@ async def main():
     await asyncio.sleep(0.5)
     import tempfile
     data = tempfile.mkdtemp(prefix="nabe-selvtest-")
-    env = dict(os.environ, NABE_ALLOWED_ORIGINS=BASE, NABE_DATA=data)
+    env = dict(os.environ, NABE_ALLOWED_ORIGINS=BASE, NABE_DATA=data,
+               NABE_COV_LIFETIME="6", NABE_COV_PAA_NYTT="3")
     server = subprocess.Popen([sys.executable, "-m", "uvicorn", "server:app", "--host", "127.0.0.1",
                                "--port", str(PORT), "--log-level", "warning"], cwd=HER, env=env)
     try:
