@@ -4869,6 +4869,14 @@ html.peker-egen *:not(input):not(textarea):not(select):not(.splitter):not([conte
 .sp-meta{color:var(--fg-3);font-size:11px}
 .sp-avvik.stor{color:var(--warn)}
 .sp-tom{color:var(--fg-3);padding:18px 8px!important;text-align:center}
+.tr-modal{width:min(1000px,96vw)}
+.tr-sum{display:flex;flex-direction:column;gap:2px;font-size:11px;color:var(--fg-3)}
+.tr-sum-rad{display:grid;grid-template-columns:150px 60px 80px 80px 90px;gap:8px;font-family:var(--mono)}
+.tr-feil-tall,.tr-ugreit{color:var(--warn)}
+.tr-filter{display:flex;align-items:center;gap:8px}
+.tr-filter .field{width:150px}
+.tr-feil{display:flex;align-items:center;gap:5px;cursor:pointer}
+.tr-mono{font-family:var(--mono);white-space:nowrap}
 .sp-panel{position:fixed;right:18px;bottom:40px;z-index:9000;width:min(380px,92vw);max-height:min(520px,80vh);display:flex;flex-direction:column;gap:10px;padding:12px 14px 14px;
   background:var(--raised);border:1px solid var(--line-2);border-radius:var(--r-lg);box-shadow:0 12px 34px rgba(0,0,0,.4)}
 .sp-panel:not(.ved){bottom:auto;top:50px}
@@ -4977,6 +4985,7 @@ button.sp-rad:hover{background:var(--hover)}
         <button id="rescanNow" class="menu-item">Søk etter enheter nå</button>
         <button id="diagBtn" class="menu-item">Sjekk en adresse…<span class="menu-hint">Ctrl+D</span></button>
         <button id="opptakBtn" class="menu-item">Opptak av punkter…</button>
+        <button id="trafikkBtn" class="menu-item">Trafikklogg…</button>
         <button id="reconnBtn" class="menu-item">Koble til på nytt</button>
         <div class="menu-sep"></div>
         <div class="menu-gruppe">Vis</div>
@@ -5419,6 +5428,7 @@ button.sp-rad:hover{background:var(--hover)}
 <script src="/js/nabe-pekere.js"></script>
 <script src="/js/nabe-garderobe.js"></script>
 <script src="/js/nabe-opptak.js"></script>
+<script src="/js/nabe-trafikk.js"></script>
 <script src="/js/nabe-kunnskap.js"></script>
 <script src="/js/nabe-spor.js"></script>
 </body>
