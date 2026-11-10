@@ -78,7 +78,8 @@ const SK = {
     k.classList.add('plugg');
     figur('klem', 400);
     await connectTo(k.dataset.cidr);
-    nabeSier(T(`Sender fra ${k.dataset.navn} nå.`, `Sending from ${k.dataset.navn} now.`), 'fornoyd');
+    if (S.connected) laasKort(true);
+    nabeSier(T(`Sender fra ${k.dataset.navn} nå, og kortet står fast.`, `Sending from ${k.dataset.navn} now, and the adapter stays put.`), 'fornoyd');
     tegnKort(); tegnVei();
   });
   liste.addEventListener('click', (e) => {
@@ -101,12 +102,13 @@ fetch('/api/interfaces').then(r => r.json()).then(d => { SK.kort = d.interfaces 
 function tegnVei() {
   const el = $('veiLinje');
   if (!el) return;
-  const ip = SK.rute?.ip || String(S.localAddr || '').split(/[/:]/)[0];
-  const navn = SK.rute?.interface || kortNavn(ip);
+  const las = kortLaast() ? String(loadPrefs().kortLast).split(/[/:]/)[0] : '';
+  const ip = las || SK.rute?.ip || String(S.localAddr || '').split(/[/:]/)[0];
+  const navn = las ? kortNavn(ip) : (SK.rute?.interface || kortNavn(ip));
   const modus = $('modeSel').value;
   const mtekst = modus === 'auto' ? 'auto' : $('modeSel').selectedOptions[0]?.textContent.toLowerCase();
   el.innerHTML = ip
-    ? `<span class="vei-tekst">via <b>${esc(navn || ip)}</b>${navn ? ` <span class="mono">${esc(ip)}</span>` : ''} · ${esc(mtekst)}</span>
+    ? `<span class="vei-tekst">via <b>${esc(navn || ip)}</b>${navn ? ` <span class="mono">${esc(ip)}</span>` : ''} · ${esc(mtekst)}${las ? ` · ${T('låst', 'locked')}` : ''}</span>
        <button type="button" class="vei-endre">${SK.apen ? T('lukk', 'close') : T('endre', 'change')}</button>`
     : `<span class="vei-tekst">${T('Ingen nettverkskort i bruk', 'No adapter in use')}</span>
        <button type="button" class="vei-endre">${T('velg', 'pick')}</button>`;
@@ -172,6 +174,13 @@ function sjekkRute() {
     SK.ruteFor = omr;
     SK.rute = r && r.status === 'done' ? r : null;
     tegnVei();
+    const las = kortLaast() ? String(loadPrefs().kortLast).split(/[/:]/)[0] : '';
+    if (SK.rute && las && SK.rute.ip !== las) {
+      visVakt('advar', T(
+        `Kortet er låst til <b>${esc(kortNavn(las) || las)}</b>, men ${esc(omr)} rutes via <b>${esc(SK.rute.interface || SK.rute.ip)}</b>. Slå på automatisk valg i innstillinger om det ikke svarer.`,
+        `The adapter is locked to <b>${esc(kortNavn(las) || las)}</b>, but ${esc(omr)} is routed via <b>${esc(SK.rute.interface || SK.rute.ip)}</b>. Turn automatic choice on in Settings if nothing answers.`));
+      return;
+    }
     const site = SK.anlegg.find(a => a.key.split(' ').includes(omr));
     if (SK.rute && SK.rute.windows && SK.rute.windows !== SK.rute.ip) {
       visVakt('advar', T(
@@ -629,3 +638,25 @@ husk = async function (omraader, enheter) {
 };
 
 tegnListe();
+
+/* ----------------------------------------------- automatic adapter choice
+   On: NABE moves to the adapter an address is routed through. Off: the one you
+   picked by hand stays, whatever Windows prefers. */
+function syncKortAuto() {
+  const b = $('kortAutoBtn');
+  if (!b) return;
+  const auto = !kortLaast();
+  b.classList.toggle('on', auto);
+  $('kortAutoState').textContent = auto ? T('på', 'on') : T('av', 'off');
+}
+if ($('kortAutoBtn')) {
+  $('kortAutoBtn').onclick = () => {
+    if (kortLaast()) {
+      savePrefs({kortLast: ''});
+      toast(T('NABE velger kort etter hvor adressen rutes', 'NABE picks the adapter by where the address is routed'));
+    } else if (S.connected) laasKort();
+    syncKortAuto(); tegnVei();
+  };
+  etter('syncMenuStates', syncKortAuto);
+  syncKortAuto();
+}

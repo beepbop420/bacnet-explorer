@@ -177,6 +177,11 @@ const FAKTA = [
   ['COV betyr at regulatoren sier fra selv. Mindre spørring, mer ro.', 'COV means the controller speaks up itself. Less asking, more peace.'],
 ];
 const NYTT = {
+  '1.55': [
+    ['Et nettverkskort du velger selv står fast, så NABE hopper ikke til et annet. Automatisk valg av kort slår du på i innstillinger', 'An adapter you pick yourself stays put, so NABE does not jump to another. Turn automatic adapter choice back on in Settings'],
+    ['COV-vakt: når varslene uteblir, merkes punktet «COV stille», leses i stedet og abonneres på nytt. COV leverer nå verdier, det gjorde den ikke før', 'COV guard: when notifications stop, the point is marked "COV silent", read instead and subscribed again. COV now delivers values, which it did not before'],
+    ['Flat linje, feil sommertid/vintertid, avvik fra settpunkt, trafikklogg og pendlingsdetektor for RT mot SB', 'Flatline, wrong summer/winter time, deviation from setpoint, a traffic log and a hunting detector for RT against SB'],
+  ],
   '1.54': [
     ['Tunnelen spør nå BACnet-enhetene selv om de er der. En ruter med samme adresse hjemme teller ikke lenger som anlegget', 'The tunnel now asks the BACnet devices themselves whether they are there. A router at home with the same address no longer counts as the site'],
   ],
@@ -558,7 +563,7 @@ async function visStartskjerm(igjen = false) {
   // A network row: bind that adapter first, so the scan goes out where the
   // route is rather than wherever Windows last sent it.
   const skannVia = async (omr, cidr) => {
-    if (cidr && S.localAddr !== cidr) {
+    if (cidr && S.localAddr !== cidr && !kortLaast()) {
       try { await connectTo(cidr, {quiet: true}); } catch {}
     }
     skann(omr);

@@ -27,6 +27,8 @@ async function sokVedStart() {
   // Wait for the adapter and the site list, a few seconds at most.
   for (let i = 0; i < 40 && !(S.connected && SK.lastet); i++) await new Promise(r => setTimeout(r, 250));
   if (AN.avlyst) return;
+  // An adapter picked by hand is not for NABE to look around from.
+  if (kortLaast()) return;
   const ri = $('rangeInput');
   // The field comes back with last time's range; only a change is yours.
   const fraSist = ri.value.trim();
