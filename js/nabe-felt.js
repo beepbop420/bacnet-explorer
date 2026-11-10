@@ -164,6 +164,89 @@ function rarVerdi(p) {
   return false;
 }
 
+/* Flat line: an analog input that has not moved for a chosen time. A live
+   sensor jitters a little; one that stands perfectly still has often lost its
+   wire or been left on a fixed value. Marked like rarVerdi, never hidden.
+
+   Only the open device is followed, and only while it is being read: a gap in
+   the reading restarts the watch, so "unchanged" always means someone was
+   looking the whole time. A point that arrives by COV is left out, because
+   COV only speaks when the value passes its increment and silence is normal. */
+const FLAT_VALG = [0, 15, 30, 60, 120];          // minutes, 0 = off
+let FLAT_TICK = 0;
+function flatMin() {
+  const v = loadPrefs().flatMin;
+  return FLAT_VALG.includes(v) ? v : 30;
+}
+function flatVerdi(p, nu = Date.now(), vinduMs = flatMin() * 60000) {
+  if (!vinduMs || !p || p.type !== 'analog-input' || typeof p.value !== 'number' || p.unread) return false;
+  if (p._flatCov || !p._flatSett || nu - p._flatSist > 60000) return false;
+  if (typeof hasFlag === 'function' && hasFlag(p, 'out-of-service')) return false;
+  const u = String(p.units || '');
+  if (!u || u === 'no-units') return false;
+  // A fan that is off, a closed damper, no flow: zero is a true reading.
+  if (p.value === 0 && /^(percent|pascals|kilopascals|hectopascals|bars|millibars)$|per-(second|hour|minute)/.test(u)) return false;
+  return nu - p._flatSett >= vinduMs && nu - p._flatEndret >= vinduMs;
+}
+function flatTittel(p, nu = Date.now()) {
+  const m = Math.max(1, Math.round((nu - p._flatEndret) / 60000));
+  return T(`Uendret i ${m} min. En levende føler flytter seg som regel litt.`,
+           `Unchanged for ${m} min. A live sensor usually moves a little.`);
+}
+function flatTekst() {
+  const m = flatMin();
+  return !m ? T('av', 'off') : m < 60 ? `${m} min` : T(`${m / 60} t`, `${m / 60} h`);
+}
+function syncFlat() {
+  $('flatBtn')?.classList.toggle('on', flatMin() > 0);
+  const s = $('flatState');
+  if (s) s.textContent = flatTekst();
+}
+/* Watches what each poll brings, before the table takes the new value in. */
+etter('api', (d, sti) => {
+  if (sti !== '/api/poll' || !d || d.status !== 'done' || !S.activeDev) return;
+  const ip = S.activeDev.address, vals = d.values && d.values[ip];
+  if (!vals) return;
+  const nu = Date.now();
+  const hull = Math.max(60000, 4 * (parseInt($('pollInt')?.value, 10) || 5000));
+  const cov = new Set((d.cov_ok && d.cov_ok[ip]) || []);
+  for (const [objid, val] of Object.entries(vals)) {
+    const p = S.pointIndex.get(objid);
+    if (!p || p.type !== 'analog-input') continue;
+    p._flatCov = cov.has(objid);
+    if (!p._flatSett || nu - p._flatSist > hull) p._flatSett = p._flatEndret = nu;
+    else if (val !== p.value) p._flatEndret = nu;
+    p._flatSist = nu;
+  }
+});
+/* The marks follow the polls, at most every other second. */
+function merkFlat(tving) {
+  const nu = Date.now();
+  if (!S.rowIndex || (!tving && nu - FLAT_TICK < 2000)) return;
+  FLAT_TICK = nu;
+  for (const [objid, tr] of S.rowIndex) {
+    const p = S.pointIndex.get(objid);
+    const td = tr._valCell || (tr._valCell = tr.querySelector('td.c-val'));
+    if (!p || !td) continue;
+    const flat = flatVerdi(p, nu);
+    if (flat === td.classList.contains('flat')) continue;
+    td.classList.toggle('flat', flat);
+    if (flat) td.title = flatTittel(p, nu); else td.removeAttribute('title');
+  }
+}
+etter('pollTick', () => merkFlat());
+etter('syncMenuStates', syncFlat);
+if ($('flatBtn')) {
+  $('flatBtn').onclick = () => {
+    const neste = FLAT_VALG[(FLAT_VALG.indexOf(flatMin()) + 1) % FLAT_VALG.length];
+    savePrefs({flatMin: neste});
+    syncFlat(); merkFlat(true);
+    toast(neste ? T(`Flat linje etter ${flatTekst()}`, `Flatline after ${flatTekst()}`)
+                : T('Flat linje av', 'Flatline off'));
+  };
+  syncFlat();
+}
+
 /* ------------------------------------------------------- recent points */
 const SISTE_NOKKEL = 'nabe_siste_punkter';
 function sistePunkter() {

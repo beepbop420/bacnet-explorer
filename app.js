@@ -4605,8 +4605,10 @@ const COLS = [
    cell: p => esc(p.description || '')},
   {k: 'value', label: 'Verdi', menu: 'Verdi', cls: 'c-val', col: 'w-val',
    extraCls: p => fmtVal(p.value).c + (p.unread ? ' unread' : '')
-     + (typeof rarVerdi === 'function' && rarVerdi(p) ? ' rar' : ''),
-   attrs: p => p.unread ? ` title="${T('Ingen svar fra enheten på dette punktet', 'No answer from the device for this point')}"` : '',
+     + (typeof rarVerdi === 'function' && rarVerdi(p) ? ' rar' : '')
+     + (typeof flatVerdi === 'function' && flatVerdi(p) ? ' flat' : ''),
+   attrs: p => p.unread ? ` title="${T('Ingen svar fra enheten på dette punktet', 'No answer from the device for this point')}"`
+     : (typeof flatVerdi === 'function' && flatVerdi(p) ? ` title="${esc(flatTittel(p))}"` : ''),
    cell: p => {
      if (p.unread) return '?';
      // A multi-state reading of "3" says nothing; the device already told us
@@ -10046,6 +10048,8 @@ const ORDBOK = {
   'Animasjoner': 'Animations',
   'Tett visning': 'Dense view',
   'Forkort punktnavn': 'Shorten point names',
+  'Flat linje': 'Flatline',
+  'Markerer analoge innganger som ikke har beveget seg': 'Marks analog inputs that have not moved',
   'Objekttyper i tabellen': 'Object types in the table',
   'Tilbakestill alt': 'Restore defaults',
   'Filtrer ur…': 'Filter schedules…',

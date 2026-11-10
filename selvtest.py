@@ -177,7 +177,12 @@ def royktest():
         s.settimeout(10)
         send({"id": 3, "method": "Runtime.evaluate", "params": {"returnByValue": True, "expression":
               "({skann: typeof runScan === 'function' && !!document.querySelector('.skann-ny'),"
-              " nabo: !!document.getElementById('naboHus'), meny: typeof closeMenus === 'function'})"}})
+              " nabo: !!document.getElementById('naboHus'), meny: typeof closeMenus === 'function',"
+              " flat: typeof flatVerdi === 'function' && !!document.getElementById('flatBtn') && (() => {"
+              "  const a = {type:'analog-input', value:21, units:'degrees-celsius', _flatSett:1, _flatEndret:1, _flatSist:36e5-1000};"
+              "  return flatVerdi(a, 36e5, 18e5) && !flatVerdi({...a, _flatEndret:3e6}, 36e5, 18e5)"
+              "    && !flatVerdi({...a, value:0, units:'pascals'}, 36e5, 18e5) && !flatVerdi({...a, _flatCov:true}, 36e5, 18e5)"
+              "    && !flatVerdi({...a, type:'analog-value'}, 36e5, 18e5); })()})"}})
         while True:
             m = motta()
             if m.get("id") == 3:

@@ -4174,6 +4174,7 @@ tbody tr.sys-hode td span{margin-left:8px;font-weight:400;color:var(--fg-3)}
 #sysBtn.on{background:var(--hover);color:var(--fg)}
 /* A value that is possible but rarely right: underlined, with the reason. */
 td.c-val.rar{text-decoration:underline dotted var(--warn);text-underline-offset:3px}
+td.c-val.flat{text-decoration:underline dashed color-mix(in srgb,var(--warn) 60%,transparent);text-underline-offset:3px}
 /* The clock warning is a button now. */
 button.ctx-stat{cursor:pointer;font:inherit}
 button.ctx-stat:hover{text-decoration:underline}
@@ -5116,6 +5117,9 @@ button.sp-rad:hover{background:var(--hover)}
           <button id="allTypesBtn" class="sett-rad bryter" role="switch">Objekttyper i tabellen
             <small>Ta med trendlogger, programmer og enhetsobjektet</small>
             <span id="allTypesState" class="menu-state"></span></button>
+          <button id="flatBtn" class="sett-rad">Flat linje
+            <small>Markerer analoge innganger som ikke har beveget seg</small>
+            <span id="flatState" class="menu-state"></span></button>
         </div>
         <div class="sett-gruppe"><div class="tema-tittel">Enhetslista</div>
           <button id="groupBtn" class="sett-rad">Grupper enheter
