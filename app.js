@@ -4240,6 +4240,7 @@ function commands() {
   add('Visning', 'Fullskjerm', () => { closeCmd(); byttFullskjerm(); });
   add('Handling', 'Spør NABE…', () => { closeCmd(); aapneSpor(); });
   add('Handling', 'Opptak av punkter…', () => { closeCmd(); aapneOpptak(); });
+  add('Handling', 'Trafikklogg…', () => { closeCmd(); aapneTrafikk(); });
   add('Handling', 'Avvik fra settpunkt…', () => { closeCmd(); aapneAvvik(); });
   add('Visning', 'Innstillinger…', () => { closeCmd(); openTema(); });
   add('Eksport', 'NABO — tagger og Variabel-fil…', () => { closeCmd(); aapneNabo(); }, {hint: 'N'});
@@ -10112,6 +10113,7 @@ const ORDBOK = {
   'Spør NABE…': 'Ask NABE…',
   'Opptak av punkter…': 'Recording points…',
   'Avvik fra settpunkt…': 'Deviation from setpoint…',
+  'Trafikklogg…': 'Traffic log…',
   'Fullskjerm': 'Full screen',
   'Fullskjerm (F11)': 'Full screen (F11)',
   'Peker': 'Pointer',

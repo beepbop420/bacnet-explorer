@@ -23,6 +23,7 @@ Endpoints:
   GET  /                                                     -> serves the web UI (index.html)
 """
 import asyncio
+import collections
 import errno
 import hashlib
 import shutil
@@ -57,7 +58,7 @@ from bacpypes3.service.device import WhoIsFuture
 
 import bacnet_core as bc
 from bacnet_core import COMM_ERRORS
-from bacpypes3.apdu import ErrorRejectAbortNack
+from bacpypes3.apdu import ErrorRejectAbortNack, ErrorPDU, RejectPDU, AbortPDU
 
 app = FastAPI(title="NABE")
 # app.js and the page are 700 kB of text and compress to about a fifth. On
@@ -888,6 +889,7 @@ async def _open_app(local_address: str, bbmd: Optional[str] = None):
         bacnet_app.register(IPv4Address(bbmd), 300)
     else:
         bacnet_app = NormalApplication(device_obj, addr)
+    _trafikk_installer(bacnet_app)
     # The transports are created asynchronously; give them a moment to
     # exist before resizing their buffers.
     await asyncio.sleep(0.3)
@@ -3757,6 +3759,105 @@ def _cov_stopp_alle() -> None:
         if t:
             t.cancel()
     COV.clear()
+
+
+# ------------------------------------------------------------ traffic log
+# Every BACnet request NABE sends and what came back, newest last. It lives in
+# memory only and is never written or sent anywhere: it is there so a slow or
+# silent controller can be seen for what it is, with times and error codes,
+# instead of guessed at. Values written are not recorded.
+TRAFIKK_MAKS = int(_env("TRAFIKK_MAKS", "5000") or 5000)
+TRAFIKK: "collections.deque" = collections.deque(maxlen=TRAFIKK_MAKS)
+_TRAFIKK_SEQ = [0]
+
+
+def _trafikk_rad(apdu, t0: float, ms: float, svar: str, kode: str) -> None:
+    _TRAFIKK_SEQ[0] += 1
+    tjeneste = type(apdu).__name__
+    tjeneste = tjeneste[:-7] if tjeneste.endswith("Request") else tjeneste
+    obj = getattr(apdu, "objectIdentifier", None) or getattr(apdu, "monitoredObjectIdentifier", None)
+    liste = getattr(apdu, "listOfReadAccessSpecs", None)
+    if liste is not None:
+        try:
+            obj = f"{len(liste)} objekter"
+        except TypeError:
+            pass
+    prop = getattr(apdu, "propertyIdentifier", None)
+    TRAFIKK.append({
+        "n": _TRAFIKK_SEQ[0], "t": round(t0, 3), "til": str(getattr(apdu, "pduDestination", "") or "broadcast"),
+        "tjeneste": tjeneste, "obj": str(obj) if obj is not None else "", "prop": str(prop) if prop is not None else "",
+        "ms": round(ms, 1), "svar": svar, "kode": kode, "forsok": bc.FORSOK.get(),
+    })
+
+
+def _trafikk_svar(x) -> tuple:
+    """(svar, kode) for whatever a request ended with: an answer, or one of
+    the error, reject and abort PDUs, which bacpypes3 may hand back either way."""
+    if isinstance(x, ErrorPDU):
+        return "feil", f"{getattr(x, 'errorClass', '')}:{getattr(x, 'errorCode', '')}"
+    if isinstance(x, RejectPDU):
+        return "avvist", str(getattr(x, "apduAbortRejectReason", ""))
+    if isinstance(x, AbortPDU):
+        return "avbrutt", str(getattr(x, "apduAbortRejectReason", ""))
+    if isinstance(x, BaseException):
+        return "feil", type(x).__name__
+    return "ok", ""
+
+
+def _trafikk_ferdig(apdu, t0: float, m0: float, forsok: int, fut) -> None:
+    ms = (time.perf_counter() - m0) * 1000
+    if fut.cancelled():
+        svar, kode = "tidsgrense", ""
+    elif fut.exception() is not None:
+        svar, kode = _trafikk_svar(fut.exception())
+    else:
+        svar, kode = _trafikk_svar(fut.result())
+    _trafikk_rad(apdu, t0, ms, svar, kode)
+    TRAFIKK[-1]["forsok"] = forsok
+
+
+def _trafikk_installer(bacnet_app) -> None:
+    """Wrap the application's request, the one door every service goes through.
+    Installed again whenever the stack is rebound."""
+    orig = bacnet_app.request
+    if getattr(orig, "_nabe_trafikk", False):
+        return
+
+    def request(apdu):
+        t0, m0, forsok = time.time(), time.perf_counter(), bc.FORSOK.get()
+        fut = orig(apdu)
+        if fut.done() and not fut.cancelled() and fut.exception() is None and fut.result() is None:
+            _trafikk_rad(apdu, t0, 0.0, "sendt", "")        # unconfirmed: nothing comes back
+        else:
+            fut.add_done_callback(lambda f: _trafikk_ferdig(apdu, t0, m0, forsok, f))
+        return fut
+    request._nabe_trafikk = True
+    bacnet_app.request = request
+
+
+@app.get("/api/trafikk")
+async def trafikk(etter: int = 0):
+    rader = [r for r in TRAFIKK if r["n"] > etter][-2000:]
+    per: Dict[str, List[float]] = {}
+    feil: Dict[str, int] = {}
+    for r in TRAFIKK:
+        if r["svar"] == "sendt":
+            continue
+        per.setdefault(r["til"], []).append(r["ms"])
+        if r["svar"] != "ok":
+            feil[r["til"]] = feil.get(r["til"], 0) + 1
+    oppsummering = {}
+    for til, ms in per.items():
+        ms.sort()
+        oppsummering[til] = {"antall": len(ms), "feil": feil.get(til, 0),
+                             "snitt": round(sum(ms) / len(ms), 1), "p95": ms[min(len(ms) - 1, int(len(ms) * 0.95))]}
+    return {"status": "done", "seq": _TRAFIKK_SEQ[0], "rader": rader, "oppsummering": oppsummering}
+
+
+@app.post("/api/trafikk/tom")
+async def trafikk_tom():
+    TRAFIKK.clear()
+    return {"status": "done"}
 
 
 def _brannmur_sjekk() -> Dict[str, Any]:

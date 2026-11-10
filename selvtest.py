@@ -207,6 +207,7 @@ def royktest():
               " sommer: typeof sommertidAvvik === 'function' && sommertidAvvik(3600) === 1 && sommertidAvvik(-3590) === -1"
               "   && sommertidAvvik(3000) === 0 && sommertidAvvik(7200) === 0 && sommertidAvvik(0) === 0"
               "   && /sommertid|summer/.test(klokkeTekst(3600)) && !/sommertid|summer/.test(klokkeTekst(1800)),"
+              " trafikk: typeof aapneTrafikk === 'function' && !!document.getElementById('trafikkBtn'),"
               " settpunkt: typeof aapneAvvik === 'function' && !!document.getElementById('avvikBtn') && (() => {"
               "  const n = ['X-SP','X_SP','X.sp','XSp','RT401SP','Akt_Sp','AktSP'].map(erSettpunktNavn);"
               "  const ikke = ['Spenning','Spjeld','Display','X','Sp'].every(x => erSettpunktNavn(x) === null);"
@@ -301,6 +302,24 @@ def sommertid():
           isinstance(drift, int) and abs(drift - 3600) <= 60, f"drift={drift}")
 
 
+def trafikklogg():
+    """Every request NABE sends is logged, with an answer, a time and a code."""
+    t = kall("/api/trafikk")
+    rader = t.get("rader", [])
+    rpm = [r for r in rader if r["tjeneste"] == "ReadPropertyMultiple" and r["til"].startswith("127.0.0.3") and r["svar"] == "ok"]
+    sjekk("trafikklogg: forespørsel mot 127.0.0.3 er logget med svar og tid", bool(rpm) and rpm[0]["ms"] >= 0,
+          f"{len(rader)} rader, tjenester {sorted({r['tjeneste'] for r in rader})}")
+    kall("/api/object/detail", {"address": "127.0.0.3", "objid": "analog-input,99"})
+    feil = [r for r in kall("/api/trafikk")["rader"] if r["svar"] != "ok" and r["til"].startswith("127.0.0.3")]
+    sjekk("trafikklogg: avvist forespørsel får feilkode", any("unknown-object" in r["kode"] or "unknownObject" in r["kode"] for r in feil),
+          str([(r["svar"], r["kode"]) for r in feil[:3]]))
+    sist = t.get("seq", 0)
+    ny = kall(f"/api/trafikk?etter={sist}")
+    sjekk("trafikklogg: etter-filter gir bare nye rader", all(r["n"] > sist for r in ny["rader"]) and ny["seq"] >= sist)
+    sjekk("trafikklogg: oppsummering per enhet", "127.0.0.3" in {k.split(":")[0] for k in ny["oppsummering"]},
+          str(list(ny["oppsummering"])[:4]))
+
+
 def kjor_tester():
     s = kall("/api/start", {"local_address": "127.0.0.1/8"})
     sjekk("kobler til", s.get("status") == "done", s.get("local_address", s.get("error", "")))
@@ -347,6 +366,7 @@ def kjor_tester():
     sjekk("live svarer med COV-telling", isinstance(p.get("cov"), int), f"cov={p.get('cov')}")
     cov_vakt()
     sommertid()
+    trafikklogg()
 
     j = vent_jobb(kall("/api/scan", {"subnet": "127.0.0.5:47820", "mode": "bbmd", "timeout": 4})["job_id"])
     r = j.get("result") or {}
@@ -387,7 +407,7 @@ def kjor_tester():
     linjer = Path(r3.get("fil", "x")).read_text(encoding="utf-8-sig").splitlines() if r3.get("status") == "done" else []
     sjekk("opptak skriver rader med verdi", len(linjer) >= 3 and r4.get("rader", 0) >= 2 and linjer[1].split(";")[1] != "", str(linjer[:3]))
 
-    for fil in ("nabe-start", "nabe-verktoy", "nabe-felt", "nabe-moro", "nabe-finn", "nabe-skann", "nabe-anlegg", "nabe-bunn", "nabe-graf", "nabe-tunnel", "nabe-sammen", "nabe-flyt", "nabe-peker", "nabe-pekere", "nabe-skrift", "nabo", "nabo-brodre", "nabo-fasit", "nabe-garderobe", "nabe-opptak", "nabe-kunnskap", "nabe-spor"):
+    for fil in ("nabe-start", "nabe-verktoy", "nabe-felt", "nabe-moro", "nabe-finn", "nabe-skann", "nabe-anlegg", "nabe-bunn", "nabe-graf", "nabe-tunnel", "nabe-sammen", "nabe-flyt", "nabe-peker", "nabe-pekere", "nabe-skrift", "nabo", "nabo-brodre", "nabo-fasit", "nabe-garderobe", "nabe-opptak", "nabe-trafikk", "nabe-kunnskap", "nabe-spor"):
         try:
             with urllib.request.urlopen(f"{BASE}/js/{fil}.js", timeout=5) as rr:
                 ok = rr.status == 200

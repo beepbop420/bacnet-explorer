@@ -6,6 +6,7 @@ tested directly against real hardware.
 from __future__ import annotations
 
 import asyncio
+import contextvars
 import datetime
 import math
 import time
@@ -214,6 +215,11 @@ def objid_str(objid: Any) -> str:
     return f"{t},{i}"
 
 
+# Which attempt a read is on, so the traffic log can show retries. A task's
+# own copy: set around each attempt and put back after.
+FORSOK: contextvars.ContextVar = contextvars.ContextVar("nabe_forsok", default=1)
+
+
 async def read_retry(app, addr: Address, objid: str, prop: str,
                      array_index: Optional[int] = None,
                      attempts: int = 3, timeout: float = 5.0,
@@ -228,6 +234,7 @@ async def read_retry(app, addr: Address, objid: str, prop: str,
     """
     last = None
     for i in range(attempts):
+        tok = FORSOK.set(i + 1)
         try:
             if array_index is None:
                 return await asyncio.wait_for(
@@ -239,6 +246,8 @@ async def read_retry(app, addr: Address, objid: str, prop: str,
             last = e
             if i + 1 < attempts:
                 await asyncio.sleep(backoff * (i + 1))
+        finally:
+            FORSOK.reset(tok)
     raise last if last else RuntimeError("read failed")
 
 
