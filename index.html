@@ -3808,7 +3808,8 @@ body.uten-bevegelse .nabo-term,body.uten-bevegelse .nabo-pakke,body.uten-bevegel
 .dev .dev-id{font-family:var(--mono);font-size:11px;font-weight:400;color:var(--fg-3)}
 .dev .dev-id::before{content:'· ';color:var(--line-2)}
 .dev-lev{color:var(--fg-3)}
-.dev-kort{color:var(--fg-3);font-size:10px;letter-spacing:.02em;padding:0 5px;border:1px solid var(--line);border-radius:8px;white-space:nowrap;max-width:90px;overflow:hidden;text-overflow:ellipsis}
+.dev-kort{flex:0 0 auto;color:var(--fg-3);font-size:10px;letter-spacing:.02em;padding:0 5px;border:1px solid var(--line);border-radius:8px;white-space:nowrap}
+.dev-l2:has(.dev-kort){flex-wrap:wrap;row-gap:1px}
 .dev-pkt{margin-left:auto;font-style:normal;color:var(--fg-3);white-space:nowrap}
 .dev .dev-note{font-size:10px;color:var(--fg-2);border:1px solid var(--line-2);border-radius:var(--r-sm);padding:0 4px}
 .dev .dev-seen{font-style:normal}

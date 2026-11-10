@@ -2521,6 +2521,9 @@ async def _husk_lokka():
 
 async def _sjekk_svar(key: str, enheter: List[Dict[str, Any]]) -> None:
     ok = False
+    if state["app"] is None:
+        _SVARER.pop(key, None)
+        return
     if state["app"] is not None:
         sem = asyncio.Semaphore(2)
         for d in enheter[:2]:
@@ -2535,7 +2538,7 @@ async def _sjekk_svar(key: str, enheter: List[Dict[str, Any]]) -> None:
     _SVARER[key] = {"t": time.time(), "ok": ok, "gaar": False}
 
 
-def svarer(key: str, site: Dict[str, Any]) -> Optional[bool]:
+def svarer(key: str, site: Dict[str, Any], hvert: float = 30.0) -> Optional[bool]:
     """True, False, or None while the first question is still out. A site
     that never had a device has nothing to answer with: False."""
     enheter = [d for d in (site.get("enheter") or []) if d.get("address")]
@@ -2543,7 +2546,7 @@ def svarer(key: str, site: Dict[str, Any]) -> Optional[bool]:
         return False
     with _SVARER_LAS:
         s = _SVARER.get(key)
-        if _LOKKE["l"] and (not s or (time.time() - s["t"] > 30 and not s["gaar"])):
+        if _LOKKE["l"] and state["app"] is not None and (not s or (time.time() - s["t"] > hvert and not s["gaar"])):
             _SVARER[key] = dict(s or {"ok": None}, t=time.time(), gaar=True)
             asyncio.run_coroutine_threadsafe(_sjekk_svar(key, enheter), _LOKKE["l"])
         return (_SVARER.get(key) or {}).get("ok")
@@ -2562,6 +2565,7 @@ def anlegg_liste():
         a = str(o.get("address") or "")
         overstyrt[a] = overstyrt.get(a, 0) + 1
     ut = []
+    prov = 0
     for key, s in sorted(SITES.items(), key=lambda kv: -(kv[1].get("sist") or 0)):
         enheter = s.get("enheter") or []
         adr = {str(d.get("address") or "") for d in enheter}
@@ -2570,13 +2574,32 @@ def anlegg_liste():
             if d.get("vendor"):
                 lev[d["vendor"]] = lev.get(d["vendor"], 0) + 1
         ranges = s.get("ranges") or key.split(" ")
+        nb = naabar(ranges[0], kort) if ranges else None
+        sv = svarer(key, s) if ranges and nb else False
+        if ranges and nb is None and enheter and prov < 3 and s.get("sist") and time.time() - s["sist"] < 30 * 86400:
+            # No route says it is there. A full-tunnel VPN (FortiClient, say) holds
+            # only the default route, and the site behind it still answers. Only
+            # an answer from one of its own devices counts, and only the three
+            # newest sites are asked, so a tunnel into an office is not used to
+            # probe every customer ever visited.
+            prov += 1
+            r0 = svarer(key, s, 120.0)
+            if r0 is None:
+                sv = None            # the question is still out
+            if r0:
+                adr0 = next((str(d["address"]) for d in enheter if d.get("address")), "")
+                ip0 = _adapter_for(adr0) if adr0 else None
+                e0 = next((e for e in kort if e["ip"] == ip0), None)
+                if e0 and not str(e0["ip"]).startswith("127."):
+                    nb = {"ip": e0["ip"], "interface": e0["interface"], "cidr": e0["cidr"], "standard": True}
+                    sv = True
         ut.append({
             "key": key, "navn": s.get("navn") or "", "enheter": len(enheter),
             "sist": s.get("sist"), "ganger": s.get("ganger", 0), "modus": s.get("modus"),
             "leverandorer": sorted(lev.items(), key=lambda kv: -kv[1])[:3],
             "overstyrt": sum(n for a, n in overstyrt.items() if a in adr),
-            "naabar": naabar(ranges[0], kort) if ranges else None,
-            "svarer": svarer(key, s) if ranges and naabar(ranges[0], kort) else False,
+            "naabar": nb,
+            "svarer": sv,
             "navnliste": [d.get("object_name") for d in enheter if d.get("object_name")][:60],
         })
     return {"status": "done", "anlegg": ut[:40]}

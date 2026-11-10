@@ -26,6 +26,12 @@ async function sokVedStart() {
   if (AN.sokt || loadPrefs().autoSok === false) return;
   // Wait for the adapter and the site list, a few seconds at most.
   for (let i = 0; i < 40 && !(S.connected && SK.lastet); i++) await new Promise(r => setTimeout(r, 250));
+  // A site behind a full-tunnel VPN counts as in reach once one of its devices has
+  // answered; give that question a few seconds before choosing where to start.
+  for (let i = 0; i < 14 && SK.anlegg.some(a => a.svarer === null && !a.naabar); i++) {
+    await new Promise(r => setTimeout(r, 300));
+    if (typeof hentAnlegg === 'function') await hentAnlegg();
+  }
   if (AN.avlyst) return;
   // An adapter picked by hand is not for NABE to look around from.
   if (kortLaast()) return;
