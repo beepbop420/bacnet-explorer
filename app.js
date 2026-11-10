@@ -336,6 +336,16 @@ setInterval(async () => {
   if (BACKEND_NEDE || S.job || S.scanJob || !S.connected) return;
   try {
     const d = await (await fetch('/api/status', {cache: 'no-store'})).json();
+    if (d.running) {
+      // An adapter may have been opened since the page last looked.
+      const sig = JSON.stringify(d.kort || []) + JSON.stringify(d.via || {});
+      if (sig !== S._kortSig) {
+        S._kortSig = sig;
+        await refreshStatus();
+        renderDevices();
+        if (S.activeDev) renderCtx();
+      }
+    }
     if (!d.running) {
       const kort = S.localAddr || $('localAddr').value;
       await connectTo(kort, {quiet: true});
@@ -846,7 +856,7 @@ async function runScan() {
         if (!await skannOmraade(n, subnet, kort)) break;
       }
     }));
-    refreshStatus();
+    await refreshStatus();
 
     const secs = ((performance.now() - t0) / 1000).toFixed(0);
     if (omraader.length > 1) {
@@ -1229,6 +1239,14 @@ function kortChip(d) {
   if (!k) return '';
   const navn = k.interface || k.ip;
   return `<span class="dev-kort" title="${esc(T('Leses via ', 'Read via ') + navn + ' ' + k.local_address)}">${esc(navn)}</span>`;
+}
+
+/* The same, in the heading of the open device: which adapter its points are read through. */
+function kortFelt(d) {
+  if (!S.kort || S.kort.length < 2) return '';
+  const k = S.kort.find(x => x.ip === (S.via && S.via[d.address]));
+  if (!k) return '';
+  return `<span class="tf"><small>${T('Via', 'Via')}</small><b title="${esc(k.local_address)}">${esc(k.interface || k.ip)}</b></span>`;
 }
 
 function renderDevices() {
@@ -2231,6 +2249,7 @@ function renderCtx() {
         <span class="tf"><small>${T('Leverandør', 'Vendor')}</small><span class="vendor" style="--vc:${v.color};flex:0 0 auto"><i></i><span>${esc(v.label)}</span></span></span>
         <span class="tf"><small>${T('Instans', 'Instance')}</small><span class="ctx-id">${d.device_instance ?? '?'}</span></span>
         <span class="tf"><small>${T('Adresse', 'Address')}</small><button type="button" class="ctx-ip ctx-web" data-web="${esc(d.address)}" title="${esc(T('Åpne webgrensesnittet til regulatoren', 'Open the controller’s web interface'))}">${esc(d.address)}<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M5 2H2.5v7.5H10V7M7 2h3v3M10 2 5.6 6.4"/></svg></button></span>
+        ${kortFelt(d)}
         <span class="tf"><small>${T('Punkter', 'Points')}</small><b>${S.points.length}</b></span>
         ${writable ? `<span class="tf"><small>${T('Skrivbare', 'Writable')}</small><b>${writable}</b></span>` : ''}
         ${identBadge(d.address)}
