@@ -610,7 +610,7 @@ async function refreshStatus() {
   $('connText').textContent = S.connected ? '' : 'Ikke tilkoblet';
   const flere = S.connected && S.kort.length > 1;
   $('connAddr').textContent = S.connected ? (S.localAddr || '') + (flere ? ` +${S.kort.length - 1}` : '') : '';
-  $('connAddr').title = flere ? S.kort.map(k => `${k.interface || k.ip} ${k.local_address}${k.primary ? ' ·  ' + T('hovedkort', 'main') : ''}${k.enheter ? ' · ' + k.enheter + ' ' + T('enheter', 'devices') : ''}`).join('\n') : '';
+  $('connAddr').title = flere ? S.kort.map(k => `${k.interface || k.ip} ${k.local_address}${k.primary ? ' · ' + T('hovedkort', 'main') : ''}${k.enheter ? ' · ' + k.enheter + ' ' + T('enheter', 'devices') : ''}`).join('\n') : '';
   $('scanBtn').disabled = !S.connected;
   $('scanBtn').title = S.connected ? '' : 'Velg et nettverkskort først';
   // Keep the dropdown showing what is actually bound, not a stale pick.

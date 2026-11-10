@@ -36,8 +36,10 @@ No administrator rights needed. Everything else in the zip is tucked away;
   other BBMDs the building has.
 - **Ranges the way you think of them:** `10.0.1.0/24`, a single IP, or
   `10.0.1.10-40`.
-- **Picks the right network adapter itself**, from the routing table, and
-  re-binds on its own when WireGuard or FortiClient connects or drops.
+- **Uses several network adapters at once.** Every address goes out of the
+  adapter the routing table sends it through, so a FortiClient tunnel, a
+  WireGuard tunnel and the cable can all be scanned and read at the same time.
+  It opens each adapter when it is needed and drops one when its tunnel goes.
 - **Reads every object** on a device: values, descriptions, state texts,
   units, priority arrays, weekly schedules, trend logs, **active alarms**.
 - **Live values by COV** where the controller allows it, polling otherwise.
