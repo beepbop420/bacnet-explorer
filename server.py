@@ -35,6 +35,7 @@ import random
 import re
 import subprocess
 import json
+import math
 import os
 import socket
 import urllib.request
@@ -3110,6 +3111,172 @@ async def opptak_stopp():
 async def opptak_status():
     return {"aktiv": bool(OPPTAK["task"]), "fil": OPPTAK["fil"], "punkter": len(OPPTAK["punkter"]), "rader": OPPTAK["rader"],
             "bom": OPPTAK["bom"], "intervall": OPPTAK["intervall"], "varighet": int(time.time() - OPPTAK["start"]) if OPPTAK["start"] else 0}
+
+
+# ------------------------------------------------------------- oscillation
+# Hunting: a loop that swings up and down on its own, a valve working back and
+# forth against a temperature that never settles. It reads what a recording
+# already holds, so it also works on an old file. A swing needs at least three
+# turns to count, and a size above what the sensor shows on its own.
+_PEND_RE = re.compile(r"(?:^|[^A-Za-z0-9])(RT|SB)(\d{2,4})(?!\d)", re.I)
+_PEND_SYS = re.compile(r"(?:^|\D)(\d{3})[._\-](\d{3})(?!\d)")
+
+
+def _pend_nokkel(navn: str):
+    """(RT or SB, system, loop number) from a name like 360.003-RT401."""
+    m = _PEND_RE.search(navn)
+    if not m:
+        return None
+    s = _PEND_SYS.search(navn)
+    return m.group(1).upper(), (f"{s.group(1)}.{s.group(2)}" if s else ""), m.group(2)
+
+
+def _pend_detrend(x: List[float]) -> List[float]:
+    n = len(x)
+    mx, my = (n - 1) / 2, sum(x) / n
+    sxx = sum((i - mx) ** 2 for i in range(n)) or 1.0
+    b = sum((i - mx) * (x[i] - my) for i in range(n)) / sxx
+    return [x[i] - my - b * (i - mx) for i in range(n)]
+
+
+def _pend_serie(x: List[float], dt: float, enhet: str = "") -> Dict[str, Any]:
+    ut: Dict[str, Any] = {"score": 0, "periode_s": None, "amplitude": 0.0, "sykluser": 0.0, "dom": "nei"}
+    x = x[-2000:]
+    n = len(x)
+    if n < 16 or dt <= 0:
+        return ut
+    d = _pend_detrend(x)
+    srt = sorted(d)
+    amp = (srt[int(0.95 * (n - 1))] - srt[int(0.05 * (n - 1))]) / 2
+    ut["amplitude"] = round(amp, 3)
+    var = sum(v * v for v in d)
+    if var <= 1e-12:
+        return ut
+    maks = n // 2
+    r = [1.0] + [(sum(d[i] * d[i + k] for i in range(n - k)) / var) * n / (n - k) for k in range(1, maks + 1)]
+    k0 = next((k for k in range(1, maks + 1) if r[k] <= 0), None)
+    if k0 is None:
+        return ut
+    topp = next((k for k in range(k0 + 1, maks) if r[k] > r[k - 1] and r[k] >= r[k + 1]), None)
+    if topp is None:
+        return ut
+    periode = topp * dt
+    # Turns counted on the signal itself, with a margin so noise does not count.
+    h, opp, under = 0.1 * amp, [], d[0] < 0
+    for i, v in enumerate(d):
+        if under and v > h:
+            opp.append(i)
+            under = False
+        elif not under and v < -h:
+            under = True
+    perioder = [(b - a) * dt for a, b in zip(opp, opp[1:])]
+    if len(opp) < 3 or not perioder:
+        return ut
+    snitt = sum(perioder) / len(perioder)
+    std = math.sqrt(sum((p - snitt) ** 2 for p in perioder) / len(perioder))
+    jevn = max(0.0, 1 - std / snitt)
+    u = enhet.lower()
+    amin = 0.2 if ("°c" in u or "celsius" in u) else 3.0 if ("%" in u or "percent" in u) else max(0.01, 0.03 * abs(sum(x) / n))
+    sykluser = n * dt / periode
+    score = round(100 * max(0.0, min(1.0, r[topp])) * jevn * min(1.0, amp / amin))
+    if sykluser < 3:
+        score = min(score, 34)
+    ut.update(score=score, periode_s=round(snitt, 1), sykluser=round(sykluser, 1),
+              dom="pendler" if score >= 60 else "mulig" if score >= 35 else "nei")
+    return ut
+
+
+def _pend_lag(a: List[float], b: List[float], dt: float, periode: float) -> float:
+    """How long after `a` moves `b` follows, in seconds (negative: it leads)."""
+    a, b = _pend_detrend(a[-2000:]), _pend_detrend(b[-2000:])
+    n = min(len(a), len(b))
+    a, b = a[-n:], b[-n:]
+    L = max(1, int(periode / dt / 2))
+    beste = max(range(-L, L + 1), key=lambda g: sum(a[i] * b[i + g] for i in range(max(0, -g), min(n, n - g))))
+    return round(beste * dt, 1)
+
+
+def _pend_analyser(serier: Dict[str, List[Optional[float]]], dt: float) -> Dict[str, Any]:
+    rene: Dict[str, List[float]] = {}
+    enhet: Dict[str, str] = {}
+    for navn, v in serier.items():
+        gyldig = [x for x in v if x is not None]
+        if len(gyldig) < 16:
+            continue
+        sist, fylt = gyldig[0], []
+        for x in v:
+            sist = x if x is not None else sist
+            fylt.append(sist)
+        m = re.match(r"^(.*) \(([^)]*)\)$", navn)
+        rene[navn], enhet[navn] = fylt, (m.group(2) if m else "")
+    res = {navn: _pend_serie(v, dt, enhet[navn]) for navn, v in rene.items()}
+    par: List[Dict[str, Any]] = []
+    rt = {k: n for n in rene for k in [_pend_nokkel(n)] if k and k[0] == "RT"}
+    sb = {k: n for n in rene for k in [_pend_nokkel(n)] if k and k[0] == "SB"}
+    for (_, sys, nr), mn in rt.items():
+        pn = sb.get(("SB", sys, nr))
+        if not pn:
+            continue
+        a, b = res[mn], res[pn]
+        ma, pa = a["dom"] != "nei", b["dom"] != "nei"
+        if ma and pa:
+            lik = abs(a["periode_s"] - b["periode_s"]) <= 0.2 * max(a["periode_s"], b["periode_s"])
+            dom = "sloyfe" if lik else "ulik"
+        else:
+            dom = "forstyrrelse" if ma else "padrag" if pa else "rolig"
+        lag = _pend_lag(rene[pn], rene[mn], dt, (a["periode_s"] or b["periode_s"] or dt * 4)) if (ma or pa) else None
+        par.append({"maling": mn, "padrag": pn, "dom": dom, "forsinkelse_s": lag})
+    rader = [{"navn": n, "enhet": enhet[n], **r} for n, r in res.items()]
+    rader.sort(key=lambda r: -r["score"])
+    rekke = {"sloyfe": 0, "ulik": 1, "forstyrrelse": 2, "padrag": 3}
+    return {"status": "done", "intervall": dt, "serier": rader,
+            "par": sorted(par, key=lambda p: rekke.get(p["dom"], 4))}
+
+
+def _pend_les_fil(fil: Path):
+    linjer = fil.read_text(encoding="utf-8-sig").splitlines()
+    hode = linjer[0].split(";")[1:]
+    tider: List[float] = []
+    kol: List[List[Optional[float]]] = [[] for _ in hode]
+    for linje in linjer[1:]:
+        c = linje.split(";")
+        try:
+            tider.append(time.mktime(time.strptime(c[0], "%Y-%m-%d %H:%M:%S")))
+        except (ValueError, IndexError):
+            continue
+        for i in range(len(hode)):
+            try:
+                kol[i].append(float(c[i + 1].replace(",", ".")))
+            except (ValueError, IndexError):
+                kol[i].append(None)
+    diff = sorted(b - a for a, b in zip(tider, tider[1:]) if b > a)
+    return dict(zip(hode, kol)), (diff[len(diff) // 2] if diff else 0.0)
+
+
+class PendlingBody(BaseModel):
+    fil: Optional[str] = None
+    serier: Optional[Dict[str, List[Optional[float]]]] = None
+    intervall: Optional[float] = None
+
+
+@app.post("/api/pendling")
+async def pendling(body: PendlingBody):
+    serier, dt = body.serier, body.intervall or 0.0
+    if serier is None:
+        fil = Path(body.fil or OPPTAK["fil"] or "")
+        try:
+            fil = fil.resolve()
+            ok = fil.is_file() and fil.is_relative_to(OPPTAK_DIR.resolve())
+        except OSError:
+            ok = False
+        if not ok:
+            return {"status": "error", "error": t("Fant ikke opptaket", "Recording not found")}
+        serier, dt = await asyncio.to_thread(_pend_les_fil, fil)
+    feil = {"status": "error", "error": t("For få rader til å si noe", "Too few rows to say anything")}
+    if dt <= 0 or not serier:
+        return feil
+    res = await asyncio.to_thread(_pend_analyser, serier, dt)
+    return res if res["serier"] else feil
 
 
 # The counters behind the wardrobe, what NABE and NABO wear, and the tunnel
