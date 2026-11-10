@@ -937,7 +937,7 @@ function siteWarnings() {
       rader: skjeve.map(({d, sek}) => ({
         alvorlig: Math.abs(sek) > CLOCK_SEVERE,
         id: String(d.device_instance ?? '?'), adresse: d.address, ip: d.address,
-        tekst: driftText(sek, (S.identity[d.address] || {})['device-time']),
+        tekst: klokkeTekst(sek, (S.identity[d.address] || {})['device-time']),
       })),
     });
   }
@@ -1523,6 +1523,21 @@ function driftText(sek, deviceTime) {
   return T(`${Math.round(a / 86400)} døgn ${retning}`, `${Math.round(a / 86400)} days ${retning === 'foran' ? 'ahead' : 'behind'}`);
 }
 
+/* Exactly one hour is not drift, it is the summer/winter switch: the clock
+   itself is right, but the device sits on the wrong side of it, or on the
+   wrong time zone. Setting the clock hides it until the next change-over, so
+   it is named as what it is instead of as "1.0 t foran". */
+const SOMMER_TOL = 120;   // seconds either side of the hour
+function sommertidAvvik(sek) {
+  return Math.abs(Math.abs(sek) - 3600) <= SOMMER_TOL ? Math.sign(sek) : 0;
+}
+function klokkeTekst(sek, deviceTime) {
+  const sa = sommertidAvvik(sek);
+  if (!sa) return driftText(sek, deviceTime);
+  return T(`feil sommertid/vintertid, 1 t ${sa > 0 ? 'foran' : 'etter'}`,
+           `wrong summer/winter time, 1 h ${sa > 0 ? 'ahead' : 'behind'}`);
+}
+
 /* What the wait shows is whatever the device has already told us. The object
    list arrives about a second before the first values, and it says what kind
    of controller this is - which is the question you actually have while
@@ -2094,8 +2109,10 @@ function clockBadge(ip) {
   const alvorlig = Math.abs(sek) > CLOCK_SEVERE;
   return `<button class="ctx-stat ${alvorlig ? 'bad' : 'warn'}" data-klokke="${esc(ip)}" title="${T('Enheten sier ', 'The device says ')}${
     esc(String(id['device-time'] || '?'))} ${T('— ukeprogram og trendlogger følger denne klokka. Klikk for å stille den.',
-    '- weekly schedules and trend logs follow this clock. Click to set it.')}">⏱ klokke ${
-    esc(driftText(sek, id['device-time']))}</button>`;
+    '- weekly schedules and trend logs follow this clock. Click to set it.')}${sommertidAvvik(sek) ? T(
+      ' Klokka er riktig time, men feil sommertid eller tidssone: rett det i enheten, ellers kommer det tilbake. Står denne PC-en i en annen tidssone, kan det forklare timen.',
+      ' The clock is an hour off: wrong daylight saving or time zone. Fix it in the device or it comes back. A PC in another time zone can also explain the hour.') : ''}">⏱ klokke ${
+    esc(klokkeTekst(sek, id['device-time']))}</button>`;
 }
 
 function renderCtx() {
@@ -5064,7 +5081,7 @@ async function visSesjonsrapport() {
   try { mine = (await (await fetch('/api/mine')).json()).overstyrt || []; } catch {}
   const klokker = S.devices.map(d => [d, clockDrift(d.address)])
     .filter(([, s]) => s !== null && Math.abs(s) >= CLOCK_WARN)
-    .map(([d, s]) => (d.object_name || d.device_instance) + ' (' + d.address + '): ' + driftText(s, (S.identity[d.address] || {})['device-time']));
+    .map(([d, s]) => (d.object_name || d.device_instance) + ' (' + d.address + '): ' + klokkeTekst(s, (S.identity[d.address] || {})['device-time']));
   visRapport('Sesjonsrapport - ' + new Date().toLocaleString('no'), [
     {h: T('Står fortsatt overstyrt av deg', 'Still overridden by you'),
      liste: mine.map(o => o.address + ' ' + o.objid + '  P' + o.priority + ' = ' + o.value

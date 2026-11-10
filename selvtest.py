@@ -21,6 +21,7 @@ from bacpypes3.ipv4.app import NormalApplication
 from bacpypes3.local.analog import AnalogValueObjectCmd, AnalogInputObject
 from bacpypes3.local.binary import BinaryValueObject
 from bacpypes3.local.device import DeviceObject
+from bacpypes3.primitivedata import Date, Time
 from bacpypes3.pdu import IPv4Address
 
 HER = Path(__file__).parent
@@ -33,8 +34,28 @@ BASE = f"http://127.0.0.1:{PORT}"
 ENHETER = [(2, 9001, "SIM-AHU01"), (3, 9002, "SIM-RT401"), (4, 9003, "SIM-VP01")]
 
 
-def lag_enhet(siste_oktett: int, instans: int, navn: str):
-    dev = DeviceObject(objectIdentifier=("device", instans), objectName=navn,
+class SkjevKlokkeDevice(DeviceObject):
+    """A controller whose clock stands exactly one hour ahead: the wrong side of
+    the summer/winter switch."""
+    @property
+    def localDate(self):
+        return Date.now(time.time() + 3600)
+
+    @localDate.setter
+    def localDate(self, value):
+        pass
+
+    @property
+    def localTime(self):
+        return Time.now(time.time() + 3600)
+
+    @localTime.setter
+    def localTime(self, value):
+        pass
+
+
+def lag_enhet(siste_oktett: int, instans: int, navn: str, skjev_klokke: bool = False):
+    dev = (SkjevKlokkeDevice if skjev_klokke else DeviceObject)(objectIdentifier=("device", instans), objectName=navn,
                        vendorIdentifier=999, maxApduLengthAccepted=1476,
                        segmentationSupported="noSegmentation", vendorName="NABE Simulator")
     app = NormalApplication(dev, IPv4Address(f"127.0.0.{siste_oktett}/8"))
@@ -182,7 +203,10 @@ def royktest():
               "  const a = {type:'analog-input', value:21, units:'degrees-celsius', _flatSett:1, _flatEndret:1, _flatSist:36e5-1000};"
               "  return flatVerdi(a, 36e5, 18e5) && !flatVerdi({...a, _flatEndret:3e6}, 36e5, 18e5)"
               "    && !flatVerdi({...a, value:0, units:'pascals'}, 36e5, 18e5) && !flatVerdi({...a, _flatCov:true}, 36e5, 18e5)"
-              "    && !flatVerdi({...a, type:'analog-value'}, 36e5, 18e5); })()})"}})
+              "    && !flatVerdi({...a, type:'analog-value'}, 36e5, 18e5); })(),"
+              " sommer: typeof sommertidAvvik === 'function' && sommertidAvvik(3600) === 1 && sommertidAvvik(-3590) === -1"
+              "   && sommertidAvvik(3000) === 0 && sommertidAvvik(7200) === 0 && sommertidAvvik(0) === 0"
+              "   && /sommertid|summer/.test(klokkeTekst(3600)) && !/sommertid|summer/.test(klokkeTekst(1800))})"}})
         while True:
             m = motta()
             if m.get("id") == 3:
@@ -257,6 +281,15 @@ def cov_vakt():
     sjekk("COV: abonnerer på nytt og varslene kommer igjen", tilbake)
 
 
+def sommertid():
+    """A clock that is exactly an hour off is the summer/winter switch."""
+    j = vent_jobb(kall("/api/device/points", {"address": "127.0.0.6", "device_instance": 9004})["job_id"])
+    ident = (j.get("result") or {}).get("identity") or j.get("identity") or {}
+    drift = ident.get("clock-drift")
+    sjekk("enhet med klokka en time frem gir klokkeavvik på 3600 s",
+          isinstance(drift, int) and abs(drift - 3600) <= 60, f"drift={drift}")
+
+
 def kjor_tester():
     s = kall("/api/start", {"local_address": "127.0.0.1/8"})
     sjekk("kobler til", s.get("status") == "done", s.get("local_address", s.get("error", "")))
@@ -302,6 +335,7 @@ def kjor_tester():
     p = kall("/api/poll", {"targets": {"127.0.0.2": ["analog-input,1"]}})
     sjekk("live svarer med COV-telling", isinstance(p.get("cov"), int), f"cov={p.get('cov')}")
     cov_vakt()
+    sommertid()
 
     j = vent_jobb(kall("/api/scan", {"subnet": "127.0.0.5:47820", "mode": "bbmd", "timeout": 4})["job_id"])
     r = j.get("result") or {}
@@ -375,7 +409,7 @@ async def main():
     LOOP = loop
     apps = [lag_enhet(*e) for e in ENHETER]
     # Outside the scanned range 127.0.0.2-4, so the scan tests do not see it.
-    APPS["127.0.0.6"] = lag_enhet(6, 9004, "SIM-AVVIK")
+    APPS["127.0.0.6"] = lag_enhet(6, 9004, "SIM-AVVIK", skjev_klokke=True)
     apps.append(APPS["127.0.0.6"])
     # A BBMD with one peer - itself. More peers that do not exist make the
     # bacpypes3 BBMD stop answering, which is the simulator, not NABE.
