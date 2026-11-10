@@ -83,8 +83,16 @@ function visNavn(a) {
 
 function sistNaabar() {
   const naa = Date.now() / 1000;
-  return SK.anlegg.filter(a => a.naabar && a.enheter > 0 && a.sist && naa - a.sist < 14 * 86400)
+  const a = SK.anlegg.filter(a => a.naabar && a.enheter > 0 && a.sist && naa - a.sist < 14 * 86400)
     .sort((x, y) => y.sist - x.sist)[0] || null;
+  // Where you left off wins. A full-tunnel VPN holds only the default route,
+  // so the site you were on over it never counts as in reach, and the one
+  // site that does (a WireGuard tunnel, say) would pull NABE away from the
+  // adapter you were using. If that adapter is still up, stay on it.
+  const sist = String(loadPrefs().iface || '').split(/[/:]/)[0];
+  const oppe = sist && [...$('localAddr').options].some(o => o.value.split(/[/:]/)[0] === sist);
+  if (a && oppe && a.naabar.ip !== sist) return null;
+  return a;
 }
 
 /* The start card stays: it is where you start, and the search on start
