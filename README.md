@@ -51,6 +51,17 @@ No administrator rights needed. Everything else in the zip is tucked away;
   firewall, and the plant you can only reach from a remote desktop.
 - **Remembers sites:** devices, notes, the scan mode that worked, and how many
   points were left overridden when you went home.
+- **Picks up where you left off:** the points you pinned to Watch come back
+  the next time that site is opened.
+- **Runs a site without the plant.** The *Simulator* starts what you have read
+  as BACnet devices on this PC (127.0.0.x): same names, descriptions, units and
+  values, writable, and with RT/SB loops that can be made to hunt. It is saved,
+  so you can practise, demonstrate or test name checks without a VPN. It is
+  marked SIMULATOR everywhere and never remembered as a site.
+- **Updates itself, and checks the signature first.** An installed NABE says when
+  a new release is out. One button downloads it, verifies the maintainer's
+  signature, closes NABE, installs and starts it again. A file that does not
+  verify is thrown away and nothing changes.
 
 ---
 
@@ -109,6 +120,20 @@ diagnostics - against them. Green means go.
 
 ---
 
+## Releasing
+
+`venv\Scripts\python.exe lag_release.py` builds the installer and publishes it as
+a GitHub release. The release is signed with the maintainer's private key
+(`%LOCALAPPDATA%\NABE-signering\privat.key`, made once with
+`python nabe_signatur.py ny-nokkel`; keep a backup, it cannot be recreated).
+Every NABE carries the public key in `nabe_signatur.py` and installs only what
+verifies. This is not a Windows code-signing certificate: it does not change what
+SmartScreen or a virus scanner thinks of a file, it makes the self-update
+trustworthy. The installer is a zip with a script rather than an unsigned
+.exe for that reason; a real certificate would allow a signed .exe later.
+
+---
+
 ## Files
 
 | | |
@@ -120,6 +145,8 @@ diagnostics - against them. Green means go.
 | `nabe_app.py` | The desktop window around it |
 | `installasjon/` | The installer, uninstaller, icon and the terms |
 | `lag_installasjon.py`, `lag_portabel.py` | Build scripts |
+| `nabe_sim.py` | The simulator: a scanned site as BACnet devices on 127.0.0.x |
+| `nabe_oppdater.py`, `nabe_signatur.py` | Self-update and the Ed25519 signature it checks |
 | `selvtest.py` | The self-test |
 
 ---

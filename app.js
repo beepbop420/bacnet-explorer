@@ -4354,6 +4354,7 @@ function commands() {
   add('Handling', 'Trafikklogg…', () => { closeCmd(); aapneTrafikk(); });
   add('Handling', 'Åpne lagret overvåkingsliste', () => { closeCmd(); fortsettHent(); });
   add('Handling', 'Simulator…', () => { closeCmd(); aapneSimulator(); });
+  add('Handling', 'Se etter oppdatering…', () => { closeCmd(); aapneOppdatering(); });
   add('Handling', 'Avvik fra settpunkt…', () => { closeCmd(); aapneAvvik(); });
   add('Visning', 'Innstillinger…', () => { closeCmd(); openTema(); });
   add('Eksport', 'NABO — tagger og Variabel-fil…', () => { closeCmd(); aapneNabo(); }, {hint: 'N'});
@@ -10231,6 +10232,7 @@ const ORDBOK = {
   'Trafikklogg…': 'Traffic log…',
   'Åpne lagret overvåkingsliste': 'Open saved watch list',
   'Simulator…': 'Simulator…',
+  'Se etter oppdatering…': 'Check for updates…',
   'Fullskjerm': 'Full screen',
   'Fullskjerm (F11)': 'Full screen (F11)',
   'Peker': 'Pointer',

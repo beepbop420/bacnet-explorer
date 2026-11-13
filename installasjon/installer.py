@@ -138,14 +138,56 @@ class Api:
         self.vindu.destroy()
 
 
+def logg(tekst: str) -> None:
+    """A line in %LOCALAPPDATA%\\NABE\\oppdatering.log, for the day an update goes wrong."""
+    try:
+        mappe = LOCAL / "NABE"
+        mappe.mkdir(parents=True, exist_ok=True)
+        with open(mappe / "oppdatering.log", "a", encoding="utf-8") as f:
+            f.write(f"{__import__('time').strftime('%Y-%m-%d %H:%M:%S')}  {tekst}\n")
+    except OSError:
+        pass
+
+
+def vent_paa_prosess(pid: int, maks_sek: int = 300) -> None:
+    """Wait until NABE has closed: no file of the old version is in use after that."""
+    import ctypes
+    k = ctypes.windll.kernel32
+    h = k.OpenProcess(0x00100000, False, int(pid))      # SYNCHRONIZE
+    if h:
+        k.WaitForSingleObject(h, int(maks_sek * 1000))
+        k.CloseHandle(h)
+
+
+def start_nabe(mappe: Path) -> None:
+    flagg = subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.CREATE_NO_WINDOW
+    subprocess.Popen([str(mappe / "python" / "pythonw.exe"), "-s", "nabe_app.py"], cwd=str(mappe),
+                     creationflags=flagg, close_fds=True,
+                     stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+
 def main():
     if "--stille" in sys.argv:
         mappe = STANDARD_MAPPE
+        pid = None
         for a in sys.argv:
             if a.startswith("--mappe="):
                 mappe = Path(a.split("=", 1)[1])
-        installer(mappe, {"meny": True, "skrivebord": "--uten-skrivebord" not in sys.argv,
-                          "nettleser": "--nettleser" in sys.argv})
+            elif a.startswith("--vent-pid="):
+                pid = int(a.split("=", 1)[1])
+        # Started by NABE's own update: wait for it to close first.
+        if pid:
+            logg(f"venter på at NABE (pid {pid}) lukkes")
+            vent_paa_prosess(pid)
+            __import__("time").sleep(1.0)
+        try:
+            installer(mappe, {"meny": True, "skrivebord": "--uten-skrivebord" not in sys.argv,
+                              "nettleser": "--nettleser" in sys.argv})
+            logg(f"installert {versjon()} i {mappe}")
+        except Exception as e:
+            logg(f"installasjonen feilet: {type(e).__name__}: {e}")
+        if "--start" in sys.argv:
+            start_nabe(mappe)
         return
     import webview
     api = Api()

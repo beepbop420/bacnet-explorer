@@ -15,6 +15,7 @@ import sys
 from pathlib import Path
 
 import lag_installasjon
+import nabe_signatur
 
 HER = Path(__file__).parent
 
@@ -56,11 +57,22 @@ def main():
     tag = f"v{versjon}"
     lag_installasjon.main()
     zipfil = HER / "dist" / "NABE-Installasjon.zip"
+    # Signed with the maintainer's key, so an installed NABE can update itself and
+    # know the file is the one that was released. Without the key the release is
+    # still made, but apps will not install it on their own.
+    sigfil = zipfil.with_name(zipfil.name + ".sig")
+    try:
+        sigfil.write_text(json.dumps(nabe_signatur.lag_signatur(zipfil, versjon, nabe_signatur.les_hemmelig())),
+                          encoding="utf-8")
+        filer = [str(zipfil), str(sigfil)]
+    except (OSError, ValueError) as e:
+        print(f"ADVARSEL: ingen signatur ({e}). Appen oppdaterer seg ikke selv fra denne utgivelsen.")
+        filer = [str(zipfil)]
     finnes = subprocess.run(["gh", "release", "view", tag], cwd=HER, capture_output=True).returncode == 0
     if finnes:
-        cmd = ["gh", "release", "upload", tag, str(zipfil), "--clobber"]
+        cmd = ["gh", "release", "upload", tag, *filer, "--clobber"]
     else:
-        cmd = ["gh", "release", "create", tag, str(zipfil), "--title", f"NABE {versjon}",
+        cmd = ["gh", "release", "create", tag, *filer, "--title", f"NABE {versjon}",
                "--notes", notater(versjon, forrige_release()), "--latest"]
     r = subprocess.run(cmd, cwd=HER, capture_output=True, text=True, encoding="utf-8")
     print(r.stdout.strip() or r.stderr.strip())

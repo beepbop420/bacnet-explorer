@@ -127,7 +127,7 @@ RESULTAT = []
 
 
 def sjekk(navn, ok, detalj=""):
-    RESULTAT.append(ok)
+    RESULTAT.append(bool(ok))
     print(f"  {'OK ' if ok else 'FEIL'}  {navn}{'  - ' + detalj if detalj else ''}", flush=True)
 
 
@@ -242,6 +242,7 @@ def royktest():
               "  const samme = !!sistNaabar();"
               "  savePrefs({iface: p || ''}); sel.innerHTML = alt; SK.anlegg = gammel;"
               "  return fri && blir && samme; })(),"
+              " oppdatering: typeof aapneOppdatering === 'function',"
               " simulator: !!window.nabeSimulator && !!document.getElementById('simBtn') && (() => {"
               "  S.devices.push({address:'9.9.9.9', device_instance: 5, object_name:'X', vendor_name:'V'});"
               "  S.cache['9.9.9.9'] = [{objid:'analog-input,1', type:'analog-input', instance:1, name:'N', description:'D', units:'percent', value:3, state_text:null, _hay:'bad'}];"
@@ -554,6 +555,95 @@ def simulator():
         kall("/api/sim/slett", {"fil": lagret[0]["fil"]})
 
 
+def oppdatering():
+    """Updating from inside the app: the signature decides. A file that does not
+    verify, an old version, a path out of the folder, an app that is not the
+    installed one: each stops with nothing changed."""
+    import shutil, tempfile, zipfile
+    sys.path.insert(0, str(HER))
+    import nabe_oppdater as no
+    import nabe_signatur as ns
+    sjekk("oppdatering: Ed25519 stemmer med RFC 8032-testvektoren", ns._sjekk_rfc())
+    sjekk("oppdatering: appen har en offentlig nøkkel å sjekke mot",
+          len(ns.PUBLIKK_NOKKEL) == 64 and bytes.fromhex(ns.PUBLIKK_NOKKEL) != b"")
+
+    h = os.urandom(32)
+    off = ns.offentlig_fra(h).hex()
+    tmp = Path(tempfile.mkdtemp(prefix="nabe-oppd-"))
+    gammel_lokal = os.environ.get("LOCALAPPDATA")
+    os.environ["LOCALAPPDATA"] = str(tmp / "lok")
+    her = tmp / "lok" / "Programs" / "NABE"
+    her.mkdir(parents=True)
+
+    def lag_zip(navn, ekstra=None):
+        z = tmp / navn
+        with zipfile.ZipFile(z, "w") as f:
+            f.writestr("Installer NABE.cmd", "@echo off")
+            f.writestr(".nabe/installer.py", "print('x')")
+            f.writestr(".nabe/python/pythonw.exe", "")
+            if ekstra:
+                f.writestr(ekstra, "ond")
+        return z
+
+    def kilde(z, sigdata, tag="v9.9", med_sig=True):
+        (tmp / "sig.json").write_text(json.dumps(sigdata), encoding="utf-8")
+        filer = {"zip": z, "sig": tmp / "sig.json"}
+        assets = [{"name": no.ZIPNAVN, "browser_download_url": "zip"}]
+        if med_sig:
+            assets.append({"name": no.SIGNAVN, "browser_download_url": "sig"})
+        hent = lambda url, timeout=10: {"tag_name": tag, "body": "- noe nytt", "assets": assets}
+
+        def last(url, mal, **k):
+            shutil.copy(filer[url], mal)
+            return ns.sha256_fil(mal)
+        return hent, last
+
+    def kjor(z, sigdata, her_versjon="1.0", mappe=None, **kw):
+        hent, last = kilde(z, sigdata, **kw)
+        try:
+            return no.oppdater(her_versjon, mappe or her, tmp / "arbeid", 1, hent_json=hent, last=last,
+                               offentlig_hex=off, start=False), ""
+        except no.Feil as e:
+            return None, str(e)
+
+    z1 = lag_zip("a.zip")
+    sig1 = ns.lag_signatur(z1, "9.9", h)
+    sha1 = ns.sha256_fil(z1)
+    sjekk("oppdatering: riktig fil, versjon og nøkkel godkjennes", ns.sjekk_signatur(sig1, sha1, "9.9", off))
+    sjekk("oppdatering: endret fil, annen versjon eller annen nøkkel avvises",
+          not ns.sjekk_signatur(sig1, "0" * 64, "9.9", off) and not ns.sjekk_signatur(sig1, sha1, "9.8", off)
+          and not ns.sjekk_signatur(sig1, sha1, "9.9", ns.offentlig_fra(os.urandom(32)).hex()))
+
+    r, feil = kjor(z1, sig1)
+    sjekk("oppdatering: en signert utgivelse lastes, sjekkes og pakkes ut",
+          r is not None and (Path(r["mappe"]) / ".nabe" / "installer.py").is_file(), feil or str(r))
+    z2 = lag_zip("b.zip", ekstra="ekstra.txt")
+    r, feil = kjor(z2, sig1)
+    sjekk("oppdatering: en fil som ikke er den signerte stoppes, og filen slettes",
+          r is None and "ignatur" in feil and not (tmp / "arbeid" / "NABE-Installasjon-9.9.zip").exists(), feil)
+    z3 = lag_zip("c.zip", ekstra="../ond.txt")
+    r, feil = kjor(z3, ns.lag_signatur(z3, "9.9", h))
+    sjekk("oppdatering: en filsti ut av mappa avvises selv med riktig signatur",
+          r is None and "utenfor" in feil and not (tmp / "arbeid" / "ond.txt").exists() and not (tmp / "ond.txt").exists(), feil)
+    r, feil = kjor(z1, sig1, her_versjon="9.9")
+    sjekk("oppdatering: samme eller nyere versjon installeres ikke igjen", r is None and "nyeste" in feil, feil)
+    r, feil = kjor(z1, sig1, mappe=tmp / "kilde")
+    sjekk("oppdatering: en kopi som ikke er den installerte overskrives aldri", r is None and "installert" in feil, feil)
+    r, feil = kjor(z1, sig1, med_sig=False)
+    sjekk("oppdatering: en utgivelse uten signatur installeres ikke av appen", r is None and "signatur" in feil, feil)
+
+    if gammel_lokal is None:
+        os.environ.pop("LOCALAPPDATA", None)
+    else:
+        os.environ["LOCALAPPDATA"] = gammel_lokal
+    shutil.rmtree(tmp, ignore_errors=True)
+
+    s = kall("/api/oppdatering")
+    sjekk("oppdatering: serveren svarer, og en kopi fra kildemappa kan ikke oppdatere seg",
+          s.get("status") == "done" and s.get("kanOppdatere") is False and bool(s.get("her")), str(s)[:150])
+    sjekk("oppdatering: å starte i en kopi som ikke er installert gir en forklaring", kall("/api/oppdater", {}).get("status") == "error")
+
+
 def kjor_tester():
     s = kall("/api/start", {"local_address": "127.0.0.1/8"})
     sjekk("kobler til", s.get("status") == "done", s.get("local_address", s.get("error", "")))
@@ -603,6 +693,7 @@ def kjor_tester():
     trafikklogg()
     flere_kort()
     simulator()
+    oppdatering()
 
     j = vent_jobb(kall("/api/scan", {"subnet": "127.0.0.5:47820", "mode": "bbmd", "timeout": 4})["job_id"])
     r = j.get("result") or {}
@@ -645,7 +736,7 @@ def kjor_tester():
 
     pendling()
 
-    for fil in ("nabe-start", "nabe-verktoy", "nabe-felt", "nabe-moro", "nabe-finn", "nabe-skann", "nabe-anlegg", "nabe-bunn", "nabe-graf", "nabe-tunnel", "nabe-sammen", "nabe-flyt", "nabe-peker", "nabe-pekere", "nabe-skrift", "nabo", "nabo-brodre", "nabo-fasit", "nabe-garderobe", "nabe-opptak", "nabe-trafikk", "nabe-fortsett", "nabe-simulator", "nabe-kunnskap", "nabe-spor"):
+    for fil in ("nabe-start", "nabe-verktoy", "nabe-felt", "nabe-moro", "nabe-finn", "nabe-skann", "nabe-anlegg", "nabe-bunn", "nabe-graf", "nabe-tunnel", "nabe-sammen", "nabe-flyt", "nabe-peker", "nabe-pekere", "nabe-skrift", "nabo", "nabo-brodre", "nabo-fasit", "nabe-garderobe", "nabe-opptak", "nabe-trafikk", "nabe-fortsett", "nabe-simulator", "nabe-oppdatering", "nabe-kunnskap", "nabe-spor"):
         try:
             with urllib.request.urlopen(f"{BASE}/js/{fil}.js", timeout=5) as rr:
                 ok = rr.status == 200
