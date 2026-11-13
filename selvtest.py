@@ -643,6 +643,16 @@ def oppdatering():
           s.get("status") == "done" and s.get("kanOppdatere") is False and bool(s.get("her")), str(s)[:150])
     sjekk("oppdatering: å starte i en kopi som ikke er installert gir en forklaring", kall("/api/oppdater", {}).get("status") == "error")
 
+    # The installer waits for NABE to close, and does not install over one that is still open.
+    if os.name == "nt":
+        sys.path.insert(0, str(HER / "installasjon"))
+        import installer as inst
+        p = subprocess.Popen(["ping", "-n", "4", "127.0.0.1"], stdout=subprocess.DEVNULL)
+        apen = inst.vent_paa_prosess(p.pid, 1)
+        lukket = inst.vent_paa_prosess(p.pid, 20)
+        sjekk("oppdatering: installasjonen venter på at NABE lukkes, og sier fra når den fortsatt er åpen",
+              apen is False and lukket is True and inst.vent_paa_prosess(p.pid, 1) is True, f"{apen} {lukket}")
+
 
 def kjor_tester():
     s = kall("/api/start", {"local_address": "127.0.0.1/8"})
