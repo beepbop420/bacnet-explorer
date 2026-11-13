@@ -338,7 +338,7 @@ setInterval(async () => {
     const d = await (await fetch('/api/status', {cache: 'no-store'})).json();
     if (d.running) {
       // An adapter may have been opened since the page last looked.
-      const sig = JSON.stringify(d.kort || []) + JSON.stringify(d.via || {});
+      const sig = JSON.stringify(d.kort || []) + JSON.stringify(d.via || {}) + JSON.stringify(d.sim || {});
       if (sig !== S._kortSig) {
         S._kortSig = sig;
         await refreshStatus();
@@ -602,6 +602,7 @@ async function refreshStatus() {
     S.localAddr = d.local_address;
     S.kort = d.kort || [];
     S.via = d.via || {};
+    S.sim = d.sim || {kjorer: false};
     meldPort(d.port_advarsel);
   } catch { S.connected = false; }
   const c = $('conn');
@@ -1233,6 +1234,8 @@ function nettVia(omr) {
 /* Which adapter a device is read through; only said when more than one is in
    use, because with one it is the same for every card. */
 function kortChip(d) {
+  // The simulator is never mistaken for a plant.
+  if (String(d.address).startsWith('127.')) return `<span class="dev-kort dev-sim" title="${esc(T('Simulert enhet', 'Simulated device'))}">${T('simulert', 'simulated')}</span>`;
   if (!S.kort || S.kort.length < 2) return '';
   const ip = S.via && S.via[d.address];
   const k = ip && S.kort.find(x => x.ip === ip);
@@ -1243,6 +1246,7 @@ function kortChip(d) {
 
 /* The same, in the heading of the open device: which adapter its points are read through. */
 function kortFelt(d) {
+  if (String(d.address).startsWith('127.')) return `<span class="tf"><small>${T('Via', 'Via')}</small><b class="sim-merke">${T('Simulator', 'Simulator')}</b></span>`;
   if (!S.kort || S.kort.length < 2) return '';
   const k = S.kort.find(x => x.ip === (S.via && S.via[d.address]));
   if (!k) return '';
@@ -4349,6 +4353,7 @@ function commands() {
   add('Handling', 'Opptak av punkter…', () => { closeCmd(); aapneOpptak(); });
   add('Handling', 'Trafikklogg…', () => { closeCmd(); aapneTrafikk(); });
   add('Handling', 'Åpne lagret overvåkingsliste', () => { closeCmd(); fortsettHent(); });
+  add('Handling', 'Simulator…', () => { closeCmd(); aapneSimulator(); });
   add('Handling', 'Avvik fra settpunkt…', () => { closeCmd(); aapneAvvik(); });
   add('Visning', 'Innstillinger…', () => { closeCmd(); openTema(); });
   add('Eksport', 'NABO — tagger og Variabel-fil…', () => { closeCmd(); aapneNabo(); }, {hint: 'N'});
@@ -10225,6 +10230,7 @@ const ORDBOK = {
   'Avvik fra settpunkt…': 'Deviation from setpoint…',
   'Trafikklogg…': 'Traffic log…',
   'Åpne lagret overvåkingsliste': 'Open saved watch list',
+  'Simulator…': 'Simulator…',
   'Fullskjerm': 'Full screen',
   'Fullskjerm (F11)': 'Full screen (F11)',
   'Peker': 'Pointer',

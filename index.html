@@ -4872,6 +4872,19 @@ html.peker-egen *:not(input):not(textarea):not(select):not(.splitter):not([conte
 .sp-avvik.stor{color:var(--warn)}
 .sp-tom{color:var(--fg-3);padding:18px 8px!important;text-align:center}
 .watch-hent{margin:6px 16px 12px;font-size:11px}
+.sim-modal{width:min(600px,94vw)}
+.sim-kropp{padding:12px 16px 16px;display:flex;flex-direction:column;gap:12px;max-height:min(72vh,620px);overflow:auto}
+.sim-h{font-size:12px;font-weight:500;color:var(--fg-2)}
+.sim-rad{display:flex;align-items:center;gap:8px;font-size:12px;padding:3px 0}
+.sim-rad .sp-meta{margin-left:auto}
+.sim-felt{display:flex;align-items:center;justify-content:space-between;gap:16px;font-size:12px;color:var(--fg-2)}
+.sim-omr{display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:12px}
+.sim-omr code{font-family:var(--mono);color:var(--fg-1,inherit)}
+.sim-knapper{display:flex;justify-content:flex-end;gap:8px}
+.sim-lagret{display:flex;align-items:center;gap:8px;font-size:12px;padding:5px 0;border-bottom:1px solid var(--line)}
+.dev-sim,.sim-merke{color:var(--warn)}
+.dev-sim{border-color:color-mix(in srgb,var(--warn) 45%,var(--line))}
+.statusbar.sb-ny #sbSim{color:var(--warn);font-weight:600;letter-spacing:.08em;font-size:10px;cursor:pointer}
 .tr-modal{width:min(1000px,96vw)}
 .op-modal.op-bred{width:min(640px,94vw)}
 .pe-rad{display:flex;flex-direction:column;gap:2px;padding:8px 0;border-bottom:1px solid var(--line);font-size:12px}
@@ -4989,6 +5002,7 @@ button.sp-rad:hover{background:var(--hover)}
         <div class="menu-gruppe">Anlegg</div>
         <button id="cmpBtn" class="menu-item">Sammenlign to enheter…</button>
         <button id="avvikBtn" class="menu-item">Avvik fra settpunkt…</button>
+        <button id="simBtn" class="menu-item">Simulator…</button>
         <div class="menu-sep"></div>
         <div class="menu-gruppe">Nettverk</div>
         <button id="rescanNow" class="menu-item">Søk etter enheter nå</button>
@@ -5442,6 +5456,7 @@ button.sp-rad:hover{background:var(--hover)}
 <script src="/js/nabe-opptak.js"></script>
 <script src="/js/nabe-trafikk.js"></script>
 <script src="/js/nabe-fortsett.js"></script>
+<script src="/js/nabe-simulator.js"></script>
 <script src="/js/nabe-kunnskap.js"></script>
 <script src="/js/nabe-spor.js"></script>
 </body>
