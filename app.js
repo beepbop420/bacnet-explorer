@@ -1186,8 +1186,10 @@ function devStatus(d) {
     const over = (c['overridden'] || 0) + (c['out-of-service'] || 0);
     // Named as the plant line names them: an alarm is not a fault.
     const alarm = c['in-alarm'] || 0, fault = c['fault'] || 0;
-    const ord = alarm && fault ? 'alarm/feil' : alarm ? 'i alarm' : 'feil';
-    if (feil) return `<em class="dev-st bad" title="${alarm} i alarm, ${fault} med feil">${feil} ${ord}</em>`;
+    // Said as two things: an alarm is the process, a fault is a point the device cannot trust.
+    const ord = alarm && fault ? T(`${alarm} alarm · ${fault} feil`, `${alarm} alarm · ${fault} faulty`)
+      : alarm ? T(`${alarm} i alarm`, `${alarm} in alarm`) : T(`${fault} feil`, `${fault} faulty`);
+    if (feil) return `<em class="dev-st ${alarm ? 'bad' : 'feil'}" title="${alarm} i alarm, ${fault} med feil">${ord}</em>`;
     if (over) return `<em class="dev-st warn" title="${over} punkter overstyrt eller ute av drift">${over} overstyrt</em>`;
     return '';
   }
@@ -2340,6 +2342,49 @@ const FLAGS = {
   'out-of-service':{label: 'ute av drift', kort: 'ute av drift', cls: 'warn'},
 };
 const hasFlag = (p, f) => !!(p.status && p.status.includes(f));
+
+/* An alarm and a fault are not the same thing, and a table that paints them alike
+   says "something is wrong" about both. An alarm is the process: a value the
+   device was told to call an alarm. A fault is the device saying it cannot trust
+   the point: a sensor that is not connected, an output that is not configured.
+   The first row class is for alarms, the second for faults alone. */
+const flaggKlasse = (p) => hasFlag(p, 'in-alarm') ? 'alarm' : hasFlag(p, 'fault') ? 'fault' : '';
+
+const RELIABILITY_TEKST = {
+  'no-sensor': ['ingen føler', 'no sensor'], 'over-range': ['over området', 'over range'],
+  'under-range': ['under området', 'under range'], 'open-loop': ['åpen sløyfe', 'open loop'],
+  'shorted-loop': ['kortsluttet', 'shorted loop'], 'no-output': ['ingen utgang', 'no output'],
+  'unreliable-other': ['upålitelig', 'unreliable'], 'process-error': ['prosessfeil', 'process error'],
+  'multi-state-fault': ['tilstandsfeil', 'multi-state fault'], 'configuration-error': ['konfigurasjonsfeil', 'configuration error'],
+  'communication-failure': ['kommunikasjonsfeil', 'communication failure'], 'member-fault': ['feil på medlem', 'member fault'],
+  'monitored-object-fault': ['feil på overvåket objekt', 'monitored object fault'], 'tripped': ['utløst', 'tripped'],
+  'lamp-failure': ['lampefeil', 'lamp failure'], 'activation-failure': ['aktiveringsfeil', 'activation failure'],
+};
+const EVENT_TEKST = {
+  'offnormal': ['unormal', 'off-normal'], 'high-limit': ['over øvre grense', 'above high limit'],
+  'low-limit': ['under nedre grense', 'below low limit'], 'life-safety-alarm': ['livssikkerhet', 'life safety'],
+};
+
+/* Why the flag is there, in a few words, from what the device itself says.
+   Nothing until that has been read: a guess would be worse than a blank. */
+function flaggArsak(p) {
+  if (hasFlag(p, 'in-alarm')) {
+    const e = p.event_state, a = p.alarm_value;
+    const ord = e && EVENT_TEKST[e] ? T(...EVENT_TEKST[e]) : (e && e !== 'normal' ? String(e).replace(/-/g, ' ') : '');
+    const av = a === 'active' ? T('alarm ved på', 'alarm when on') : a === 'inactive' ? T('alarm ved av', 'alarm when off') : '';
+    return [ord, av].filter(Boolean).join(' · ');
+  }
+  if (hasFlag(p, 'fault')) {
+    const r = p.reliability;
+    if (!r || r === 'no-fault-detected') return '';
+    return RELIABILITY_TEKST[r] ? T(...RELIABILITY_TEKST[r]) : String(r).replace(/-/g, ' ');
+  }
+  return '';
+}
+function flaggTag(p) {
+  const t = flaggArsak(p);
+  return t ? ` <small class="flagg-arsak ${flaggKlasse(p)}">${esc(t)}</small>` : '';
+}
 
 function flagCounts(points) {
   const out = {};
@@ -4732,7 +4777,7 @@ const COLS = [
    cell: p => `<span class="type-tag ${TYPE_CLASS[p.type] || ''}">${shortType(p.type)}</span><span class="inst">${p.instance}</span>`},
   {k: 'name', label: 'Tag', menu: 'Tag', cls: 'c-name', col: '',
    attrs: p => ` title="${esc(p.name || '')}"`,
-   cell: p => esc(shortName(p) || '—')},
+   cell: p => esc(shortName(p) || '—') + flaggTag(p)},
   {k: 'description', label: 'Beskrivelse', menu: 'Beskrivelse', cls: 'c-desc', col: '',
    attrs: p => ` title="${esc(p.description || '')}"`,
    cell: p => esc(p.description || '')},
@@ -5778,7 +5823,7 @@ function renderPoints() {
     const cls = [
       S.selected === p.objid ? 'sel' : '',
       isSel(p) ? 'picked' : '',
-      (hasFlag(p, 'in-alarm') || hasFlag(p, 'fault')) ? 'alarm' : '',
+      flaggKlasse(p),
       (hasFlag(p, 'overridden') || hasFlag(p, 'out-of-service')) ? 'over' : '',
       isDiff(p) ? 'diff' : '',
     ].filter(Boolean).join(' ');
@@ -6508,7 +6553,7 @@ function renderInspector() {
   }
 
   const alarmHtml = p.status && p.status.length
-    ? `<div class="sect-body"><div class="warn-box" style="color:var(--err);background:color-mix(in srgb,var(--err) 8%,transparent);border-color:color-mix(in srgb,var(--err) 25%,transparent)">${esc(p.status.join(', '))}</div></div>`
+    ? `<div class="sect-body"><div class="warn-box" style="color:var(--err);background:color-mix(in srgb,var(--err) 8%,transparent);border-color:color-mix(in srgb,var(--err) 25%,transparent)">${esc(p.status.join(', '))}${flaggArsak(p) ? `<div class="flagg-ars">${esc(flaggArsak(p))}</div>` : ''}</div></div>`
     : '';
 
   el.innerHTML = `

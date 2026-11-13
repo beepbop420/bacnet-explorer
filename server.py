@@ -201,7 +201,7 @@ def t(nb: str, en: str) -> str:
     return en if SPRAAK_VAR.get() == "en" else nb
 
 
-VERSJON = "1.57"
+VERSJON = "1.58"
 
 state = {"app": None, "local_address": None, "read_only": False, "bbmd": None, "primary": None}
 # The simulator: a scanned site run as devices on 127.0.0.x, in a process of its own.
@@ -2221,7 +2221,48 @@ async def _load_points(job, bacnet_app, body: "LoadPointsBody"):
         pt["description"] = bc.serialize(vals.get("description"))
         pt["status"] = bc.status_flags_to_list(vals.get("status-flags"))
 
+    # The reason behind a fault or an alarm, for the few points that have one.
+    flagget = [oid for oid, pt in by_id.items() if {"fault", "in-alarm"} & set(pt.get("status") or [])]
+    if flagget:
+        job["phase"] = t("årsaker til feil", "reasons for faults")
+        try:
+            for oid, g in (await bc.read_flag_reasons(bacnet_app, addr, flagget)).items():
+                if oid in by_id:
+                    by_id[oid].update(g)
+        except COMM_ERRORS:
+            pass
+
     return _points_result(partial=False)
+
+
+class FlaggBody(BaseModel):
+    address: str
+    objids: List[str]
+
+
+@app.post("/api/device/flagg")
+async def device_flagg(body: FlaggBody):
+    """The status flags of some points read again, with the reason for each flag
+    that is a fault or an alarm. A flag that could not be read comes back with
+    lest=false, and is never taken for "cleared"."""
+    bacnet_app = await _app_for(body.address)
+    if bacnet_app is None:
+        return {"status": "error", "error": t("Proxy er ikke startet.", "Not connected.")}
+    addr = device_address(body.address)
+    ider = body.objids[:300]
+    try:
+        data = await bc.read_objects_bulk(bacnet_app, addr, ider, props=("status-flags",), use_caps=False)
+        ut: Dict[str, Dict[str, Any]] = {}
+        for oid in ider:
+            v = (data.get(oid) or {}).get("status-flags")
+            lest = v is not None and not bc.is_error(v)
+            ut[oid] = {"status": bc.status_flags_to_list(v) if lest else [], "lest": lest}
+        flagget = [oid for oid, x in ut.items() if x["lest"] and {"fault", "in-alarm"} & set(x["status"])]
+        for oid, g in (await bc.read_flag_reasons(bacnet_app, addr, flagget)).items():
+            ut[oid].update(g)
+    except COMM_ERRORS as e:
+        return {"status": "error", "error": str(e)}
+    return {"status": "done", "flagg": ut}
 
 
 @app.post("/api/device/points")

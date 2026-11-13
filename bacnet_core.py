@@ -195,6 +195,31 @@ def status_flags_to_list(value: Any) -> List[str]:
     return [p for p in text.replace(";", ",").split(",") if p.strip()]
 
 
+# Why a point is flagged. A fault bit follows the reliability property, an alarm
+# bit follows the event state; alarm-value says which binary value is the alarm.
+REASON_PROPS = ("reliability", "event-state", "alarm-value")
+
+
+def flag_reason(vals: Dict[str, Any]) -> Dict[str, Any]:
+    """reliability, event_state and alarm_value as plain values; what could not be read is left out."""
+    ut: Dict[str, Any] = {}
+    for prop, felt in (("reliability", "reliability"), ("event-state", "event_state"), ("alarm-value", "alarm_value")):
+        v = vals.get(prop)
+        if v is None or is_error(v):
+            continue
+        s = serialize(v)
+        if s is not None and s != [] and s != "":
+            ut[felt] = s
+    return ut
+
+
+async def read_flag_reasons(app, addr: Address, objids: Sequence[str]) -> Dict[str, Dict[str, Any]]:
+    if not objids:
+        return {}
+    data = await read_objects_bulk(app, addr, list(objids), props=REASON_PROPS, use_caps=False)
+    return {oid: flag_reason(v) for oid, v in data.items()}
+
+
 def object_type_of(objid: Any) -> str:
     try:
         return str(objid[0])

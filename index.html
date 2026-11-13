@@ -4444,6 +4444,7 @@ button:focus:not(:focus-visible){outline:none;box-shadow:none}
 .as-tall b{font-family:var(--mono);font-weight:600}
 .as-tall.bad b{color:var(--err)}
 .as-tall.warn b{color:var(--warn)}
+.as-tall.feil b{color:color-mix(in srgb,var(--err) 62%,var(--fg-2))}
 .as-tall:hover,.as-tall.apen{border-bottom-color:currentColor;color:var(--fg)}
 .as-rolig{color:var(--ok)}
 .as-tom{color:var(--fg-2)}
@@ -4872,6 +4873,14 @@ html.peker-egen *:not(input):not(textarea):not(select):not(.splitter):not([conte
 .sp-avvik.stor{color:var(--warn)}
 .sp-tom{color:var(--fg-3);padding:18px 8px!important;text-align:center}
 .watch-hent{margin:6px 16px 12px;font-size:11px}
+/* A fault is the device not trusting a point; an alarm is the process. Same family, not the same red. */
+tr.fault td.c-name{color:color-mix(in srgb,var(--err) 62%,var(--fg-2))}
+tbody tr.fault td.c-act{position:relative}
+tbody tr.fault td.c-act::before{content:'';position:absolute;left:0;top:2px;bottom:2px;width:3px;border-radius:0 var(--r-sm) var(--r-sm) 0;background:color-mix(in srgb,var(--err) 55%,transparent)}
+.flagg-arsak{font-size:10px;font-weight:400;margin-left:6px;color:var(--fg-3);letter-spacing:.01em}
+.flagg-arsak.alarm{color:color-mix(in srgb,var(--err) 70%,var(--fg-3))}
+.flagg-ars{margin-top:3px;font-size:11px;opacity:.85}
+.dev-st.feil{color:color-mix(in srgb,var(--err) 62%,var(--fg-2))}
 .oppd-gar{display:flex;align-items:center;gap:10px;font-size:13px}
 .oppd-nytt{margin:0;padding-left:18px;font-size:12px;line-height:1.6;color:var(--fg-2)}
 .oppd-feil{margin:0;font-size:12px;color:var(--warn)}
@@ -5462,6 +5471,7 @@ button.sp-rad:hover{background:var(--hover)}
 <script src="/js/nabe-fortsett.js"></script>
 <script src="/js/nabe-simulator.js"></script>
 <script src="/js/nabe-oppdatering.js"></script>
+<script src="/js/nabe-flagg.js"></script>
 <script src="/js/nabe-kunnskap.js"></script>
 <script src="/js/nabe-spor.js"></script>
 </body>
