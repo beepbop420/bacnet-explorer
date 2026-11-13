@@ -242,6 +242,18 @@ def royktest():
               "  const samme = !!sistNaabar();"
               "  savePrefs({iface: p || ''}); sel.innerHTML = alt; SK.anlegg = gammel;"
               "  return fri && blir && samme; })(),"
+              " fortsett: !!window.nabeFortsett && (() => {"
+              "  const gammel = S.watch, gS = S.scanRanges, nokkel = 'nabe_watch_v1', lagret = localStorage.getItem(nokkel);"
+              "  S.scanRanges = ['9.9.9.0/24']; S.cache['9.9.9.9'] = [{objid:'analog-input,1', name:'Nytt navn', unit_symbol:'C', value:7}];"
+              "  S.watch = [{ip:'9.9.9.9', objid:'analog-input,1', name:'X', unit:'C', hist:[1,2], value:1}]; nabeFortsett.lagre();"
+              "  const lagretLagt = nabeFortsett.lagret().length === 1 && !JSON.stringify(nabeFortsett.lagret()).includes('hist');"
+              "  S.watch = []; const n = nabeFortsett.gjenopprett(undefined, {stille: true});"
+              "  const hentet = n === 1 && S.watch[0].name === 'Nytt navn' && S.watch[0].value === 7 && S.watch[0].hist.length === 0;"
+              "  S.scanRanges = ['8.8.8.0/24']; const annet = nabeFortsett.gjenopprett(undefined, {stille: true}) === 0;"
+              "  S.scanRanges = ['9.9.9.0/24']; S.watch = []; nabeFortsett.lagre(); const borte = nabeFortsett.lagret().length === 0;"
+              "  S.watch = gammel; S.scanRanges = gS; delete S.cache['9.9.9.9'];"
+              "  if (lagret === null) localStorage.removeItem(nokkel); else localStorage.setItem(nokkel, lagret);"
+              "  return lagretLagt && hentet && annet && borte; })(),"
               " trafikk: typeof aapneTrafikk === 'function' && !!document.getElementById('trafikkBtn'),"
               " settpunkt: typeof aapneAvvik === 'function' && !!document.getElementById('avvikBtn') && (() => {"
               "  const n = ['X-SP','X_SP','X.sp','XSp','RT401SP','Akt_Sp','AktSP'].map(erSettpunktNavn);"
@@ -543,7 +555,7 @@ def kjor_tester():
 
     pendling()
 
-    for fil in ("nabe-start", "nabe-verktoy", "nabe-felt", "nabe-moro", "nabe-finn", "nabe-skann", "nabe-anlegg", "nabe-bunn", "nabe-graf", "nabe-tunnel", "nabe-sammen", "nabe-flyt", "nabe-peker", "nabe-pekere", "nabe-skrift", "nabo", "nabo-brodre", "nabo-fasit", "nabe-garderobe", "nabe-opptak", "nabe-trafikk", "nabe-kunnskap", "nabe-spor"):
+    for fil in ("nabe-start", "nabe-verktoy", "nabe-felt", "nabe-moro", "nabe-finn", "nabe-skann", "nabe-anlegg", "nabe-bunn", "nabe-graf", "nabe-tunnel", "nabe-sammen", "nabe-flyt", "nabe-peker", "nabe-pekere", "nabe-skrift", "nabo", "nabo-brodre", "nabo-fasit", "nabe-garderobe", "nabe-opptak", "nabe-trafikk", "nabe-fortsett", "nabe-kunnskap", "nabe-spor"):
         try:
             with urllib.request.urlopen(f"{BASE}/js/{fil}.js", timeout=5) as rr:
                 ok = rr.status == 200

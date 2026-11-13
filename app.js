@@ -4348,6 +4348,7 @@ function commands() {
   add('Handling', 'Spør NABE…', () => { closeCmd(); aapneSpor(); });
   add('Handling', 'Opptak av punkter…', () => { closeCmd(); aapneOpptak(); });
   add('Handling', 'Trafikklogg…', () => { closeCmd(); aapneTrafikk(); });
+  add('Handling', 'Åpne lagret overvåkingsliste', () => { closeCmd(); fortsettHent(); });
   add('Handling', 'Avvik fra settpunkt…', () => { closeCmd(); aapneAvvik(); });
   add('Visning', 'Innstillinger…', () => { closeCmd(); openTema(); });
   add('Eksport', 'NABO — tagger og Variabel-fil…', () => { closeCmd(); aapneNabo(); }, {hint: 'N'});
@@ -10223,6 +10224,7 @@ const ORDBOK = {
   'Opptak av punkter…': 'Recording points…',
   'Avvik fra settpunkt…': 'Deviation from setpoint…',
   'Trafikklogg…': 'Traffic log…',
+  'Åpne lagret overvåkingsliste': 'Open saved watch list',
   'Fullskjerm': 'Full screen',
   'Fullskjerm (F11)': 'Full screen (F11)',
   'Peker': 'Pointer',
