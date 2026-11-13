@@ -8,9 +8,9 @@
    the tool can say what is still commanded. */
 let MINE = new Map();          // "ip|objid|pri" -> {value, ts}
 
-async function hentMine() {
+async function hentMine(fersk = false) {
   try {
-    const d = await (await fetch('/api/mine', {cache: 'no-store'})).json();
+    const d = await (await fetch('/api/mine' + (fersk ? '?fersk=1' : ''), {cache: 'no-store'})).json();
     MINE = new Map((d.overstyrt || []).map(o => [`${o.address}|${o.objid}|${o.priority}`, o]));
   } catch {}
   return MINE;
@@ -30,7 +30,8 @@ function minHolder(ip, objid, pri) {
    closed with points still commanded; the browser version gets the browser's
    own "leave this page?" question. */
 async function visLukkVakt() {
-  await hentMine();
+  // Asked afresh at the door: whether the plant answers now decides whether to stop you.
+  await hentMine(true);
   const liste = [...MINE.values()];
   // Only what can be reached can be released. A point on a network you have
   // left waits for the next visit - NABE says so on start when it is in

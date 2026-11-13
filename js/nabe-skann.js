@@ -342,7 +342,8 @@ setTimeout(hentAnlegg, 600);
 /* On start, once: the site you can reach, and what you left overridden. */
 function proaktivStart() {
   const naabare = SK.anlegg.filter(a => a.naabar);
-  const igjen = SK.anlegg.find(a => a.overstyrt && a.naabar) || SK.anlegg.find(a => a.overstyrt);
+  // Only a site that is in reach and answers: a reminder about a plant you cannot get to is noise.
+  const igjen = SK.anlegg.find(a => a.overstyrt && a.naabar && a.svarer !== false);
   setTimeout(() => {
     if (igjen) {
       nabeSier(T(`${igjen.overstyrt} ${igjen.overstyrt === 1 ? 'punkt står' : 'punkter står'} fortsatt overstyrt på ${igjen.navn || igjen.key}.`,
