@@ -149,13 +149,17 @@ def logg(tekst: str) -> None:
         pass
 
 
-def vent_paa_prosess(pid: int, maks_sek: int = 300) -> None:
-    """Wait until NABE has closed: no file of the old version is in use after that."""
+def vent_paa_prosess(pid: int, maks_sek: int = 300) -> bool:
+    """Wait until NABE has closed: no file of the old version is in use after that.
+    True when it has closed (or was never running), False when it is still open."""
     import ctypes
     k = ctypes.windll.kernel32
     h = k.OpenProcess(0x00100000, False, int(pid))      # SYNCHRONIZE
-    if h:
-        k.WaitForSingleObject(h, int(maks_sek * 1000))
+    if not h:
+        return True
+    try:
+        return k.WaitForSingleObject(h, int(maks_sek * 1000)) == 0     # WAIT_OBJECT_0
+    finally:
         k.CloseHandle(h)
 
 
@@ -178,7 +182,10 @@ def main():
         # Started by NABE's own update: wait for it to close first.
         if pid:
             logg(f"venter på at NABE (pid {pid}) lukkes")
-            vent_paa_prosess(pid)
+            if not vent_paa_prosess(pid, 900):
+                # Copying over a program that is still running would break it.
+                logg("NABE ble ikke lukket innen 15 minutter. Oppdateringen er avbrutt og ingenting er endret.")
+                return
             __import__("time").sleep(1.0)
         try:
             installer(mappe, {"meny": True, "skrivebord": "--uten-skrivebord" not in sys.argv,
