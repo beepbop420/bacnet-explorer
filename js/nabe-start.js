@@ -177,6 +177,10 @@ const FAKTA = [
   ['COV betyr at regulatoren sier fra selv. Mindre spørring, mer ro.', 'COV means the controller speaks up itself. Less asking, more peace.'],
 ];
 const NYTT = {
+  '1.60': [
+    ['Alltid-på opptak: punktene du fester leses i bakgrunnen og de siste to timene lagres, også om du lukker NABE. Knappen ⟲ i overvåkingen åpner «Se bakover» med en graf per punkt, og du kan åpne det som CSV', 'Always-on recording: the points you pin are read in the background and the last two hours are kept, even if you close NABE. The ⟲ button in Watch opens "Look back" with a chart per point, and you can open it as CSV'],
+    ['Pendling i ettertid: NABE leter i opptaket og sier når en sløyfe begynte å svinge, for eksempel «RT401 pendler siden 14:10», også mens du holder på med noe annet', 'Hunting afterwards: NABE searches the recording and says when a loop began to swing, for example "RT401 is hunting since 14:10", even while you are busy with something else'],
+  ],
   '1.59': [
     ['NABE maser ikke lenger om å frigi en overstyring på en enhet som ikke svarer. Før regnet den en enhet som innen rekkevidde så lenge nettet var det samme, selv om enheten var avslått. Nå spørres enheten selv når du lukker, og den som ikke svarer venter til neste besøk', 'NABE no longer nags you to release an override on a device that does not answer. It used to count a device as in reach whenever the network was the same, even if the device was switched off. Now the device itself is asked when you close, and one that does not answer waits for the next visit'],
   ],

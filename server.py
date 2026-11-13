@@ -24,6 +24,7 @@ Endpoints:
 """
 import asyncio
 import atexit
+import bisect
 import collections
 import errno
 import hashlib
@@ -115,7 +116,7 @@ ALLOWED_ORIGINS = {
 READ_ONLY_PATHS = {"/api/sites",
                    
     "/api/status", "/api/interfaces", "/api/readonly", "/api/mine", "/api/ny-versjon",
-    "/api/anlegg", "/api/sim", "/api/oppdatering", "/api/route", "/api/var-fasit", "/api/kabelnett", "/api/object/all",
+    "/api/anlegg", "/api/sim", "/api/vakt", "/api/oppdatering", "/api/route", "/api/var-fasit", "/api/kabelnett", "/api/object/all",
     "/api/writelog", "/api/notes", "/download", "/logo",
 }
 
@@ -201,7 +202,7 @@ def t(nb: str, en: str) -> str:
     return en if SPRAAK_VAR.get() == "en" else nb
 
 
-VERSJON = "1.59"
+VERSJON = "1.60"
 
 state = {"app": None, "local_address": None, "read_only": False, "bbmd": None, "primary": None}
 # The simulator: a scanned site run as devices on 127.0.0.x, in a process of its own.
@@ -3572,7 +3573,7 @@ def _pend_lag(a: List[float], b: List[float], dt: float, periode: float) -> floa
     return round(beste * dt, 1)
 
 
-def _pend_analyser(serier: Dict[str, List[Optional[float]]], dt: float) -> Dict[str, Any]:
+def _pend_analyser(serier: Dict[str, List[Optional[float]]], dt: float, vurder=None) -> Dict[str, Any]:
     rene: Dict[str, List[float]] = {}
     enhet: Dict[str, str] = {}
     for navn, v in serier.items():
@@ -3585,7 +3586,7 @@ def _pend_analyser(serier: Dict[str, List[Optional[float]]], dt: float) -> Dict[
             fylt.append(sist)
         m = re.match(r"^(.*) \(([^)]*)\)$", navn)
         rene[navn], enhet[navn] = fylt, (m.group(2) if m else "")
-    res = {navn: _pend_serie(v, dt, enhet[navn]) for navn, v in rene.items()}
+    res = {navn: (vurder(v, dt, enhet[navn]) if vurder else _pend_serie(v, dt, enhet[navn])) for navn, v in rene.items()}
     par: List[Dict[str, Any]] = []
     rt = {k: n for n in rene for k in [_pend_nokkel(n)] if k and k[0] == "RT"}
     sb = {k: n for n in rene for k in [_pend_nokkel(n)] if k and k[0] == "SB"}
@@ -4110,6 +4111,373 @@ async def routers():
     await asyncio.gather(*jobber)
     return {"status": "done",
             "rutere": [{"ruter": r, "nett": sorted(n)} for r, n in sorted(funn.items()) if n]}
+
+
+# ------------------------------------------------------- always-on recording
+# The pinned points are read quietly in the background, whatever the page is
+# doing, and the last two hours are kept (and saved, so a restart does not empty
+# them). When something happens there is something to look back at without having
+# started a recording first, and the hunting detector can say when a loop began to
+# swing: "RT401 has been hunting since 14:10".
+VAKT_SEK = max(1.0, float(_env("VAKT_SEK", "10") or 10))     # seconds between reads
+VAKT_MIN = 120                                                # minutes kept
+VAKT_MAKS = 120                                               # points followed
+VAKT_FIL = DATA_DIR / "vakt" / "siste.json"
+VAKT: Dict[str, Any] = {"punkter": {}, "start": 0.0, "bom": 0, "lagret": None, "varsler": [],
+                        "sist_analyse": 0.0, "sist_lagret": 0.0}
+
+
+def _vakt_nokkel(adresse: str, objid: str) -> str:
+    return f"{adresse}|{objid}"
+
+
+def _vakt_ny(adresse: str, objid: str, navn: str, enhet: str) -> Dict[str, Any]:
+    lengde = int(VAKT_MIN * 60 / VAKT_SEK) + 5
+    return {"address": adresse, "objid": objid, "navn": navn, "enhet": enhet,
+            "t": collections.deque(maxlen=lengde), "v": collections.deque(maxlen=lengde)}
+
+
+def _vakt_verdi(v: Any) -> Any:
+    """A value worth keeping: a finite number, or active/inactive. Else None."""
+    if isinstance(v, bool):
+        return 1.0 if v else 0.0
+    if isinstance(v, (int, float)):
+        return None if (v != v or v in (float("inf"), float("-inf"))) else round(float(v), 4)
+    return v if v in ("active", "inactive") else None
+
+
+async def _vakt_les() -> None:
+    grupper: Dict[str, List[str]] = {}
+    for p in VAKT["punkter"].values():
+        grupper.setdefault(p["address"], []).append(p["objid"])
+    nu = time.time()
+
+    async def en(ip: str, oids: List[str]):
+        a = await _app_for(ip)
+        if a is None:
+            return ip, {}
+        fra_cov, les = _cov_del(a, ip, oids)
+        try:
+            v = await asyncio.wait_for(bc.poll_values(a, device_address(ip), les),
+                                       timeout=max(3.0, VAKT_SEK * 0.8)) if les else {}
+        except COMM_ERRORS:
+            v = {}
+        v = dict(v or {})
+        v.update(fra_cov)
+        return ip, v
+
+    svar = await asyncio.gather(*[en(ip, o) for ip, o in grupper.items()], return_exceptions=True)
+    manglet = 0
+    for r in svar:
+        if not isinstance(r, tuple):
+            manglet += 1
+            continue
+        ip, v = r
+        for p in VAKT["punkter"].values():
+            if p["address"] != ip:
+                continue
+            x = _vakt_verdi(v.get(p["objid"]))
+            if x is None:
+                manglet += 1
+                continue
+            p["t"].append(round(nu, 1))
+            p["v"].append(x)
+    VAKT["bom"] += manglet
+
+
+def _vakt_lagre() -> None:
+    VAKT["sist_lagret"] = time.time()
+    try:
+        VAKT_FIL.parent.mkdir(parents=True, exist_ok=True)
+        d = {"t": time.time(), "sek": VAKT_SEK,
+             "punkter": [{"address": p["address"], "objid": p["objid"], "navn": p["navn"], "enhet": p["enhet"],
+                          "t": list(p["t"]), "v": list(p["v"])} for p in VAKT["punkter"].values()]}
+        tmp = VAKT_FIL.with_suffix(".tmp")
+        tmp.write_text(json.dumps(d), encoding="utf-8")
+        os.replace(tmp, VAKT_FIL)
+        VAKT["lagret"] = time.time()
+    except OSError:
+        pass
+
+
+def _vakt_last() -> None:
+    """Pick up the last two hours from the file, so a restart does not start empty."""
+    try:
+        d = json.loads(VAKT_FIL.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return
+    grense = time.time() - VAKT_MIN * 60
+    for q in (d.get("punkter") or [])[:VAKT_MAKS]:
+        try:
+            p = _vakt_ny(q["address"], q["objid"], q.get("navn") or "", q.get("enhet") or "")
+            for t, v in zip(q.get("t") or [], q.get("v") or []):
+                if t >= grense:
+                    p["t"].append(t)
+                    p["v"].append(v)
+            VAKT["punkter"][_vakt_nokkel(q["address"], q["objid"])] = p
+        except (KeyError, TypeError):
+            continue
+    if VAKT["punkter"]:
+        VAKT["start"] = time.time()
+
+
+atexit.register(_vakt_lagre)
+
+
+def _ned(x: List[float], k: int) -> List[float]:
+    """Block averages of k samples, aligned to the end, so the newest are kept whole."""
+    if k <= 1:
+        return list(x)
+    x = x[len(x) % k:]
+    return [sum(x[i:i + k]) / k for i in range(0, len(x), k)]
+
+
+def _pend_oppstart(x: List[float], dt: float, periode: float) -> Optional[int]:
+    """Index in `x` where the swinging began: walk back from the end through the
+    turns while each one is about one period long and about as big as the
+    latest ones. None if it does not go back at least two periods."""
+    n = len(x)
+    P = max(3, int(round(periode / dt)))
+    if n < 3 * P:
+        return None
+    pre = [0.0]
+    for v in x:
+        pre.append(pre[-1] + v)
+    h = P // 2
+    d = []
+    for i in range(n):
+        a, b = max(0, i - h), min(n, i + h + 1)
+        d.append(x[i] - (pre[b] - pre[a]) / (b - a))       # what is left when a period is averaged out
+    hale = sorted(d[-3 * P:])
+    amp = (hale[int(0.95 * (len(hale) - 1))] - hale[int(0.05 * (len(hale) - 1))]) / 2
+    if amp <= 0:
+        return None
+    hh = 0.1 * amp
+    opp: List[int] = []
+    under = d[0] < 0
+    for i, v in enumerate(d):
+        if under and v > hh:
+            opp.append(i)
+            under = False
+        elif not under and v < -hh:
+            under = True
+    if len(opp) < 3:
+        return None
+    start = opp[-1]
+    for a, b in zip(reversed(opp[:-1]), reversed(opp[1:])):
+        seg = d[a:b + 1]
+        if 0.6 * P <= b - a <= 1.5 * P and (max(seg) - min(seg)) / 2 >= 0.4 * amp:
+            start = a
+        else:
+            break
+    return start if opp[-1] - start >= 2 * P else None
+
+
+def _vakt_vurder(x: List[float], dt: float, enhet: str) -> Dict[str, Any]:
+    """One series, looked at over the last 20 minutes, 40 minutes and all there is,
+    each cut to about 240 samples; the window that shows the swing best wins.
+    A swing that began twenty minutes ago would drown in two hours of calm."""
+    n = len(x)
+    ingen: Dict[str, Any] = {"score": 0, "periode_s": None, "amplitude": 0.0, "sykluser": 0.0, "dom": "nei"}
+    if n < 16:
+        return ingen
+    snitt = sum(x) / n
+    if max(x) - min(x) < max(0.05, 0.002 * abs(snitt)):
+        return ingen                                        # flat: nothing to find
+    beste = None
+    for min_ in (20, 40, 120):
+        m = min(n, int(min_ * 60 / dt))
+        k = max(1, int(round(max(dt, m * dt / 240.0) / dt)))
+        seg = _ned(x[-m:], k)
+        r = _pend_serie(seg, dt * k, enhet)
+        if beste is None or r["score"] >= beste["score"]:
+            beste = r
+        if m == n:
+            break
+    r = beste or ingen
+    if r["dom"] != "nei" and r["periode_s"]:
+        k = max(1, int(round(n / 360.0)))
+        xx = _ned(x, k)
+        i = _pend_oppstart(xx, dt * k, r["periode_s"])
+        if i is not None:
+            r["siden_s"] = round((len(xx) - i) * dt * k)
+    return r
+
+
+def _vakt_bygg(minutter: int):
+    """The recorded numeric points as even series (forward filled) for the analysis."""
+    nu = time.time()
+    fra = nu - max(1, min(VAKT_MIN, minutter)) * 60
+    serier: Dict[str, List[Optional[float]]] = {}
+    for p in VAKT["punkter"].values():
+        t, v = list(p["t"]), list(p["v"])
+        if not t or any(isinstance(x, str) for x in v):
+            continue
+        navn = (p["navn"] or p["objid"]) + (f" ({p['enhet']})" if p["enhet"] else "")
+        if navn in serier:
+            navn += f" @{p['address']}"
+        # From the first reading there is, not from the start of the window: a
+        # stretch of made-up constant before it would only dilute the swing.
+        start = max(fra, t[0])
+        n = int((nu - start) // VAKT_SEK) + 1
+        ut: List[Optional[float]] = []
+        j, siste = 0, None
+        for i in range(n):
+            tt = start + i * VAKT_SEK
+            while j < len(t) and t[j] <= tt:
+                siste = v[j]
+                j += 1
+            ut.append(siste)
+        serier[navn] = ut
+    return serier, nu
+
+
+def _vakt_pendling(minutter: int) -> Dict[str, Any]:
+    serier, nu = _vakt_bygg(minutter)
+    res = _pend_analyser(serier, VAKT_SEK, vurder=_vakt_vurder)
+    for r in res.get("serier", []):
+        if r.get("siden_s"):
+            r["siden_t"] = round(nu - r["siden_s"], 1)
+    res["nu"] = nu
+    return res
+
+
+def _vakt_analyse() -> None:
+    """Every five minutes: which of the followed points are hunting, and since when."""
+    VAKT["sist_analyse"] = time.time()
+    try:
+        res = _vakt_pendling(VAKT_MIN)
+    except Exception:
+        return
+    par = {p["maling"] for p in res.get("par", []) if p["dom"] in ("sloyfe", "ulik")} | \
+          {p["padrag"] for p in res.get("par", []) if p["dom"] in ("sloyfe", "ulik")}
+    VAKT["varsler"] = [
+        {"navn": r["navn"], "enhet": r["enhet"], "periode_s": r["periode_s"], "amplitude": r["amplitude"],
+         "score": r["score"], "siden_t": r.get("siden_t"), "par": r["navn"] in par}
+        for r in res.get("serier", []) if r["dom"] == "pendler"]
+
+
+async def _vakt_lokke() -> None:
+    while True:
+        t0 = time.time()
+        try:
+            if state["app"] is not None and VAKT["punkter"]:
+                await _vakt_les()
+                if time.time() - VAKT["sist_lagret"] > 60:
+                    _vakt_lagre()
+                if time.time() - VAKT["sist_analyse"] > 300:
+                    await asyncio.get_event_loop().run_in_executor(None, _vakt_analyse)
+        except Exception:
+            pass
+        await asyncio.sleep(max(0.5, VAKT_SEK - (time.time() - t0)))
+
+
+@app.on_event("startup")
+async def _start_vakt() -> None:
+    _vakt_last()
+    asyncio.get_running_loop().create_task(_vakt_lokke())
+
+
+class VaktPunkt(BaseModel):
+    address: str
+    objid: str
+    navn: str = ""
+    enhet: str = ""
+
+
+class VaktSett(BaseModel):
+    punkter: List[VaktPunkt]
+
+
+class VaktMinutter(BaseModel):
+    minutter: int = 120
+
+
+@app.get("/api/vakt")
+def vakt_status():
+    p = VAKT["punkter"]
+    eldste = min((x["t"][0] for x in p.values() if x["t"]), default=None)
+    return {"status": "done", "punkter": len(p), "sek": VAKT_SEK, "eldste": eldste, "bom": VAKT["bom"],
+            "lagret": VAKT["lagret"], "varsler": VAKT["varsler"], "aktiv": state["app"] is not None and bool(p)}
+
+
+@app.post("/api/vakt/sett")
+async def vakt_sett(body: VaktSett):
+    """The points to follow: the page's watch list. Those already followed keep what
+    they have recorded; points taken off the list lose it."""
+    nye: Dict[str, Dict[str, Any]] = {}
+    for q in body.punkter[:VAKT_MAKS]:
+        k = _vakt_nokkel(q.address, q.objid)
+        p = VAKT["punkter"].get(k) or _vakt_ny(q.address, q.objid, q.navn, q.enhet)
+        p["navn"], p["enhet"] = q.navn or p["navn"] or q.objid, q.enhet
+        nye[k] = p
+    VAKT["punkter"] = nye
+    if not VAKT["start"]:
+        VAKT["start"] = time.time()
+    if not nye:
+        VAKT["varsler"] = []
+    _vakt_lagre()
+    return {"status": "done", "punkter": len(nye)}
+
+
+@app.post("/api/vakt/serier")
+async def vakt_serier(body: VaktMinutter):
+    nu = time.time()
+    fra = nu - max(1, min(VAKT_MIN, body.minutter)) * 60
+    ut = []
+    for p in VAKT["punkter"].values():
+        t, v = list(p["t"]), list(p["v"])
+        i = bisect.bisect_left(t, fra)
+        ut.append({"address": p["address"], "objid": p["objid"], "navn": p["navn"], "enhet": p["enhet"],
+                   "t": t[i:], "v": v[i:]})
+    return {"status": "done", "nu": nu, "sek": VAKT_SEK, "serier": ut}
+
+
+@app.post("/api/vakt/pendling")
+async def vakt_pendling(body: VaktMinutter):
+    res = await asyncio.get_event_loop().run_in_executor(None, _vakt_pendling, body.minutter)
+    if not res.get("serier"):
+        return {"status": "error", "error": t("For få målinger til å si noe ennå", "Too few readings to say anything yet")}
+    return res
+
+
+@app.post("/api/vakt/lagre")
+async def vakt_lagre_na():
+    _vakt_lagre()
+    return {"status": "done", "lagret": VAKT["lagret"]}
+
+
+@app.post("/api/vakt/eksport")
+async def vakt_eksport(body: VaktMinutter):
+    """The last stretch as a recording file, so it can be opened in Excel or put
+    through "look for hunting" like any other."""
+    nu = time.time()
+    fra = nu - max(1, min(VAKT_MIN, body.minutter)) * 60
+    punkter = [p for p in VAKT["punkter"].values() if len(p["t"])]
+    if not punkter:
+        return {"status": "error", "error": t("Ingenting er tatt opp ennå", "Nothing has been recorded yet")}
+    navn = [(p["navn"] or p["objid"]).replace(";", ",") + (f" ({p['enhet']})" if p["enhet"] else "") for p in punkter]
+    OPPTAK_DIR.mkdir(parents=True, exist_ok=True)
+    fil = OPPTAK_DIR / f"opptak-bakover-{time.strftime('%Y%m%d-%H%M%S')}.csv"
+    start = max(fra, min(p["t"][0] for p in punkter))
+    rader = 0
+    with open(fil, "w", encoding="utf-8", newline="") as f:
+        f.write("﻿" + ";".join([t("Tid", "Time")] + navn) + "\r\n")
+        pek = [0] * len(punkter)
+        siste: List[Any] = [None] * len(punkter)
+        tt = start
+        while tt <= nu:
+            celler = []
+            for i, p in enumerate(punkter):
+                t_, v_ = p["t"], p["v"]
+                while pek[i] < len(t_) and t_[pek[i]] <= tt:
+                    siste[i] = v_[pek[i]]
+                    pek[i] += 1
+                celler.append(_opptak_celle(siste[i]))
+            f.write(";".join([time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(tt))] + celler) + "\r\n")
+            rader += 1
+            tt += VAKT_SEK
+    return {"status": "done", "fil": str(fil), "rader": rader}
 
 
 # ----------------------------------------------------------------- simulator

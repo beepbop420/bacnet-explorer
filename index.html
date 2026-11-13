@@ -4873,6 +4873,23 @@ html.peker-egen *:not(input):not(textarea):not(select):not(.splitter):not([conte
 .sp-avvik.stor{color:var(--warn)}
 .sp-tom{color:var(--fg-3);padding:18px 8px!important;text-align:center}
 .watch-hent{margin:6px 16px 12px;font-size:11px}
+.bk-modal{width:min(720px,95vw)}
+.bk-kropp{padding:12px 16px 16px;display:flex;flex-direction:column;gap:10px;min-height:0}
+.bk-topp{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.bk-topp .field{width:90px}
+.bk-akse{display:flex;justify-content:space-between;font-size:10px;color:var(--fg-3);font-family:var(--mono)}
+.bk-liste{overflow:auto;max-height:min(50vh,440px);display:flex;flex-direction:column}
+.bk-rad{padding:7px 0;border-bottom:1px solid var(--line)}
+.bk-hode{display:flex;justify-content:space-between;gap:12px;font-size:12px}
+.bk-navn{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bk-verdi{font-family:var(--mono);color:var(--fg-2);white-space:nowrap}
+.bk-ingen{color:var(--fg-3);font-family:inherit}
+.bk-graf{width:100%;height:44px;display:block;margin-top:3px;cursor:crosshair}
+.bk-graf path{fill:none;stroke:var(--fg-2);stroke-width:1.3;vector-effect:non-scaling-stroke}
+.bk-kors{stroke:var(--fg-3);stroke-width:1;vector-effect:non-scaling-stroke;visibility:hidden}
+.bk-meta{display:flex;justify-content:space-between;font-size:10.5px;color:var(--fg-3);font-family:var(--mono)}
+.bk-pend{color:var(--warn);font-family:inherit}
+.statusbar.sb-ny #sbVakt{margin-left:8px;color:var(--warn);font-weight:600;cursor:pointer}
 /* A fault is the device not trusting a point; an alarm is the process. Same family, not the same red. */
 tr.fault td.c-name{color:color-mix(in srgb,var(--err) 62%,var(--fg-2))}
 tbody tr.fault td.c-act{position:relative}
@@ -5472,6 +5489,7 @@ button.sp-rad:hover{background:var(--hover)}
 <script src="/js/nabe-simulator.js"></script>
 <script src="/js/nabe-oppdatering.js"></script>
 <script src="/js/nabe-flagg.js"></script>
+<script src="/js/nabe-bakover.js"></script>
 <script src="/js/nabe-kunnskap.js"></script>
 <script src="/js/nabe-spor.js"></script>
 </body>

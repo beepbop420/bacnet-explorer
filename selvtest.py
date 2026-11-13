@@ -257,6 +257,9 @@ def royktest():
               "    && flaggArsak(f).length > 0 && !flaggArsak(f).includes('-') && flaggArsak(a).includes('·')"
               "    && flaggArsak({status:['fault'], reliability:'no-fault-detected'}) === '' && flaggArsak({status:['fault']}) === ''"
               "    && flaggTag({status:[]}) === ''; })(),"
+              " bakover: typeof aapneBakover === 'function' && !!document.getElementById('watchBakover') && (() => {"
+              "  const d = nabeVakt.bane([0, 10, 20, 100, 110], [1, 2, 3, 2, 1], 0, 110, 100, 10, 1, 3);"
+              "  return /^M/.test(d) && (d.match(/M/g) || []).length === 2 && /L/.test(d) && nabeVakt.bane([], [], 0, 10, 100, 10, 0, 1) === ''; })(),"
               " oppdatering: typeof aapneOppdatering === 'function',"
               " simulator: !!window.nabeSimulator && !!document.getElementById('simBtn') && (() => {"
               "  S.devices.push({address:'9.9.9.9', device_instance: 5, object_name:'X', vendor_name:'V'});"
@@ -723,6 +726,40 @@ def mine_uten_kontakt():
         kall("/api/write", {"address": adr, "objid": "analog-value,1", "priority": 7, "release": True})
 
 
+def vakt():
+    """The pinned points are recorded in the background, and what was recorded can
+    be looked at: the numbers, a file, and the hunting detector, which also says
+    when the swing began."""
+    punkter = [{"address": "127.0.0.6", "objid": "analog-input,2", "navn": "360.003-RT402", "enhet": "°C"},
+               {"address": "127.0.0.6", "objid": "analog-input,3", "navn": "360.003-SB402", "enhet": "%"},
+               {"address": "127.0.0.6", "objid": "analog-input,1", "navn": "VAKT-FLAT", "enhet": "°C"}]
+    r = kall("/api/vakt/sett", {"punkter": punkter})
+    sjekk("opptak bakover: festede punkter følges", r.get("punkter") == 3, str(r))
+    time.sleep(32)
+    st = kall("/api/vakt")
+    sjekk("opptak bakover: punktene leses i bakgrunnen uten at noe annet pågår",
+          st.get("aktiv") and st.get("punkter") == 3 and st.get("eldste") is not None, str(st))
+    se = kall("/api/vakt/serier", {"minutter": 5})
+    n = {s["navn"]: len(s["t"]) for s in se.get("serier", [])}
+    sjekk("opptak bakover: det er målinger å se tilbake på", len(n) == 3 and all(v >= 15 for v in n.values()), str(n))
+    pe = kall("/api/vakt/pendling", {"minutter": 5})
+    ser = {x["navn"]: x for x in pe.get("serier", [])}
+    rt, flat = ser.get("360.003-RT402 (°C)", {}), ser.get("VAKT-FLAT (°C)", {})
+    sjekk("opptak bakover: pendlingen finnes i ettertid, med periode og når den begynte",
+          rt.get("dom") == "pendler" and abs((rt.get("periode_s") or 0) - 5) <= 1.5
+          and 0 < (rt.get("siden_s") or 0) <= 40 and bool(rt.get("siden_t")), str(rt))
+    sjekk("opptak bakover: RT og SB blir en sløyfe som pendler", [p["dom"] for p in pe.get("par", [])] == ["sloyfe"], str(pe.get("par")))
+    sjekk("opptak bakover: et punkt som ikke beveger seg pendler ikke", flat.get("dom") == "nei", str(flat))
+    ek = kall("/api/vakt/eksport", {"minutter": 5})
+    linjer = Path(ek.get("fil", "x")).read_text(encoding="utf-8-sig").splitlines() if ek.get("status") == "done" else []
+    sjekk("opptak bakover: kan åpnes som CSV, i samme format som et opptak",
+          len(linjer) >= 20 and linjer[0].startswith("Time;") or (len(linjer) >= 20 and linjer[0].startswith("Tid;")), str(linjer[:2]))
+    lagret = kall("/api/vakt/lagre", {}).get("lagret")
+    sjekk("opptak bakover: lagres, så en omstart ikke tømmer det", bool(lagret) and kall("/api/vakt").get("lagret"), str(lagret))
+    kall("/api/vakt/sett", {"punkter": []})
+    sjekk("opptak bakover: tas et punkt av lista, slutter det", kall("/api/vakt").get("punkter") == 0)
+
+
 def kjor_tester():
     s = kall("/api/start", {"local_address": "127.0.0.1/8"})
     sjekk("kobler til", s.get("status") == "done", s.get("local_address", s.get("error", "")))
@@ -774,6 +811,7 @@ def kjor_tester():
     simulator()
     oppdatering()
     flagg()
+    vakt()
 
     j = vent_jobb(kall("/api/scan", {"subnet": "127.0.0.5:47820", "mode": "bbmd", "timeout": 4})["job_id"])
     r = j.get("result") or {}
@@ -818,7 +856,7 @@ def kjor_tester():
     # Last: it silences the simulated device on 127.0.0.6.
     mine_uten_kontakt()
 
-    for fil in ("nabe-start", "nabe-verktoy", "nabe-felt", "nabe-moro", "nabe-finn", "nabe-skann", "nabe-anlegg", "nabe-bunn", "nabe-graf", "nabe-tunnel", "nabe-sammen", "nabe-flyt", "nabe-peker", "nabe-pekere", "nabe-skrift", "nabo", "nabo-brodre", "nabo-fasit", "nabe-garderobe", "nabe-opptak", "nabe-trafikk", "nabe-fortsett", "nabe-simulator", "nabe-oppdatering", "nabe-kunnskap", "nabe-spor"):
+    for fil in ("nabe-start", "nabe-verktoy", "nabe-felt", "nabe-moro", "nabe-finn", "nabe-skann", "nabe-anlegg", "nabe-bunn", "nabe-graf", "nabe-tunnel", "nabe-sammen", "nabe-flyt", "nabe-peker", "nabe-pekere", "nabe-skrift", "nabo", "nabo-brodre", "nabo-fasit", "nabe-garderobe", "nabe-opptak", "nabe-trafikk", "nabe-fortsett", "nabe-simulator", "nabe-oppdatering", "nabe-bakover", "nabe-kunnskap", "nabe-spor"):
         try:
             with urllib.request.urlopen(f"{BASE}/js/{fil}.js", timeout=5) as rr:
                 ok = rr.status == 200
@@ -876,7 +914,7 @@ async def main():
     import tempfile
     data = tempfile.mkdtemp(prefix="nabe-selvtest-")
     env = dict(os.environ, NABE_ALLOWED_ORIGINS=BASE, NABE_DATA=data,
-               NABE_COV_LIFETIME="6", NABE_COV_PAA_NYTT="3", NABE_TILLAT_LOOPBACK="1")
+               NABE_COV_LIFETIME="6", NABE_COV_PAA_NYTT="3", NABE_TILLAT_LOOPBACK="1", NABE_VAKT_SEK="1")
     server = subprocess.Popen([sys.executable, "-m", "uvicorn", "server:app", "--host", "127.0.0.1",
                                "--port", str(PORT), "--log-level", "warning"], cwd=HER, env=env)
     try:
