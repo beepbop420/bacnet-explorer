@@ -260,6 +260,7 @@ def royktest():
               " bakover: typeof aapneBakover === 'function' && !!document.getElementById('watchBakover') && (() => {"
               "  const d = nabeVakt.bane([0, 10, 20, 100, 110], [1, 2, 3, 2, 1], 0, 110, 100, 10, 1, 3);"
               "  return /^M/.test(d) && (d.match(/M/g) || []).length === 2 && /L/.test(d) && nabeVakt.bane([], [], 0, 10, 100, 10, 0, 1) === ''; })(),"
+              " kart: typeof aapneKart === 'function' && !!document.getElementById('kartBtn') && typeof nabeKart.steder === 'function',"
               " oppdatering: typeof aapneOppdatering === 'function',"
               " simulator: !!window.nabeSimulator && !!document.getElementById('simBtn') && (() => {"
               "  S.devices.push({address:'9.9.9.9', device_instance: 5, object_name:'X', vendor_name:'V'});"
@@ -856,7 +857,7 @@ def kjor_tester():
     # Last: it silences the simulated device on 127.0.0.6.
     mine_uten_kontakt()
 
-    for fil in ("nabe-start", "nabe-verktoy", "nabe-felt", "nabe-moro", "nabe-finn", "nabe-skann", "nabe-anlegg", "nabe-bunn", "nabe-graf", "nabe-tunnel", "nabe-sammen", "nabe-flyt", "nabe-peker", "nabe-pekere", "nabe-skrift", "nabo", "nabo-brodre", "nabo-fasit", "nabe-garderobe", "nabe-opptak", "nabe-trafikk", "nabe-fortsett", "nabe-simulator", "nabe-oppdatering", "nabe-bakover", "nabe-kunnskap", "nabe-spor"):
+    for fil in ("nabe-start", "nabe-verktoy", "nabe-felt", "nabe-moro", "nabe-finn", "nabe-skann", "nabe-anlegg", "nabe-bunn", "nabe-graf", "nabe-tunnel", "nabe-sammen", "nabe-flyt", "nabe-peker", "nabe-pekere", "nabe-skrift", "nabo", "nabo-brodre", "nabo-fasit", "nabe-garderobe", "nabe-opptak", "nabe-trafikk", "nabe-fortsett", "nabe-simulator", "nabe-oppdatering", "nabe-bakover", "nabe-kart", "nabe-kunnskap", "nabe-spor"):
         try:
             with urllib.request.urlopen(f"{BASE}/js/{fil}.js", timeout=5) as rr:
                 ok = rr.status == 200
