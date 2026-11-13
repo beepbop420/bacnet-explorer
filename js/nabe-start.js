@@ -177,6 +177,10 @@ const FAKTA = [
   ['COV betyr at regulatoren sier fra selv. Mindre spørring, mer ro.', 'COV means the controller speaks up itself. Less asking, more peace.'],
 ];
 const NYTT = {
+  '1.58': [
+    ['Feil og alarm skilles, og du ser hvorfor: en feil viser årsaken fra enheten (ingen føler, åpen sløyfe, ingen utgang), en alarm viser tilstanden og alarmverdien. Feil har en roligere rød enn alarm', 'Faults and alarms are told apart, and you see why: a fault shows the reason from the device (no sensor, open loop, no output), an alarm shows the state and the alarm value. A fault is a quieter red than an alarm'],
+    ['Flaggene leses på nytt hvert tjuende sekund mens Live går, så en feil som har gått over forsvinner, og en ny alarm dukker opp uten at du leser enheten på nytt', 'The flags are read again every twenty seconds while Live runs, so a fault that has cleared goes away and a new alarm appears without reading the device again'],
+  ],
   '1.57': [
     ['NABE kan oppdatere seg selv. Utgivelsen er signert, og signaturen sjekkes før noe installeres: stemmer den ikke, kastes filen og ingenting endres. Fra og med denne versjonen kommer nye versjoner som en knapp i statuslinja', 'NABE can update itself. The release is signed, and the signature is checked before anything is installed: if it does not match, the file is thrown away and nothing changes. From this version on, new versions arrive as a button in the status bar'],
     ['Simulator: et anlegg du har lest kan startes som BACnet-enheter på denne PC-en, med samme navn, beskrivelser og verdier. Den lagres og kan startes igjen uten anlegg, og RT og SB kan pendle. Alt er merket SIMULATOR', 'Simulator: a site you have read can be started as BACnet devices on this PC, with the same names, descriptions and values. It is saved and can be started again without the plant, and RT and SB can hunt. Everything is marked SIMULATOR'],

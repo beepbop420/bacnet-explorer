@@ -19,7 +19,7 @@ from pathlib import Path
 
 from bacpypes3.ipv4.app import NormalApplication
 from bacpypes3.local.analog import AnalogValueObjectCmd, AnalogInputObject
-from bacpypes3.local.binary import BinaryValueObject
+from bacpypes3.local.binary import BinaryInputObject, BinaryValueObject
 from bacpypes3.local.device import DeviceObject
 from bacpypes3.primitivedata import Date, Time
 from bacpypes3.pdu import IPv4Address
@@ -78,6 +78,15 @@ def lag_enhet(siste_oktett: int, instans: int, navn: str, skjev_klokke: bool = F
         app.add_object(AnalogInputObject(objectIdentifier=("analog-input", 3), objectName=f"{navn}_SB402",
                                          presentValue=50.0, units="percent", covIncrement=1.0,
                                          description="Pendler pådrag", statusFlags=[0, 0, 0, 0]))
+    if skjev_klokke:
+        # A sensor that is not connected (a fault, with its reason) and a binary
+        # point the device calls an alarm while it is on.
+        app.add_object(AnalogInputObject(objectIdentifier=("analog-input", 4), objectName=f"{navn}_FEIL",
+                                         presentValue=0.0, units="degreesCelsius", description="Ubrukt",
+                                         statusFlags=[0, 1, 0, 0], reliability="noSensor"))
+        app.add_object(BinaryInputObject(objectIdentifier=("binary-input", 5), objectName=f"{navn}_ALARM",
+                                         presentValue="active", polarity="normal", description="Alarm ved på",
+                                         statusFlags=[1, 0, 0, 0], eventState="offnormal", alarmValue="active"))
     # Lets a test make the device go quiet: it keeps the subscription but
     # stops pushing, which is what a restarted controller looks like.
     app.stum = False
@@ -242,6 +251,12 @@ def royktest():
               "  const samme = !!sistNaabar();"
               "  savePrefs({iface: p || ''}); sel.innerHTML = alt; SK.anlegg = gammel;"
               "  return fri && blir && samme; })(),"
+              " flagg: (() => {"
+              "  const f = {status:['fault'], reliability:'no-output'}, a = {status:['in-alarm','fault'], event_state:'offnormal', alarm_value:'active'};"
+              "  return flaggKlasse(f) === 'fault' && flaggKlasse(a) === 'alarm' && flaggKlasse({status:[]}) === ''"
+              "    && flaggArsak(f).length > 0 && !flaggArsak(f).includes('-') && flaggArsak(a).includes('·')"
+              "    && flaggArsak({status:['fault'], reliability:'no-fault-detected'}) === '' && flaggArsak({status:['fault']}) === ''"
+              "    && flaggTag({status:[]}) === ''; })(),"
               " oppdatering: typeof aapneOppdatering === 'function',"
               " simulator: !!window.nabeSimulator && !!document.getElementById('simBtn') && (() => {"
               "  S.devices.push({address:'9.9.9.9', device_instance: 5, object_name:'X', vendor_name:'V'});"
@@ -654,6 +669,35 @@ def oppdatering():
               apen is False and lukket is True and inst.vent_paa_prosess(p.pid, 1) is True, f"{apen} {lukket}")
 
 
+def flagg():
+    """A fault says why (the reliability behind it), an alarm says which state and
+    value, and flags read again follow what the device says now, never taking a
+    flag that could not be read for one that cleared."""
+    j = vent_jobb(kall("/api/device/points", {"address": "127.0.0.6", "device_instance": 9004})["job_id"])
+    pts = {p["objid"]: p for p in (j.get("result") or {}).get("points", [])}
+    f, a = pts.get("analog-input,4", {}), pts.get("binary-input,5", {})
+    sjekk("flagg: en fault får årsaken fra enhetens reliability",
+          f.get("status") == ["fault"] and f.get("reliability") == "no-sensor", str(f)[:160])
+    sjekk("flagg: en alarm får tilstand og alarmverdi fra enheten",
+          a.get("status") == ["in-alarm"] and a.get("event_state") == "offnormal" and a.get("alarm_value") == "active", str(a)[:160])
+    ok = pts.get("analog-input,1", {})
+    sjekk("flagg: et punkt uten flagg får ingen årsak", ok.get("status") == [] and "reliability" not in ok, str(ok)[:120])
+
+    ider = ["analog-input,4", "binary-input,5", "analog-input,1"]
+    r = kall("/api/device/flagg", {"address": "127.0.0.6", "objids": ider}).get("flagg", {})
+    sjekk("flagg: lest på nytt gir flagg og årsak",
+          r.get("analog-input,4", {}).get("status") == ["fault"] and r["analog-input,4"].get("reliability") == "no-sensor"
+          and r.get("binary-input,5", {}).get("status") == ["in-alarm"] and r.get("analog-input,1", {}).get("status") == []
+          and all(x.get("lest") for x in r.values()), str(r)[:200])
+
+    obj = APPS["127.0.0.6"].get_object_name("SIM-AVVIK_FEIL")
+    i_loop(lambda: (setattr(obj, "statusFlags", [0, 0, 0, 0]), setattr(obj, "reliability", "noFaultDetected")))
+    r = kall("/api/device/flagg", {"address": "127.0.0.6", "objids": ["analog-input,4"]}).get("flagg", {})
+    sjekk("flagg: når enheten fjerner feilen, forsvinner den ved neste lesing",
+          r.get("analog-input,4", {}).get("status") == [] and r["analog-input,4"].get("lest") is True, str(r))
+    i_loop(lambda: (setattr(obj, "statusFlags", [0, 1, 0, 0]), setattr(obj, "reliability", "noSensor")))
+
+
 def kjor_tester():
     s = kall("/api/start", {"local_address": "127.0.0.1/8"})
     sjekk("kobler til", s.get("status") == "done", s.get("local_address", s.get("error", "")))
@@ -704,6 +748,7 @@ def kjor_tester():
     flere_kort()
     simulator()
     oppdatering()
+    flagg()
 
     j = vent_jobb(kall("/api/scan", {"subnet": "127.0.0.5:47820", "mode": "bbmd", "timeout": 4})["job_id"])
     r = j.get("result") or {}

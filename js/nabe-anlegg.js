@@ -178,7 +178,8 @@ function tegnAnlegg() {
   if (!t.total || !t.lest) { el.hidden = true; el.innerHTML = ''; return; }
   el.hidden = false;
   const tall = AN_REKKE.filter(f => t.flagg[f].length);
-  const alvor = f => (f === 'in-alarm' || f === 'fault') ? 'bad' : 'warn';
+  // An alarm is red; a fault is a point the device cannot trust, a quieter red; the rest are warnings.
+  const alvor = f => f === 'in-alarm' ? 'bad' : f === 'fault' ? 'feil' : 'warn';
   const fram = t.ferdig
     ? (t.feilet ? T(`${t.lest} av ${t.total} lest · ${t.feilet} svarte ikke`, `${t.lest} of ${t.total} read · ${t.feilet} did not answer`)
                 : t.total === 1 ? T('lest', 'read') : T(`alle ${t.total} lest`, `all ${t.total} read`))
@@ -227,7 +228,7 @@ function tegnAnlegg() {
       <button type="button" class="as-kopier" data-kopier title="${T('Kopier status som tekst, til servicerapporten', 'Copy the status as text, for the service report')}">${T('Kopier', 'Copy')}</button>
     </div>${liste}`;
   if (el.innerHTML !== html) el.innerHTML = html;
-  el.classList.toggle('bad', tall.some(f => alvor(f) === 'bad'));
+  el.classList.toggle('bad', tall.some(f => alvor(f) === 'bad' || alvor(f) === 'feil'));
   el.classList.toggle('warn', tall.length > 0 && !tall.some(f => alvor(f) === 'bad'));
 }
 
