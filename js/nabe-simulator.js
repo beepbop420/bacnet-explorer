@@ -59,7 +59,7 @@
     }).filter(e => e.device_instance != null && e.punkter.length);
   }
 
-  const leste = () => S.devices.filter(d => S.cache[d.address] && !erSim(d.address));
+  const leste = () => S.devices.filter(d => S.cache[d.address] && S.cache[d.address].length && !erSim(d.address));
   const antallPkt = (e) => (e.punkter || []).length;
 
   function tegn() {

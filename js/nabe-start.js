@@ -177,6 +177,11 @@ const FAKTA = [
   ['COV betyr at regulatoren sier fra selv. Mindre spørring, mer ro.', 'COV means the controller speaks up itself. Less asking, more peace.'],
 ];
 const NYTT = {
+  '1.57': [
+    ['NABE kan oppdatere seg selv. Utgivelsen er signert, og signaturen sjekkes før noe installeres: stemmer den ikke, kastes filen og ingenting endres. Fra og med denne versjonen kommer nye versjoner som en knapp i statuslinja', 'NABE can update itself. The release is signed, and the signature is checked before anything is installed: if it does not match, the file is thrown away and nothing changes. From this version on, new versions arrive as a button in the status bar'],
+    ['Simulator: et anlegg du har lest kan startes som BACnet-enheter på denne PC-en, med samme navn, beskrivelser og verdier. Den lagres og kan startes igjen uten anlegg, og RT og SB kan pendle. Alt er merket SIMULATOR', 'Simulator: a site you have read can be started as BACnet devices on this PC, with the same names, descriptions and values. It is saved and can be started again without the plant, and RT and SB can hunt. Everything is marked SIMULATOR'],
+    ['Overvåkingslista huskes per anlegg og hentes tilbake når du åpner anlegget igjen', 'The watch list is remembered per site and comes back when you open the site again'],
+  ],
   '1.56': [
     ['Flere nettverkskort samtidig: hver adresse går ut av kortet den rutes gjennom, og områder bak ulike kort skannes samtidig. Enhetene viser hvilket kort de leses via, og statuslinja viser +1 når flere kort er i bruk', 'Several network adapters at once: every address goes out of the adapter it is routed through, and ranges behind different adapters are scanned at the same time. Devices show which adapter they are read through, and the status bar shows +1 when more than one is in use'],
     ['Et anlegg bak FortiClient med bare standardrute regnes som nåbart når en av enhetene det husker svarer, så oppstarten går til anlegget du var på sist', 'A site behind FortiClient with only the default route counts as in reach once one of its remembered devices answers, so start-up goes to the site you were on last'],

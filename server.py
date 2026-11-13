@@ -115,7 +115,7 @@ ALLOWED_ORIGINS = {
 READ_ONLY_PATHS = {"/api/sites",
                    
     "/api/status", "/api/interfaces", "/api/readonly", "/api/mine", "/api/ny-versjon",
-    "/api/anlegg", "/api/sim", "/api/route", "/api/var-fasit", "/api/kabelnett", "/api/object/all",
+    "/api/anlegg", "/api/sim", "/api/oppdatering", "/api/route", "/api/var-fasit", "/api/kabelnett", "/api/object/all",
     "/api/writelog", "/api/notes", "/download", "/logo",
 }
 
@@ -201,7 +201,7 @@ def t(nb: str, en: str) -> str:
     return en if SPRAAK_VAR.get() == "en" else nb
 
 
-VERSJON = "1.56"
+VERSJON = "1.57"
 
 state = {"app": None, "local_address": None, "read_only": False, "bbmd": None, "primary": None}
 # The simulator: a scanned site run as devices on 127.0.0.x, in a process of its own.
@@ -2647,6 +2647,63 @@ def glem_mine(body: GlemBody):
     log_write({"address": body.address, "objid": body.objid, "prop": "present-value",
                "priority": body.priority, "action": "forget", "value": None, "status": "done"})
     return {"status": "done"}
+
+
+# ------------------------------------------------------------------ self-update
+# An installed NABE can fetch the newest release itself. The file is checked
+# against the maintainer's signature (nabe_signatur.py) before anything is
+# unpacked, and the installer inside it runs only after NABE has closed.
+import nabe_oppdater as _opp
+
+OPPD_DIR = DATA_DIR / "oppdatering"
+OPPD: Dict[str, Any] = {"status": "ledig", "tekst": "", "feil": "", "versjon": None}
+OPPD_INFO: Dict[str, Any] = {"t": 0.0, "info": None}
+_OPPD_GAAR = ("laster", "sjekker", "pakker ut", "starter", "klar")
+
+
+@app.get("/api/oppdatering")
+async def oppdatering():
+    """The newest release, checked at most every fifteen minutes, and what an
+    update in progress is doing. Without internet the answer is "nothing known"."""
+    if time.time() - OPPD_INFO["t"] > 900:
+        OPPD_INFO["t"] = time.time()
+        try:
+            OPPD_INFO["info"] = await asyncio.get_event_loop().run_in_executor(None, _opp.siste_utgivelse)
+        except Exception:
+            OPPD_INFO["info"] = None
+    u = OPPD_INFO["info"] or {}
+    ny = u.get("versjon") if u.get("versjon") and _opp.tall(u["versjon"]) > _opp.tall(VERSJON) else None
+    return {"status": "done", "her": VERSJON, "ny": ny, "notater": (u.get("notater") or "")[:4000],
+            "signert": bool(u.get("sig") and u.get("zip")),
+            "kanOppdatere": _opp.er_installert(Path(__file__).parent), "jobb": dict(OPPD)}
+
+
+@app.post("/api/oppdater")
+async def oppdater():
+    if not _opp.er_installert(Path(__file__).parent):
+        return {"status": "error", "error": t(
+            "Oppdatering i appen virker bare for installert NABE. Last ned den nye versjonen fra GitHub.",
+            "Updating from inside the app only works for an installed NABE. Download the new version from GitHub.")}
+    if OPPD["status"] in _OPPD_GAAR:
+        return {"status": "error", "error": t("En oppdatering pågår allerede", "An update is already in progress")}
+    OPPD.update(status="laster", tekst=t("Ser etter ny versjon", "Looking for a new version"), feil="", versjon=None)
+
+    def melding(tekst: str) -> None:
+        OPPD["tekst"] = tekst
+        OPPD["status"] = ("sjekker" if "ignatur" in tekst else "pakker ut" if "akker ut" in tekst
+                          else "starter" if "tarter" in tekst else "laster")
+
+    def jobb() -> None:
+        try:
+            r = _opp.oppdater(VERSJON, Path(__file__).parent, OPPD_DIR, os.getpid(), melding)
+            OPPD.update(status="klar", versjon=r["versjon"], tekst="")
+        except _opp.Feil as e:
+            OPPD.update(status="feil", feil=str(e), tekst="")
+        except Exception as e:
+            OPPD.update(status="feil", feil=f"{type(e).__name__}: {e}", tekst="")
+
+    asyncio.get_event_loop().run_in_executor(None, jobb)
+    return {"status": "started"}
 
 
 NY_VERSJON: Dict[str, Any] = {"t": 0.0, "versjon": None}
