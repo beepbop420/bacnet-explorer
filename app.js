@@ -786,8 +786,17 @@ async function runScan() {
      in the tree or the database it stays, and they poll what they know rather
      than rediscovering from scratch. Scanning a different range starts over,
      because then the old list really is about somewhere else. */
+  /* Another range replaces only what is read through the same adapter. A building
+     behind a different adapter (Hoppensprett next to a plant over the VPN) stays,
+     so two sites can be open side by side. Cleared here, once the routes are known. */
   const sammeOmraader = omraader.join(' ') === (S.scanRanges || []).join(' ');
-  if (!sammeOmraader) { S.devices = []; }
+  const viaLaast = kortLaast() ? String(loadPrefs().kortLast).split(/[\/:]/)[0] : '';
+  const grupper = await gruppeEtterKort(omraader, viaLaast);
+  if (!sammeOmraader) {
+    const nye = new Set(grupper.keys());
+    S.devices = nye.has('') ? [] : S.devices.filter(d =>
+      omraader.includes(d._range) || !nye.has((S.via && S.via[d.address]) || ''));
+  }
   S.scanRanges = omraader.slice();
   renderDevices();
 
@@ -802,8 +811,7 @@ async function runScan() {
   try {
     // Ranges behind different adapters run side by side, each out of its own;
     // ranges behind one adapter go in turn, as before. A locked adapter takes all.
-    const via = kortLaast() ? String(loadPrefs().kortLast).split(/[\/:]/)[0] : '';
-    const grupper = await gruppeEtterKort(omraader, via);
+    const via = viaLaast;
     const samtidig = grupper.size > 1;
     const frak = omraader.map(() => 0);
     S._viaOmr = S._viaOmr || {};
@@ -882,7 +890,7 @@ async function runScan() {
   S.scanJob = null;
   // Remembered once the sweep is finished, not while it runs - a half-done
   // scan is not the list you want to come back to next month.
-  husk(S.scanRanges, S.devices);
+  husk(S.scanRanges, S.devices.filter(d => !d._range || S.scanRanges.includes(d._range)));
   // Not re-enabled when the backend is gone: pressing it again would only
   // produce the same failure.
   b.disabled = BACKEND_NEDE || !S.connected;
@@ -4397,6 +4405,7 @@ function commands() {
   add('Handling', 'Spør NABE…', () => { closeCmd(); aapneSpor(); });
   add('Handling', 'Opptak av punkter…', () => { closeCmd(); aapneOpptak(); });
   add('Handling', 'Trafikklogg…', () => { closeCmd(); aapneTrafikk(); });
+  add('Handling', 'Nettverkskart…', () => { closeCmd(); aapneKart(); });
   add('Handling', 'Åpne lagret overvåkingsliste', () => { closeCmd(); fortsettHent(); });
   add('Handling', 'Simulator…', () => { closeCmd(); aapneSimulator(); });
   add('Handling', 'Se etter oppdatering…', () => { closeCmd(); aapneOppdatering(); });
@@ -10276,6 +10285,7 @@ const ORDBOK = {
   'Opptak av punkter…': 'Recording points…',
   'Avvik fra settpunkt…': 'Deviation from setpoint…',
   'Trafikklogg…': 'Traffic log…',
+  'Nettverkskart…': 'Network map…',
   'Åpne lagret overvåkingsliste': 'Open saved watch list',
   'Simulator…': 'Simulator…',
   'Se etter oppdatering…': 'Check for updates…',

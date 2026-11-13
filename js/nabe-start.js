@@ -177,6 +177,10 @@ const FAKTA = [
   ['COV betyr at regulatoren sier fra selv. Mindre spørring, mer ro.', 'COV means the controller speaks up itself. Less asking, more peace.'],
 ];
 const NYTT = {
+  '1.61': [
+    ['Flere anlegg samtidig: skanner du et nytt område via et annet nettverkskort, blir bygget du allerede har åpent stående. Hoppenspretthallen over Hoppensprett og en Beckhoff over FortiClient kan ligge side om side', 'Several sites at once: scan a new range through another adapter and the building you already have open stays. Hoppenspretthallen over Hoppensprett and a Beckhoff over FortiClient can sit side by side'],
+    ['Nettverkskart: PC-en, nettverkskortene og byggene bak dem på ett bilde, med hver enhet som en liten rute (rød alarm, gul feil). Trykk på et anlegg for å legge det til, på et ledig kort for å ta det i bruk, eller på en enhet for å åpne den', 'Network map: the PC, its adapters and the buildings behind them in one picture, with each device as a small square (red alarm, yellow fault). Click a site to add it, an idle adapter to bring it into use, or a device to open it'],
+  ],
   '1.60': [
     ['Alltid-på opptak: punktene du fester leses i bakgrunnen og de siste to timene lagres, også om du lukker NABE. Knappen ⟲ i overvåkingen åpner «Se bakover» med en graf per punkt, og du kan åpne det som CSV', 'Always-on recording: the points you pin are read in the background and the last two hours are kept, even if you close NABE. The ⟲ button in Watch opens "Look back" with a chart per point, and you can open it as CSV'],
     ['Pendling i ettertid: NABE leter i opptaket og sier når en sløyfe begynte å svinge, for eksempel «RT401 pendler siden 14:10», også mens du holder på med noe annet', 'Hunting afterwards: NABE searches the recording and says when a loop began to swing, for example "RT401 is hunting since 14:10", even while you are busy with something else'],

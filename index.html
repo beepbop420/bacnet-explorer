@@ -4916,6 +4916,42 @@ tbody tr.fault td.c-act::before{content:'';position:absolute;left:0;top:2px;bott
 .dev-sim{border-color:color-mix(in srgb,var(--warn) 45%,var(--line))}
 .statusbar.sb-ny #sbSim{color:var(--warn);font-weight:600;letter-spacing:.08em;font-size:10px;cursor:pointer}
 .tr-modal{width:min(1000px,96vw)}
+.kt-modal{width:min(920px,96vw)}
+.kt-kropp{padding:8px 16px 14px;display:flex;flex-direction:column;gap:8px;min-height:0}
+.kt-svg{width:100%;height:auto;max-height:68vh;display:block}
+.kt-svg text{font-family:var(--sans,inherit);fill:var(--fg-2);font-size:12px}
+.kt-svg .kt-t{fill:var(--fg);font-size:12.5px}
+.kt-svg .kt-s{fill:var(--fg-3);font-size:10.5px;font-family:var(--mono)}
+.kt-svg .kt-h{text-anchor:end;letter-spacing:.04em}
+.kt-pc text{text-anchor:middle}
+.kt-svg rect{fill:var(--panel);stroke:var(--line)}
+.kt-klikk{cursor:pointer}
+.kt-klikk:hover rect{stroke:var(--fg-3)}
+.kt-lenke{fill:none;stroke:var(--line);stroke-width:1.2}
+.kt-lenke.av{stroke-dasharray:3 4}
+.kt-lenke.paa{stroke:color-mix(in srgb,var(--ok) 70%,var(--line));stroke-width:1.8}
+.kt-lenke.ktx-varsel.paa{stroke:var(--warn)}
+.kt-lenke.ktx-av{stroke:var(--line)}
+.kt-prikk{fill:var(--fg-3)}
+.ktx-ok .kt-prikk,.kt-sted.lastet .kt-prikk{fill:var(--ok)}
+.ktx-varsel .kt-prikk{fill:var(--warn)}
+.ktx-av{opacity:.7}
+.kt-sted.ledig .kt-prikk{fill:none;stroke:var(--fg-3)}
+.kt-sted.lastet rect,.ktx-ok rect{stroke:color-mix(in srgb,var(--ok) 45%,var(--line))}
+.kt-fjern{fill:var(--fg-3)!important;cursor:pointer;text-anchor:end}
+.kt-fjern:hover{fill:var(--err)!important}
+.kt-puls{fill:var(--ok)}
+.kt-svg .kt-chip{stroke:none;fill:var(--ok);opacity:.75;cursor:pointer;transition:opacity .12s}
+.kt-svg .kt-chip:hover{opacity:1}
+.kt-svg .kt-chip.alarm{fill:var(--err);opacity:1}
+.kt-svg .kt-chip.feil{fill:var(--warn);opacity:1}
+.kt-svg .kt-chip.over{fill:var(--adjust);opacity:.9}
+.kt-svg .kt-chip.stille{fill:var(--fg-3);opacity:.45}
+.kt-bunn{display:flex;justify-content:space-between;gap:12px;font-size:11px;color:var(--fg-3)}
+.kt-tegn{display:flex;align-items:center;gap:6px}
+.kt-tegn i{display:inline-block;width:18px;height:0;border-top:2px solid var(--ok);margin-left:6px}
+.kt-tegn i.kt-ld{border-top:1.5px dashed var(--fg-3)}
+@media (prefers-reduced-motion:reduce){.kt-puls{display:none}}
 .op-modal.op-bred{width:min(640px,94vw)}
 .pe-rad{display:flex;flex-direction:column;gap:2px;padding:8px 0;border-bottom:1px solid var(--line);font-size:12px}
 .pe-rad.sloyfe .pe-dom,.pe-rad.ulik .pe-dom{color:var(--warn)}
@@ -5038,6 +5074,7 @@ button.sp-rad:hover{background:var(--hover)}
         <button id="rescanNow" class="menu-item">Søk etter enheter nå</button>
         <button id="diagBtn" class="menu-item">Sjekk en adresse…<span class="menu-hint">Ctrl+D</span></button>
         <button id="opptakBtn" class="menu-item">Opptak av punkter…</button>
+        <button id="kartBtn" class="menu-item">Nettverkskart…</button>
         <button id="trafikkBtn" class="menu-item">Trafikklogg…</button>
         <button id="reconnBtn" class="menu-item">Koble til på nytt</button>
         <div class="menu-sep"></div>
@@ -5485,6 +5522,7 @@ button.sp-rad:hover{background:var(--hover)}
 <script src="/js/nabe-garderobe.js"></script>
 <script src="/js/nabe-opptak.js"></script>
 <script src="/js/nabe-trafikk.js"></script>
+<script src="/js/nabe-kart.js"></script>
 <script src="/js/nabe-fortsett.js"></script>
 <script src="/js/nabe-simulator.js"></script>
 <script src="/js/nabe-oppdatering.js"></script>
