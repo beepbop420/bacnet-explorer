@@ -23,6 +23,7 @@ Endpoints:
   GET  /                                                     -> serves the web UI (index.html)
 """
 import asyncio
+import atexit
 import collections
 import errno
 import hashlib
@@ -114,7 +115,7 @@ ALLOWED_ORIGINS = {
 READ_ONLY_PATHS = {"/api/sites",
                    
     "/api/status", "/api/interfaces", "/api/readonly", "/api/mine", "/api/ny-versjon",
-    "/api/anlegg", "/api/route", "/api/var-fasit", "/api/kabelnett", "/api/object/all",
+    "/api/anlegg", "/api/sim", "/api/route", "/api/var-fasit", "/api/kabelnett", "/api/object/all",
     "/api/writelog", "/api/notes", "/download", "/logo",
 }
 
@@ -203,6 +204,8 @@ def t(nb: str, en: str) -> str:
 VERSJON = "1.56"
 
 state = {"app": None, "local_address": None, "read_only": False, "bbmd": None, "primary": None}
+# The simulator: a scanned site run as devices on 127.0.0.x, in a process of its own.
+SIM: Dict[str, Any] = {"proc": None, "fil": "", "navn": "", "enheter": [], "omrade": "", "start": 0.0}
 
 
 def route_source_ip(target: str) -> str:
@@ -297,6 +300,10 @@ def list_interfaces() -> List[Dict[str, Any]]:
     except Exception:
         primary = None
     out.sort(key=lambda e: (e["ip"] != primary, e["interface"]))
+    if _sim_kjorer():
+        # While the simulator runs, the PC's own loopback is an adapter like any
+        # other: the simulated devices answer on 127.0.0.x.
+        out.append({"interface": "Simulator", "ip": "127.0.0.1", "prefix": 8, "cidr": "127.0.0.1/8"})
     return out
 
 
@@ -456,6 +463,7 @@ def status():
         # Every adapter in use, and which one each device is read through.
         "kort": _kort_liste(),
         "via": dict(DEVICE_KORT),
+        "sim": _sim_kort(),
     }
 
 
@@ -2435,6 +2443,8 @@ def mine_overstyringer() -> List[Dict[str, Any]]:
     """
     aktive: Dict[tuple, Dict[str, Any]] = {}
     for e in WRITE_LOG:
+        if e.get("sim"):
+            continue            # written to the simulator: nothing is left commanded in a plant
         if e.get("prop", "present-value") != "present-value" or e.get("priority") is None:
             continue
         if e.get("status") != "done":
@@ -2567,6 +2577,8 @@ def anlegg_liste():
     ut = []
     prov = 0
     for key, s in sorted(SITES.items(), key=lambda kv: -(kv[1].get("sist") or 0)):
+        if str(key).startswith("127."):
+            continue
         enheter = s.get("enheter") or []
         adr = {str(d.get("address") or "") for d in enheter}
         lev: Dict[str, int] = {}
@@ -2881,7 +2893,7 @@ async def write(body: WriteBody):
 
     log_write({
         "address": body.address, "objid": body.objid, "prop": body.prop,
-        "priority": body.priority,
+        "priority": body.priority, "sim": _sim_adresse(body.address),
         "action": "release" if body.release else "write",
         "before": before, "value": value,
         "auto_release_min": scheduled,
@@ -2967,6 +2979,8 @@ async def sites_record(body: SiteBody):
     key = _site_key(body.ranges)
     if not key:
         return {"status": "error", "error": t("Ingen omrader oppgitt", "No ranges given")}
+    if all(r.strip().startswith("127.") for r in body.ranges if r.strip()):
+        return {"status": "skip"}       # the simulator is not a plant to come back to
 
     naa = time.time()
     site = SITES.get(key) or {"forste": naa, "ganger": 0, "navn": ""}
@@ -3949,6 +3963,157 @@ async def routers():
     await asyncio.gather(*jobber)
     return {"status": "done",
             "rutere": [{"ruter": r, "nett": sorted(n)} for r, n in sorted(funn.items()) if n]}
+
+
+# ----------------------------------------------------------------- simulator
+# A scanned site, run as BACnet devices on this PC (nabe_sim.py, a process of its
+# own so a crash there cannot take the server with it). It is for practice,
+# demonstrations and for testing without a VPN. Everything stays on 127.0.0.x.
+SIM_DIR = DATA_DIR / "sim"
+_SIM_FIL = re.compile(r"^[A-Za-z0-9_.-]+\.json$")
+
+
+def _sim_kjorer() -> bool:
+    p = SIM["proc"]
+    return p is not None and p.poll() is None
+
+
+def _sim_adresse(adresse) -> bool:
+    """Is this address one of the simulated devices that are running now?"""
+    return _sim_kjorer() and any(e.get("address") == str(adresse) for e in SIM["enheter"])
+
+
+def _sim_kort() -> Dict[str, Any]:
+    if not _sim_kjorer():
+        return {"kjorer": False}
+    return {"kjorer": True, "navn": SIM["navn"], "omrade": SIM["omrade"], "enheter": SIM["enheter"],
+            "start": SIM["start"], "fil": SIM["fil"]}
+
+
+def _sim_stopp() -> None:
+    p = SIM["proc"]
+    if p is not None and p.poll() is None:
+        p.terminate()
+        try:
+            p.wait(5)
+        except subprocess.TimeoutExpired:
+            p.kill()
+    SIM.update(proc=None, fil="", navn="", enheter=[], omrade="", start=0.0)
+
+
+atexit.register(_sim_stopp)
+
+
+class SimEnhet(BaseModel):
+    address: str
+    device_instance: int
+    object_name: Optional[str] = None
+    vendor_name: Optional[str] = None
+    vendor_id: Optional[int] = None
+    punkter: List[Dict[str, Any]] = []
+
+
+class SimStart(BaseModel):
+    navn: str = ""
+    enheter: List[SimEnhet] = []
+    fil: Optional[str] = None          # a saved simulation to start again
+    pendling: bool = False             # let each RT/SB loop swing
+    periode: float = 120.0             # seconds per swing
+    fra: int = 2                       # first 127.0.0.x
+
+
+def _sim_fil(navn: str) -> Optional[Path]:
+    if not _SIM_FIL.match(navn or ""):
+        return None
+    f = SIM_DIR / navn
+    return f if f.is_file() else None
+
+
+@app.get("/api/sim")
+def sim_status():
+    filer = []
+    if SIM_DIR.is_dir():
+        for f in sorted(SIM_DIR.glob("sim-*.json"), reverse=True)[:30]:
+            try:
+                d = json.loads(f.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                continue
+            filer.append({"fil": f.name, "navn": d.get("navn") or "", "t": d.get("opprettet"),
+                          "enheter": len(d.get("enheter") or []),
+                          "punkter": sum(len(e.get("punkter") or []) for e in d.get("enheter") or [])})
+    return {"status": "done", **_sim_kort(), "filer": filer}
+
+
+@app.post("/api/sim/start")
+async def sim_start(body: SimStart):
+    if _sim_kjorer():
+        return {"status": "error", "error": t("Simulatoren går allerede. Stopp den først.",
+                                              "The simulator is already running. Stop it first.")}
+    SIM_DIR.mkdir(parents=True, exist_ok=True)
+    if body.fil:
+        fil = _sim_fil(body.fil)
+        if fil is None:
+            return {"status": "error", "error": t("Fant ikke simuleringen", "Simulation not found")}
+        snap = json.loads(fil.read_text(encoding="utf-8"))
+    else:
+        if not body.enheter:
+            return {"status": "error", "error": t("Ingen enheter å simulere", "No devices to simulate")}
+        if len(body.enheter) > 200:
+            return {"status": "error", "error": t("Maks 200 enheter", "At most 200 devices")}
+        snap = {"versjon": 1, "navn": body.navn or body.enheter[0].object_name or "",
+                "opprettet": time.time(), "enheter": [e.dict() for e in body.enheter]}
+        fil = SIM_DIR / f"sim-{time.strftime('%Y%m%d-%H%M%S')}.json"
+        fil.write_text(json.dumps(snap, ensure_ascii=False), encoding="utf-8")
+    fra = max(2, min(240, body.fra))
+    klar = fil.with_suffix(".klar")
+    klar.unlink(missing_ok=True)
+    logg = fil.with_suffix(".log")
+    kmd = [sys.executable, "-s", str(Path(__file__).parent / "nabe_sim.py"), str(fil), f"--fra={fra}",
+           f"--periode={max(5.0, body.periode)}"] + (["--pendling"] if body.pendling else [])
+    with open(logg, "w", encoding="utf-8") as lf:
+        proc = subprocess.Popen(kmd, stdout=lf, stderr=subprocess.STDOUT, cwd=str(Path(__file__).parent),
+                                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+    for _ in range(100):
+        await asyncio.sleep(0.15)
+        if klar.exists() or proc.poll() is not None:
+            break
+    if not klar.exists():
+        feil = ""
+        try:
+            feil = logg.read_text(encoding="utf-8")[-400:]
+        except OSError:
+            pass
+        if proc.poll() is None:
+            proc.terminate()
+        return {"status": "error", "error": t("Simulatoren kom ikke i gang. ", "The simulator did not start. ") + feil}
+    kart = json.loads(klar.read_text(encoding="utf-8")).get("enheter") or []
+    siste = fra + len(kart) - 1
+    SIM.update(proc=proc, fil=fil.name, navn=snap.get("navn") or "", enheter=kart, start=time.time(),
+               omrade=f"127.0.0.{fra}" if len(kart) == 1 else f"127.0.0.{fra}-{siste}")
+    return {"status": "done", **_sim_kort()}
+
+
+@app.post("/api/sim/stopp")
+async def sim_stopp():
+    _sim_stopp()
+    # An adapter stack on the loopback is of no use without the simulator behind it.
+    if "127.0.0.1" in POOL and not TILLAT_LOOPBACK:
+        _close_app("127.0.0.1")
+    return {"status": "done"}
+
+
+class SimSlett(BaseModel):
+    fil: str
+
+
+@app.post("/api/sim/slett")
+async def sim_slett(body: SimSlett):
+    f = _sim_fil(body.fil)
+    if f is None or (_sim_kjorer() and SIM["fil"] == body.fil):
+        return {"status": "error", "error": t("Kan ikke slette den", "Cannot delete it")}
+    for ext in (".json", ".klar", ".log"):
+        f.with_suffix(ext).unlink(missing_ok=True)
+    return {"status": "done"}
 
 
 # ---------------------------------------------------------------------- COV

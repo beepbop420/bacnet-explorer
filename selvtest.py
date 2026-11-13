@@ -242,6 +242,11 @@ def royktest():
               "  const samme = !!sistNaabar();"
               "  savePrefs({iface: p || ''}); sel.innerHTML = alt; SK.anlegg = gammel;"
               "  return fri && blir && samme; })(),"
+              " simulator: !!window.nabeSimulator && !!document.getElementById('simBtn') && (() => {"
+              "  S.devices.push({address:'9.9.9.9', device_instance: 5, object_name:'X', vendor_name:'V'});"
+              "  S.cache['9.9.9.9'] = [{objid:'analog-input,1', type:'analog-input', instance:1, name:'N', description:'D', units:'percent', value:3, state_text:null, _hay:'bad'}];"
+              "  const e = nabeSimulator.bygg(['9.9.9.9', '8.8.8.8']); S.devices.pop(); delete S.cache['9.9.9.9'];"
+              "  return e.length === 1 && e[0].device_instance === 5 && e[0].punkter[0].units === 'percent' && !('_hay' in e[0].punkter[0]); })(),"
               " fortsett: !!window.nabeFortsett && (() => {"
               "  const gammel = S.watch, gS = S.scanRanges, nokkel = 'nabe_watch_v1', lagret = localStorage.getItem(nokkel);"
               "  S.scanRanges = ['9.9.9.0/24']; S.cache['9.9.9.9'] = [{objid:'analog-input,1', name:'Nytt navn', unit_symbol:'C', value:7}];"
@@ -465,6 +470,90 @@ def flere_kort():
           and any(k["primary"] and k["ip"] == "127.0.0.1" for k in st["kort"]))
 
 
+def simulator():
+    """A site run as devices on this PC: started from a snapshot, scanned and
+    read like the real thing, written and released, never remembered as a site,
+    and gone when stopped."""
+    def punkt(nr, typ, navn, v, enhet=None, tekst=None, besk=""):
+        d = {"objid": f"{typ},{nr}", "type": typ, "instance": nr, "name": navn, "description": besk, "value": v}
+        if enhet:
+            d["units"] = enhet
+        if tekst:
+            d["state_text"] = tekst
+        return d
+
+    a = {"address": "10.0.0.1", "device_instance": 7001, "object_name": "SIM-A", "vendor_name": "Beckhoff",
+         "vendor_id": 15, "punkter": [
+             punkt(0, "analog-input", "DE.320.043.RT401", 21.5, "degrees-celsius", besk="Romtemp"),
+             punkt(1, "analog-value", "DE.320.043.RT401-SP", 21.0, "degrees-celsius", besk="Settpunkt"),
+             punkt(2, "analog-output", "DE.320.043.SB401", 40.0, "percent", besk="Ventil"),
+             punkt(3, "binary-value", "SYSTEM.OU001_HB", "active", tekst=["Av", "På"]),
+             punkt(4, "multi-state-value", "DE.MODE", 2, tekst=["Av", "Auto", "Hand"], besk="Drift"),
+             punkt(0, "schedule", "Ukeprogram", None)]}
+    b = {"address": "10.0.0.2", "device_instance": 7002, "object_name": "SIM-B",
+         "punkter": [punkt(0, "analog-input", "B_T1", 5.0, "degrees-celsius")]}
+    r = kall("/api/sim/start", {"navn": "Test", "enheter": [a, b], "pendling": True, "periode": 6, "fra": 20})
+    sjekk("simulator: starter fra et øyeblikksbilde og gir området å skanne",
+          r.get("status") == "done" and r.get("omrade") == "127.0.0.20-21" and len(r.get("enheter", [])) == 2, str(r)[:200])
+    ifs = [i["interface"] for i in kall("/api/interfaces").get("interfaces", [])]
+    sjekk("simulator: loopback er et kort mens den går", "Simulator" in ifs, str(ifs))
+
+    j = vent_jobb(kall("/api/scan", {"subnet": "127.0.0.20-21", "mode": "unicast_sweep", "thorough": False,
+                                      "per_host_timeout": 1.0, "concurrency": 4, "via": "127.0.0.1"})["job_id"])
+    funnet = sorted(d["device_instance"] for d in (j.get("result") or {}).get("devices", []))
+    sjekk("simulator: skann finner enhetene med riktig instans", funnet == [7001, 7002], str(funnet))
+
+    j = vent_jobb(kall("/api/device/points", {"address": "127.0.0.20", "device_instance": 7001})["job_id"])
+    pts = {p["name"]: p for p in (j.get("result") or {}).get("points", [])}
+    sjekk("simulator: punktene har navn, beskrivelse og enhet fra bildet",
+          pts.get("DE.320.043.RT401", {}).get("description") == "Romtemp"
+          and pts.get("DE.320.043.RT401", {}).get("units") == "degrees-celsius"
+          and "DE.MODE" in pts and "Ukeprogram" not in pts, str(sorted(pts))[:200])
+
+    # The loop swings on purpose: the room sensor moves.
+    vals = []
+    for _ in range(14):
+        p = kall("/api/poll", {"targets": {"127.0.0.20": ["analog-input,0"]}})
+        v = ((p.get("values") or {}).get("127.0.0.20") or {}).get("analog-input,0")
+        if isinstance(v, (int, float)):
+            vals.append(v)
+        time.sleep(0.7)
+    sjekk("simulator: sløyfa pendler, måleverdien beveger seg", len(vals) > 8 and max(vals) - min(vals) > 0.5,
+          f"{len(vals)} verdier, spenn {round(max(vals) - min(vals), 2) if vals else '-'}")
+
+    w = kall("/api/write", {"address": "127.0.0.20", "objid": "analog-value,1", "value": 23.5, "priority": 8})
+    p = kall("/api/poll", {"targets": {"127.0.0.20": ["analog-value,1"]}})
+    skrevet = ((p.get("values") or {}).get("127.0.0.20") or {}).get("analog-value,1")
+    kall("/api/write", {"address": "127.0.0.20", "objid": "analog-value,1", "priority": 8, "release": True})
+    time.sleep(0.6)
+    p = kall("/api/poll", {"targets": {"127.0.0.20": ["analog-value,1"]}})
+    tilbake = ((p.get("values") or {}).get("127.0.0.20") or {}).get("analog-value,1")
+    sjekk("simulator: skriving og frigjøring virker som mot et anlegg",
+          w.get("status") == "done" and skrevet == 23.5 and tilbake == 21.0, f"{skrevet} -> {tilbake}")
+
+    kall("/api/write", {"address": "127.0.0.20", "objid": "analog-value,1", "value": 22.0, "priority": 8})
+    mine = [o for o in kall("/api/mine").get("overstyrt", []) if str(o.get("address")).startswith("127.0.0.2")]
+    sjekk("simulator: det som skrives dit står ikke igjen som overstyrt anlegg", not mine, str(mine))
+    sk = kall("/api/sites", {"ranges": ["127.0.0.20-21"], "devices": [{"address": "127.0.0.20", "device_instance": 7001, "object_name": "SIM-A"}]})
+    sjekk("simulator: huskes ikke som et anlegg", sk.get("status") == "skip", str(sk))
+
+    lagret = kall("/api/sim").get("filer", [])
+    kall("/api/sim/stopp", {})
+    st = kall("/api/sim")
+    ifs = [i["interface"] for i in kall("/api/interfaces").get("interfaces", [])]
+    sjekk("simulator: stopper, og loopback er ikke lenger et kort", not st.get("kjorer") and "Simulator" not in ifs, f"{st.get('kjorer')} {ifs}")
+
+    # A saved simulation starts again without the plant.
+    r2 = kall("/api/sim/start", {"fil": lagret[0]["fil"], "fra": 30}) if lagret else {}
+    j = vent_jobb(kall("/api/scan", {"subnet": "127.0.0.30-31", "mode": "unicast_sweep", "thorough": False,
+                                      "per_host_timeout": 1.0, "concurrency": 4, "via": "127.0.0.1"})["job_id"]) if r2.get("status") == "done" else {}
+    sjekk("simulator: en lagret simulering starter igjen uten anlegget",
+          r2.get("status") == "done" and (j.get("result") or {}).get("count") == 2, str(r2)[:150])
+    kall("/api/sim/stopp", {})
+    if lagret:
+        kall("/api/sim/slett", {"fil": lagret[0]["fil"]})
+
+
 def kjor_tester():
     s = kall("/api/start", {"local_address": "127.0.0.1/8"})
     sjekk("kobler til", s.get("status") == "done", s.get("local_address", s.get("error", "")))
@@ -513,6 +602,7 @@ def kjor_tester():
     sommertid()
     trafikklogg()
     flere_kort()
+    simulator()
 
     j = vent_jobb(kall("/api/scan", {"subnet": "127.0.0.5:47820", "mode": "bbmd", "timeout": 4})["job_id"])
     r = j.get("result") or {}
@@ -555,7 +645,7 @@ def kjor_tester():
 
     pendling()
 
-    for fil in ("nabe-start", "nabe-verktoy", "nabe-felt", "nabe-moro", "nabe-finn", "nabe-skann", "nabe-anlegg", "nabe-bunn", "nabe-graf", "nabe-tunnel", "nabe-sammen", "nabe-flyt", "nabe-peker", "nabe-pekere", "nabe-skrift", "nabo", "nabo-brodre", "nabo-fasit", "nabe-garderobe", "nabe-opptak", "nabe-trafikk", "nabe-fortsett", "nabe-kunnskap", "nabe-spor"):
+    for fil in ("nabe-start", "nabe-verktoy", "nabe-felt", "nabe-moro", "nabe-finn", "nabe-skann", "nabe-anlegg", "nabe-bunn", "nabe-graf", "nabe-tunnel", "nabe-sammen", "nabe-flyt", "nabe-peker", "nabe-pekere", "nabe-skrift", "nabo", "nabo-brodre", "nabo-fasit", "nabe-garderobe", "nabe-opptak", "nabe-trafikk", "nabe-fortsett", "nabe-simulator", "nabe-kunnskap", "nabe-spor"):
         try:
             with urllib.request.urlopen(f"{BASE}/js/{fil}.js", timeout=5) as rr:
                 ok = rr.status == 200
