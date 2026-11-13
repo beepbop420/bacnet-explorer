@@ -177,6 +177,9 @@ const FAKTA = [
   ['COV betyr at regulatoren sier fra selv. Mindre spørring, mer ro.', 'COV means the controller speaks up itself. Less asking, more peace.'],
 ];
 const NYTT = {
+  '1.59': [
+    ['NABE maser ikke lenger om å frigi en overstyring på en enhet som ikke svarer. Før regnet den en enhet som innen rekkevidde så lenge nettet var det samme, selv om enheten var avslått. Nå spørres enheten selv når du lukker, og den som ikke svarer venter til neste besøk', 'NABE no longer nags you to release an override on a device that does not answer. It used to count a device as in reach whenever the network was the same, even if the device was switched off. Now the device itself is asked when you close, and one that does not answer waits for the next visit'],
+  ],
   '1.58': [
     ['Feil og alarm skilles, og du ser hvorfor: en feil viser årsaken fra enheten (ingen føler, åpen sløyfe, ingen utgang), en alarm viser tilstanden og alarmverdien. Feil har en roligere rød enn alarm', 'Faults and alarms are told apart, and you see why: a fault shows the reason from the device (no sensor, open loop, no output), an alarm shows the state and the alarm value. A fault is a quieter red than an alarm'],
     ['Flaggene leses på nytt hvert tjuende sekund mens Live går, så en feil som har gått over forsvinner, og en ny alarm dukker opp uten at du leser enheten på nytt', 'The flags are read again every twenty seconds while Live runs, so a fault that has cleared goes away and a new alarm appears without reading the device again'],

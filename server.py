@@ -201,7 +201,7 @@ def t(nb: str, en: str) -> str:
     return en if SPRAAK_VAR.get() == "en" else nb
 
 
-VERSJON = "1.58"
+VERSJON = "1.59"
 
 state = {"app": None, "local_address": None, "read_only": False, "bbmd": None, "primary": None}
 # The simulator: a scanned site run as devices on 127.0.0.x, in a process of its own.
@@ -2658,11 +2658,53 @@ def anlegg_liste():
     return {"status": "done", "anlegg": ut[:40]}
 
 
+_SVAR_ADR: Dict[str, Dict[str, Any]] = {}
+
+
+async def _svarer_adresse(adresse: str, maks_alder: float = 30.0, vent: float = 3.5) -> Optional[bool]:
+    """Does the device at this address answer right now? None when that cannot be
+    asked (not connected, an address behind a gateway) or the answer did not come
+    in time: unknown is never taken for "no"."""
+    if state["app"] is None or not _plain_ip(adresse):
+        return None
+    c = _SVAR_ADR.get(adresse)
+    if c and time.time() - c["t"] < maks_alder:
+        return c["ok"]
+
+    async def sporr() -> Optional[bool]:
+        app_ = await _app_for(adresse)
+        if app_ is None:
+            return None
+        for _ in range(2):
+            try:
+                await asyncio.wait_for(
+                    app_.read_property(device_address(adresse), "device,4194303", "object-identifier"), timeout=1.5)
+                return True
+            except ErrorRejectAbortNack:
+                return True              # it answered, it just refused the wildcard
+            except COMM_ERRORS:
+                continue
+        return False
+
+    try:
+        ok = await asyncio.wait_for(sporr(), timeout=vent)
+    except asyncio.TimeoutError:
+        return None
+    if ok is not None:
+        _SVAR_ADR[adresse] = {"t": time.time(), "ok": ok}
+    return ok
+
+
 @app.get("/api/mine")
-def get_mine():
+async def get_mine(fersk: int = 0):
     """What you hold, each with whether its plant can be reached from here
     now. A point on a network you have left cannot be released, and asking
-    you to at the door only gets in the way."""
+    you to at the door only gets in the way.
+
+    A route is not an answer: the PC can sit on the same subnet as a plant that is
+    switched off, or a rig on another wall of the building. So the device itself is
+    asked, and only one that does not answer counts as out of reach. `fersk` asks
+    again instead of using an answer from the last half minute."""
     try:
         kort = list_interfaces()
     except Exception:
@@ -2672,6 +2714,13 @@ def get_mine():
         o = dict(o)
         o["naabar"] = naabar(str(o.get("address") or ""), kort) is not None
         ut.append(o)
+    adresser = sorted({o["address"] for o in ut if o["naabar"]})
+    if adresser:
+        svar = await asyncio.gather(*[_svarer_adresse(a, 0.0 if fersk else 30.0) for a in adresser])
+        stille = {a for a, s in zip(adresser, svar) if s is False}
+        for o in ut:
+            if o["address"] in stille:
+                o["naabar"] = False
     return {"status": "done", "overstyrt": ut}
 
 

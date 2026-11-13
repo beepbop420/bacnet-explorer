@@ -698,6 +698,31 @@ def flagg():
     i_loop(lambda: (setattr(obj, "statusFlags", [0, 1, 0, 0]), setattr(obj, "reliability", "noSensor")))
 
 
+def mine_uten_kontakt():
+    """An override on a device that does not answer is not something to be stopped
+    at the door for: it waits for the next visit. One that answers still is."""
+    for adr in ("127.0.0.4", "127.0.0.6"):
+        kall("/api/write", {"address": adr, "objid": "analog-value,1", "value": 22.0, "priority": 7})
+
+    def liste():
+        return {o["address"]: o["naabar"] for o in kall("/api/mine?fersk=1").get("overstyrt", [])
+                if o["address"] in ("127.0.0.4", "127.0.0.6") and o["priority"] == 7}
+
+    for _ in range(3):
+        for adr in ("127.0.0.4", "127.0.0.6"):
+            kall("/api/write", {"address": adr, "objid": "analog-value,1", "value": 22.0, "priority": 7})
+    for_ = liste()
+    sjekk("overstyring: enheter som svarer regnes som innen rekkevidde",
+          for_ == {"127.0.0.4": True, "127.0.0.6": True}, str(for_))
+    # The device on .6 goes quiet, as a rig that is switched off does.
+    i_loop(lambda: APPS["127.0.0.6"].close())
+    etter_ = liste()
+    sjekk("overstyring: en enhet som ikke svarer er utenfor rekkevidde, de andre er det ikke",
+          etter_ == {"127.0.0.4": True, "127.0.0.6": False}, str(etter_))
+    for adr in ("127.0.0.4",):
+        kall("/api/write", {"address": adr, "objid": "analog-value,1", "priority": 7, "release": True})
+
+
 def kjor_tester():
     s = kall("/api/start", {"local_address": "127.0.0.1/8"})
     sjekk("kobler til", s.get("status") == "done", s.get("local_address", s.get("error", "")))
@@ -790,6 +815,8 @@ def kjor_tester():
     sjekk("opptak skriver rader med verdi", len(linjer) >= 3 and r4.get("rader", 0) >= 2 and linjer[1].split(";")[1] != "", str(linjer[:3]))
 
     pendling()
+    # Last: it silences the simulated device on 127.0.0.6.
+    mine_uten_kontakt()
 
     for fil in ("nabe-start", "nabe-verktoy", "nabe-felt", "nabe-moro", "nabe-finn", "nabe-skann", "nabe-anlegg", "nabe-bunn", "nabe-graf", "nabe-tunnel", "nabe-sammen", "nabe-flyt", "nabe-peker", "nabe-pekere", "nabe-skrift", "nabo", "nabo-brodre", "nabo-fasit", "nabe-garderobe", "nabe-opptak", "nabe-trafikk", "nabe-fortsett", "nabe-simulator", "nabe-oppdatering", "nabe-kunnskap", "nabe-spor"):
         try:
