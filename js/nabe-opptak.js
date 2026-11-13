@@ -40,6 +40,7 @@
     }
     return ut;
   }
+  const klokke = (t) => new Date(t * 1000).toLocaleTimeString(SPRAAK === 'en' ? 'en-GB' : 'no', {hour: '2-digit', minute: '2-digit'});
   const periodeTekst = (s) => s < 120 ? `${Math.round(s)} s` : `${(s / 60).toFixed(1).replace('.', ',')} min`;
   const utenEnhet = (n) => String(n).replace(/ \([^)]*\)$/, '');
   const PAR_TEKST = {
@@ -54,7 +55,9 @@
     const par = r.par.map(p => {
       const a = ser.get(p.maling), b = ser.get(p.padrag), per = (a && a.periode_s) || (b && b.periode_s);
       const f = p.forsinkelse_s;
+      const sidenT = (a && a.siden_t) || (b && b.siden_t);
       const info = [per && p.dom !== 'rolig' ? T(`periode ${periodeTekst(per)}`, `period ${periodeTekst(per)}`) : '',
+        sidenT ? T(`siden kl. ${klokke(sidenT)}`, `since ${klokke(sidenT)}`) : '',
         (p.dom === 'sloyfe' || p.dom === 'ulik') && Math.abs(f) >= 1
           ? (f > 0 ? T(`målingen følger ${Math.abs(f)} s etter pådraget`, `the measurement follows ${Math.abs(f)} s after the actuator`)
                    : T(`målingen går ${Math.abs(f)} s foran pådraget`, `the measurement leads the actuator by ${Math.abs(f)} s`)) : ''].filter(Boolean).join(' · ');
@@ -63,7 +66,7 @@
     }).join('');
     const funnet = r.serier.filter(x => x.dom !== 'nei');
     const tab = funnet.length ? `<table class="sp-tab"><thead><tr><th>${T('Punkt', 'Point')}</th><th class="t">${T('Poeng', 'Score')}</th><th class="t">${T('Periode', 'Period')}</th><th class="t">${T('Amplitude', 'Amplitude')}</th></tr></thead><tbody>${
-      funnet.map(x => `<tr><td>${esc(utenEnhet(x.navn))}${x.dom === 'mulig' ? ` <span class="sp-meta">${T('mulig', 'possible')}</span>` : ''}</td><td class="t">${x.score}</td>
+      funnet.map(x => `<tr><td>${esc(utenEnhet(x.navn))}${x.dom === 'mulig' ? ` <span class="sp-meta">${T('mulig', 'possible')}</span>` : ''}${x.siden_t ? ` <span class="sp-meta">${T('siden', 'since')} ${klokke(x.siden_t)}</span>` : ''}</td><td class="t">${x.score}</td>
         <td class="t">${esc(periodeTekst(x.periode_s))}</td><td class="t">${esc(String(x.amplitude).replace('.', ','))} ${esc(x.enhet)}</td></tr>`).join('')}</tbody></table>`
       : `<p class="op-tekst">${T('Ingen pendling funnet i dette opptaket.', 'No hunting found in this recording.')}</p>`;
     return `${par}${tab}<div class="op-knapper"><button type="button" class="btn" data-op="tilbake">${T('Tilbake', 'Back')}</button></div>`;
