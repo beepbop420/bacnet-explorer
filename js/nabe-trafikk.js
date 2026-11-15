@@ -67,7 +67,7 @@
       valg($('trTjeneste'), T('Alle tjenester', 'All services'), tjenester, fTjeneste);
     }
     const sumRad = (navn, o, klasse = '') => `<div class="tr-sum-rad ${klasse}"><span>${esc(navn)}</span><span>${o.antall}</span>
-        <span class="${o.feil ? 'tr-feil-tall' : ''}">${o.feil} ${T('feil', 'errors')}</span><span>${o.snitt} ms</span><span>p95 ${o.p95} ms</span></div>`;
+        <span class="${o.feil ? 'tr-feil-tall' : ''}">${o.feil} ${T('feil', o.feil === 1 ? 'error' : 'errors')}</span><span>${o.snitt} ms</span><span>p95 ${o.p95} ms</span></div>`;
     const kortRader = Object.entries(perKort).map(([ip, o]) => sumRad(kortNavn(ip), o, 'tr-sum-kort'));
     const enhetRader = Object.entries(oppsummering)
       .sort((a, b) => b[1].feil - a[1].feil || b[1].snitt - a[1].snitt).slice(0, 5)

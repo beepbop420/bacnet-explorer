@@ -1011,7 +1011,7 @@ td.c-act{text-align:center;padding:0;text-overflow:clip}
    controls, which are shown only for writable selections. */
 .selbar .btn[hidden],.selbar .field[hidden]{display:none}
 .selbar .field{padding:2px 6px;font-size:11px}
-col.w-act{width:26px} col.w-obj{width:104px} col.w-val{width:150px} col.w-unit{width:34px}
+col.w-act{width:26px} col.w-obj{width:104px} col.w-val{width:150px} col.w-unit{width:46px}
 .inst{margin-left:5px}
 /* Narrow table: give the name column its space back by dropping the object
    instance number and tightening the value column. Nothing is lost — the
@@ -4337,6 +4337,14 @@ button:focus:not(:focus-visible){outline:none;box-shadow:none}
   .pane-devices{flex-basis:min(var(--w-devices,300px),250px)}
   .pane-side{flex-basis:min(var(--w-side,400px),320px)}
 }
+/* Phone and small tablet: the three panes stack instead of squeezing each other, and the
+   page scrolls down through them. */
+@media (max-width:760px){
+  .workspace{flex-wrap:wrap;overflow-y:auto;align-content:flex-start}
+  .workspace>.splitter{display:none}
+  .pane-devices,.pane-side{flex:1 1 100%;min-width:0;max-height:46vh}
+  .pane-main{flex:1 1 100%;min-width:0;min-height:62vh}
+}
 @media (max-width:1100px){
   .pane-devices{flex-basis:236px}
   .pane-devices #rangeInput{flex:1 1 auto;width:auto!important;min-width:0}
@@ -4870,6 +4878,13 @@ html.peker-egen *:not(input):not(textarea):not(select):not(.splitter):not([conte
 .sp-tab tbody tr[data-ip]:hover{background:var(--hover)}
 .sp-tab .t{text-align:right;font-family:var(--mono);white-space:nowrap}
 .sp-meta{color:var(--fg-3);font-size:11px}
+.alarm-del,.alarm-fold summary{margin:10px 0 4px;font-size:11px;color:var(--fg-3);letter-spacing:.04em}
+.alarm-fold summary{cursor:pointer;list-style:none}
+.alarm-fold summary::before{content:'▸ ';display:inline-block;width:12px}
+.alarm-fold[open] summary::before{content:'▾ '}
+.alarm-fold summary::-webkit-details-marker{display:none}
+.alarm-fold .alarm-til:not(.bad):not(.warn){color:var(--fg-3)}
+.sp-navn{overflow-wrap:anywhere;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .sp-avvik.stor{color:var(--warn)}
 .sp-tom{color:var(--fg-3);padding:18px 8px!important;text-align:center}
 .watch-hent{margin:6px 16px 12px;font-size:11px}

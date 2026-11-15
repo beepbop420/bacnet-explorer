@@ -202,7 +202,7 @@ def t(nb: str, en: str) -> str:
     return en if SPRAAK_VAR.get() == "en" else nb
 
 
-VERSJON = "1.61"
+VERSJON = "1.62"
 
 state = {"app": None, "local_address": None, "read_only": False, "bbmd": None, "primary": None}
 # The simulator: a scanned site run as devices on 127.0.0.x, in a process of its own.
@@ -5310,4 +5310,5 @@ def logo():
         p = here / name
         if p.is_file():
             return FileResponse(p, media_type=mime, headers=headers)
-    return Response(status_code=404, headers=headers)
+    # 204, not 404: no logo is an ordinary answer, and a 404 shows as an error in the console on every start.
+    return Response(status_code=204, headers=headers)

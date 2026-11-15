@@ -122,7 +122,7 @@
       const m = KT.perKort[k.ip];
       const feil = m && m.antall ? m.feil / m.antall : 0;
       const klasse = igang ? (feil > 0.5 ? 'ktx-varsel' : 'ktx-ok') : 'ktx-av';
-      const tall = igang && m ? `${m.snitt} ms${m.feil ? ` · ${m.feil} ${T('feil', 'errors')}` : ''}` : (igang ? T('ingen trafikk ennå', 'no traffic yet') : T('ikke i bruk', 'not in use'));
+      const tall = igang && m ? `${m.snitt} ms${m.feil ? ` · ${m.feil} ${T('feil', m.feil === 1 ? 'error' : 'errors')}` : ''}` : (igang ? T('ingen trafikk ennå', 'no traffic yet') : T('ikke i bruk', 'not in use'));
       linjer += `<path class="kt-lenke ${igang ? 'paa' : 'av'} ${klasse}" d="${kurve(140, pcY, 300, b.y)}"/>`;
       noder += `<g class="kt-kort ${klasse}${igang ? '' : ' kt-klikk'}" data-kt="kort" data-cidr="${esc(k.cidr)}" transform="translate(300,${b.y - 29})">
         <title>${esc(k.interface + ' ' + k.cidr + (s.bbmd ? ' · BBMD ' + s.bbmd : ''))}</title>

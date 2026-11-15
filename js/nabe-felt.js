@@ -377,7 +377,7 @@ setInterval(() => {
     }
     return r.vist.map(x => {
       const u = esc(x.p.unit_symbol || '');
-      return `<tr data-ip="${esc(x.ip)}" data-o="${esc(x.p.objid)}">
+      return `<tr data-ip="${esc(x.ip)}" data-o="${esc(x.p.objid)}" title="${esc((x.p.name || x.p.objid) + ' / ' + (x.sp.name || ''))}">
         <td><div class="sp-navn">${esc(x.p.name || x.p.objid)}</div>
             <div class="sp-meta">${esc(enhetNavn(x.ip))}${alder(x.ip) ? ' · ' + esc(alder(x.ip)) : ''}</div></td>
         <td class="t">${esc(tall(x.p.value))} ${u}</td>

@@ -754,6 +754,11 @@ async function runScan() {
   // som ble avfyrt. Ladningen er et eget element, og etiketten faar staa til
   // den er ferdig - skannet gaar i mellomtida, saa ingen ventetid legges til.
   const ladet = ladSkann();
+  // The wrappers around runScan pass no arguments, so the automatic second try says so
+  // through a flag instead.
+  const auto = !!S._autoNeste; S._autoNeste = false;
+  if (!auto) S._tomtForsok = false;
+  let proevIgjen = false;
   const raa = $('rangeInput').value.trim();
   const omraader = parseRanges(raa);
   if (!omraader.length) { toast('Skriv inn et IP-område', true); return; }
@@ -878,7 +883,13 @@ async function runScan() {
     S.sisteOmraader = omraader;
     // A scan you stopped found nothing because you stopped it - no advice for that.
     S.tomtSkann = S.devices.length || LINJE.avbrutt ? null : {mode, omraader};
-    if (!S.devices.length && !LINJE.avbrutt) nabeTrist();
+    // A tunnel that has sat idle drops its first packets while it wakes up, so a first
+    // sweep can come back empty over a plant that answers a moment later. One more try,
+    // quietly, before telling anyone nothing answered.
+    if (!S.devices.length && !LINJE.avbrutt && !S._tomtForsok && mode !== 'bbmd' && mode !== 'broadcast') {
+      S._tomtForsok = true; proevIgjen = true;
+      status(T('Ingen svar ennå. Prøver en gang til…', 'No answer yet. Trying once more…'));
+    } else if (!S.devices.length && !LINJE.avbrutt) nabeTrist();
     nabeEtterSkann(S.devices.length);
     tell('skann'); tell('enheter', S.devices.length);
     if (S.devices.length) visRutere();
@@ -895,6 +906,7 @@ async function runScan() {
   // produce the same failure.
   b.disabled = BACKEND_NEDE || !S.connected;
   b.textContent = T('Skann', 'Scan'); b.onclick = () => runScan();
+  if (proevIgjen) setTimeout(() => { if (!document.body.classList.contains('skanner')) S._autoNeste = true; runScan(); }, 1500);
 }
 
 async function cancelScan() {
@@ -1637,9 +1649,10 @@ function driftText(sek, deviceTime) {
   const a = Math.abs(sek);
   const retning = sek > 0 ? 'foran' : 'etter';
   if (a > 2592000 && deviceTime) return T(`står på ${String(deviceTime).slice(0, 10)}`, `stuck at ${String(deviceTime).slice(0, 10)}`);
-  if (a < 90) return `${Math.round(a)} s ${retning}`;
-  if (a < 5400) return `${Math.round(a / 60)} min ${retning}`;
-  if (a < 172800) return `${(a / 3600).toFixed(1)} t ${retning}`;
+  const en = sek > 0 ? 'ahead' : 'behind';
+  if (a < 90) return T(`${Math.round(a)} s ${retning}`, `${Math.round(a)} s ${en}`);
+  if (a < 5400) return T(`${Math.round(a / 60)} min ${retning}`, `${Math.round(a / 60)} min ${en}`);
+  if (a < 172800) return T(`${(a / 3600).toFixed(1)} t ${retning}`, `${(a / 3600).toFixed(1)} h ${en}`);
   return T(`${Math.round(a / 86400)} døgn ${retning}`, `${Math.round(a / 86400)} days ${retning === 'foran' ? 'ahead' : 'behind'}`);
 }
 
@@ -6880,6 +6893,9 @@ function settpunktAvvik(cache) {
     for (const [p, sp] of settpunktParFor(liste)) {
       if (typeof p.value !== 'number' || typeof sp.value !== 'number' || p.unread || sp.unread) continue;
       const avvik = p.value - sp.value;
+      // CO2 is held under a limit, not at a target: 420 ppm against a 700 ppm limit is
+      // as it should be. Only a reading above the limit is a deviation.
+      if (avvik <= 0 && /parts-per-million/.test(String(sp.units || p.units || ''))) continue;
       ut.push({ip, p, sp, avvik, rel: Math.abs(avvik) / Math.max(Math.abs(sp.value), 1)});
     }
   }
@@ -7764,7 +7780,8 @@ const EDE_UNIT = {
 /* BACnet stores a weekly schedule as transition points: "at 07:00 the value
    becomes X". A week grid needs spans, so each entry runs until the next one
    or to midnight. */
-const SCHED_DAYS = ['man', 'tir', 'ons', 'tor', 'fre', 'lør', 'søn'];
+// A function, not a list: the language is not known yet when this file is read.
+const schedDag = (i) => [T('man', 'Mon'), T('tir', 'Tue'), T('ons', 'Wed'), T('tor', 'Thu'), T('fre', 'Fri'), T('lør', 'Sat'), T('søn', 'Sun')][i];
 
 function timeToMin(t) {
   const m = String(t || '').match(/^(\d{1,2}):(\d{2})/);
@@ -7914,7 +7931,7 @@ function schedTekst(p) {
   if (!st.til) return 'hele uka';
   const naar = st.dagerFram === 0 ? st.til
              : st.dagerFram === 1 ? 'i morgen ' + st.til
-             : SCHED_DAYS[(deviceNow().getDay() + 6 + st.dagerFram) % 7] + ' ' + st.til;
+             : schedDag((deviceNow().getDay() + 6 + st.dagerFram) % 7) + ' ' + st.til;
   return `til ${naar} \u2192 ${st.nesteVerdi}`;
 }
 
@@ -7970,6 +7987,10 @@ function renderWeekGrid(sch) {
       const hgt = ((sp.to - sp.from) / 1440) * WK_H;
       const label = sp.value === null ? 'null'
                   : sp.value === undefined ? '—' : String(sp.value);
+      // What the schedule means, not what the wire says: null gives the priority back,
+      // true and false are on and off.
+      const vis = label === 'null' ? T('Frigir', 'Releases') : label === 'true' ? T('På', 'On')
+                : label === 'false' ? T('Av', 'Off') : label;
       // Which transition does this block start from? A carried block belongs
       // to the previous day and has no entry of its own to drag.
       const idx = sp.carried ? -1 : entries.findIndex(e => timeToMin(e.time) === sp.from);
@@ -7981,13 +8002,13 @@ function renderWeekGrid(sch) {
                    title="${esc(label)} ${minToTime(sp.from)}–${minToTime(sp.to === 1440 ? 0 : sp.to)}${
                      kanRedigere && idx >= 0 ? T(' — klikk for å endre nedenfor, dra for å flytte', ' — click to change below, drag to move') : ''}">
         ${kanRedigere && idx >= 0 ? '<span class="wk-grep topp"></span>' : ''}
-        <b>${esc(label)}</b>
+        <b>${esc(vis)}</b>
         <i>${minToTime(sp.from)} - ${minToTime(sp.to === 1440 ? 0 : sp.to)}</i>
         ${kanRedigere && idx >= 0 ? '<span class="wk-grep bunn"></span>' : ''}
       </div>`;
     }).join('');
     return `<div class="wk-col">
-      <div class="wk-day">${SCHED_DAYS[i] || day.day}</div>
+      <div class="wk-day">${schedDag(i) || day.day}</div>
       <div class="wk-body" data-dag="${i}" style="height:${WK_H}px">${
         blocks || '<div class="wk-empty">tomt</div>'}</div>
     </div>`;
@@ -8184,7 +8205,7 @@ function tegnRedigering() {
     </span>`;
 
   bar.innerHTML = `
-    <span class="wk-dag">${SCHED_DAYS[v.dag]}</span>
+    <span class="wk-dag">${schedDag(v.dag)}</span>
     <label class="wk-felt"><span>Hendelsesstart</span>${tid('hs', fra)}</label>
     <label class="wk-felt"><span>Hendelsesslutt</span>${tid('he', til === 1440 ? 0 : til)}</label>
     <label class="wk-felt"><span>Hendelsesverdi</span>
@@ -8437,7 +8458,7 @@ async function lagreUke() {
                 value: e.value === null ? null : String(e.value ?? '')})));
   const antall = dager.reduce((n, d) => n + d.length, 0);
 
-  const linjer = dager.map((d, i) => `  ${SCHED_DAYS[i]}: ` +
+  const linjer = dager.map((d, i) => `  ${schedDag(i)}: ` +
     (d.length ? d.map(e => `${e.time}=${e.value === null ? 'null' : e.value}`).join('  ')
               : '(ingen)')).join('\n');
   if (!confirm(T(`Skrive ukeprogrammet til ${sch.name || sch.objid}?\n\n`

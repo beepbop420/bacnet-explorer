@@ -39,16 +39,30 @@ async function fyllAlarmer() {
   for (const a of (listeOk ? r.alarmer || [] : [])) alle.set(a.objid, Object.assign({kilde: 'liste'}, a));
   for (const p of S.points || []) {
     const f = (p.status || []).filter(x => x === 'in-alarm' || x === 'fault');
-    if (!f.length || alle.has(p.objid)) continue;
+    if (!f.length) continue;
+    // The list says "normal, not acknowledged" while the flag says the point is in
+    // alarm or fault right now: the flag is the present, the list is what it remembers.
+    if (alle.has(p.objid)) {
+      const a = alle.get(p.objid);
+      if (a.tilstand === 'normal') a.tilstand = f.includes('fault') ? 'fault' : 'in-alarm';
+      continue;
+    }
     alle.set(p.objid, {objid: p.objid, tilstand: f.includes('fault') ? 'fault' : 'in-alarm', ukvittert: [], kilde: 'flagg'});
   }
-  const liste = [...alle.values()];
+  const alt = [...alle.values()];
+  // What stands in alarm now, what is faulty, and what has come back to normal without
+  // being acknowledged: three different things, and only the first is "active".
+  const erFeil = a => /fault/.test(a.tilstand);
+  const erNormal = a => a.tilstand === 'normal';
+  const liste = alt.filter(a => !erFeil(a) && !erNormal(a));
+  const feil = alt.filter(erFeil);
+  const venter = alt.filter(a => erNormal(a) && (a.ukvittert || []).length);
   const lest = (S.points || []).length > 0 && S.points.every(p => p.status_lest === true);
   boks.hidden = false;
   const kildeTekst = listeOk
     ? T('Fra enhetens alarmliste og punktenes statusflagg.', 'From the device’s alarm list and the points’ status flags.')
     : T('Enheten svarer ikke på alarmforespørsel, så dette er fra punktenes statusflagg.', 'The device does not answer the alarm request, so this is from the points’ status flags.');
-  if (!liste.length) {
+  if (!alt.length) {
     boks.innerHTML = `<div class="sect-head">${T('Aktive alarmer', 'Active alarms')} <span class="count">0</span></div>`
       + `<div class="alarm-tom">${lest
           ? T('Ingen aktive alarmer.', 'No active alarms.')
@@ -59,15 +73,23 @@ async function fyllAlarmer() {
   }
   const navn = oid => (S.pointIndex && S.pointIndex.get(oid)?.name) || oid;
   const tilstand = t => ({'in-alarm': T('i alarm', 'in alarm'), fault: T('feil', 'fault')}[t] || t);
-  boks.innerHTML = `<div class="sect-head">${T('Aktive alarmer', 'Active alarms')} <span class="count">${liste.length}</span></div>
-    <div class="alarm-liste">${liste.map(a => `
+  const rad = a => `
       <button class="alarm-rad" data-o="${esc(a.objid)}" title="${esc(a.kilde === 'flagg'
         ? T('Statusflagget står i alarm eller feil. Ikke i enhetens alarmliste.', 'The status flag is in alarm or fault. Not in the device’s alarm list.')
         : T('Fra enhetens alarmliste', 'From the device’s alarm list'))}">
         <span class="alarm-navn">${esc(navn(a.objid))}</span>
-        <span class="alarm-til ${/fault/.test(a.tilstand) ? 'bad' : 'warn'}">${esc(tilstand(a.tilstand))}</span>
-        ${a.ukvittert.length ? `<span class="alarm-ukv" title="${esc(a.ukvittert.join(', '))}">${T('ukvittert', 'unacked')}</span>` : ''}
-      </button>`).join('')}</div>
+        <span class="alarm-til ${erFeil(a) ? 'bad' : erNormal(a) ? '' : 'warn'}">${esc(tilstand(a.tilstand))}</span>
+        ${(a.ukvittert || []).length ? `<span class="alarm-ukv" title="${esc(a.ukvittert.join(', '))}">${T('ukvittert', 'unacked')}</span>` : ''}
+      </button>`;
+  // Alarms first and open. Faults and returned-to-normal are folded away when there are
+  // more than a few, so one real alarm is never buried under twenty dead sensors.
+  const gruppe = (tittel, rader, apen) => !rader.length ? '' : (apen || rader.length <= 3
+    ? `<div class="alarm-del">${tittel} <span class="count">${rader.length}</span></div><div class="alarm-liste">${rader.map(rad).join('')}</div>`
+    : `<details class="alarm-fold"><summary>${tittel} <span class="count">${rader.length}</span></summary><div class="alarm-liste">${rader.map(rad).join('')}</div></details>`);
+  boks.innerHTML = `<div class="sect-head">${T('Aktive alarmer', 'Active alarms')} <span class="count">${liste.length}</span></div>
+    ${liste.length ? `<div class="alarm-liste">${liste.map(rad).join('')}</div>` : `<div class="alarm-tom">${T('Ingen aktive alarmer.', 'No active alarms.')}</div>`}
+    ${gruppe(T('Punkter med feil', 'Points with a fault'), feil, false)}
+    ${gruppe(T('Tilbake til normal, venter på kvittering', 'Back to normal, waiting to be acknowledged'), venter, false)}
     <div class="alarm-kilde">${kildeTekst}</div>`;
   boks.querySelectorAll('.alarm-rad').forEach(b => b.onclick = () =>
     document.querySelector(`#pointsWrap tr[data-o="${CSS.escape(b.dataset.o)}"]`)?.click());
@@ -177,6 +199,13 @@ const FAKTA = [
   ['COV betyr at regulatoren sier fra selv. Mindre spørring, mer ro.', 'COV means the controller speaks up itself. Less asking, more peace.'],
 ];
 const NYTT = {
+  '1.62': [
+    ['Aktive alarmer viser bare det som står i alarm nå. Punkter med feil og alarmer som er tilbake til normal uten å være kvittert ligger i hver sin sammenfoldede liste, så én ekte alarm ikke drukner i tjue døde følere', 'Active alarms shows only what is in alarm now. Points with a fault and alarms back to normal but not acknowledged sit in their own folded lists, so one real alarm is not buried under twenty dead sensors'],
+    ['Avvik fra settpunkt: en CO2-verdi under grensen (for eksempel 420 ppm mot 700) regnes ikke lenger som avvik, og lange punktnavn brytes i stedet for å klippes', 'Deviation from setpoint: a CO2 value under its limit (for example 420 ppm against 700) is no longer a deviation, and long point names wrap instead of being cut'],
+    ['NABE lærer hva en enhet tåler: en kontroller som ikke kan segmentere et stort svar får mindre forespørsler resten av økten (WAGO fikk 60 % færre avbrutte forespørsler)', 'NABE learns what a device can take: a controller that cannot segment a large answer gets smaller requests for the rest of the session (a WAGO got 60 % fewer aborted requests)'],
+    ['Et skann som ikke finner noe prøver én gang til av seg selv, siden en tunnel som har stått stille kan miste de første pakkene', 'A scan that finds nothing tries once more by itself, since a tunnel that has been idle can drop its first packets'],
+    ['Kartet deler anlegg som leses via ulike kort, og skanneprober teller ikke lenger som feil. Ukeprogram viser «Frigir», «På» og «Av» i stedet for null og true, dagnavn og klokketekst følger språket, og smale vinduer stables i stedet for å presses sammen', 'The map splits sites read through different adapters, and sweep probes no longer count as errors. Schedules show "Releases", "On" and "Off" instead of null and true, weekday names and clock text follow the language, and narrow windows stack instead of squeezing'],
+  ],
   '1.61': [
     ['Flere anlegg samtidig: skanner du et nytt område via et annet nettverkskort, blir bygget du allerede har åpent stående. Hoppenspretthallen over Hoppensprett og en Beckhoff over FortiClient kan ligge side om side', 'Several sites at once: scan a new range through another adapter and the building you already have open stays. Hoppenspretthallen over Hoppensprett and a Beckhoff over FortiClient can sit side by side'],
     ['Nettverkskart: PC-en, nettverkskortene og byggene bak dem på ett bilde, med hver enhet som en liten rute (rød alarm, gul feil). Trykk på et anlegg for å legge det til, på et ledig kort for å ta det i bruk, eller på en enhet for å åpne den', 'Network map: the PC, its adapters and the buildings behind them in one picture, with each device as a small square (red alarm, yellow fault). Click a site to add it, an idle adapter to bring it into use, or a device to open it'],

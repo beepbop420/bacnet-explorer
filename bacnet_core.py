@@ -385,8 +385,13 @@ async def _rpm_chunk(app, addr: Address, objids: Sequence[str], props: Sequence[
         params.extend([oid, list(props)])
     try:
         raw = await asyncio.wait_for(app.read_property_multiple(addr, params), timeout=timeout)
-    except COMM_ERRORS:
+    except COMM_ERRORS as e:
+        # Remembered so a caller can tell "this device cannot segment the answer" from
+        # a timeout, and stop asking it for answers that size.
+        global SISTE_RPM_FEIL
+        SISTE_RPM_FEIL = (str(e) + " " + repr(e)).lower()
         return None
+    SISTE_RPM_FEIL = ""
 
     out: Dict[str, Dict[str, Any]] = {}
     for objid, prop, _array_index, value in raw:
@@ -434,6 +439,13 @@ def forget_caps(key: Optional[str] = None) -> None:
         DEVICE_CAPS.clear()
     else:
         DEVICE_CAPS.pop(key, None)
+
+
+SISTE_RPM_FEIL = ""
+
+
+def _kan_ikke_segmentere() -> bool:
+    return "segmentation" in SISTE_RPM_FEIL
 
 
 # Below this many objects the calibration cannot pay for itself.
@@ -549,8 +561,26 @@ async def read_objects_bulk(app, addr: Address, objids: Sequence[str],
         # against 3.4 s at 18 for the description pass on the same device
         # that needs batch 6 for names.
         batch_size = caps["batch"]
+    # Every kind of read shares what one of them found out: a device that could not
+    # segment an answer of twelve objects is not asked for twelve again by the next read
+    # (status flags, fault reasons), whichever properties it is after.
+    c0 = caps_for(str(addr))
+    laert = c0.get("batch_props")
+    if not use_caps and c0.get("batch") and c0.get("rpm"):
+        # The status and reason passes ask with use_caps off, but a device that was
+        # measured to need small batches for names needs them here too.
+        laert = min(laert or c0["batch"], c0["batch"])
+    if laert and rpm_ok is not False and batch_size > laert:
+        batch_size = laert
 
     async def handle(chunk: List[str]):
+        # Chunks are cut before the first answer is in. Once one has been refused for want
+        # of segmentation, the ones still waiting are cut down to what was learned, instead
+        # of each being refused in turn.
+        lp = caps_for(str(addr)).get("batch_props")
+        if rpm_ok is not False and lp and len(chunk) > lp:
+            await asyncio.gather(*[handle(chunk[i:i + lp]) for i in range(0, len(chunk), lp)])
+            return
         if rpm_ok is not False:
             async with sem:
                 # Inside the semaphore, not before it: every chunk is turned
@@ -560,12 +590,22 @@ async def read_objects_bulk(app, addr: Address, objids: Sequence[str],
                 # request actually goes out, which is the point that matters.
                 if gate is not None:
                     await gate()
-                data = await _rpm_chunk(app, addr, chunk, props, timeout)
+                # Checked here, at the moment it is this chunk's turn: by now an earlier
+                # one may have been refused, and this one need not be.
+                lp2 = caps_for(str(addr)).get("batch_props")
+                skjaer = bool(lp2) and len(chunk) > lp2
+                data = None if skjaer else await _rpm_chunk(app, addr, chunk, props, timeout)
+            if skjaer:
+                await asyncio.gather(*[handle(chunk[i:i + lp2]) for i in range(0, len(chunk), lp2)])
+                return
             if data is not None:
                 results.update(data)
                 tick(len(chunk))
                 return
             if len(chunk) > 1:
+                if _kan_ikke_segmentere():
+                    c = caps_for(str(addr))
+                    c["batch_props"] = min(c.get("batch_props") or len(chunk), max(1, len(chunk) // 2))
                 mid = len(chunk) // 2
                 await asyncio.gather(handle(chunk[:mid]), handle(chunk[mid:]))
                 return
@@ -623,11 +663,24 @@ async def read_object_detail(app, addr: Address, objid: str,
     otype = objid.split(",")[0]
     props = detail_props_for(otype)
 
-    data = await _rpm_chunk(app, addr, [objid], props, timeout)
-    if data is None:
-        values = await _read_single(app, addr, objid, props, timeout)
+    # A device that has refused the whole set once for want of segmentation is not asked
+    # again: its properties are read in small groups from the start.
+    caps = caps_for(str(addr))
+    if caps.get("detalj_uten_seg"):
+        values = {}
+        for i in range(0, len(props), 6):
+            d = await _rpm_chunk(app, addr, [objid], props[i:i + 6], timeout)
+            if d is None:
+                d = {objid: await _read_single(app, addr, objid, props[i:i + 6], timeout)}
+            values.update(d.get(objid, {}))
     else:
-        values = data.get(objid, {})
+        data = await _rpm_chunk(app, addr, [objid], props, timeout)
+        if data is None:
+            if _kan_ikke_segmentere():
+                caps["detalj_uten_seg"] = True
+            values = await _read_single(app, addr, objid, props, timeout)
+        else:
+            values = data.get(objid, {})
 
     out: Dict[str, Any] = {}
     for prop in props:

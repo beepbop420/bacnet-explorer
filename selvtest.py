@@ -280,6 +280,8 @@ def royktest():
               "  if (lagret === null) localStorage.removeItem(nokkel); else localStorage.setItem(nokkel, lagret);"
               "  return lagretLagt && hentet && annet && borte; })(),"
               " trafikk: typeof aapneTrafikk === 'function' && !!document.getElementById('trafikkBtn'),"
+              " co2grense: (() => { const mk = (v, i) => ({a: [{objid: 'ai,' + i, name: 'CO2_PV', units: 'parts-per-million', value: v}, {objid: 'av,' + i, name: 'CO2_SP', units: 'parts-per-million', value: 700}]});"
+              "  return settpunktAvvik(mk(420, 91)).length === 0 && settpunktAvvik(mk(800, 92)).length === 1 && schedDag(0) === T('man', 'Mon'); })(),"
               " settpunkt: typeof aapneAvvik === 'function' && !!document.getElementById('avvikBtn') && (() => {"
               "  const n = ['X-SP','X_SP','X.sp','XSp','RT401SP','Akt_Sp','AktSP'].map(erSettpunktNavn);"
               "  const ikke = ['Spenning','Spjeld','Display','X','Sp'].every(x => erSettpunktNavn(x) === null);"
