@@ -4918,7 +4918,9 @@ async def trafikk(etter: int = 0):
     per: Dict[str, List[float]] = {}
     feil: Dict[str, int] = {}
     for r in TRAFIKK:
-        if r["svar"] == "sendt":
+        # Silent addresses in a sweep are not devices with trouble: left out of the summary,
+        # still in the log below for anyone who wants to see them.
+        if r["svar"] == "sendt" or str(r.get("obj", "")).endswith(",4194303"):
             continue
         per.setdefault(r["til"], []).append(r["ms"])
         if r["svar"] != "ok":
@@ -4932,7 +4934,8 @@ async def trafikk(etter: int = 0):
     pk: Dict[str, List[float]] = {}
     pkf: Dict[str, int] = {}
     for r in TRAFIKK:
-        if r["svar"] == "sendt" or not r.get("kort"):
+        # A silent address in a sweep is the sweep working, not the adapter failing.
+        if r["svar"] == "sendt" or not r.get("kort") or str(r.get("obj", "")).endswith(",4194303"):
             continue
         pk.setdefault(r["kort"], []).append(r["ms"])
         if r["svar"] != "ok":

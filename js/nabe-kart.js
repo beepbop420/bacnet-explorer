@@ -58,6 +58,15 @@
       omr.forEach(r => { if (lastet.has(r)) brukt.add(r); });
       const kortIp = (l[0] && l[0].kort) || (a.naabar && a.naabar.ip) || '';
       const inne = !!l.length;
+      // Scanned together and remembered as one, but read through different adapters:
+      // each range is its own building on the map.
+      if (l.length > 1 && new Set(l.map(x => x.kort)).size > 1) {
+        for (const x of l) {
+          brukt.add(x.omr);
+          ut.push({key: x.omr, navn: '', antall: x.antall, lastet: true, kort: x.kort, svarer: true, overstyrt: 0, modus: a.modus});
+        }
+        continue;
+      }
       if (!inne && !(a.naabar && a.svarer !== false)) continue;
       ut.push({key: a.key, navn: a.navn || '', antall: inne ? l.reduce((s, x) => s + x.antall, 0) : a.enheter,
                lastet: inne, kort: kortIp, svarer: a.svarer, overstyrt: a.overstyrt, modus: a.modus});
