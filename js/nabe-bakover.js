@@ -123,7 +123,7 @@
       <svg class="bk-graf" viewBox="0 0 400 44" preserveAspectRatio="none" aria-hidden="true">
         <path d="${bane(t, v, fra, nu, 400, 44, lo, hi)}"/>
         <line class="bk-kors" x1="0" y1="0" x2="0" y2="44"/></svg>
-      <div class="bk-meta"><span>${esc(tall(Math.min(...nums)))} – ${esc(tall(Math.max(...nums)))} ${esc(s.enhet || '')}</span>
+      <div class="bk-meta"><span>${esc(tall(Math.min(...nums)))}, ${esc(tall(Math.max(...nums)))} ${esc(s.enhet || '')}</span>
         ${vars ? `<span class="bk-pend">${T('pendler', 'hunting')}${vars.siden_t ? ' ' + T('siden ', 'since ') + kl(vars.siden_t) : ''} · ${esc(per(vars.periode_s))}</span>` : ''}</div></div>`;
   }
 

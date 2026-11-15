@@ -800,7 +800,7 @@ thead th{
   border-bottom:1px solid var(--line);cursor:pointer;user-select:none;white-space:nowrap;}
 thead th:hover{color:var(--fg-2)}
 /* This arrow is the only thing saying what the table is sorted by, and at
-   .6 opacity on a 9px glyph it sat at 2.8:1 — effectively invisible. It is a
+   .6 opacity on a 9px glyph it sat at 2.8:1, effectively invisible. It is a
    state indicator, so it gets the accent rather than a dimmer grey. */
 thead th .arr{font-size:9px;color:var(--accent);margin-left:3px}
 .arr-nr{
@@ -1015,7 +1015,7 @@ td.c-act{text-align:center;padding:0;text-overflow:clip}
 col.w-act{width:26px} col.w-obj{width:104px} col.w-val{width:150px} col.w-unit{width:46px}
 .inst{margin-left:5px}
 /* Narrow table: give the name column its space back by dropping the object
-   instance number and tightening the value column. Nothing is lost — the
+   instance number and tightening the value column. Nothing is lost, the
    instance is in the inspector, the tooltip and every export. */
 #pointsWrap.cramped col.w-obj{width:38px}
 #pointsWrap.cramped col.w-val{width:64px}
@@ -1247,7 +1247,7 @@ tr.alarm.over td.c-name{color:var(--err)}
 }
 .loadbox-meta{font-family:var(--mono);font-size:10px;color:var(--fg-3);margin-top:6px}
 /* What the device has already told us, shown while the rest is still being
-   read. Facts, not filler — it is the same information you would otherwise
+   read. Facts, not filler, it is the same information you would otherwise
    go looking for once the table finally appeared. */
 .load-ident{
   display:flex;flex-wrap:wrap;gap:5px 16px;margin-top:12px;
@@ -2843,7 +2843,7 @@ body.drar,body.drar .wk-blk.redigerbar{cursor:grabbing;user-select:none}
 .gs-chip.bad.on{background:color-mix(in srgb,var(--err) 16%,transparent);border-color:var(--err)}
 /* One keyboard-first entry point to everything. The features live behind three
    menus and a set of shortcuts, which is fine once you know them and a wall
-   otherwise — this is the path for people who do not use the tool daily. */
+   otherwise, this is the path for people who do not use the tool daily. */
 .cmd-list{max-height:52vh;overflow-y:auto;padding:4px 6px 6px}
 .cmd-group{
   font-size:9px;text-transform:uppercase;letter-spacing:var(--spor);color:var(--fg-3);
@@ -4827,7 +4827,7 @@ body.uten-bevegelse .plagg-flamme{animation:none}
 .ctx-bar .ctx-name{font-size:24px;font-weight:500;letter-spacing:-.015em}
 .ctx-tittel{gap:9px}
 .ctx-under{gap:0;overflow:visible;flex-wrap:wrap;row-gap:6px}
-.tf{display:flex;flex-direction:column;gap:2px;padding:0 16px;border-left:1px solid var(--line-2);min-width:0}
+.tf{display:flex;flex-direction:column;gap:2px;padding:0 14px;border-left:1px solid var(--line-2);min-width:0}
 .tf:first-child{padding-left:0;border-left:0}
 .tf>small{font-size:10px;line-height:1.2;color:var(--fg-3);font-weight:400}
 .tf>b,.tf .ctx-id,.tf .ctx-ip{font-family:var(--mono);font-size:12px;line-height:1.3;font-weight:500;color:var(--fg);font-variant-numeric:tabular-nums}
@@ -5399,14 +5399,14 @@ button.sp-rad:hover{background:var(--hover)}
       <dt>PgUp PgDn</dt><dd>Hopp 15 punkter</dd>
       <dt>Mellomrom</dt><dd>Fest punkt til overvåking</dd>
       <dt>L</dt><dd>Live av/på</dd>
-      <dt>Z</dt><dd>Zoom — stor visning av valgt punkt</dd>
-      <dt>Dobbeltklikk på verdi</dt><dd>Skriv til et skrivbart punkt — bekreftelsen kommer som vanlig</dd>
+      <dt>Z</dt><dd>Zoom: stor visning av valgt punkt</dd>
+      <dt>Dobbeltklikk på verdi</dt><dd>Skriv til et skrivbart punkt, bekreftelsen kommer som vanlig</dd>
       <dt>Ctrl+.</dt><dd>Handlinger for punktet du staar på</dd>
-      <dt>F6</dt><dd>Neste rute — enheter, punkter, overvåking</dd>
+      <dt>F6</dt><dd>Neste rute: enheter, punkter, overvåking</dd>
       <dt>Ctrl+1/2/3</dt><dd>Rett til en rute</dd>
       <dt>g d / g p / g o / g s</dt><dd>Gå til enheter, punkter, overvåking, søk</dd>
       <dt>?</dt><dd>Denne lista</dd>
-      <dt>Ctrl+K</dt><dd>Kommandopalett — alt verktøyet kan gjøre, ett søkefelt</dd>
+      <dt>Ctrl+K</dt><dd>Kommandopalett: alt verktøyet kan gjøre, ett søkefelt</dd>
       <dt>Ctrl+F</dt><dd>Søk i alle enheter samtidig</dd>
       <dt>Ctrl+L</dt><dd>Hopp til skannefeltet</dd>
       <dt>Ctrl+J</dt><dd>Spør NABE</dd>
@@ -5439,14 +5439,14 @@ button.sp-rad:hover{background:var(--hover)}
         <option value="">Laster nettverkskort…</option>
       </select>
       <datalist id="kjenteOmrader"></datalist>
-      <input id="rangeInput" class="field" list="kjenteOmrader" style="width:148px" placeholder="10.75.1.0/24, …" title="Ett eller flere IP-områder: 10.75.1.0/24, én IP, eller 10.75.1.10-40. Skill dem med komma, semikolon eller mellomrom — de skannes etter tur inn i én liste. I BBMD-modus: IP-en til byggets BBMD."
+      <input id="rangeInput" class="field" list="kjenteOmrader" style="width:148px" placeholder="10.75.1.0/24, …" title="Ett eller flere IP-områder: 10.75.1.0/24, én IP, eller 10.75.1.10-40. Skill dem med komma, semikolon eller mellomrom, de skannes etter tur inn i én liste. I BBMD-modus: IP-en til byggets BBMD."
              autocomplete="off">
       <button id="diagKjapp" class="btn diag-kjapp" type="button" tabindex="-1">Sjekk én</button>
       <select id="modeSel" class="field" title="Auto: Who-Is på eget subnett, grundig sweep over VPN og rutet nett. BBMD: skriv IP-en til byggets BBMD og få hele bygget - også MS/TP bak rutere - uten å treffe nabobyggene på samme VPN.">
         <option value="auto">Auto</option>
-        <option value="bbmd">BBMD — via én IP</option>
-        <option value="unicast_sweep">Sweep — grundig</option>
-        <option value="unicast_fast">Sweep — rask</option>
+        <option value="bbmd">BBMD: via én IP</option>
+        <option value="unicast_sweep">Sweep: grundig</option>
+        <option value="unicast_fast">Sweep: rask</option>
         <option value="broadcast">Who-Is</option>
       </select>
       <button id="scanBtn" class="btn primary" disabled>Skann</button>
@@ -5473,7 +5473,7 @@ button.sp-rad:hover{background:var(--hover)}
       <div id="ctxBar" class="ctx-bar"><span class="ctx-empty">Ingen enhet valgt</span></div>
       <div id="filterChips" class="filter-chips" hidden></div>
       <div class="filterbar" hidden>
-        <input id="q" class="field" placeholder="Søk… (/) — flere ord = alle må treffe"
+        <input id="q" class="field" placeholder="Søk… (/): flere ord = alle må treffe"
                title="Mellomrom betyr og: KG32 RT601 finner alle RT601 på KG32.  -ord utelater.  &quot;to ord&quot; søker som frase.">
         <select id="typeSel" class="field"><option value="">Alle typer</option></select>
 
@@ -5491,7 +5491,7 @@ button.sp-rad:hover{background:var(--hover)}
 
         <button id="sysBtn" class="btn" type="button" title="Grupper punktene etter system - 360.003, 320.001 ...">System</button>
         <div class="menu">
-          <button id="visBtn" class="btn" title="Lagrede visninger — filter, sortering og kolonner under ett navn">Visninger</button>
+          <button id="visBtn" class="btn" title="Lagrede visninger: filter, sortering og kolonner under ett navn">Visninger</button>
           <div id="visPop" class="menu-pop" hidden></div>
         </div>
 
@@ -5605,6 +5605,10 @@ button.sp-rad:hover{background:var(--hover)}
 <script src="/js/nabe-kart.js"></script>
 <script src="/js/nabe-syn.js"></script>
 <script src="/js/nabe-raad.js"></script>
+<script src="/js/nabe-dialoger-innhold.js"></script>
+<script src="/js/nabe-dialoger-mer.js"></script>
+<script src="/js/nabe-dialoger.js"></script>
+<script src="/js/nabe-tilbehor.js"></script>
 <script src="/js/nabe-fortsett.js"></script>
 <script src="/js/nabe-simulator.js"></script>
 <script src="/js/nabe-oppdatering.js"></script>

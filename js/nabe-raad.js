@@ -11,7 +11,12 @@
 'use strict';
 
 (function raad() {
-  const sier = (nokkel, nb, en, humor) => nabeSier(T(nb, en), humor || null, nokkel, true);
+  const SAGT = new Set();
+  const sier = (nokkel, nb, en, humor) => {
+    if (SAGT.has(nokkel)) return;
+    SAGT.add(nokkel);
+    nabeSier(T(nb, en), humor || null, nokkel, true);
+  };
   const navnPaa = (d) => d.object_name || d.address;
 
   /* The same name on several devices: Beckhoff ships every controller as «Beckhoff_0». */
@@ -31,6 +36,8 @@
   /* Clocks: one device off is a device, most of a site off is a plant with no time sync. */
   function klokker() {
     let sek;
+    // Said when every device has been read, so the count is the real one and not the one so far.
+    try { if (typeof anleggTall === 'function' && !anleggTall().ferdig) return; } catch { return; }
     try { sek = siteWarnings().find(s => s.nokkel === 'klokke'); } catch { return; }
     if (!sek) return;
     const perSted = new Map(), totalt = new Map();

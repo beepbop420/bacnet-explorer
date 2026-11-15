@@ -283,6 +283,8 @@ def royktest():
               " helhet: !!window.nabeSyn && !!window.nabeRaad && typeof kobleTilPaaNytt === 'function' && typeof navngiNett === 'function'"
               "  && !!document.getElementById('devRescan') && !!document.getElementById('fargesynBtn') && !!document.getElementById('humorBtn')"
               "  && !!document.getElementById('bakoverBtn') && !document.getElementById('expPop').contains(document.getElementById('schBtn')),"
+              " dialoger: !!window.nabeDialoger && nabeDialoger.antall() > 600 && PLAGG.length >= 55 && !!PLAGG_REPLIKK.sydvest"
+              "  && Object.values(DIA_INNHOLD).every(d => d.l.every(x => String(JSON.stringify(x)).includes(' | '))),"
               " co2grense: (() => { const mk = (v, i) => ({a: [{objid: 'ai,' + i, name: 'CO2_PV', units: 'parts-per-million', value: v}, {objid: 'av,' + i, name: 'CO2_SP', units: 'parts-per-million', value: 700}]});"
               "  return settpunktAvvik(mk(420, 91)).length === 0 && settpunktAvvik(mk(800, 92)).length === 1 && schedDag(0) === T('man', 'Mon'); })(),"
               " settpunkt: typeof aapneAvvik === 'function' && !!document.getElementById('avvikBtn') && (() => {"
@@ -878,7 +880,7 @@ def kjor_tester():
     # Last: it silences the simulated device on 127.0.0.6.
     mine_uten_kontakt()
 
-    for fil in ("nabe-start", "nabe-verktoy", "nabe-felt", "nabe-moro", "nabe-finn", "nabe-skann", "nabe-anlegg", "nabe-bunn", "nabe-graf", "nabe-tunnel", "nabe-sammen", "nabe-flyt", "nabe-peker", "nabe-pekere", "nabe-skrift", "nabo", "nabo-brodre", "nabo-fasit", "nabe-garderobe", "nabe-opptak", "nabe-trafikk", "nabe-fortsett", "nabe-simulator", "nabe-oppdatering", "nabe-bakover", "nabe-kart", "nabe-syn", "nabe-raad", "nabe-kunnskap", "nabe-spor"):
+    for fil in ("nabe-start", "nabe-verktoy", "nabe-felt", "nabe-moro", "nabe-finn", "nabe-skann", "nabe-anlegg", "nabe-bunn", "nabe-graf", "nabe-tunnel", "nabe-sammen", "nabe-flyt", "nabe-peker", "nabe-pekere", "nabe-skrift", "nabo", "nabo-brodre", "nabo-fasit", "nabe-garderobe", "nabe-opptak", "nabe-trafikk", "nabe-fortsett", "nabe-simulator", "nabe-oppdatering", "nabe-bakover", "nabe-kart", "nabe-syn", "nabe-raad", "nabe-dialoger-innhold", "nabe-dialoger-mer", "nabe-dialoger", "nabe-tilbehor", "nabe-kunnskap", "nabe-spor"):
         try:
             with urllib.request.urlopen(f"{BASE}/js/{fil}.js", timeout=5) as rr:
                 ok = rr.status == 200

@@ -265,7 +265,7 @@ function meldBackend(nede, detalj) {
     el.hidden = !nede;
     if (nede) el.innerHTML = 'Mistet kontakt med NABE på denne PC-en'
       + '<span class="bw-note">Dette er programmet, ikke anlegget. '
-      + T('Kjør <b>start.bat</b> igjen — siden kobler seg på av seg selv.', 'Run <b>start.bat</b> again — the page reconnects by itself.') + '</span>';
+      + T('Kjør <b>start.bat</b> igjen, siden kobler seg på av seg selv.', 'Run <b>start.bat</b> again, the page reconnects by itself.') + '</span>';
   }
   if (nede) {
     // The address indicator must stop claiming a live connection: with the
@@ -307,7 +307,7 @@ async function api(path, body) {
     });
   } catch (e) {
     meldBackend(true);
-    throw new Error(T('Ingen kontakt med NABE på denne PC-en — kjører start.bat?', 'No contact with NABE on this PC — is start.bat running?'));
+    throw new Error(T('Ingen kontakt med NABE på denne PC-en, kjører start.bat?', 'No contact with NABE on this PC, is start.bat running?'));
   }
   meldBackend(false);
   if (!res.ok) {
@@ -349,7 +349,7 @@ setInterval(async () => {
     if (!d.running) {
       const kort = S.localAddr || $('localAddr').value;
       await connectTo(kort, {quiet: true});
-      if (S.connected) { sambandEndret(true); toast('Forbindelsen ble gjenopprettet — sender fra ' + S.localAddr); }
+      if (S.connected) { sambandEndret(true); toast('Forbindelsen ble gjenopprettet: sender fra ' + S.localAddr); }
       else { S.connected = false; sambandEndret(false); await refreshStatus(); }
     }
   } catch { /* haandteres av backend-vakten under */ }
@@ -370,8 +370,8 @@ setInterval(async () => {
       // again - which is exactly the kind of small stall this whole banner
       // exists to prevent.
       if (!S.connected) await connectTo($('localAddr').value, {quiet: true});
-      toast(S.connected ? 'Kontakt gjenopprettet — sender fra ' + S.localAddr
-                        : 'Kontakt gjenopprettet — velg nettverkskort');
+      toast(S.connected ? 'Kontakt gjenopprettet: sender fra ' + S.localAddr
+                        : 'Kontakt gjenopprettet: velg nettverkskort');
     }
   } catch { /* fortsatt nede */ }
 }, 4000);
@@ -442,7 +442,7 @@ const MAIN_MIN = 430;   // keep the points table usable
 /* The side panes are rigid (flex 0 0), so on a narrow window they would
    happily squeeze the points table down to a few characters. Give the table
    a floor and take the space back from the inspector first, then the device
-   list — without overwriting the user's saved preference. */
+   list, without overwriting the user's saved preference. */
 function clampPanes() {
   const prefs = loadPrefs();
   let dev = prefs.wDevices || PANE_DEFAULT.devices;
@@ -527,7 +527,7 @@ async function loadInterfaces() {
 }
 
 /* Bind to a specific interface. Called on startup and whenever the user
-   picks a different one — there is no reason to make them press a separate
+   picks a different one, there is no reason to make them press a separate
    connect button when choosing the interface already says what they want. */
 async function connectTo(cidr, {quiet = false, restart = false} = {}) {
   $('connText').textContent = 'Kobler til…';
@@ -648,7 +648,7 @@ async function kortForMaal(maal) {
   if (!bundet || bundet === r.ip) return;
   await connectTo(r.cidr, {quiet: true});
   if (S.connected && String(S.localAddr || '').startsWith(r.ip)) {
-    toast(T(`Byttet til ${r.interface || r.ip} — det er dit ${maal} rutes`, `Switched to ${r.interface || r.ip} — that is where ${maal} is routed`));
+    toast(T(`Byttet til ${r.interface || r.ip}, det er dit ${maal} rutes`, `Switched to ${r.interface || r.ip}, that is where ${maal} is routed`));
   }
 }
 
@@ -1017,9 +1017,9 @@ function siteWarnings() {
       nokkel: 'mangler',
       tittel: T(`${mangler.length} ${mangler.length === 1 ? 'enhet' : 'enheter'} svarte ikke`, `${mangler.length} ${mangler.length === 1 ? 'device' : 'devices'} did not answer`),
       note: T('Disse har svart her før. Rask sweep prøver hver adresse én gang, og '
-          + 'rekkevidden over VPN driver — «Sweep — grundig» prøver de stille om igjen. ',
+          + 'rekkevidden over VPN driver, «Sweep, grundig» prøver de stille om igjen. ',
           'These have answered here before. A quick sweep tries each address once, and '
-          + 'reach over a VPN drifts — “Sweep — thorough” tries the silent ones again. ')
+          + 'reach over a VPN drifts, “Sweep, thorough” tries the silent ones again. ')
           + levTekst,
       rader: mangler.map(e => ({
         alvorlig: false,
@@ -1115,12 +1115,12 @@ function renderSiteWarnings() {
         sp.textContent = lever ? 'svarer på ping' : 'stille';
         sp.classList.toggle('wr-ok', lever);
         sp.classList.toggle('wr-nei', !lever);
-        if (lever) toast(ip + ' svarer på ping — prøv «Sweep — grundig»');
+        if (lever) toast(ip + ' svarer på ping, prøv «Sweep, grundig»');
       } catch (e) {
         sp.textContent = /404|not found/i.test(e.message || '')
           ? 'krever omstart' : 'feilet';
         sp.title = /404|not found/i.test(e.message || '')
-          ? 'Ping kom i en nyere serverversjon — kjør start.bat igjen'
+          ? 'Ping kom i en nyere serverversjon, kjør start.bat igjen'
           : e.message;
       }
     });
@@ -1150,7 +1150,7 @@ async function stillKlokka(ip) {
   if (r.advarsel) {
     toast(r.advarsel, true);
   } else {
-    toast(T(`Klokka er stilt — enheten er nå ${r.avvik_etter ?? 0} s fra denne PC-en`, `Clock set — the device is now ${r.avvik_etter ?? 0} s from this PC`));
+    toast(T(`Klokka er stilt: enheten er nå ${r.avvik_etter ?? 0} s fra denne PC-en`, `Clock set: the device is now ${r.avvik_etter ?? 0} s from this PC`));
   }
   // Re-read so the warning reflects what the device says now, not what it
   // said when it was first identified.
@@ -1955,7 +1955,7 @@ async function selectDevice(ip, opts = {}) {
     // the socket until their own timeouts expire. Give them a moment to
     // drain, or the load that follows competes with them and crawls.
     await new Promise(r => setTimeout(r, 4500));
-    status(T('Skann stoppet — laster enheten', 'Scan stopped — loading the device'));
+    status(T('Skann stoppet: laster enheten', 'Scan stopped: loading the device'));
   }
   S.selected = null; S.detail = null;
   renderDevices(); renderInspector();
@@ -2117,7 +2117,7 @@ function fillTypeFilter(counts) {
 /* Keyed by ip|objid rather than objid alone so a selection made on one device
    is not silently reinterpreted as different points on the next. */
 /* Every caller reaches these through a render, and renders happen from timers
-   and the resize handler as well as from clicks — so they must not assume a
+   and the resize handler as well as from clicks, so they must not assume a
    device is selected. Without the guard, clearing the device while points were
    still in memory threw out of renderPoints and left a half-drawn table. */
 function selKey(p) { return S.activeDev ? wkey(S.activeDev.address, p.objid) : ''; }
@@ -2198,7 +2198,7 @@ function renderSelBar() {
 async function releaseSelected() {
   const rows = selectedVisible().filter(p => p.writable);
   if (!rows.length) { toast(T('Ingen skrivbare punkter valgt', 'No writable points selected'), true); return; }
-  if (S.readOnly) { toast(T('Lesemodus er på — skriving er blokkert', 'Read-only is on — writing is blocked'), true); return; }
+  if (S.readOnly) { toast(T('Lesemodus er på: skriving er blokkert', 'Read-only is on: writing is blocked'), true); return; }
   const pri = parseInt($('selPri').value, 10);
   const NL = String.fromCharCode(10);
   const vis = rows.slice(0, 8).map(p => '  · ' + (p.name || p.objid)).join(NL)
@@ -2234,7 +2234,7 @@ async function releaseSelected() {
       `.dev[data-ip="${CSS.escape(S.activeDev.address)}"]`), 'mottok', 1040);
   }
   status(T(`${ok} av ${rows.length} frigitt på prioritet ${pri}`, `${ok} of ${rows.length} released at priority ${pri}`));
-  toast(feil.length ? T(`${ok} frigitt · ${feil.length} feilet — se skriveloggen`, `${ok} released · ${feil.length} failed — see the write log`)
+  toast(feil.length ? T(`${ok} frigitt · ${feil.length} feilet, se skriveloggen`, `${ok} released · ${feil.length} failed, see the write log`)
                     : T(`${ok} punkter frigitt på prioritet ${pri}`, `${ok} points released at priority ${pri}`), feil.length > 0);
   await refreshMany(rows.map(p => p.objid));
 }
@@ -2316,7 +2316,7 @@ function clockBadge(ip) {
   const id = S.identity[ip] || {};
   const alvorlig = Math.abs(sek) > CLOCK_SEVERE;
   return `<button class="ctx-stat ${alvorlig ? 'bad' : 'warn'}" data-klokke="${esc(ip)}" title="${T('Enheten sier ', 'The device says ')}${
-    esc(String(id['device-time'] || '?'))} ${T('— ukeprogram og trendlogger følger denne klokka. Klikk for å stille den.',
+    esc(String(id['device-time'] || '?'))} ${T('ukeprogram og trendlogger følger denne klokka. Klikk for å stille den.',
     '- weekly schedules and trend logs follow this clock. Click to set it.')}${sommertidAvvik(sek) ? T(
       ' Klokka er riktig time, men feil sommertid eller tidssone: rett det i enheten, ellers kommer det tilbake. Står denne PC-en i en annen tidssone, kan det forklare timen.',
       ' The clock is an hour off: wrong daylight saving or time zone. Fix it in the device or it comes back. A PC in another time zone can also explain the hour.') : ''}">⏱ ${T('klokke', 'clock')} ${
@@ -2358,7 +2358,7 @@ function renderCtx() {
         ${clockBadge(d.address)}
       </span>
     </div>
-    ${(S.namePrefix && loadPrefs().shortNames !== false) ? `<span class="ctx-prefix" title="${T('Alle punktnavn på denne enheten starter med dette. Det er utelatt fra tabellen for lesbarhet — hold over et navn for å se det fullt ut.', 'Every point name on this device starts with this. It is left out of the table to keep it readable — hover a name to see it in full.')}">${esc(S.namePrefix)}…</span>` : ''}
+    ${(S.namePrefix && loadPrefs().shortNames !== false) ? `<span class="ctx-prefix" title="${T('Alle punktnavn på denne enheten starter med dette. Det er utelatt fra tabellen for lesbarhet, hold over et navn for å se det fullt ut.', 'Every point name on this device starts with this. It is left out of the table to keep it readable, hover a name to see it in full.')}">${esc(S.namePrefix)}…</span>` : ''}
     <div class="spacer"></div>
     ${Object.entries(FLAGS).filter(([f]) => flagg[f]).map(([f, m]) =>
       `<button class="ctx-stat ${m.cls}" data-flag="${f}" title="${T('Vis kun punkter ' + esc(m.label), 'Show only points ' + esc(oversettTekst(m.label, true)))}">${flagg[f]} ${esc(m.label)}</button>`).join('')}
@@ -2494,7 +2494,7 @@ function flagCounts(points) {
 /* Every point on a controller carries the controller's own name as the first
    segment of its own: 1421 points, 1421 copies of "563001-1OS001/", a quarter
    of every name spent on something the device list already tells you. Worse,
-   text-overflow trims the tail — and the tail ("AI-4", "AV-256") is the only
+   text-overflow trims the tail, and the tail ("AI-4", "AV-256") is the only
    part that differs.
 
    So leading segments that are identical across every point are dropped from
@@ -2524,7 +2524,7 @@ function shortName(p) {
 }
 
 /* "Ingen treff" is the same sentence whether you mistyped a search or the
-   plant simply has nothing in alarm — and those deserve different reactions.
+   plant simply has nothing in alarm, and those deserve different reactions.
    Say which filter came up empty, and offer the way back out. */
 function emptyResultView() {
   const f = S.filters;
@@ -2538,11 +2538,11 @@ function emptyResultView() {
   if (f.q.trim() && !aktive.length) {
     tittel = T(`Ingen punkter matcher «${esc(f.q.trim())}»`, `No points match “${esc(f.q.trim())}”`);
     hjelp = T('Søket dekker navn, beskrivelse og objekt-ID på denne enheten. '
-          + 'Flere ord må alle treffe, uansett rekkefølge — «360.001 RT601» '
+          + 'Flere ord må alle treffe, uansett rekkefølge, «360.001 RT601» '
           + 'finner punkter som inneholder begge. Sett minus foran et ord for '
           + 'å utelate det. Trykk Ctrl+F for å søke i alle leste enheter.',
           'The search covers name, description and object ID on this device. '
-          + 'Several words must all match, in any order — “360.001 RT601” '
+          + 'Several words must all match, in any order, “360.001 RT601” '
           + 'finds points that contain both. Put a minus in front of a word to '
           + 'leave it out. Press Ctrl+F to search every device read.');
   } else if (aktive.length && !f.q.trim()) {
@@ -2733,7 +2733,7 @@ function noteSyncTekst() {
   if (!S.noteUpstream) return '';
   const s = S.noteSync || {};
   if (s.state === 'ok') return 'delt med fellesserveren';
-  if (s.state === 'ikke delt') return 'lagret her, men ikke delt — fellesserveren svarte ikke';
+  if (s.state === 'ikke delt') return 'lagret her, men ikke delt, fellesserveren svarte ikke';
   if (s.state === 'frakoblet') return 'lagret her · fellesserveren er ikke tilgjengelig';
   return 'lagret her';
 }
@@ -2841,7 +2841,7 @@ function lagreBilde(navn, dataUri) {
     localStorage.setItem(BILDE_KEY, JSON.stringify(b));
     return true;
   } catch {
-    toast('Bildet er for stort til å lagres — prøv et mindre', true);
+    toast('Bildet er for stort til å lagres, prøv et mindre', true);
     return false;
   }
 }
@@ -3009,7 +3009,7 @@ function fiksLesbarhet() {
       savePrefs({bgMorkne: m});
       brukTema();
       tegnTema();
-      toast(T(`Mørklegging satt til ${m} % — teksten er lesbar igjen`, `Dimming set to ${m} % — the text is readable again`));
+      toast(T(`Mørklegging satt til ${m} %, teksten er lesbar igjen`, `Dimming set to ${m} %, the text is readable again`));
       return;
     }
   }
@@ -3017,7 +3017,7 @@ function fiksLesbarhet() {
   savePrefs({bgMorkne: 80, flateGjennom: Math.max(0, (p.flateGjennom ?? 0) - 30)});
   brukTema();
   tegnTema();
-  toast('Bildet er for lyst — dempet det og gjorde flatene mer dekkende', true);
+  toast('Bildet er for lyst, dempet det og gjorde flatene mer dekkende', true);
 }
 
 function rgbaAv(hex, alfa) {
@@ -4515,7 +4515,7 @@ function commands() {
   add('Handling', 'Frigi valgte punkter', () => { closeCmd(); releaseSelected(); },
       {when: () => harPunkter() && selectedVisible().some(p => p.writable) && !S.readOnly,
        undertekst: () => selectedVisible().filter(p => p.writable).length + ' valgt'});
-  add('Handling', 'Lesemodus — blokker all skriving', () => $('roBtn').click(),
+  add('Handling', 'Lesemodus: blokker all skriving', () => $('roBtn').click(),
       {tilstand: () => S.readOnly ? 'pa' : ''});
 
   add('Visning', 'Vis alle objekttyper (ukeprogram, kalender, trendlogg)',
@@ -4536,8 +4536,8 @@ function commands() {
   add('Handling', 'Se bakover…', () => { closeCmd(); aapneBakover(); });
   add('Handling', 'Avvik fra settpunkt…', () => { closeCmd(); aapneAvvik(); });
   add('Visning', 'Innstillinger…', () => { closeCmd(); openTema(); });
-  add('Eksport', 'NABO — tagger og Variabel-fil…', () => { closeCmd(); aapneNabo(); }, {hint: 'N'});
-  add('Visning', 'Utseende — farger, bilder og størrelse…',
+  add('Eksport', 'NABO: tagger og Variabel-fil…', () => { closeCmd(); aapneNabo(); }, {hint: 'N'});
+  add('Visning', 'Utseende: farger, bilder og størrelse…',
       () => { closeCmd(); openTema('utseende'); });
   add('Visning', 'Kolonner…', () => { closeCmd(); openCols(); });
   add('Visning', 'Grupper enheter (automatisk / leverandør / nett / av)', () => $('groupBtn').click(),
@@ -4571,7 +4571,7 @@ function commands() {
   add('Eksport', 'Skrivelogg', () => { closeCmd(); showWriteLog(); });
   add('Visning', 'Garderobe…', () => { closeCmd(); aapneGarderobe(); });
   add('Visning', 'Tunnelen (spill)', () => { closeCmd(); aapneTunnel(); }, {when: () => !S.activeDev});
-  add('Handling', 'Ukeprogram — vis og rediger', () => { closeCmd(); $('schBtn').click(); }, {when: harEnhet});
+  add('Handling', 'Ukeprogram: vis og rediger', () => { closeCmd(); $('schBtn').click(); }, {when: harEnhet});
 
   add('Anlegg', 'Koble til på nytt', () => $('reconnBtn').click());
 
@@ -4905,7 +4905,7 @@ function isDiff(p) {
 /* ------------------------------------------------------------ render points */
 /* Both the header and the body are generated from this list, so the order can
    be changed without the two drifting apart. `menu` is only what the column
-   picker calls it — the table's own headings are left exactly as they were. */
+   picker calls it, the table's own headings are left exactly as they were. */
 const COLS = [
   {k: 'objid', label: 'Objekt', menu: 'Objekt', cls: 'c-obj', col: 'w-obj',
    cell: p => `<span class="type-tag ${TYPE_CLASS[p.type] || ''}">${shortType(p.type)}</span><span class="inst">${p.instance}</span>`},
@@ -5256,7 +5256,7 @@ function tegnSammenlign() {
 
   if (!vis.length) {
     body.innerHTML = '<div class="gs-empty">'
-      + (bareUlike ? 'Ingen avvik — de to er like.' : 'Ingen felles punkter.')
+      + (bareUlike ? 'Ingen avvik: de to er like.' : 'Ingen felles punkter.')
       + '</div>';
     return;
   }
@@ -5281,13 +5281,13 @@ function tegnSammenlign() {
 function openSammenlign() {
   const lest = S.devices.filter(d => (S.cache[d.address] || []).length);
   if (lest.length < 2) {
-    toast('Åpne minst to enheter først — sammenlikningen bruker det som er lest', true);
+    toast('Åpne minst to enheter først, sammenlikningen bruker det som er lest', true);
     return;
   }
   const valg = (sel, forvalg) => {
     sel.innerHTML = lest.map(d =>
       `<option value="${esc(d.address)}">${esc(d.object_name || ('Enhet ' + d.device_instance))}`
-      + ` — ${esc(d.address)}</option>`).join('');
+      + `, ${esc(d.address)}</option>`).join('');
     sel.value = forvalg;
   };
   const a = S.activeDev && S.cache[S.activeDev.address] ? S.activeDev.address : lest[0].address;
@@ -5620,7 +5620,7 @@ function cmdEnheter(q) {
    sparer man klikkene fram til spoersmaalet, ikke spoersmaalet. */
 function startInlineSkriv(td, p) {
   if (!p || !p.writable || td.querySelector('input')) return;
-  if (S.readOnly) { toast('Lesemodus er på — skriving er blokkert', true); return; }
+  if (S.readOnly) { toast('Lesemodus er på: skriving er blokkert', true); return; }
 
   const gammel = td.textContent;
   const inp = document.createElement('input');
@@ -5657,7 +5657,7 @@ function levérTilSkjema(p, verdi) {
     const send = document.getElementById('wSend');
     if (!felt || !send) {
       if (n > 0) return void setTimeout(() => forsok(n - 1), 60);
-      toast('Fant ikke skriveskjemaet — bruk feltet i inspektøren', true);
+      toast('Fant ikke skriveskjemaet: bruk feltet i inspektøren', true);
       return;
     }
     felt.value = verdi;
@@ -5695,7 +5695,7 @@ async function pingOmraade(omraader, boks) {
   } catch (e) {
     const nytt = /404|not found/i.test(e.message || '');
     if (ut) ut.innerHTML = nytt
-      ? T('Ping krever at serveren startes på nytt — kjør <code>start.bat</code> igjen.', 'Ping needs the server restarted — run <code>start.bat</code> again.')
+      ? T('Ping krever at serveren startes på nytt, kjør <code>start.bat</code> igjen.', 'Ping needs the server restarted, run <code>start.bat</code> again.')
       : esc(T('Ping feilet: ', 'Ping failed: ') + e.message);
     return;
   }
@@ -5706,11 +5706,11 @@ async function pingOmraade(omraader, boks) {
   if (!ut) return;
   if (!lever.length) {
     ut.innerHTML = T('<b>Ingen av ' + sjekket + ' adresser svarte på ping heller.</b> '
-      + 'Det peker mot nettveien — rute, brannmur eller feil nettverkskort. '
+      + 'Det peker mot nettveien, rute, brannmur eller feil nettverkskort. '
       + 'Men vær klar over at mange regulatorer svarer på BACnet uten å svare '
       + 'på ping, så prøv <b>grundig sweep</b> før du konkluderer.',
       '<b>None of ' + sjekket + ' addresses answered ping either.</b> '
-      + 'That points at the network path — route, firewall or the wrong adapter. '
+      + 'That points at the network path, route, firewall or the wrong adapter. '
       + 'But many controllers answer BACnet without answering ping, '
       + 'so try a <b>thorough sweep</b> before you conclude.');
     return;
@@ -5719,12 +5719,12 @@ async function pingOmraade(omraader, boks) {
     T('<b>' + lever.length + ' av ' + sjekket + ' adresser svarer på ping', '<b>' + lever.length + ' of ' + sjekket + ' addresses answer ping')
     + (stille.length
         ? T(', men ' + stille.length + ' av dem svarte ikke på BACnet.</b> '
-          + 'De adressene er i live — det er BACnet-oppdagelsen som feiler der. '
+          + 'De adressene er i live, det er BACnet-oppdagelsen som feiler der. '
           + 'Grundig sweep prøver dem om igjen. '
           + '<span class="ping-nb">Merk at ping ikke er fasit andre veien: '
           + 'en regulator kan svare på BACnet uten å svare på ping.</span>',
           ', but ' + stille.length + ' of them did not answer BACnet.</b> '
-          + 'Those addresses are alive — it is BACnet discovery that fails there. '
+          + 'Those addresses are alive, it is BACnet discovery that fails there. '
           + 'A thorough sweep tries them again. '
           + '<span class="ping-nb">Ping is not the answer the other way round: '
           + 'a controller can answer BACnet without answering ping.</span>')
@@ -5775,33 +5775,33 @@ function tomtSkannResultat(mode, omraader) {
   const grunner = [];
   if (mode === 'broadcast') {
     grunner.push(T('<b>Who-Is</b> er en kringkasting. Rutere og VPN slipper den '
-      + 'som regel ikke gjennom — derfor svarer ingen, selv om enhetene er der.',
+      + 'som regel ikke gjennom, derfor svarer ingen, selv om enhetene er der.',
       '<b>Who-Is</b> is a broadcast. Routers and VPNs usually do not let it '
-      + 'through — so nobody answers, even though the devices are there.'));
+      + 'through, so nobody answers, even though the devices are there.'));
   }
   if (mode === 'unicast_fast') {
-    grunner.push(T('<b>Sweep — rask</b> prøver hver adresse <b>én gang</b>. Over '
-      + 'VPN driver rekkevidden fra minutt til minutt — samme regulator kan '
+    grunner.push(T('<b>Sweep, rask</b> prøver hver adresse <b>én gang</b>. Over '
+      + 'VPN driver rekkevidden fra minutt til minutt, samme regulator kan '
       + 'svare på seks av åtte forsøk, og på null en halvtime senere. Ett '
       + 'stille forsøk betyr derfor lite, og «grundig» prøver de stille '
       + 'adressene om igjen for deg.',
-      '<b>Sweep — quick</b> tries each address <b>once</b>. Over a '
-      + 'VPN, reach drifts from minute to minute — the same controller can '
+      '<b>Sweep, quick</b> tries each address <b>once</b>. Over a '
+      + 'VPN, reach drifts from minute to minute, the same controller can '
       + 'answer six of eight tries, and none half an hour later. One '
       + 'silent try means little, and “thorough” tries the silent '
       + 'addresses again for you.'));
   }
   if (vpn) {
-    grunner.push(T('Du sender fra <code>' + esc(S.localAddr) + '</code> — et '
+    grunner.push(T('Du sender fra <code>' + esc(S.localAddr) + '</code>, et '
       + '/32 uten eget subnett, altså en VPN-tunnel. Kringkasting virker ikke herfra.',
-      'You are sending from <code>' + esc(S.localAddr) + '</code> — a '
+      'You are sending from <code>' + esc(S.localAddr) + '</code>, a '
       + '/32 with no subnet of its own, so a VPN tunnel. Broadcasts do not work from here.'));
   }
   if (mode === 'bbmd') {
-    grunner.push(T('<b>BBMD</b> trenger IP-en til byggets BBMD — som oftest JACE-en '
+    grunner.push(T('<b>BBMD</b> trenger IP-en til byggets BBMD, som oftest JACE-en '
       + 'eller hovedsentralen, ikke en vilkårlig regulator. Svarer den ikke på '
       + 'registreringen, leses adressen alene.',
-      '<b>BBMD</b> needs the IP of the building’s BBMD — usually the JACE '
+      '<b>BBMD</b> needs the IP of the building’s BBMD, usually the JACE '
       + 'or the main controller, not just any controller. If it does not answer '
       + 'the registration, the address is read on its own.'));
   }
@@ -5819,7 +5819,7 @@ function tomtSkannResultat(mode, omraader) {
     + 'is its own conversation on UDP 47808, and it can be blocked while ping works.'));
 
   const knapp = mode !== 'unicast_sweep'
-    ? `<button class="btn primary" id="tomtGrundig">${T('Prøv «Sweep — grundig»', 'Try “Sweep — thorough”')}</button>`
+    ? `<button class="btn primary" id="tomtGrundig">${T('Prøv «Sweep: grundig»', 'Try “Sweep: thorough”')}</button>`
     : `<button class="btn" id="tomtIgjen">${T('Skann på nytt', 'Scan again')}</button>`;
 
   el.innerHTML =
@@ -5917,8 +5917,8 @@ function renderPoints() {
   // it is too narrow to show, the name is all there is and keeps it.
   wrap.classList.toggle('desc-primary', showDesc);
   /* The fixed columns add up to 250 px. When the table has less room than
-     that plus something to read, the name column — the one that identifies
-     the point — is what gets squeezed, and it was measured down to 20 px on a
+     that plus something to read, the name column, the one that identifies
+     the point, is what gets squeezed, and it was measured down to 20 px on a
      700 px window. Below this the object instance stands down: it is an
      address you rarely read, and the type tag next to it survives. */
   wrap.classList.toggle('cramped', wrap.clientWidth < 420);
@@ -5984,8 +5984,7 @@ function renderPoints() {
   const colgroup = '<colgroup><col class="w-act">'
     + cols.map(c => `<col${c.col ? ` class="${c.col}"` : ''}>`).join('') + '</colgroup>';
   const moreNote = truncated
-    ? `<div class="empty" style="padding:12px">Viser ${MAX_ROWS} av ${all.length} punkter —
-        bruk søk eller typefilter for å snevre inn.</div>`
+    ? `<div class="empty" style="padding:12px">${T(`Viser ${MAX_ROWS} av ${all.length} punkter. Bruk søk eller typefilter for å snevre inn.`, `Showing ${MAX_ROWS} of ${all.length} points. Use search or the type filter to narrow it down.`)}</div>`
     : '';
   wrap.innerHTML = `<table>${colgroup}<thead><tr><th></th>${head}</tr></thead><tbody${fersk ? ' class="ferske"' : ''}>${body}</tbody></table>${moreNote}`;
 
@@ -6197,7 +6196,7 @@ function syncMenuStates() {
     $('shortState').textContent = !kort ? 'av'
       : S.namePrefix ? 'på' : 'ingen felles start';
     el.title = !kort ? 'Punktnavn vises fullt ut'
-      : S.namePrefix ? T(`Utelater «${S.namePrefix}» fra tabellen — fullt navn i tooltip, søk og eksport`, `Leaves “${S.namePrefix}” out of the table — full name in the tooltip, search and export`)
+      : S.namePrefix ? T(`Utelater «${S.namePrefix}» fra tabellen, fullt navn i tooltip, søk og eksport`, `Leaves “${S.namePrefix}” out of the table, full name in the tooltip, search and export`)
                      : 'På, men punktnavnene her har ingen felles start å utelate';
   }
 }
@@ -6682,7 +6681,7 @@ function renderInspector() {
               : `<small class="pri-hvem">${T('ikke fra NABE', 'not from NABE')}</small>`;
             return `<dt>${T('prioritet', 'priority')} ${a.p}${PRI_NAVN[a.p] ? ` <small class="pri-navn">${esc(T(PRI_NAVN[a.p][0], PRI_NAVN[a.p][1]))}</small>` : ''}</dt><dd>${esc(a.v)} ${hvem}</dd>`;
           }).join('')}</dl>`
-        : `<div style="font-size:11px;color:var(--fg-3)">Ingen aktive kommandoer — styres av lokal logikk</div>`) +
+        : `<div style="font-size:11px;color:var(--fg-3)">Ingen aktive kommandoer, styres av lokal logikk</div>`) +
       `</div></div>`;
   }
 
@@ -6697,7 +6696,7 @@ function renderInspector() {
     </div>
     <div class="insp-sub">${esc(p.description || '')}</div>
     <div class="insp-val${p.writable ? ' adjustable' : ''}" aria-live="off"${
-      p.writable ? ` title="${T('Kommanderbart punkt — kan skrives', 'Commandable point — can be written')}"` : ''
+      p.writable ? ` title="${T('Kommanderbart punkt: kan skrives', 'Commandable point: can be written')}"` : ''
       } data-rull="${kanRulle(shown) ? '1' : ''}">${
       esc(shown)}<small>${esc(p.unit_symbol || '')}</small></div>
     <div class="insp-sub" style="padding-top:6px;display:flex;align-items:center;gap:6px;flex-wrap:wrap">
@@ -7143,8 +7142,8 @@ async function refreshReadOnly() {
 
 function roNotice() {
   return `<div class="sect"><div class="sect-head">${T('Skriv verdi', 'Write value')}</div>`
-       + `<div class="wf"><div class="warn-box">${T('Lesemodus er på — skriving er blokkert. '
-       + 'Slå av hengelåsen i verktøylinjen for å skrive.', 'Read-only is on — writing is blocked. '
+       + `<div class="wf"><div class="warn-box">${T('Lesemodus er på: skriving er blokkert. '
+       + 'Slå av hengelåsen i verktøylinjen for å skrive.', 'Read-only is on: writing is blocked. '
        + 'Turn off the padlock in the toolbar to write.')}</div></div></div>`;
 }
 
@@ -7208,11 +7207,11 @@ function writeForm(p, d) {
   let input;
   if (Array.isArray(d['state-text'])) {
     input = `<select id="wVal" class="field">` +
-      d['state-text'].map((t, i) => `<option value="${i + 1}">${i + 1} — ${esc(t)}</option>`).join('') + `</select>`;
+      d['state-text'].map((t, i) => `<option value="${i + 1}">${i + 1}, ${esc(t)}</option>`).join('') + `</select>`;
   } else if (p.type.startsWith('binary')) {
     input = `<select id="wVal" class="field">
-      <option value="active">active${d['active-text'] ? ' — ' + esc(d['active-text']) : ''}</option>
-      <option value="inactive">inactive${d['inactive-text'] ? ' — ' + esc(d['inactive-text']) : ''}</option>
+      <option value="active">active${d['active-text'] ? ', ' + esc(d['active-text']) : ''}</option>
+      <option value="inactive">inactive${d['inactive-text'] ? ', ' + esc(d['inactive-text']) : ''}</option>
     </select>`;
   } else {
     input = `<input id="wVal" class="field" placeholder="${T('verdi', 'value')}">`;
@@ -7227,7 +7226,7 @@ function writeForm(p, d) {
       <div class="wf-row">
         <label style="font-size:10px;color:var(--fg-3);flex:0 0 auto">Auto-frigi</label>
         <select id="wAuto" class="field" style="flex:1" title="Frigjør prioriteten automatisk etter valgt tid">
-          <option value="">av — blir stående til du frigir</option>
+          <option value="">av, blir stående til du frigir</option>
           <option value="5">etter 5 min</option>
           <option value="15" selected>etter 15 min</option>
           <option value="30">etter 30 min</option>
@@ -7236,7 +7235,7 @@ function writeForm(p, d) {
       </div>
       <div class="wf-row">
         <button id="wSend" class="btn primary" style="flex:1">Skriv</button>
-        <button id="wRel" class="btn" title="Skriv Null — frigjør prioriteten">Frigi</button>
+        <button id="wRel" class="btn" title="Skriv Null: frigjør prioriteten">Frigi</button>
       </div>
       <div class="warn-box">Skriving påvirker et anlegg i drift. Kontroller punkt og prioritet før du sender.</div>
     </div></div>`;
@@ -7759,7 +7758,7 @@ function takeSnapshot() {
   S.snapAt = new Date();
   $('sbSnap').innerHTML = `<b>snapshot</b> ${S.snapAt.toLocaleTimeString('no')}`;
   $('snapBtn').textContent = T('Nytt snapshot', 'New snapshot');
-  toast(T(S.points.length + ' verdier lagret — endringer markeres gult', S.points.length + ' values saved — changes are marked yellow'));
+  toast(T(S.points.length + ' verdier lagret, endringer markeres gult', S.points.length + ' values saved, changes are marked yellow'));
   renderPoints();
 }
 
@@ -8111,7 +8110,7 @@ function renderWeekGrid(sch) {
                    data-dag="${i}" data-idx="${idx}" data-til="${sp.to}"
                    style="top:${top}px;height:${Math.max(hgt, 2)}px;background:${schedColor(sp.value, seen)}"
                    title="${esc(label)} ${minToTime(sp.from)}–${minToTime(sp.to === 1440 ? 0 : sp.to)}${
-                     kanRedigere && idx >= 0 ? T(' — klikk for å endre nedenfor, dra for å flytte', ' — click to change below, drag to move') : ''}">
+                     kanRedigere && idx >= 0 ? T(', klikk for å endre nedenfor, dra for å flytte', ', click to change below, drag to move') : ''}">
         ${kanRedigere && idx >= 0 ? '<span class="wk-grep topp"></span>' : ''}
         <b>${esc(vis)}</b>
         <i>${minToTime(sp.from)} - ${minToTime(sp.to === 1440 ? 0 : sp.to)}</i>
@@ -8164,7 +8163,7 @@ function tegnUke() {
 
 function ukeFot() {
   if (S.readOnly) {
-    return `<div class="wk-foot"><span class="wk-hint">Lesemodus er på — ukeprogrammet kan ikke endres.</span></div>`;
+    return `<div class="wk-foot"><span class="wk-hint">Lesemodus er på, ukeprogrammet kan ikke endres.</span></div>`;
   }
   return `<div class="wk-foot">
     <span class="wk-hint">Klikk en blokk og endre tidene nederst · «Del i to» lager en ny
@@ -8559,7 +8558,7 @@ async function lagreUke() {
   if (S.ukeOrig && ukeSignatur(sch) === ukeSignatur(S.ukeOrig)) {
     S.ukeRort = false;
     tegnUke();
-    toast('Ukeprogrammet er uendret — ingenting å skrive');
+    toast('Ukeprogrammet er uendret: ingenting å skrive');
     return;
   }
 
@@ -8780,7 +8779,7 @@ function renderEdeResult(r, filename) {
   $('edeBody').innerHTML =
     (r.missing.length || r.renamed.length || r.extra.length
       ? ''
-      : `<div class="gs-empty">${T('Ingen avvik — filen stemmer med anlegget.', 'No differences — the file matches the plant.')}</div>`)
+      : `<div class="gs-empty">${T('Ingen avvik: filen stemmer med anlegget.', 'No differences: the file matches the plant.')}</div>`)
     + sec(T('Mangler i anlegget', 'Missing in the plant'), r.missing,
         x => `<div class="ede-row"><code>${esc(x.objid)}</code><span>${esc(x.name)}</span>
               <em>${esc(x.description)}</em></div>`, 'bad')
@@ -9050,6 +9049,7 @@ async function kobleTilPaaNytt(ip) {
     } else {
       toast(T(`Koblet til på nytt: ${d.kort.map(navn).join(', ')}.`, `Reconnected: ${d.kort.map(navn).join(', ')}.`));
     }
+    document.dispatchEvent(new CustomEvent('nabe:reconnect', {detail: {ok: !feil.length}}));
     if (S.devices.length && !feil.length) setTimeout(() => rescanOnce(true), 900);
   } catch (e) {
     toast(e.message, true);
@@ -9283,8 +9283,8 @@ $('allTypesBtn').onclick = () => {
   const paa = loadPrefs().allTypes === true;
   savePrefs({allTypes: !paa});
   syncMenuStates();
-  toast(!paa ? 'Viser alle objekttyper — les enheten på nytt'
-             : 'Viser kun punkter med verdi — les enheten på nytt');
+  toast(!paa ? 'Viser alle objekttyper: les enheten på nytt'
+             : 'Viser kun punkter med verdi, les enheten på nytt');
   if (S.activeDev) {
     const ip = S.activeDev.address;
     delete S.cache[ip]; delete S.cacheMeta[ip];
@@ -9324,7 +9324,7 @@ $('wlogBtn').onclick = showWriteLog;
 $('roBtn').onclick = async () => {
   const d = await api('/api/readonly', {enabled: !S.readOnly});
   S.readOnly = !!d.enabled;
-  toast(S.readOnly ? T('Lesemodus på — skriving blokkert', 'Read-only on — writing blocked') : T('Lesemodus av', 'Read-only off'));
+  toast(S.readOnly ? T('Lesemodus på: skriving blokkert', 'Read-only on: writing blocked') : T('Lesemodus av', 'Read-only off'));
   refreshReadOnly();
 };
 $('selPin').onclick = pinSelected;
@@ -9340,7 +9340,7 @@ $('brandLink')?.removeAttribute('title');
 
 /* Build the image off-DOM with both handlers attached before src is set, so
    the load cannot fire before we are listening. It is only inserted once it
-   has actually decoded — with no logo file installed the placeholder mark
+   has actually decoded, with no logo file installed the placeholder mark
    simply stays and no broken image is ever shown. */
 (function loadLogo() {
   const img = new Image();
@@ -9668,7 +9668,7 @@ function oppdaterDiagKjapp() {
      nothing is worse than the button not being reachable at all. Back in it
      the moment it means something. */
   if (ip) b.removeAttribute('tabindex'); else b.setAttribute('tabindex', '-1');
-  b.title = ip ? T('Sjekk ' + ip + ' — hvorfor svarer den ikke?', 'Check ' + ip + ' — why is it not answering?') : '';
+  b.title = ip ? T('Sjekk ' + ip + ', hvorfor svarer den ikke?', 'Check ' + ip + ', why is it not answering?') : '';
 }
 
 let DIAG_GEN = 0;
@@ -9724,10 +9724,10 @@ function diagOppsummer(ip, s) {
   } else if (ping === 'ok') {
     tekst = T('<b>Adressen lever, men BACnet svarer ikke.</b> Da er det ikke '
           + 'nettveien. Sjekk at enheten faktisk snakker BACnet/IP på 47808, '
-          + 'og prøv «Sweep — grundig» — stille adresser svarer ofte på '
+          + 'og prøv «Sweep, grundig», stille adresser svarer ofte på '
           + 'andre forsøk.', '<b>The address is alive, but BACnet does not answer.</b> Then it is not '
           + 'the network path. Check that the device really speaks BACnet/IP on 47808, '
-          + 'and try “Sweep — thorough” — silent addresses often answer '
+          + 'and try “Sweep, thorough”, silent addresses often answer '
           + 'the second time.');
   } else if (kort === 'advarsel') {
     tekst = T('<b>Ingenting svarer, og adressen ligger utenfor ditt subnett.</b> '
@@ -9738,10 +9738,10 @@ function diagOppsummer(ip, s) {
   } else {
     tekst = T('<b>Ingenting svarer.</b> Verken ping eller BACnet. Sjekk kabel, '
           + 'VLAN, brannmur, og at IP-en er riktig. Merk at en del regulatorer '
-          + 'ikke svarer på ping i det hele tatt — prøv «Sweep — grundig» på '
+          + 'ikke svarer på ping i det hele tatt, prøv «Sweep, grundig» på '
           + 'området før du konkluderer.', '<b>Nothing answers.</b> Neither ping nor BACnet. Check the cable, '
           + 'VLAN, firewall, and that the IP is right. Some controllers '
-          + 'do not answer ping at all — try “Sweep — thorough” on '
+          + 'do not answer ping at all, try “Sweep, thorough” on '
           + 'the range before you conclude.');
   }
 
@@ -9930,16 +9930,16 @@ const ORDBOK = {
   'Variabel-fil…': 'Variabel file…',
   'Punkt': 'Point',
   'avvik': 'difference',
-  'Ett eller flere IP-områder: 10.75.1.0/24, én IP, eller 10.75.1.10-40. Skill dem med komma, semikolon eller mellomrom — de skannes etter tur inn i én liste. I BBMD-modus: IP-en til byggets BBMD.':
+  'Ett eller flere IP-områder: 10.75.1.0/24, én IP, eller 10.75.1.10-40. Skill dem med komma, semikolon eller mellomrom, de skannes etter tur inn i én liste. I BBMD-modus: IP-en til byggets BBMD.':
     'One or more IP ranges: 10.75.1.0/24, one IP, or 10.75.1.10-40. Separate them with commas, semicolons or spaces - they are scanned in turn into one list. In BBMD mode: the IP of the building’s BBMD.',
   'Auto: Who-Is på eget subnett, grundig sweep over VPN og rutet nett. BBMD: skriv IP-en til byggets BBMD og få hele bygget - også MS/TP bak rutere - uten å treffe nabobyggene på samme VPN.':
     'Auto: Who-Is on your own subnet, a thorough sweep over VPN and routed networks. BBMD: type the IP of the building’s BBMD and get the whole building - MS/TP behind routers too - without touching the neighbours on the same VPN.',
   /* --- top bar and scanning --- */
   'Skann': 'Scan',
   'Avbryt': 'Cancel',
-  'Sweep — grundig': 'Sweep — thorough',
-  'BBMD — via én IP': 'BBMD — via one IP',
-  'Sweep — rask': 'Sweep — fast',
+  'Sweep: grundig': 'Sweep: thorough',
+  'BBMD: via én IP': 'BBMD: via one IP',
+  'Sweep: rask': 'Sweep: fast',
   'Laster nettverkskort…': 'Loading adapters…',
   'Nettverkskortet forespørslene sendes fra': 'The adapter requests are sent from',
   'Bytt mellom mørk og lys visning': 'Switch between dark and light',
@@ -10043,17 +10043,17 @@ const ORDBOK = {
 
   /* --- search and filtering --- */
   'Søk i punkter': 'Search points',
-  'Søk… (/) — flere ord = alle må treffe': 'Search… (/) — several words = all must match',
+  'Søk… (/): flere ord = alle må treffe': 'Search… (/): several words = all must match',
   'Søk i alle enheter…': 'Search every device…',
   'Søk i alle enheter samtidig': 'Search every device at once',
   'Søk etter handling eller enhet…': 'Search for an action or a device…',
-  'Kommandopalett — alt verktøyet kan gjøre, ett søkefelt':
-    'Command palette — everything the tool can do, one search field',
+  'Kommandopalett: alt verktøyet kan gjøre, ett søkefelt':
+    'Command palette: everything the tool can do, one search field',
   'Alle typer': 'All types',
   'Filter': 'Filter',
   'Visninger': 'Views',
-  'Lagrede visninger — filter, sortering og kolonner under ett navn':
-    'Saved views — filter, sorting and columns under one name',
+  'Lagrede visninger: filter, sortering og kolonner under ett navn':
+    'Saved views: filter, sorting and columns under one name',
   'Denne lista': 'This list',
   'Kun med feil': 'Only with a fault',
   'Kun ute av drift': 'Only out of service',
@@ -10099,7 +10099,7 @@ const ORDBOK = {
   'Fest punkt til overvåking': 'Pin the point to the watch list',
   'Fest punkter med ☆ for å følge dem live på tvers av enheter':
     'Pin points with ☆ to follow them live across devices',
-  'Zoom — stor visning av valgt punkt': 'Zoom — large view of the selected point',
+  'Zoom: stor visning av valgt punkt': 'Zoom: large view of the selected point',
 
   /* --- menu: sites --- */
   'Anlegg': 'Sites',
@@ -10150,8 +10150,8 @@ const ORDBOK = {
 
   /* --- writing --- */
   'Dobbeltklikk på verdi': 'Double-click a value',
-  'Skriv til et skrivbart punkt — bekreftelsen kommer som vanlig':
-    'Write to a writable point — the confirmation appears as usual',
+  'Skriv til et skrivbart punkt, bekreftelsen kommer som vanlig':
+    'Write to a writable point, the confirmation appears as usual',
   'Skriv Null til valgt prioritet på alle markerte punkter':
     'Write Null at the chosen priority on every selected point',
   'Prioritet som frigis': 'Priority to release',
@@ -10160,7 +10160,7 @@ const ORDBOK = {
   /* --- navigation --- */
   'Bla mellom punkter': 'Move between points',
   'Hopp 15 punkter': 'Jump 15 points',
-  'Neste rute — enheter, punkter, overvåking': 'Next pane — devices, points, watch',
+  'Neste rute: enheter, punkter, overvåking': 'Next pane: devices, points, watch',
   'Rett til en rute': 'Straight to a pane',
   'Gå til enheter, punkter, overvåking, søk': 'Go to devices, points, watch, search',
 
@@ -10187,11 +10187,11 @@ const ORDBOK = {
   'Proxy er ikke startet': 'The proxy has not been started',
   'Sender fra': 'Sending from',
   'Denne PC-en:': 'This PC:',
-  'Forbindelsen ble gjenopprettet — sender fra': 'The connection is back — sending from',
-  'Kontakt gjenopprettet — sender fra': 'Contact restored — sending from',
-  'Kontakt gjenopprettet — velg nettverkskort': 'Contact restored — pick an adapter',
+  'Forbindelsen ble gjenopprettet: sender fra': 'The connection is back, sending from',
+  'Kontakt gjenopprettet: sender fra': 'Contact restored: sending from',
+  'Kontakt gjenopprettet: velg nettverkskort': 'Contact restored: pick an adapter',
   'Mistet kontakt med NABE på denne PC-en': 'Lost contact with NABE on this PC',
-  'Ingen kontakt med NABE på denne PC-en — kjører start.bat?': 'No contact with NABE on this PC — is start.bat running?',
+  'Ingen kontakt med NABE på denne PC-en, kjører start.bat?': 'No contact with NABE on this PC, is start.bat running?',
   'Uventet svar fra serveren (ikke JSON)': 'Unexpected reply from the server (not JSON)',
   'Velg nettverkskort øverst til venstre': 'Pick an adapter at the top left',
   'Fant ingen nettverkskort': 'Found no adapters',
@@ -10202,7 +10202,7 @@ const ORDBOK = {
   'Ukjent område': 'Unknown range',
   'Skann på nytt': 'Scan again',
   'Prøv igjen': 'Try again',
-  'Prøv «Sweep — grundig»': 'Try “Sweep — thorough”',
+  'Prøv «Sweep: grundig»': 'Try “Sweep: thorough”',
   'Velg en annen enhet': 'Pick another device',
   'Sjekk med ping': 'Check with ping',
   'Svarer denne adressen på ping?': 'Does this address answer a ping?',
@@ -10244,11 +10244,11 @@ const ORDBOK = {
   'Ingen skrivinger logget': 'No writes logged',
   'Loggen er tom': 'The log is empty',
   'Ingen felles punkter.': 'No points in common.',
-  'Ingen avvik — de to er like.': 'No differences — the two are the same.',
-  'Ingen avvik — filen stemmer med anlegget.': 'No differences — the file matches the plant.',
+  'Ingen avvik: de to er like.': 'No differences: the two are the same.',
+  'Ingen avvik: filen stemmer med anlegget.': 'No differences: the file matches the plant.',
   'To enheter som begge er lest.': 'Two devices that have both been read.',
   'Enheten har ingen skjema-objekter.': 'The device has no schedule objects.',
-  'Ingen aktive kommandoer — styres av lokal logikk': 'No active commands — driven by local logic',
+  'Ingen aktive kommandoer: styres av lokal logikk': 'No active commands: driven by local logic',
   'Ingen skift lagt inn på denne ukedagen': 'No periods entered on this weekday',
   'ingen skift i dag': 'no periods today',
   'ingen verdier har endret seg': 'no values have changed',
@@ -10256,7 +10256,7 @@ const ORDBOK = {
   'Velg et punkt først': 'Pick a point first',
   'Åpne en enhet først': 'Open a device first',
   'Velg to forskjellige enheter': 'Pick two different devices',
-  'Åpne minst to enheter først — sammenlikningen bruker det som er lest': 'Open at least two devices first — the comparison uses what has been read',
+  'Åpne minst to enheter først, sammenlikningen bruker det som er lest': 'Open at least two devices first, the comparison uses what has been read',
   'Velg et punkt i tabellen for detaljer, live trend og skriving.': 'Pick a point in the table for details, a live trend and writing.',
   'Skriv verdi': 'Write value',
   'Skriv verdi…': 'Write value…',
@@ -10271,24 +10271,24 @@ const ORDBOK = {
   'Frigis automatisk etter': 'Released automatically after',
   'Frigjør prioriteten automatisk etter valgt tid': 'Releases the priority automatically after the chosen time',
   'Frigi valgte punkter': 'Release the selected points',
-  'Skriv Null — frigjør prioriteten': 'Write Null — releases the priority',
+  'Skriv Null: frigjør prioriteten': 'Write Null: releases the priority',
   'Punktene faller tilbake til anleggets egen styring.': 'The points fall back to the plant’s own control.',
-  'Kommanderbart punkt — kan skrives': 'Commandable point — can be written',
-  'Fant ikke skriveskjemaet — bruk feltet i inspektøren': 'Could not find the write form — use the field in the inspector',
-  'Lesemodus er på — skriving er blokkert': 'Read-only mode is on — writing is blocked',
-  'Lesemodus er på — skriving er blokkert.': 'Read-only mode is on — writing is blocked.',
-  'Lesemodus på — skriving blokkert': 'Read-only — writing blocked',
-  'Lesemodus er på — ukeprogrammet kan ikke endres.': 'Read-only mode is on — the schedule cannot be changed.',
+  'Kommanderbart punkt: kan skrives': 'Commandable point: can be written',
+  'Fant ikke skriveskjemaet: bruk feltet i inspektøren': 'Could not find the write form, use the field in the inspector',
+  'Lesemodus er på: skriving er blokkert': 'Read-only mode is on, writing is blocked',
+  'Lesemodus er på: skriving er blokkert.': 'Read-only mode is on, writing is blocked.',
+  'Lesemodus på: skriving blokkert': 'Read-only: writing blocked',
+  'Lesemodus er på: ukeprogrammet kan ikke endres.': 'Read-only mode is on, the schedule cannot be changed.',
   'etter 5 min': 'after 5 min',
   'etter 15 min': 'after 15 min',
   'etter 30 min': 'after 30 min',
   'etter 1 time': 'after 1 hour',
-  'av — blir stående til du frigir': 'off — stays until you release it',
+  'av, blir stående til du frigir': 'off, stays until you release it',
   'Ukeprogram': 'Schedule',
   'Åpne ukeprogram': 'Open the schedule',
-  'Ukeprogram — vis og rediger': 'Schedule — view and edit',
+  'Ukeprogram: vis og rediger': 'Schedule: view and edit',
   'Ukeprogrammet er ikke lest': 'The schedule has not been read',
-  'Ukeprogrammet er uendret — ingenting å skrive': 'The schedule is unchanged — nothing to write',
+  'Ukeprogrammet er uendret: ingenting å skrive': 'The schedule is unchanged, nothing to write',
   'Skrive ukeprogrammet til': 'Write the schedule to',
   'Lagre til kontroller': 'Save to the controller',
   'Du har ulagrede endringer i ukeprogrammet. Forkaste dem?': 'You have unsaved changes to the schedule. Discard them?',
@@ -10305,7 +10305,7 @@ const ORDBOK = {
   'feil klokke': 'wrong clock',
   'Sette klokka på': 'Set the clock on',
   'Sett klokka på denne enheten fra denne PC-en': 'Set this device’s clock from this PC',
-  'Klokka er stilt — enheten er nå': 'The clock is set — the device is now',
+  'Klokka er stilt: enheten er nå': 'The clock is set, the device is now',
   'Klarte ikke å stille klokka': 'Could not set the clock',
   'Ukeprogram kjører etter enhetens egen klokke, og trendlogger stemples med den.': 'The schedule runs on the device’s own clock, and trend logs are stamped with it.',
   'Ukeprogram og trendlogger på enheten følger denne klokka.': 'The schedule and trend logs on the device follow this clock.',
@@ -10319,7 +10319,7 @@ const ORDBOK = {
   'ikke delt': 'not shared',
   'delt med fellesserveren': 'shared with the common server',
   'lagret her · fellesserveren er ikke tilgjengelig': 'saved here · the common server is unreachable',
-  'lagret her, men ikke delt — fellesserveren svarte ikke': 'saved here, but not shared — the common server did not answer',
+  'lagret her, men ikke delt, fellesserveren svarte ikke': 'saved here, but not shared, the common server did not answer',
   'Finnes bare i anlegget': 'Only in the plant',
   'Ulikt navn': 'Different name',
   'Endret verdi': 'Changed value',
@@ -10337,18 +10337,18 @@ const ORDBOK = {
   'EDE-filen mangler object-name, object-type eller object-instance.': 'The EDE file is missing object-name, object-type or object-instance.',
   'Fant ikke EDE-kolonneoverskriften (object-name / object-type).': 'Could not find the EDE column heading (object-name / object-type).',
   'Overvåkingshistorikk eksportert': 'Watch history exported',
-  'Rapporten er kopiert - lim inn der du vil': 'The report is copied — paste it wherever you want',
+  'Rapporten er kopiert - lim inn der du vil': 'The report is copied, paste it wherever you want',
   'Kunne ikke kopiere': 'Could not copy',
   'Kopier navn': 'Copy name',
   'Kopier punktnavn': 'Copy the point name',
   'Hva du fant, hva som gjenstår, hva neste mann bør vite…': 'What you found, what is left, what the next person should know…',
-  'Ta et snapshot forst - rapporten viser hva som har endret seg siden da': 'Take a snapshot first — the report shows what has changed since then',
+  'Ta et snapshot forst - rapporten viser hva som har endret seg siden da': 'Take a snapshot first, the report shows what has changed since then',
   'Fjern dette filteret': 'Remove this filter',
   'Nullstill alle': 'Reset all',
   'Vis alle punkter': 'Show all points',
   'Vis alle objekttyper (ukeprogram, kalender, trendlogg)': 'Show every object type (schedule, calendar, trend log)',
-  'Viser alle objekttyper — les enheten på nytt': 'Showing every object type — read the device again',
-  'Viser kun punkter med verdi — les enheten på nytt': 'Showing only points with a value — read the device again',
+  'Viser alle objekttyper: les enheten på nytt': 'Showing every object type, read the device again',
+  'Viser kun punkter med verdi, les enheten på nytt': 'Showing only points with a value, read the device again',
   'alle objekttyper': 'every object type',
   'alle tilstander': 'every state',
   'kun overstyrte': 'overridden only',
@@ -10357,7 +10357,7 @@ const ORDBOK = {
   'Enheter vises i én liste': 'Devices are shown in one list',
   'Grupper enheter (automatisk / leverandør / nett / av)': 'Group devices (vendor / IP range / off)',
   'Punktnavn vises fullt ut': 'Point names are shown in full',
-  'Alle punktnavn på denne enheten starter med dette. Det er utelatt fra tabellen for lesbarhet — hold over et navn for å se det fullt ut.': 'Every point name on this device starts with this. It is dropped from the table for readability — hover a name to see it in full.',
+  'Alle punktnavn på denne enheten starter med dette. Det er utelatt fra tabellen for lesbarhet, hold over et navn for å se det fullt ut.': 'Every point name on this device starts with this. It is dropped from the table for readability, hover a name to see it in full.',
   'Live og trend': 'Live and trend',
   'Stor visning av valgt punkt': 'Large view of the selected point',
   'Fest til overvåking': 'Pin to the watch list',
@@ -10367,14 +10367,14 @@ const ORDBOK = {
   'Søk i punkter på denne enheten': 'Search points on this device',
   'Søk i alle leste enheter': 'Search every device read',
   'Søket dekker navn, beskrivelse og objekt-ID på denne enheten.': 'The search covers name, description and object ID on this device.',
-  'Flere ord må alle treffe, uansett rekkefølge — «360.001 RT601»': 'Several words must all match, in any order — “360.001 RT601”',
+  'Flere ord må alle treffe, uansett rekkefølge, «360.001 RT601»': 'Several words must all match, in any order, “360.001 RT601”',
   'finner punkter som inneholder begge. Sett minus foran et ord for': 'finds points containing both. Put a minus in front of a word to',
   'å utelate det. Trykk Ctrl+F for å søke i alle leste enheter.': 'exclude it. Press Ctrl+F to search every device read.',
   'hvor er RT401': 'where is RT401',
   'søker i': 'searching in',
   'gaa til punkter': 'go to points',
   'gaa til enheter / punkter / overvaaking': 'go to devices / points / watch',
-  'Utseende — farger, bilder og størrelse…': 'Appearance — colours, images and size…',
+  'Utseende: farger, bilder og størrelse…': 'Appearance: colours, images and size…',
   'Utseendet er tilbakestilt': 'Appearance reset',
   'Tilbakestille alle farger og størrelser til standard?': 'Reset every colour and size to the default?',
   'Hele grensesnittet': 'The whole interface',
@@ -10398,9 +10398,9 @@ const ORDBOK = {
   'Det er ikke et bilde': 'That is not an image',
   'ikke et bilde': 'not an image',
   'Kunne ikke lese bildet:': 'Could not read the image:',
-  'Bildet er for stort til å lagres — prøv et mindre': 'The image is too large to store — try a smaller one',
-  'Bildet er for lyst — dempet det og gjorde flatene mer dekkende': 'The image is too light — dimmed it and made the surfaces more opaque',
-  '% — teksten er lesbar igjen': '% — the text is legible again',
+  'Bildet er for stort til å lagres, prøv et mindre': 'The image is too large to store, try a smaller one',
+  'Bildet er for lyst, dempet det og gjorde flatene mer dekkende': 'The image is too light, dimmed it and made the surfaces more opaque',
+  '%, teksten er lesbar igjen': '%, the text is legible again',
   'Kunne ikke lese temafilen': 'Could not read the theme file',
   'Navn': 'Name',
   'Verdi': 'Value',
@@ -10430,12 +10430,12 @@ const ORDBOK = {
   'svarte ikke': 'did not answer',
   'svarer fra': 'answers from',
   'svarer på ping': 'answers a ping',
-  'svarer på ping — prøv «Sweep — grundig»': 'answers a ping — try “Sweep — thorough”',
+  'svarer på ping, prøv «Sweep, grundig»': 'answers a ping, try “Sweep, thorough”',
   'utløst': 'triggered',
   'områder': 'ranges',
   'døgn': 'days',
   'dager siden': 'days ago',
-  'Ping kom i en nyere serverversjon — kjør start.bat igjen': 'Ping arrived in a newer server version — run start.bat again',
+  'Ping kom i en nyere serverversjon, kjør start.bat igjen': 'Ping arrived in a newer server version, run start.bat again',
   /* --- settings and menu state --- */
   'Innstillinger': 'Settings',
   'Oppsett': 'Setup',
@@ -10562,7 +10562,7 @@ const ORDBOK = {
      entries rather than being folded into the ones above. */
   'Skriving': 'Writing',
   'Utseende': 'Appearance',
-  'Lesemodus — blokker all skriving': 'Read-only mode - block all writing',
+  'Lesemodus: blokker all skriving': 'Read-only mode - block all writing',
   'Sammenlign med EDE-fil…': 'Compare with an EDE file...',
   // Settings → Tagging
   'Prefiks': 'Prefix',
@@ -10607,7 +10607,7 @@ const ORDBOK = {
   'enheter lest': 'devices read',
   'Finn enhet': 'Find device',
   'Åpne NABO': 'Open NABO',
-  'NABO — tagger og Variabel-fil…': 'NABO - tags and the Variabel file...',
+  'NABO: tagger og Variabel-fil…': 'NABO - tags and the Variabel file...',
   'NABO · tagger og Variabel-fil…': 'NABO · tags and Variabel file…',
   'Tagger og Variabel-fil for NTI-import i Niagara, fra anlegget og EDE-filer':
     'Tags and the Variabel file for NTI import into Niagara, from the plant and EDE files',
@@ -10682,8 +10682,8 @@ const MONSTER = [
    /^(\d+) points overridden or out of service$/, (m) => `${m[1]} punkter overstyrt eller ute av drift`],
   [/^(\d+) enheter lest$/, (m) => `${m[1]} devices read`,
    /^(\d+) devices read$/, (m) => `${m[1]} enheter lest`],
-  [/^(\d+) rader kopiert - lim inn i Excel$/, (m) => `${m[1]} rows copied — paste into Excel`,
-   /^(\d+) rows copied — paste into Excel$/, (m) => `${m[1]} rader kopiert - lim inn i Excel`],
+  [/^(\d+) rader kopiert - lim inn i Excel$/, (m) => `${m[1]} rows copied, paste into Excel`,
+   /^(\d+) rows copied, paste into Excel$/, (m) => `${m[1]} rader kopiert - lim inn i Excel`],
   [/^(\d+) punkt\(er\) festet$/, (m) => `${m[1]} point(s) pinned`,
    /^(\d+) point\(s\) pinned$/, (m) => `${m[1]} punkt(er) festet`],
   [/^(\d+) punkter er filtrert bort$/, (m) => `${m[1]} points filtered out`,

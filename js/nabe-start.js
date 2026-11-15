@@ -199,6 +199,12 @@ const FAKTA = [
   ['COV betyr at regulatoren sier fra selv. Mindre spørring, mer ro.', 'COV means the controller speaks up itself. Less asking, more peace.'],
 ];
 const NYTT = {
+  '1.64': [
+    ['Megapakke med dialoger: NABE og NABO har fått over tusen nye replikker som passer til det du gjør, til tiden på døgnet, til leverandøren du leser og til hvordan det går. Ingenting gjentas før alt annet er sagt. Humørnivå i innstillinger (Stille, Normal, Kaos) styrer hvor mye', 'A mega pack of dialogue: NABE and NABO have over a thousand new lines that fit what you are doing, the time of day, the vendor you are reading and how it is going. Nothing repeats before everything else has been said. Mood in Settings (Quiet, Normal, Chaos) sets how much'],
+    ['De to snakker også sammen når det er stille, og kommenterer verktøyene du åpner. NABO har fått mer å skrive i terminalen sin', 'The two also talk to each other when it is quiet, and comment on the tools you open. NABO has more to type in his terminal'],
+    ['Femten nye ting i garderoben, alle fortjent og ingen kjøpt: sydvest, brannhjelm, hørselvern, sykkelhjelm, bandana, klovnenese, munnbind, stetoskop, nøkkelkjede, kaffekopp, multimeter, kabelrulle, ballong, termos og flagg. De kommenterer hverandre når de tas på', 'Fifteen new things in the wardrobe, all earned and none bought: rain hat, fire helmet, ear defenders, bike helmet, bandana, clown nose, face mask, stethoscope, key chain, coffee cup, multimeter, cable reel, balloon, flask and flag. They comment on each other when put on'],
+    ['Ryddet i teksten: tankestrekene er borte fra grensesnittet, og en notis om avkortet tabell var bare på norsk', 'Tidied the text: the long dashes are gone from the interface, and a note about a truncated table was only in Norwegian'],
+  ],
   '1.63': [
     ['Fargesyn i innstillinger: tre paletter som holder alarm, feil og advarsel adskilt ved rød-grønn og blå-gul fargeblindhet, og høy kontrast. Former (▲ alarm, ◆ feil, ● overstyrt) står ved siden av fargen, også i nettverkskartet', 'Colour vision in Settings: three palettes that keep alarm, fault and warning apart for red-green and blue-yellow colour blindness, plus high contrast. Shapes (▲ alarm, ◆ fault, ● overridden) sit beside the colour, in the network map too'],
     ['Venstre side: hvert kort i bruk vises som en rad med svartid, anlegg kan få navn (blyanten ved overskriften), og enheter med samme navn får adressen bak navnet. Oppsummeringen deler alarmene per anlegg', 'Left side: every adapter in use shows as a row with its response time, sites can be named (the pencil by the heading), and devices with the same name get the address behind it. The summary splits the alarms per site'],
@@ -512,7 +518,7 @@ const NYTT = {
   '1.4': [
     ['NABE ser etter musa når den forlater vinduet, og dukker når den kommer for fort', 'NABE watches the pointer leave the window, and ducks when it comes too fast'],
     ['Åpne et varmt eller kaldt temperaturpunkt', 'Open a hot or a cold temperature point'],
-    ['Han husker om du klapper ham – eller drar i ham', 'He remembers whether you pet him – or drag him'],
+    ['Han husker om du klapper ham, eller drar i ham', 'He remembers whether you pet him, or drag him'],
     ['Han snakker ferdig før han sier noe nytt', 'He finishes a line before starting the next'],
   ],
   '1.3': [
