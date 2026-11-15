@@ -53,6 +53,12 @@ No administrator rights needed. Everything else in the zip is tucked away;
   points were left overridden when you went home.
 - **Picks up where you left off:** the points you pinned to Watch come back
   the next time that site is opened.
+- **Reads colour and shape.** Colour vision in Settings gives three palettes that keep
+  alarm, fault and warning apart for red-green and blue-yellow colour blindness, and
+  high contrast. Shapes (▲ alarm, ◆ fault, ● overridden) sit beside the colour.
+- **Says it when it helps.** NABE points out devices that share a name, a plant whose
+  clocks disagree and a clock stuck on a factory date, once per site. NABO makes device
+  names unique in one click. The mood (Quiet, Normal, Chaos) is set in Settings.
 - **Runs a site without the plant.** The *Simulator* starts what you have read
   as BACnet devices on this PC (127.0.0.x): same names, descriptions, units and
   values, writable, and with RT/SB loops that can be made to hunt. It is saved,

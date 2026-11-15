@@ -143,8 +143,15 @@
         const c = d.address in S.cache ? flagCounts(S.cache[d.address]) : null;
         const kl = BORTE_NAA.has(d.address) ? 'stille' : c && c['in-alarm'] ? 'alarm' : c && c['fault'] ? 'feil'
           : c && (c['overridden'] || c['out-of-service']) ? 'over' : 'ok';
-        return `<rect class="kt-chip ${kl}" data-kt="enhet" data-adr="${esc(d.address)}" x="${14 + (i % PR_RAD) * 14}" y="${50 + Math.floor(i / PR_RAD) * 14}" width="10" height="10" rx="2">
-          <title>${esc((d.object_name || d.address) + ' · ' + d.address)}</title></rect>`;
+        // Shape and colour together: a triangle for alarm, a diamond for a fault, a circle for
+        // an override, a square for the rest. The map should read without colour at all.
+        const x = 14 + (i % PR_RAD) * 14, y = 50 + Math.floor(i / PR_RAD) * 14;
+        const tit = `<title>${esc((d.object_name || d.address) + ' · ' + d.address)}</title>`;
+        const at = `class="kt-chip ${kl}" data-kt="enhet" data-adr="${esc(d.address)}"`;
+        if (kl === 'alarm') return `<polygon ${at} points="${x + 5},${y - 1} ${x + 11},${y + 10} ${x - 1},${y + 10}">${tit}</polygon>`;
+        if (kl === 'feil') return `<polygon ${at} points="${x + 5},${y - 1} ${x + 11},${y + 5} ${x + 5},${y + 11} ${x - 1},${y + 5}">${tit}</polygon>`;
+        if (kl === 'over') return `<circle ${at} cx="${x + 5}" cy="${y + 5}" r="5.5">${tit}</circle>`;
+        return `<rect ${at} x="${x}" y="${y}" width="10" height="10" rx="2">${tit}</rect>`;
       }).join('');
       const mer = st.dev.length > maks ? `<text x="182" y="${st.nodeH - 6}" class="kt-s kt-h">+${st.dev.length - maks}</text>` : '';
       return `<g class="kt-sted ${st.lastet ? 'lastet' : 'ledig'} kt-klikk" data-kt="sted" data-key="${esc(st.key)}" data-modus="${esc(st.modus || '')}" transform="translate(640,${st.y - st.nodeH / 2})">

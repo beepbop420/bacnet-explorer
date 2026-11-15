@@ -280,6 +280,9 @@ def royktest():
               "  if (lagret === null) localStorage.removeItem(nokkel); else localStorage.setItem(nokkel, lagret);"
               "  return lagretLagt && hentet && annet && borte; })(),"
               " trafikk: typeof aapneTrafikk === 'function' && !!document.getElementById('trafikkBtn'),"
+              " helhet: !!window.nabeSyn && !!window.nabeRaad && typeof kobleTilPaaNytt === 'function' && typeof navngiNett === 'function'"
+              "  && !!document.getElementById('devRescan') && !!document.getElementById('fargesynBtn') && !!document.getElementById('humorBtn')"
+              "  && !!document.getElementById('bakoverBtn') && !document.getElementById('expPop').contains(document.getElementById('schBtn')),"
               " co2grense: (() => { const mk = (v, i) => ({a: [{objid: 'ai,' + i, name: 'CO2_PV', units: 'parts-per-million', value: v}, {objid: 'av,' + i, name: 'CO2_SP', units: 'parts-per-million', value: 700}]});"
               "  return settpunktAvvik(mk(420, 91)).length === 0 && settpunktAvvik(mk(800, 92)).length === 1 && schedDag(0) === T('man', 'Mon'); })(),"
               " settpunkt: typeof aapneAvvik === 'function' && !!document.getElementById('avvikBtn') && (() => {"
@@ -437,6 +440,21 @@ def pendling():
     sjekk("pendling: opptak av simulert enhet som svinger, periode 5 s",
           st.get("status") == "done" and rt.get("score", 0) >= 60 and abs((rt.get("periode_s") or 0) - 5) <= 1.5, str(rt))
     sjekk("pendling: opptaket gir en sløyfe som pendler", [p["dom"] for p in e.get("par", [])] == ["sloyfe"], str(e.get("par")))
+
+
+def tilkobling():
+    """Reconnecting binds every adapter in use again, as it was, and the known devices
+    can be asked directly whether they answer."""
+    for_ = kall("/api/status")
+    r = kall("/api/reconnect", {})
+    sjekk("koble til på nytt: hvert kort i bruk bindes på nytt", r.get("status") == "done" and bool(r.get("kort"))
+          and all(k.get("ok") for k in r["kort"]), str(r))
+    etter_ = kall("/api/status")
+    sjekk("koble til på nytt: samme kort er oppe og hovedkortet er det samme",
+          sorted(k["ip"] for k in etter_.get("kort", [])) == sorted(k["ip"] for k in for_.get("kort", []))
+          and etter_.get("local_address") == for_.get("local_address"), str(etter_.get("kort")))
+    sv = kall("/api/svar", {"adresser": ["127.0.0.2", "127.0.0.3"]})
+    sjekk("svarer nå: kjente enheter som svarer blir funnet", sv.get("svar") == {"127.0.0.2": True, "127.0.0.3": True}, str(sv))
 
 
 def flere_kort():
@@ -815,6 +833,7 @@ def kjor_tester():
     oppdatering()
     flagg()
     vakt()
+    tilkobling()
 
     j = vent_jobb(kall("/api/scan", {"subnet": "127.0.0.5:47820", "mode": "bbmd", "timeout": 4})["job_id"])
     r = j.get("result") or {}
@@ -859,7 +878,7 @@ def kjor_tester():
     # Last: it silences the simulated device on 127.0.0.6.
     mine_uten_kontakt()
 
-    for fil in ("nabe-start", "nabe-verktoy", "nabe-felt", "nabe-moro", "nabe-finn", "nabe-skann", "nabe-anlegg", "nabe-bunn", "nabe-graf", "nabe-tunnel", "nabe-sammen", "nabe-flyt", "nabe-peker", "nabe-pekere", "nabe-skrift", "nabo", "nabo-brodre", "nabo-fasit", "nabe-garderobe", "nabe-opptak", "nabe-trafikk", "nabe-fortsett", "nabe-simulator", "nabe-oppdatering", "nabe-bakover", "nabe-kart", "nabe-kunnskap", "nabe-spor"):
+    for fil in ("nabe-start", "nabe-verktoy", "nabe-felt", "nabe-moro", "nabe-finn", "nabe-skann", "nabe-anlegg", "nabe-bunn", "nabe-graf", "nabe-tunnel", "nabe-sammen", "nabe-flyt", "nabe-peker", "nabe-pekere", "nabe-skrift", "nabo", "nabo-brodre", "nabo-fasit", "nabe-garderobe", "nabe-opptak", "nabe-trafikk", "nabe-fortsett", "nabe-simulator", "nabe-oppdatering", "nabe-bakover", "nabe-kart", "nabe-syn", "nabe-raad", "nabe-kunnskap", "nabe-spor"):
         try:
             with urllib.request.urlopen(f"{BASE}/js/{fil}.js", timeout=5) as rr:
                 ok = rr.status == 200

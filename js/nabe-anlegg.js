@@ -219,10 +219,26 @@ function tegnAnlegg() {
       </div>`;
     }).join('')}</div>`;
   }
+  // With more than one site open the totals say little on their own: how many of the
+  // alarms are at which site is the first thing anyone asks.
+  const perSted = new Map();
+  for (const d of S.devices) {
+    const pts = S.cache[d.address];
+    if (!pts || !d._range) continue;
+    const e = perSted.get(d._range) || {alarm: 0, feil: 0};
+    for (const p of pts) { const s = p.status || []; if (s.includes('in-alarm')) e.alarm++; if (s.includes('fault')) e.feil++; }
+    perSted.set(d._range, e);
+  }
+  const flere = perSted.size > 1;
+  const sted = flere ? `<div class="as-siter">${[...perSted].map(([r, e]) => {
+    const navn = (typeof nettNavn === 'function' && nettNavn(r)) || r;
+    const deler = [e.alarm ? `<span class="a">${e.alarm} ${T('i alarm', 'in alarm')}</span>` : '', e.feil ? `${e.feil} ${T('med feil', 'faulty')}` : ''].filter(Boolean);
+    return `<span><b>${esc(navn)}</b> ${deler.join(' · ') || T('rolig', 'quiet')}</span>`;
+  }).join('')}</div>` : '';
   const html = `<div class="as-linje">
-      <span class="as-tittel">${T('Anlegget', 'The plant')}</span>
+      <span class="as-tittel">${flere ? T('Anleggene', 'The plants') : T('Anlegget', 'The plant')}</span>
       <span class="as-tallene">${hoved}</span>
-    </div>
+    </div>${sted}
     <div class="as-linje2">
       <span class="as-fram">${fram}${sist ? ` · <span class="as-sist">${sist}</span>` : ''}</span>
       <button type="button" class="as-kopier" data-kopier title="${T('Kopier status som tekst, til servicerapporten', 'Copy the status as text, for the service report')}">${T('Kopier', 'Copy')}</button>

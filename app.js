@@ -622,6 +622,7 @@ async function refreshStatus() {
     }
     sel.value = S.localAddr;
   }
+  if (typeof tegnVei === 'function') tegnVei();
 }
 
 /* Send from the adapter the plant is actually behind.
@@ -1209,11 +1210,11 @@ function devStatus(d) {
     // Said as two things: an alarm is the process, a fault is a point the device cannot trust.
     const ord = alarm && fault ? T(`${alarm} alarm · ${fault} feil`, `${alarm} alarm · ${fault} faulty`)
       : alarm ? T(`${alarm} i alarm`, `${alarm} in alarm`) : T(`${fault} feil`, `${fault} faulty`);
-    if (feil) return `<em class="dev-st ${alarm ? 'bad' : 'feil'}" title="${alarm} i alarm, ${fault} med feil">${ord}</em>`;
-    if (over) return `<em class="dev-st warn" title="${over} punkter overstyrt eller ute av drift">${over} overstyrt</em>`;
+    if (feil) return `<em class="dev-st ${alarm ? 'bad' : 'feil'}" title="${alarm} ${T('i alarm', 'in alarm')}, ${fault} ${T('med feil', 'with a fault')}">${ord}</em>`;
+    if (over) return `<em class="dev-st warn" title="${over} ${T('punkter overstyrt eller ute av drift', 'points overridden or out of service')}">${over} ${T('overstyrt', 'overridden')}</em>`;
     return '';
   }
-  return PRE.jobs.has(d.address) ? '<em class="dev-st">leser…</em>' : '';
+  return PRE.jobs.has(d.address) ? `<em class="dev-st">${T('leser…', 'reading…')}</em>` : '';
 }
 
 /* Hvem som var stille sist lista ble tegnet. */
@@ -1259,6 +1260,9 @@ function kortChip(d) {
   // The simulator is never mistaken for a plant.
   if (String(d.address).startsWith('127.')) return `<span class="dev-kort dev-sim" title="${esc(T('Simulert enhet', 'Simulated device'))}">${T('simulert', 'simulated')}</span>`;
   if (!S.kort || S.kort.length < 2) return '';
+  // Grouped by network the heading already says which adapter; saying it on every
+  // card as well is the same word repeated.
+  if (grupperingsAkse() === 'range') return '';
   const ip = S.via && S.via[d.address];
   const k = ip && S.kort.find(x => x.ip === ip);
   if (!k) return '';
@@ -1276,8 +1280,11 @@ function kortFelt(d) {
 }
 
 function renderDevices() {
+  // A name being typed in a heading must not be wiped by the next background redraw.
+  if (S._redigerNavn) { S._renderUtsatt = true; return; }
   BORTE_NAA = new Set();
   $('devCount').textContent = S.devices.length;
+  if ($('devRescan')) $('devRescan').hidden = !S.devices.length;
   renderSiteWarnings();
   const el = $('devList');
   if (!S.devices.length && S.tomtSkann) {
@@ -1298,6 +1305,11 @@ function renderDevices() {
     return;
   }
   const dupIds = new Set(duplicateInstances().map(([inst]) => String(inst)));
+  // Beckhoff ships every controller as «Beckhoff_0»: a card that cannot be told from the
+  // next one is a card nobody can use. The end of the address is added where names repeat.
+  const navnTall = new Map();
+  for (const d of S.devices) if (d.object_name) navnTall.set(d.object_name, (navnTall.get(d.object_name) || 0) + 1);
+  const kortAdr = (a) => /^\d+\.\d+\.\d+\.\d+$/.test(a) ? '.' + a.split('.')[3] : String(a);
 
   const gruppert = grupperingsAkse() === 'vendor';
   const kort = (d) => {
@@ -1327,7 +1339,7 @@ function renderDevices() {
     const lest = S.cache[d.address] ? ' lest' : '';
     return `<button class="dev${sel}${ny}${laster}${borte}${lest}${st ? ' st-' + st : ''}" data-ip="${esc(d.address)}" style="--vc:${v.color}${frem}">
       <span class="dev-l1">
-        <span class="dev-name">${esc(d.object_name || '—')}</span>
+        <span class="dev-name">${esc(d.object_name || '—')}${navnTall.get(d.object_name) > 1 ? `<span class="dev-suff" title="${esc(T('Flere enheter heter det samme. Adressen skiller dem.', 'Several devices share this name. The address tells them apart.'))}">${esc(kortAdr(d.address))}</span>` : ''}</span>
         ${devStatus(d)}
       </span>
       <span class="dev-l2">
@@ -1336,7 +1348,7 @@ function renderDevices() {
         ${gruppert ? '' : `<span class="dev-lev">${esc(v.label)}</span>`}
         ${kortChip(d)}
         ${presenceTag(d)}
-        ${noteFor(d) ? `<span class="dev-note" title="${esc(noteFor(d))}">notat</span>` : ''}
+        ${noteFor(d) ? `<span class="dev-note" title="${esc(noteFor(d))}">${T('notat', 'note')}</span>` : ''}
         ${S.cache[d.address] ? `<em class="dev-pkt">${S.cache[d.address].length} pkt</em>` : ''}
       </span>
     </button>`;
@@ -1390,7 +1402,8 @@ function renderDevices() {
         return `<div class="vgroup${av ? ' av' : ''}" style="--vc:${g.v.color}">
           <button class="vgroup-head" data-vendor="${esc(g.v.label)}">
             <span class="vgroup-bar"></span>
-            <span class="vgroup-name${akse === 'range' ? ' nett' : ''}">${esc(g.v.label)}</span>
+            <span class="vgroup-name${akse === 'range' ? ' nett' : ''}">${esc(akse === 'range' ? nettNavn(g.v.label) || g.v.label : g.v.label)}</span>
+            ${akse === 'range' ? `<span class="vgroup-edit" role="button" tabindex="0" data-navngi="${esc(g.v.label)}" title="${esc(T('Gi anlegget et navn', 'Name this site'))}" aria-label="${esc(T('Gi anlegget et navn', 'Name this site'))}">${IKON_BLYANT}</span>` : ''}
             ${akse === 'range' ? nettMeta(g) : ''}
             ${feil ? `<em class="dev-flag bad" title="${feil} enheter med feil">${feil}</em>` : ''}
             ${adv ? `<em class="dev-flag warn" title="${adv} enheter med overstyringer">${adv}</em>` : ''}
@@ -1402,6 +1415,11 @@ function renderDevices() {
         </div>`;
       }).join('');
 
+    el.querySelectorAll('[data-navngi]').forEach(p => {
+      const go = (e) => { e.stopPropagation(); e.preventDefault(); navngiNett(p.dataset.navngi, p.closest('.vgroup-head')); };
+      p.onclick = go;
+      p.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') go(e); };
+    });
     el.querySelectorAll('[data-vendor]').forEach(b => b.onclick = () => {
       const sett = new Set(loadPrefs().vendorCollapsed || []);
       sett.has(b.dataset.vendor) ? sett.delete(b.dataset.vendor) : sett.add(b.dataset.vendor);
@@ -1428,12 +1446,69 @@ function renderDevices() {
    given, and how many answered this round when not all did. */
 function nettMeta(g) {
   const via = nettVia(g.v.label);
-  const m = (typeof MINNE !== 'undefined' && MINNE[g.v.label]) || null;
-  const navn = m && m.navn ? m.navn : '';
+  // With a name given the heading shows the name, and the range moves here.
+  const navn = nettNavn(g.v.label) ? g.v.label : '';
   const stille = g.enheter.filter(d => { const p = presence(d); return p && !p.naa; }).length;
-  const deler = [navn, via && `via ${via}`, stille && T(`${g.enheter.length - stille} av ${g.enheter.length} svarte`, `${g.enheter.length - stille} of ${g.enheter.length} answered`)].filter(Boolean);
+  const deler = [navn, via, stille && T(`${g.enheter.length - stille} av ${g.enheter.length} svarte`, `${g.enheter.length - stille} of ${g.enheter.length} answered`)].filter(Boolean);
   // Always there, empty or not: it is what pushes the count to the right.
   return `<span class="vgroup-meta">${esc(deler.join(' · '))}</span>`;
+}
+
+const IKON_BLYANT = '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>';
+
+/* The remembered site a network belongs to: the one with the fewest ranges that
+   includes it, so a site scanned together with another is still found by its own range. */
+function minneNokkel(label) {
+  let best = null, n = 1e9;
+  for (const [k, s] of Object.entries(MINNE || {})) {
+    const r = s.ranges || k.split(' ');
+    if (r.includes(label) && r.length < n) { best = k; n = r.length; }
+  }
+  return best;
+}
+function nettNavn(label) {
+  const k = minneNokkel(label);
+  return (k && MINNE[k].navn) || '';
+}
+async function lagreAnleggsnavn(label, navn) {
+  let nokkel = minneNokkel(label);
+  if (!nokkel) {
+    // Not remembered yet: remember this network on its own, with its devices, then name it.
+    await husk([label], S.devices.filter(d => d._range === label));
+    nokkel = minneNokkel(label);
+  }
+  if (!nokkel) return;
+  const d = await api('/api/sites/name', {key: nokkel, name: navn});
+  if (d.status === 'done') { MINNE[nokkel] = d.site; if (typeof fyllOmradeliste === 'function') fyllOmradeliste(); }
+}
+/* Rename in place: the name turns into a field, Enter keeps it, Esc leaves it. */
+function navngiNett(label, head) {
+  const span = head && head.querySelector('.vgroup-name');
+  if (!span || S._redigerNavn) return;
+  const naa = nettNavn(label);
+  const inp = document.createElement('input');
+  inp.className = 'vgroup-input';
+  inp.value = naa;
+  inp.placeholder = label;
+  inp.maxLength = 60;
+  inp.setAttribute('aria-label', T('Navn på anlegget', 'Site name'));
+  S._redigerNavn = true;
+  span.replaceWith(inp);
+  inp.focus();
+  inp.select();
+  let ferdig = false;
+  const lagre = async (behold) => {
+    if (ferdig) return;
+    ferdig = true;
+    const navn = inp.value.trim();
+    try { if (behold && navn !== naa) await lagreAnleggsnavn(label, navn); } catch { /* the name is a convenience */ }
+    S._redigerNavn = false;
+    S._renderUtsatt = false;
+    renderDevices();
+  };
+  inp.onkeydown = (e) => { e.stopPropagation(); if (e.key === 'Enter') lagre(true); else if (e.key === 'Escape') lagre(false); };
+  inp.onblur = () => lagre(true);
+  inp.onclick = (e) => e.stopPropagation();
 }
 
 /* A big network with more than one maker is split by maker inside it - a
@@ -2244,7 +2319,7 @@ function clockBadge(ip) {
     esc(String(id['device-time'] || '?'))} ${T('— ukeprogram og trendlogger følger denne klokka. Klikk for å stille den.',
     '- weekly schedules and trend logs follow this clock. Click to set it.')}${sommertidAvvik(sek) ? T(
       ' Klokka er riktig time, men feil sommertid eller tidssone: rett det i enheten, ellers kommer det tilbake. Står denne PC-en i en annen tidssone, kan det forklare timen.',
-      ' The clock is an hour off: wrong daylight saving or time zone. Fix it in the device or it comes back. A PC in another time zone can also explain the hour.') : ''}">⏱ klokke ${
+      ' The clock is an hour off: wrong daylight saving or time zone. Fix it in the device or it comes back. A PC in another time zone can also explain the hour.') : ''}">⏱ ${T('klokke', 'clock')} ${
     esc(klokkeTekst(sek, id['device-time']))}</button>`;
 }
 
@@ -2357,10 +2432,10 @@ function markFreshness() {
    at all. Overridden in particular is what you are looking for when handing a
    plant back - it says someone has taken manual control of that point. */
 const FLAGS = {
-  'in-alarm':      {label: 'i alarm',      kort: 'alarm',    cls: 'bad'},
-  'fault':         {label: 'med feil',     kort: 'feil',     cls: 'bad'},
-  'overridden':    {label: 'overstyrte',   kort: 'overstyrt', cls: 'warn'},
-  'out-of-service':{label: 'ute av drift', kort: 'ute av drift', cls: 'warn'},
+  'in-alarm':      {get label() { return T('i alarm', 'in alarm'); },           kort: 'alarm',    cls: 'bad'},
+  'fault':         {get label() { return T('med feil', 'with a fault'); },      kort: 'feil',     cls: 'bad'},
+  'overridden':    {get label() { return T('overstyrte', 'overridden'); },      kort: 'overstyrt', cls: 'warn'},
+  'out-of-service':{get label() { return T('ute av drift', 'out of service'); }, kort: 'ute av drift', cls: 'warn'},
 };
 const hasFlag = (p, f) => !!(p.status && p.status.includes(f));
 
@@ -2522,13 +2597,18 @@ async function rescanOnce(manuell) {
   const omraader = parseRanges($('rangeInput').value);
   if (!omraader.length || !S.connected) return;
   RESCAN.running = true;
+  $('devRescan')?.classList.add('snurrer');
   try {
     // Every range is covered, or a device on the second subnet would be
     // reported as missing on every round simply because nobody looked.
     const funnet = new Set();
     for (const subnet of omraader) {
-      const started = await api('/api/scan', {
-        subnet, mode: 'unicast_sweep', per_host_timeout: 0.6, concurrency: 40, thorough: false});
+      // Out of the adapter that reads this range, not wherever the routing table points:
+      // a full-tunnel VPN has no route of its own to the plant behind it.
+      const dv = S.devices.find(d => d._range === subnet && S.via && S.via[d.address]);
+      const kropp = {subnet, mode: 'unicast_sweep', per_host_timeout: 0.6, concurrency: 40, thorough: false};
+      if (dv) kropp.via = S.via[dv.address];
+      const started = await api('/api/scan', kropp);
       if (started.status !== 'started') continue;
       let res = null;
       for (let i = 0; i < 400; i++) {
@@ -2550,6 +2630,12 @@ async function rescanOnce(manuell) {
         }
       }
     }
+    // The known devices are asked one by one as well: the sweep is quick and loses the odd
+    // one, and "did not answer" should not rest on that.
+    try {
+      const sv = await api('/api/svar', {adresser: S.devices.map(d => d.address)});
+      for (const [a, ok] of Object.entries((sv && sv.svar) || {})) if (ok) funnet.add(a);
+    } catch { /* the sweep alone then */ }
     for (const d of S.devices) noteSeen(d.address, funnet.has(d.address));
 
     RESCAN.runs++; RESCAN.last = Date.now();
@@ -2562,6 +2648,12 @@ async function rescanOnce(manuell) {
     if (manuell) toast(T('Skann feilet: ', 'Scan failed: ') + e.message, true);
   } finally {
     RESCAN.running = false;
+    const kn = $('devRescan');
+    if (kn) {
+      kn.classList.remove('snurrer');
+      const k = new Date().toLocaleTimeString(SPRAAK === 'en' ? 'en-GB' : 'no', {hour: '2-digit', minute: '2-digit'});
+      kn.title = T(`Søk etter enheter nå · sist sjekket ${k}`, `Look for devices now · last checked ${k}`);
+    }
   }
 }
 
@@ -3590,7 +3682,14 @@ document.addEventListener('keydown', (e) => { if (e.key === 'Escape') nabeTie();
 
 const NABE_SAGT = new Set();
 
-function nabeSier(tekst, humor, nokkel) {
+/* What counts as useful, for the Quiet mood: advice and facts about the plant, not remarks.
+   Recognised by key or by what it says, so the calls themselves stay as they were. */
+const NABE_NYTTIG_NOKKEL = /^(kabel-start|start-naabar|auto-stopp|sist:|fortsett|bbmd-tips|rute:|ingen-alarm|komplett:|tunnel-oppe|raad:)/;
+const NABE_NYTTIG_TEKST = /rekkevidde|in reach|Mistet veien|Lost the way|fortsatt overstyrt|still overridden|Ingen vei til|No way to|Kjenner ikke|Do not know|fra sist|since last time|Ny forbindelse|New connection|nyere NABE|newer NABE|Hovedkort|Main adapter|pendler|hunting|Nytt anlegg|A new site/i;
+function nabeSier(tekst, humor, nokkel, nyttig) {
+  let niva = 'normal';
+  try { niva = loadPrefs().humor || 'normal'; } catch { /* default */ }
+  if (niva === 'stille' && !nyttig && !NABE_NYTTIG_NOKKEL.test(nokkel || '') && !NABE_NYTTIG_TEKST.test(String(tekst))) return;
   if (nokkel) {
     if (NABE_SAGT.has(nokkel)) return;
     NABE_SAGT.add(nokkel);
@@ -3873,6 +3972,18 @@ function fyllOmradeliste() {
    not what you want to come back to. */
 async function husk(omraader, enheter) {
   if (!omraader || !omraader.length) return;
+  // Ranges read through different adapters are different places, even when they were
+  // scanned in one go: each is remembered, and named, on its own.
+  const via = S._viaOmr || {};
+  const grupper = new Map();
+  for (const r of omraader) { const k = via[r] || ''; if (!grupper.has(k)) grupper.set(k, []); grupper.get(k).push(r); }
+  if (grupper.size > 1 && !grupper.has('')) {
+    for (const rs of grupper.values()) await huskEn(rs, (enheter || []).filter(d => rs.includes(d._range)));
+    return;
+  }
+  return huskEn(omraader, enheter);
+}
+async function huskEn(omraader, enheter) {
   try {
     const d = await api('/api/sites', {
       ranges: omraader,
@@ -4396,7 +4507,7 @@ function commands() {
       {hint: 'Ctrl+D', undertekst: () => 'når du vet IP-en og den ikke svarer'});
   add('Handling', 'Søk etter enheter nå', () => { closeCmd(); rescanOnce(true); },
       {when: () => S.connected && !!$('rangeInput').value.trim(),
-       undertekst: () => S.devices.length + ' kjent'});
+       undertekst: () => S.devices.length + ' ' + T('kjent', 'known')});
   add('Handling', 'Overvåk nettet kontinuerlig', () => $('rescanBtn').click(),
       {tilstand: () => RESCAN.on ? 'pa' : '',
        undertekst: () => RESCAN.on ? RESCAN.runs + ' runder' : 'av'});
@@ -8918,10 +9029,36 @@ $('localAddr').onchange = async e => {
   const navn = ($('localAddr').selectedOptions[0]?.textContent || '').split(' · ')[1] || S.localAddr;
   if (S.connected) toast(T(`Hovedkort: ${navn}. Andre kort brukes der adressene rutes.`, `Main adapter: ${navn}. Other adapters are used where the addresses are routed.`));
 };
-$('reconnBtn').onclick = async () => {
-  await connectTo($('localAddr').value, {restart: true});
-  toast(S.connected ? 'Tilkoblet på nytt' : 'Klarte ikke koble til', !S.connected);
-};
+/* Bind every adapter in use again, each as it was, main one first. Used to stop
+   everything and start only the main adapter, which dropped the other site. One
+   adapter when ip is given. Afterwards the devices are asked once whether they
+   answer, so the message says how it went rather than only that it was done. */
+let KOBLER_NYTT = false;
+async function kobleTilPaaNytt(ip) {
+  if (KOBLER_NYTT) return;
+  KOBLER_NYTT = true;
+  $('connText').textContent = T('Kobler til på nytt…', 'Reconnecting…');
+  try {
+    const d = await api('/api/reconnect', ip ? {ip} : {});
+    await refreshStatus();
+    if (d.status !== 'done') { toast(d.error || T('Klarte ikke koble til', 'Could not connect'), true); return; }
+    const navn = k => k.interface || k.ip;
+    const feil = d.kort.filter(k => !k.ok);
+    if (feil.length) {
+      toast(T(`Klarte ikke å koble til ${feil.map(navn).join(', ')}: ${feil[0].error}`,
+              `Could not reconnect ${feil.map(navn).join(', ')}: ${feil[0].error}`), true);
+    } else {
+      toast(T(`Koblet til på nytt: ${d.kort.map(navn).join(', ')}.`, `Reconnected: ${d.kort.map(navn).join(', ')}.`));
+    }
+    if (S.devices.length && !feil.length) setTimeout(() => rescanOnce(true), 900);
+  } catch (e) {
+    toast(e.message, true);
+  } finally {
+    KOBLER_NYTT = false;
+  }
+}
+$('reconnBtn').onclick = () => { closeMenus(); kobleTilPaaNytt(); };
+$('devRescan').onclick = () => rescanOnce(true);
 $('cmpBtn').onclick = () => { closeMenus(); openSammenlign(); };
 $('rapOktBtn').onclick = () => { closeMenus(); visSesjonsrapport(); };
 $('rapSnapBtn').onclick = () => { closeMenus(); visSnapshotrapport(); };
@@ -9379,6 +9516,8 @@ document.addEventListener('keydown', e => {
     if (e.key === ',') { e.preventDefault(); $('temaBtn')?.click(); return; }
   }
   if (e.key === 'Escape') {
+    // An open menu sits on top of everything, so it goes first.
+    if (MENUS.some(([, pop]) => !$(pop).hidden)) { closeMenus(); return; }
     if (!$('diagOverlay').hidden) { diagLukk(); return; }
     if (!$('cmpOverlay').hidden) { closeSammenlign(); return; }
     if (!$('raportOverlay').hidden) { closeRapport(); return; }
@@ -9984,6 +10123,13 @@ const ORDBOK = {
 
   /* --- menu: view and settings --- */
   'Vis': 'View',
+  'Verktøy': 'Tools',
+  'Overvåk': 'Monitor',
+  'Tilkobling': 'Connection',
+  'Sikkerhet': 'Safety',
+  'Siden sist': 'Since last time',
+  'Rapport og eksport': 'Report and export',
+  'Binder hvert kort som er i bruk på nytt, uten å miste de andre anleggene': 'Binds every adapter in use again, without losing the other sites',
   'Flere rader på skjermen, mindre luft': 'More rows on screen, less air',
   'Innstillinger…': 'Settings…',
   'Endringer vises med en gang og lagres på denne maskinen. Lys og mørk visning huskes hver for seg.':

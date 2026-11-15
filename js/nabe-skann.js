@@ -49,7 +49,11 @@ const SK = {
   const panel = lag('div', 'kortPanel', 'kort-panel');
   panel.hidden = true;
   panel.innerHTML = `<div class="kp-kort" id="kpKort"></div>
-    <label class="kp-modus"><span>${T('Modus', 'Mode')}</span></label>`;
+    <label class="kp-modus"><span>${T('Modus', 'Mode')}</span></label>
+    <div class="kp-handlinger">
+      <button type="button" class="kp-knapp" data-kp="koble" title="${T('Binder hvert kort som er i bruk på nytt, uten å miste de andre anleggene', 'Binds every adapter in use again, without losing the other sites')}">${T('Koble til på nytt', 'Reconnect')}</button>
+      <button type="button" class="kp-knapp" data-kp="sok" title="${T('Spør de kjente enhetene om de svarer nå', 'Asks the known devices whether they answer now')}">${T('Søk etter enheter', 'Look for devices')}</button>
+    </div>`;
   panel.querySelector('.kp-modus').appendChild($('modeSel'));
   panel.appendChild($('localAddr'));
   const liste = lag('div', 'anleggListe', 'anlegg-liste');
@@ -62,7 +66,7 @@ const SK = {
   $('scanBtn').after(vei, vakt, verktoy, panel);
   $('omrForslag')?.after(liste);
 
-  vei.addEventListener('click', (e) => { if (e.target.closest('.vei-endre')) settApen(!SK.apen); });
+  vei.addEventListener('click', (e) => { if (e.target.closest('.vei-endre, .kort-brikke')) settApen(!SK.apen); });
   bbmd.addEventListener('click', (e) => {
     const b = e.target.closest('button[data-m]');
     if (!b) return;
@@ -73,6 +77,12 @@ const SK = {
       'Via BBMD. That gets the whole building, MS/TP behind the routers too.'), 'fornoyd', 'bbmd-valgt');
   });
   panel.addEventListener('click', async (e) => {
+    const h = e.target.closest('[data-kp]');
+    if (h) {
+      if (h.dataset.kp === 'koble') kobleTilPaaNytt();
+      else rescanOnce(true);
+      return;
+    }
     const k = e.target.closest('.kp-rad');
     if (!k || k.classList.contains('i-bruk')) return;
     k.classList.add('plugg');
@@ -107,6 +117,24 @@ function tegnVei() {
   const navn = las ? kortNavn(ip) : (SK.rute?.interface || kortNavn(ip));
   const modus = $('modeSel').value;
   const mtekst = modus === 'auto' ? 'auto' : $('modeSel').selectedOptions[0]?.textContent.toLowerCase();
+  // Every adapter in use as a chip, not just the main one: with two sites open, one
+  // name would be wrong half of the time. The one the typed range will go through
+  // is underlined, the main one is brighter.
+  const aktive = S.connected ? (S.kort || []) : [];
+  el.classList.toggle('flere', aktive.length > 0);
+  if (aktive.length) {
+    const ms = S.kortMs || {};
+    const chips = aktive.map(k => {
+      const tips = [k.local_address, k.primary ? T('hovedkort', 'main adapter') : '', k.enheter ? `${k.enheter} ${T('enheter', 'devices')}` : '',
+                    k.ip === (SK.rute && SK.rute.ip) ? T('området i feltet går hit', 'the range in the field goes here') : ''].filter(Boolean).join(' · ');
+      return `<button type="button" class="kort-brikke${k.primary ? ' hoved' : ''}${k.ip === (SK.rute && SK.rute.ip) ? ' rute' : ''}" data-ip="${esc(k.ip)}" title="${esc(tips)}"><i></i><span>${esc(k.interface || k.ip)}</span>${ms[k.ip] ? `<em>${ms[k.ip]} ms</em>` : ''}</button>`;
+    }).join('');
+    el.innerHTML = `<div class="kort-rad">${chips}</div>
+      <div class="vei-under"><span class="vei-tekst">${esc(mtekst)}${las ? ` · ${T('låst', 'locked')}` : ''}</span>
+      <button type="button" class="vei-endre">${SK.apen ? T('lukk', 'close') : T('endre', 'change')}</button></div>`;
+    tegnBbmd();
+    return;
+  }
   el.innerHTML = ip
     ? `<span class="vei-tekst">via <b>${esc(navn || ip)}</b>${navn ? ` <span class="mono">${esc(ip)}</span>` : ''} · ${esc(mtekst)}${las ? ` · ${T('låst', 'locked')}` : ''}</span>
        <button type="button" class="vei-endre">${SK.apen ? T('lukk', 'close') : T('endre', 'change')}</button>`
@@ -123,12 +151,26 @@ async function tegnKort() {
     try { liste = (await (await fetch('/api/interfaces')).json()).interfaces || []; } catch {}
   }
   const bundet = String(S.localAddr || '').split(/[/:]/)[0];
+  const iBruk = new Set((S.kort || []).map(k => k.ip));
   boks.innerHTML = liste.map(k => `
-    <button type="button" class="kp-rad${k.ip === bundet ? ' i-bruk' : ''}" data-cidr="${esc(k.cidr)}" data-navn="${esc(k.interface)}">
-      <b>${esc(k.interface)}</b><span class="mono">${esc(k.cidr)}</span>
-      <span class="kp-merke">${k.ip === bundet ? T('i bruk', 'in use') : (k.prefix === 32 ? 'VPN' : '')}</span>
+    <button type="button" class="kp-rad${k.ip === bundet ? ' i-bruk' : ''}${iBruk.has(k.ip) ? ' aktiv' : ''}" data-cidr="${esc(k.cidr)}" data-navn="${esc(k.interface)}" title="${esc(k.cidr)}">
+      <b>${esc(k.interface)}</b><span class="mono">${esc(k.ip)}</span>
+      <span class="kp-merke">${k.ip === bundet ? T('hovedkort', 'main') : iBruk.has(k.ip) ? T('i bruk', 'in use') : (k.prefix === 32 ? 'VPN' : '')}</span>
     </button>`).join('') || `<div class="lite">${T('Fant ingen nettverkskort', 'No adapters found')}</div>`;
 }
+
+/* Round-trip time per adapter, from what NABE has already sent. Quiet when there is
+   not enough traffic to say anything. */
+async function hentKortMs() {
+  if (!S.connected || document.hidden || (S.kort || []).length < 1) return;
+  try {
+    const d = await (await fetch('/api/trafikk?etter=999999999', {cache: 'no-store'})).json();
+    const ut = {};
+    for (const [ip, o] of Object.entries(d.kort || {})) if (o.antall >= 5) ut[ip] = Math.round(o.snitt);
+    if (JSON.stringify(ut) !== JSON.stringify(S.kortMs || {})) { S.kortMs = ut; tegnVei(); }
+  } catch { /* the next round tries again */ }
+}
+setInterval(hentKortMs, 8000);
 
 function settApen(apen) {
   SK.apen = apen;

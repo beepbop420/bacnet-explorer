@@ -577,6 +577,7 @@ function naboResultat() {
   }
   for (const k of NABO.kilder) {
     if (k.av) continue;
+    k._dupMerket = false;
     const enhetNavn = enhetsfelt(k, t);
     const sett = new Map();
     const objekter = new Set();
@@ -593,7 +594,8 @@ function naboResultat() {
       const ob = `${r.type}:${r.inst}`;
       if (objekter.has(ob)) r.feil.push(T('Samme objekt (type og instans) finnes to ganger', 'The same object (type and instance) appears twice'));
       objekter.add(ob);
-      if (navnBrukt.get(enhetNavn) > 1) r.feil.push(T('En annen enhet får samme device-navn', 'Another device gets the same device name'));
+      // Said once per device, on its first row: on every row it was 1379 red marks for six controllers.
+      if (navnBrukt.get(enhetNavn) > 1 && !k._dupMerket) { r.feil.push(T('En annen enhet får samme device-navn', 'Another device gets the same device name')); k._dupMerket = true; }
       // No warning for a short path: a controller's own points (.avDTempHeat01)
       // never follow the plant's naming, and nothing can be done about them here.
       if (r.normert === false) r.adv.push(T('Passer ikke normaliseringen, vanlig sti brukt', 'Does not fit the normalisation, plain path used'));
@@ -1470,8 +1472,40 @@ function tegnNabo(helt) {
   $('naboSum').innerHTML = `<b>${r.rader.length}</b> ${T('variabler', 'variables')} · <b>${enh}</b> ${T(enh === 1 ? 'enhet' : 'enheter', enh === 1 ? 'device' : 'devices')}`
     + (feil ? ` · <span class="f">${feil} ${T('med feil', 'with errors')}</span>` : '')
     + (r.hoppet ? ` · <span title="${T('Kalendere, ukeplaner, trendlogger og andre typer blir ikke variabler', 'Calendars, schedules, trend logs and other types do not become variables')}">${r.hoppet} ${T('hoppet over', 'skipped')}</span>` : '');
+  // Several devices under one name would be one device to NTI. The fix is one click: the
+  // instance number goes behind the name, in NABO only, never on the controller.
+  const dupper = naboDupEnheter();
+  if (dupper.length) {
+    $('naboSum').insertAdjacentHTML('beforeend', `<button type="button" class="nabo-unike" title="${esc(T('Legger enhetens instansnummer bak navnet i Variabel-fila. Ingenting endres på anlegget.', 'Puts the device instance after the name in the Variabel file. Nothing is changed on the plant.'))}">${T('Gi unike navn', 'Make names unique')}</button>`);
+    $('naboSum').querySelector('.nabo-unike').onclick = () => {
+      const n = naboUnikeNavn();
+      toast(n ? T(`${n} enheter fikk unike navn.`, `${n} devices got unique names.`) : T('Fant ingen instansnummer å bruke.', 'No instance numbers to use.'));
+    };
+  }
   $('naboVar').disabled = !r.rader.length;
   $('naboEde').disabled = !NABO.kilder.some(k => !k.av);
+}
+
+/* Devices that end up under the same name in the file. */
+function naboDupEnheter() {
+  const t = tagInnstillinger();
+  const telling = new Map();
+  for (const k of NABO.kilder) if (!k.av) { const e = enhetsfelt(k, t); telling.set(e, (telling.get(e) || 0) + 1); }
+  return NABO.kilder.filter(k => !k.av && telling.get(enhetsfelt(k, t)) > 1);
+}
+function naboUnikeNavn() {
+  const o = naboInnst();
+  const navn = Object.assign({}, o.navn);
+  let n = 0;
+  for (const k of naboDupEnheter()) {
+    if (k.instans === null || k.instans === undefined || k.instans === '') continue;
+    // «Beckhoff_0» ends in a default index: it goes, the instance takes its place.
+    const base = String((o.navn[devNokkel(k)] ?? k.auto) || '').trim().replace(/[\s\-.]+/g, '_').replace(/_0$/, '');
+    navn[devNokkel(k)] = `${base}_${k.instans}`;
+    n++;
+  }
+  if (n) { lagreAnlegg({navn}); tegnNabo(); }
+  return n;
 }
 
 function tegnDiff(r, q) {

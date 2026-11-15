@@ -234,3 +234,5 @@
     verktoy.prepend(b);
   }
 })();
+
+if (document.getElementById('bakoverBtn')) document.getElementById('bakoverBtn').onclick = () => { closeMenus(); window.aapneBakover(); };

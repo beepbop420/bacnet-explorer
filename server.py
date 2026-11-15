@@ -202,7 +202,7 @@ def t(nb: str, en: str) -> str:
     return en if SPRAAK_VAR.get() == "en" else nb
 
 
-VERSJON = "1.62"
+VERSJON = "1.63"
 
 state = {"app": None, "local_address": None, "read_only": False, "bbmd": None, "primary": None}
 # The simulator: a scanned site run as devices on 127.0.0.x, in a process of its own.
@@ -1162,6 +1162,53 @@ async def start_proxy(body: StartBody):
 async def stop_proxy():
     _close_app()
     return {"status": "done"}
+
+
+class ReconnectBody(BaseModel):
+    ip: Optional[str] = None
+
+
+class SvarBody(BaseModel):
+    adresser: List[str]
+
+
+@app.post("/api/svar")
+async def svarer_na(body: SvarBody):
+    """Which of these known devices answer right now. Each is asked directly, with a
+    retry, out of the adapter that reads it: a fast sweep over a VPN misses one device in
+    a few on any given round, and "did not answer" should not rest on that."""
+    adr = [a for a in dict.fromkeys(body.adresser) if _plain_ip(a)][:300]
+    sv = await asyncio.gather(*[_svarer_adresse(a, 0.0, 6.0) for a in adr])
+    return {"status": "done", "svar": {a: s for a, s in zip(adr, sv)}}
+
+
+@app.post("/api/reconnect")
+async def reconnect(body: ReconnectBody):
+    """Bind the adapters in use again, each as it was (same address, same BBMD),
+    main adapter first. One adapter when `ip` is given, otherwise all of them.
+
+    Stopping everything and starting only the main adapter, which is what the
+    button used to do, quietly dropped the other site: its devices stayed in the
+    list and stopped answering until something happened to open that adapter again."""
+    mal = [body.ip] if body.ip else list(POOL)
+    info = []
+    for ip in mal:
+        e = POOL.get(ip)
+        if e:
+            info.append((ip, e["local"], e.get("bbmd"), ip == state.get("primary")))
+    if not info:
+        return {"status": "error", "error": t("Ingen kort er i bruk å koble til på nytt.", "No adapter in use to reconnect.")}
+    ut = []
+    for ip, lokal, bbmd, hoved in sorted(info, key=lambda x: not x[3]):
+        async with _pool_las(ip):
+            _close_app(ip)
+            try:
+                await _open_app(lokal, bbmd, primary=hoved)
+                ut.append({"ip": ip, "interface": _kort_navn(ip), "ok": True})
+            except Exception as ex:
+                ut.append({"ip": ip, "interface": _kort_navn(ip), "ok": False, "error": str(ex)})
+    _SVAR_ADR.clear()
+    return {"status": "done", "kort": ut}
 
 
 def _local_network(lokal: Optional[str] = None) -> Optional[ipaddress.IPv4Network]:
