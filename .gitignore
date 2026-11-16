@@ -9,6 +9,7 @@ notes-queue.json
 writelog.jsonl
 pending-releases.json
 projects/
+besok/
 logo.*
 *.log
 dist/

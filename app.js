@@ -610,8 +610,13 @@ async function refreshStatus() {
   c.classList.toggle('down', !S.connected);
   $('connText').textContent = S.connected ? '' : 'Ikke tilkoblet';
   const flere = S.connected && S.kort.length > 1;
-  $('connAddr').textContent = S.connected ? (S.localAddr || '') + (flere ? ` +${S.kort.length - 1}` : '') : '';
-  $('connAddr').title = flere ? S.kort.map(k => `${k.interface || k.ip} ${k.local_address}${k.primary ? ' · ' + T('hovedkort', 'main') : ''}${k.enheter ? ' · ' + k.enheter + ' ' + T('enheter', 'devices') : ''}`).join('\n') : '';
+  /* The name of the adapter and how fast the plant answers says more than an
+     address with a mask and a port. The address is in the tooltip. */
+  const hk = (S.kort || []).find(k => k.primary);
+  const hkMs = hk && S.kortMs && S.kortMs[hk.ip];
+  $('connAddr').textContent = !S.connected ? ''
+    : hk && hk.interface ? hk.interface + (hkMs ? ` · ${hkMs} ms` : '') : (S.localAddr || '');
+  $('connAddr').title = !flere ? (S.localAddr || '') : S.kort.map(k => `${k.interface || k.ip} ${k.local_address}${k.primary ? ' · ' + T('hovedkort', 'main') : ''}${k.enheter ? ' · ' + k.enheter + ' ' + T('enheter', 'devices') : ''}`).join('\n');
   $('scanBtn').disabled = !S.connected;
   $('scanBtn').title = S.connected ? '' : 'Velg et nettverkskort først';
   // Keep the dropdown showing what is actually bound, not a stale pick.
@@ -4563,6 +4568,8 @@ function commands() {
   add('Handling', 'Spør NABE…', () => { closeCmd(); aapneSpor(); });
   add('Handling', 'Opptak av punkter…', () => { closeCmd(); aapneOpptak(); });
   add('Handling', 'Trafikklogg…', () => { closeCmd(); aapneTrafikk(); });
+  add('Handling', 'Siden sist…', () => { closeCmd(); aapneBesok(); }, {when: () => S.devices.length > 0});
+  add('Handling', 'Besøksrapport…', () => { closeCmd(); aapneRapport(); }, {when: () => S.devices.length > 0});
   add('Handling', 'Nettverkskart…', () => { closeCmd(); aapneKart(); });
   add('Handling', 'Åpne lagret overvåkingsliste', () => { closeCmd(); fortsettHent(); });
   add('Handling', 'Simulator…', () => { closeCmd(); aapneSimulator(); });
@@ -6294,7 +6301,7 @@ function renderGlobalChips() {
   if (!finnes.length) { box.innerHTML = ''; return; }
   box.innerHTML = finnes.map(([f, m]) =>
     `<button class="gs-chip ${m.cls}${S.gsFlag === f ? ' on' : ''}" data-gsflag="${f}">${
-      tellinger[f]} ${esc(m.label)} i anlegget</button>`).join('');
+      tellinger[f]} ${esc(m.label)} ${T('i anlegget', 'in the plant')}</button>`).join('');
   box.querySelectorAll('[data-gsflag]').forEach(b => b.onclick = () => {
     S.gsFlag = S.gsFlag === b.dataset.gsflag ? '' : b.dataset.gsflag;
     if (S.gsFlag) { $('gsInput').value = ''; }
@@ -6352,9 +6359,34 @@ function renderGlobal() {
     box.querySelectorAll('.gs-enhet').forEach(b => b.onclick = () => { closeGlobal(); selectDevice(b.dataset.ip); });
     return;
   }
-  if (!hits.length) { box.innerHTML = '<div class="gs-empty">Ingen treff</div>'; return; }
+  /* One field for everything: the devices and the actions that match come
+     first, a few of each, and then the points. Looking for "ukeprogram" or
+     "AHU 3" should not need a different box than looking for a sensor. */
+  const ord = term.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  const enheter = S.gsFlag ? [] : S.devices.filter(d => {
+    const tekst = `${d.object_name || ''} ${d.address} ${d.device_instance ?? ''}`.toLowerCase();
+    return ord.every(o => tekst.includes(o));
+  }).slice(0, 6);
+  const handlinger = S.gsFlag ? [] : commands().filter(x => x.gruppe !== 'Enheter' && x.gruppe !== 'Punkter' && (!x.when || x.when()))
+    .map(x => [cmdScore(x, term.trim()), x]).filter(([s]) => s >= 60)
+    .sort((a, b) => b[0] - a[0]).slice(0, 4).map(([, x]) => x);
+  const topp = (enheter.length ? `<div class="gs-nett">${T('Enheter', 'Devices')}</div>`
+      + enheter.map(d => `<button class="gs-enhet" data-ip="${esc(d.address)}"><span>${esc(d.object_name || d.address)}</span>`
+        + `<small>${esc(d.address)} · ${d.device_instance ?? '?'}</small>`
+        + `<small>${S.cache[d.address] ? T(`${S.cache[d.address].length} pkt`, `${S.cache[d.address].length} pts`) : T('ikke lest', 'not read')}</small></button>`).join('') : '')
+    + (handlinger.length ? `<div class="gs-nett">${T('Handlinger', 'Actions')}</div>`
+      + handlinger.map((x, i) => `<button class="gs-enhet gs-handling" data-h="${i}"><span>${esc(x.etikett)}</span><small>${esc(x.gruppe)}</small><small>${esc(x.hint || '')}</small></button>`).join('') : '');
+  const kobleTopp = () => {
+    box.querySelectorAll('.gs-enhet[data-ip]').forEach(b => b.onclick = () => { closeGlobal(); selectDevice(b.dataset.ip); });
+    box.querySelectorAll('.gs-handling').forEach(b => b.onclick = () => { closeGlobal(); kjorCmd(handlinger[+b.dataset.h]); });
+  };
+  if (!hits.length) {
+    box.innerHTML = topp || '<div class="gs-empty">Ingen treff</div>';
+    kobleTopp();
+    return;
+  }
 
-  box.innerHTML = hits.slice(0, 200).map((h, i) => {
+  box.innerHTML = topp + (topp ? `<div class="gs-nett">${T('Punkter', 'Points')}</div>` : '') + hits.slice(0, 200).map((h, i) => {
     const v = fmtVal(h.p.value);
     return `<button class="gs-row" data-i="${i}">
       <span class="gs-dev" title="${esc(h.dev ? String(h.dev.device_instance) : '')}">${esc(h.dev ? (h.dev.object_name || h.dev.device_instance) : '?')}</span>
@@ -6375,6 +6407,7 @@ function renderGlobal() {
     const tr = document.querySelector(`#pointsWrap tbody tr[data-o="${CSS.escape(h.p.objid)}"]`);
     if (tr) tr.scrollIntoView({block: 'center'});
   });
+  kobleTopp();
 }
 
 /* --------------------------------------------------------------- inspector */
@@ -10170,6 +10203,7 @@ const ORDBOK = {
   'Søk i punkter': 'Search points',
   'Søk… (/): flere ord = alle må treffe': 'Search… (/): several words = all must match',
   'Søk i alle enheter…': 'Search every device…',
+  'Søk i punkter, enheter og handlinger…': 'Search points, devices and actions…',
   'Søk i alle enheter samtidig': 'Search every device at once',
   'Søk etter handling eller enhet…': 'Search for an action or a device…',
   'Kommandopalett: alt verktøyet kan gjøre, ett søkefelt':
@@ -10577,6 +10611,8 @@ const ORDBOK = {
   'Opptak av punkter…': 'Recording points…',
   'Avvik fra settpunkt…': 'Deviation from setpoint…',
   'Trafikklogg…': 'Traffic log…',
+  'Siden sist…': 'Since last visit…',
+  'Besøksrapport…': 'Visit report…',
   'Nettverkskart…': 'Network map…',
   'Åpne lagret overvåkingsliste': 'Open saved watch list',
   'Simulator…': 'Simulator…',

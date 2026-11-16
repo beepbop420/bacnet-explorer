@@ -4899,6 +4899,42 @@ html.peker-egen *:not(input):not(textarea):not(select):not(.splitter):not([conte
 .as-varsel b{font-family:var(--mono);font-weight:600}
 .as-varsel.severe{color:var(--err)}
 .as-varsel:hover,.as-varsel:focus-visible{background:var(--hover)}
+/* Since last visit: sections of plain rows, the count on the right of each heading. */
+.bs-rull{display:flex;flex-direction:column;gap:14px}
+.bs-tittel{display:flex;align-items:baseline;justify-content:space-between;padding:0 8px 4px;font-size:11px;font-weight:600;color:var(--fg-2);border-bottom:1px solid var(--line)}
+.bs-tittel b{font-family:var(--mono);font-weight:600}
+.bs-tittel.bad{color:var(--err)}
+.bs-tittel.warn{color:var(--warn)}
+.bs-tittel.ok{color:var(--ok)}
+.bs-rad{display:grid;grid-template-columns:minmax(0,150px) minmax(0,1fr) auto;gap:12px;width:100%;padding:5px 8px;text-align:left;font-size:12px;border-radius:6px;cursor:pointer}
+.bs-rad:hover,.bs-rad:focus-visible{background:var(--hover)}
+.bs-rad span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bs-enhet{color:var(--fg-3)}
+.bs-verdi{font-family:var(--mono);color:var(--fg-2)}
+.bs-verdi b{color:var(--fg);font-weight:600}
+.bs-mer{padding:4px 8px;font-size:11px;color:var(--fg-3)}
+/* The visit report: a sheet on screen, the same sheet alone on paper. */
+.rap-modal{width:min(820px,94vw)}
+.rap-ark{padding:6px 4px}
+.rap-hode{padding-bottom:10px;border-bottom:1px solid var(--line);font-size:12px;color:var(--fg-3);line-height:1.6}
+.rap-hode h1{margin:0 0 2px;font-size:20px;font-weight:600;color:var(--fg)}
+.rap-ark h2{margin:18px 0 4px;font-size:12px;font-weight:600;color:var(--fg-2)}
+.rap-ark h2 small{margin-left:6px;font-family:var(--mono);font-weight:500;color:var(--fg-3)}
+.rap-tab{width:100%;border-collapse:collapse;font-size:12px}
+.rap-tab td{padding:4px 8px 4px 0;border-bottom:1px solid var(--line);vertical-align:top}
+.rap-tab td:first-child{width:28%;color:var(--fg-2)}
+.rap-tab td:last-child{text-align:right;font-family:var(--mono);white-space:nowrap}
+.rap-fot{margin-top:20px;font-size:10px;color:var(--fg-3)}
+@media print{
+  body.skriver-rapport > *:not(#rapOverlay){display:none !important}
+  body.skriver-rapport{background:#fff !important;overflow:visible !important;height:auto !important}
+  body.skriver-rapport #rapOverlay{position:static;display:block;background:none;backdrop-filter:none;padding:0;
+    --fg:#111;--fg-2:#333;--fg-3:#666;--line:#ccc}
+  body.skriver-rapport .rap-modal{width:auto;max-width:none;box-shadow:none;border:0;background:#fff;color:#111;transform:none}
+  body.skriver-rapport .rap-skjerm{display:none !important}
+  body.skriver-rapport .sp-rull{max-height:none;overflow:visible}
+  body.skriver-rapport .rap-tab tr{break-inside:avoid}
+}
 /* The maker's mark is a short upright bar, the same bar the cards carry down
    their left edge. Round dots are left to status (alarm, fault, online), so a
    green WAGO or a red Regin is never taken for "fine" or "in alarm". The
@@ -4954,7 +4990,9 @@ html.peker-egen *:not(input):not(textarea):not(select):not(.splitter):not([conte
 .nabo-unike:hover,.nabo-unike:focus-visible{background:var(--accent-dim)}
 /* the plant status, folded: one quiet line, a way to open it, a way to be rid of it */
 .as-kompakt{align-items:center;flex-wrap:nowrap;padding:0 4px 0 0;gap:0}
-.as-kompakt .as-tallene{overflow:hidden}
+.as-kompakt .as-tallene{overflow:hidden;flex-wrap:nowrap;white-space:nowrap}
+.as-kompakt .as-tittel{flex:0 0 auto;white-space:nowrap}
+.as-kompakt .as-vis{flex-wrap:nowrap}
 .as-vis{display:flex;flex:1 1 auto;min-width:0;align-items:baseline;gap:8px;padding:6px 4px 6px 11px;text-align:left;font:inherit;color:inherit;cursor:pointer}
 .as-vis:hover .as-tittel,.as-vis:focus-visible .as-tittel{color:var(--fg)}
 .as-kompakt .as-tallene{flex:1 1 auto;min-width:0;display:flex;gap:10px}
@@ -5196,6 +5234,8 @@ button.sp-rad:hover{background:var(--hover)}
       <div id="toolsPop" class="menu-pop menu-right" hidden>
         <div class="menu-gruppe">Verktøy</div>
         <button id="cmpBtn" class="menu-item">Sammenlign to enheter…</button>
+        <button id="besokBtn" class="menu-item">Siden sist…</button>
+        <button id="rapportBtn" class="menu-item">Besøksrapport…</button>
         <button id="avvikBtn" class="menu-item">Avvik fra settpunkt…</button>
         <button id="schBtn" class="menu-item">Ukeprogram…</button>
         <button id="diagBtn" class="menu-item">Sjekk en adresse…<span class="menu-hint">Ctrl+D</span></button>
@@ -5327,7 +5367,7 @@ button.sp-rad:hover{background:var(--hover)}
   <div id="gsOverlay" class="gs-overlay" role="dialog" aria-modal="true" hidden>
     <div class="gs-modal">
       <div class="gs-head">
-        <input id="gsInput" class="gs-input" type="text" placeholder="Søk i alle enheter…" autocomplete="off">
+        <input id="gsInput" class="gs-input" type="text" placeholder="Søk i punkter, enheter og handlinger…" autocomplete="off">
         <button class="gs-close" onclick="closeGlobal()"><span class="lbl">Lukk</span> ✕</button>
       </div>
       <div id="gsChips" class="gs-chips"></div>
@@ -5658,6 +5698,7 @@ button.sp-rad:hover{background:var(--hover)}
 <script src="/js/nabe-garderobe.js"></script>
 <script src="/js/nabe-opptak.js"></script>
 <script src="/js/nabe-trafikk.js"></script>
+<script src="/js/nabe-besok.js"></script>
 <script src="/js/nabe-kart.js"></script>
 <script src="/js/nabe-syn.js"></script>
 <script src="/js/nabe-raad.js"></script>

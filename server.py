@@ -3957,6 +3957,53 @@ async def _notes_startup():
     asyncio.create_task(_flush_loop())
 
 
+# ----------------------------------------------------------------- visits
+# What a plant looked like when it was last read to the end, kept on this PC
+# so the next visit can be compared with it. One file per plant, the last six
+# visits. A rescan within the hour is the same visit and replaces the record.
+BESOK_DIR = DATA_DIR / "besok"
+BESOK_MAKS = 6
+
+
+class BesokBody(BaseModel):
+    key: str
+    data: Dict[str, Any]
+
+
+def _besok_fil(key: str) -> Path:
+    return BESOK_DIR / (hashlib.sha256(key.encode("utf-8")).hexdigest()[:24] + ".json")
+
+
+@app.post("/api/besok")
+def lagre_besok(body: BesokBody):
+    key = body.key.strip()
+    if not key or not isinstance(body.data.get("enheter"), dict):
+        return {"status": "error", "error": t("Mangler anlegg eller enheter.", "Plant or devices missing.")}
+    fil = _besok_fil(key)
+    try:
+        liste = json.loads(fil.read_text(encoding="utf-8"))
+        if not isinstance(liste, list):
+            liste = []
+    except Exception:
+        liste = []
+    naa = time.time()
+    forrige = next((b for b in reversed(liste) if naa - float(b.get("t") or 0) > 3600), None)
+    ny = dict(body.data, t=naa, key=key)
+    if liste and naa - float(liste[-1].get("t") or 0) <= 3600:
+        liste[-1] = ny
+    else:
+        liste.append(ny)
+    liste = liste[-BESOK_MAKS:]
+    try:
+        BESOK_DIR.mkdir(parents=True, exist_ok=True)
+        tmp = fil.with_suffix(".tmp")
+        tmp.write_text(json.dumps(liste, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
+        tmp.replace(fil)
+    except OSError as e:
+        return {"status": "error", "error": f"{type(e).__name__}: {e}", "forrige": forrige}
+    return {"status": "done", "forrige": forrige, "antall": len(liste)}
+
+
 @app.get("/api/notes")
 def get_notes():
     return {"status": "done", "notes": NOTES, "sync": NOTES_SYNC,
