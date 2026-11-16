@@ -203,6 +203,11 @@ const FAKTA = [
   ['COV betyr at regulatoren sier fra selv. Mindre spørring, mer ro.', 'COV means the controller speaks up itself. Less asking, more peace.'],
 ];
 const NYTT = {
+  '1.69': [
+    ['Når et annet BACnet-program (for eksempel en Niagara-stasjon) har port 47808, står det en knapp «Bruk egen port» i varselet. NABE bytter til en ledig port og husker valget. Porten kan også byttes fra Ctrl K', 'When another BACnet program (a Niagara station, for instance) has port 47808, the warning has a button "Use own port". NABE moves to a free port and remembers the choice. The port can also be changed from Ctrl K'],
+    ['Snakkeboblen til NABE kan bruke to linjer, så setninger ikke kuttes midt i', 'The speech bubble can use two lines, so sentences are not cut in the middle'],
+    ['Rettet: enhetskortene kunne få hele flaten fylt med leverandørfarge på enkelte skjermer', 'Fixed: the device cards could get the whole surface filled with the vendor colour on some screens'],
+  ],
   '1.68': [
     ['Spørsmål som «Fortsette?» og «Hva heter anlegget?» kommer i NABEs egen dialog, ikke nettleserens grå boks', 'Questions like "Continue?" and "What is this site called?" come in a dialog of NABE itself, not the grey box of the browser'],
     ['Skriv og Frigi er synlige uten rulling på 1366×768, som er vanlig på fjernskrivebord', 'Write and Release are visible without scrolling at 1366×768, which is common on remote desktops'],

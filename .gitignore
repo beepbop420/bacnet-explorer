@@ -10,6 +10,7 @@ writelog.jsonl
 pending-releases.json
 projects/
 besok/
+port.json
 logo.*
 *.log
 dist/

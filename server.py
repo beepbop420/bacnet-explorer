@@ -233,7 +233,7 @@ def t(nb: str, en: str) -> str:
     return en if SPRAAK_VAR.get() == "en" else nb
 
 
-VERSJON = "1.68"
+VERSJON = "1.69"
 
 state = {"app": None, "local_address": None, "read_only": False, "bbmd": None, "primary": None}
 # The simulator: a scanned site run as devices on 127.0.0.x, in a process of its own.
@@ -342,7 +342,20 @@ def list_interfaces() -> List[Dict[str, Any]]:
 # BACnet reserves UDP 47808-47823 so several BACnet applications can share a
 # host. Where 47808 is already taken by another BACnet program, NABE can be
 # given its own port with NABE_BACNET_PORT.
-BACNET_PORT = int(_env("BACNET_PORT", "47808"))
+# It can also be changed while running (the button in the port warning), and
+# that choice is kept in port.json. A port given in the environment wins.
+PORT_FIL = DATA_DIR / "port.json"
+
+
+def _lagret_port() -> int:
+    try:
+        p = int(json.loads(PORT_FIL.read_text(encoding="utf-8")).get("port"))
+        return p if 1024 <= p <= 65535 else 47808
+    except Exception:
+        return 47808
+
+
+BACNET_PORT = int(_env("BACNET_PORT", "") or _lagret_port())
 
 
 def _with_port(cidr: str) -> str:
@@ -490,6 +503,7 @@ def status():
         "running": state["app"] is not None,
         "versjon": VERSJON,
         "mini": MINI,
+        "bacnet_port": BACNET_PORT,
         "local_address": state["local_address"],
         "bbmd": state.get("bbmd"),
         "port_advarsel": port_advarsel(port_naboer()) if state["app"] else None,
@@ -889,12 +903,12 @@ def port_advarsel(naboer: List[Dict[str, Any]]) -> Optional[str]:
         "Windows tillater det, men da er det tilfeldig hvem av dere som får "
         "svarene fra anlegget - og den andre finner ingenting uten å si fra. "
         "Lukk det andre BACnet-verktøyet og trykk «Koble til på nytt», eller "
-        f"gi denne en egen port med NABE_BACNET_PORT=47809 i start.bat.",
+        "trykk «Bruk egen port» så bytter NABE til en ledig port selv.",
         f"Another program is also listening on UDP {BACNET_PORT}: {hvem}. "
         "Windows allows it, but then it is chance which of you gets the "
         "replies from the plant - and the other finds nothing without saying so. "
         "Close the other BACnet tool and press “Reconnect”, or "
-        f"give this one its own port with NABE_BACNET_PORT=47809 in start.bat.")
+        "press “Use own port” and NABE moves to a free port by itself.")
 
 
 def device_address(spec) -> Address:
@@ -1227,6 +1241,44 @@ async def svarer_na(body: SvarBody):
     adr = [a for a in dict.fromkeys(body.adresser) if _plain_ip(a)][:300]
     sv = await asyncio.gather(*[_svarer_adresse(a, 0.0, 6.0) for a in adr])
     return {"status": "done", "svar": {a: s for a, s in zip(adr, sv)}}
+
+
+class PortBody(BaseModel):
+    port: Optional[int] = None
+
+
+@app.post("/api/port")
+async def bytt_port(body: PortBody):
+    """Move NABE to another local UDP port and bind every adapter in use again.
+    Without a port: the first one in BACnet's own range (47808-47823) nobody
+    else on this PC is listening on. The choice is kept for next start."""
+    global BACNET_PORT
+    port = body.port
+    if port is None:
+        port = next((p for p in range(47809, 47824) if not port_naboer(p)), None)
+        if port is None:
+            return {"status": "error", "error": t("Fant ingen ledig port mellom 47809 og 47823.",
+                                                  "Found no free port between 47809 and 47823.")}
+    if not 1024 <= port <= 65535:
+        return {"status": "error", "error": t("Porten må være mellom 1024 og 65535.", "The port must be between 1024 and 65535.")}
+    forrige = BACNET_PORT
+    BACNET_PORT = port
+    try:
+        PORT_FIL.write_text(json.dumps({"port": port}), encoding="utf-8")
+    except OSError:
+        pass
+    info = [(ip, e.get("bbmd"), ip == state.get("primary")) for ip, e in POOL.items()]
+    ut = []
+    for ip, bbmd, hoved in sorted(info, key=lambda x: not x[2]):
+        async with _pool_las(ip):
+            _close_app(ip)
+            try:
+                await _open_app(_lokal_for(ip), bbmd, primary=hoved)
+                ut.append({"ip": ip, "ok": True})
+            except Exception as ex:
+                ut.append({"ip": ip, "ok": False, "error": str(ex)})
+    _SVAR_ADR.clear()
+    return {"status": "done", "port": port, "forrige": forrige, "kort": ut}
 
 
 @app.post("/api/reconnect")

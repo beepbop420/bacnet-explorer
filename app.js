@@ -632,11 +632,28 @@ function meldPort(tekst) {
   if (tekst === PORT_VARSEL_SETT) return;      // allerede vist, eller avvist
   el.hidden = false;
   el.innerHTML = '<span>' + esc(tekst) + '</span>'
-    + '<button class="bw-lukk" title="Skjul">Skjul</button>';
+    + `<span class="bw-knapper"><button class="bw-port btn primary">${T('Bruk egen port', 'Use own port')}</button>`
+    + '<button class="bw-lukk" title="Skjul">Skjul</button></span>';
   el.querySelector('.bw-lukk').onclick = () => {
     el.hidden = true;
     PORT_VARSEL_SETT = tekst;   // hold den skjult til teksten endrer seg
   };
+  el.querySelector('.bw-port').onclick = () => byttPort();
+}
+
+/* Another BACnet program has the port: move to a free one, here, without a
+   file to edit. NABE picks the first port nobody else listens on, binds the
+   adapters again and remembers the choice. */
+async function byttPort(port) {
+  try {
+    const d = await api('/api/port', port ? {port} : {});
+    if (d.status !== 'done') { toast(d.error || T('Fikk ikke byttet port', 'Could not change the port'), true); return; }
+    const feil = (d.kort || []).filter(k => !k.ok);
+    toast(feil.length
+      ? T(`Port ${d.port}, men ${feil.length} kort lot seg ikke binde`, `Port ${d.port}, but ${feil.length} adapters would not bind`)
+      : T(`NABE bruker nå UDP ${d.port}. Skann på nytt.`, `NABE now uses UDP ${d.port}. Scan again.`), feil.length > 0);
+    await refreshStatus();
+  } catch (e) { toast(e.message, true); }
 }
 
 /* ------------------------------------------------------- connect / status */
@@ -4662,6 +4679,12 @@ function commands() {
   add('Handling', 'Ukeprogram: vis og rediger', () => { closeCmd(); $('schBtn').click(); }, {when: harEnhet});
 
   add('Anlegg', 'Koble til på nytt', () => $('reconnBtn').click());
+  add('Anlegg', 'Bytt BACnet-port…', async () => {
+    closeCmd();
+    const p = await nabeSpor(T('Hvilken UDP-port skal NABE bruke? 47808 er standard. Tomt felt velger en ledig.', 'Which UDP port should NABE use? 47808 is the standard. An empty field picks a free one.'), '');
+    if (p === null) return;
+    byttPort(p.trim() ? parseInt(p, 10) : null);
+  });
 
   for (const d of S.devices) {
     const ip = d.address;
@@ -10666,6 +10689,7 @@ const ORDBOK = {
   'Opptak av punkter…': 'Recording points…',
   'Avvik fra settpunkt…': 'Deviation from setpoint…',
   'Trafikklogg…': 'Traffic log…',
+  'Bytt BACnet-port…': 'Change BACnet port…',
   'Siden sist…': 'Since last visit…',
   'Besøksrapport…': 'Visit report…',
   'Nettverkskart…': 'Network map…',

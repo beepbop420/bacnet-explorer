@@ -85,8 +85,8 @@
       if (tregTeller[k.ip] < 3) continue;
       const navn = k.interface || k.ip;
       sier('raad:treg:' + k.ip,
-        `${navn} svarer på ${ms} ms. Lesingen tar tid, og det er veien dit, ikke anlegget.`,
-        `${navn} answers in ${ms} ms. Reading takes a while, and that is the road there, not the plant.`);
+        `${navn} svarer på ${ms} ms. Veien dit er treg, ikke anlegget.`,
+        `${navn} answers in ${ms} ms. The road is slow, not the plant.`);
     }
   }
 

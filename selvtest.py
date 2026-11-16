@@ -291,6 +291,7 @@ def royktest():
               " dialog: typeof nabeBekreft === 'function' && (() => { nabeBekreft('x');"
               "    const ok = !!document.querySelector('.dlg-lag [data-d=ja]'); document.querySelector('.dlg-lag [data-d=nei]').click();"
               "    return ok && !document.querySelector('.dlg-lag'); })(),"
+              " port: typeof byttPort === 'function',"
               " kort: typeof flereKortIBruk === 'function' && typeof anKompakt === 'function',"
               " ukeprogram: typeof urEnheter === 'function' && typeof urLesAlle === 'function' && !!document.getElementById('anStatusBtn')"
               "  && cmpAdr('10.0.0.9', '10.0.0.10') < 0 && cmpAdr('10.0.1.1', '10.0.0.200') > 0,"
@@ -473,6 +474,9 @@ def tilkobling():
     # A visit is kept, and a second one within the hour replaces it rather than becoming "last time".
     sjekk("vanlig utgave er ikke Mini, og KI-status sier det samme",
           kall("/api/status").get("mini") is False and kall("/api/ki").get("mini") is False)
+    pp = kall("/api/port", {"port": 80})
+    sjekk("portbytte avviser en umulig port, og status sier hvilken port som brukes",
+          pp.get("status") == "error" and isinstance(kall("/api/status").get("bacnet_port"), int))
     b1 = kall("/api/besok", {"key": "selvtest 127.0.0.0/8", "data": {"enheter": {"127.0.0.2": {"n": "X", "p": {}}}}})
     b2 = kall("/api/besok", {"key": "selvtest 127.0.0.0/8", "data": {"enheter": {}}})
     b3 = kall("/api/besok", {"key": "", "data": {"enheter": {}}})

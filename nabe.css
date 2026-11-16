@@ -4893,6 +4893,11 @@ html.peker-egen *:not(input):not(textarea):not(select):not(.splitter):not([conte
 .kort-rad .vei-tekst{flex:0 0 auto;color:var(--fg-3);font-size:11px}
 .kort-brikke.treg em{color:var(--warn)}
 html.mini .ki-gruppe,html.mini .sb-oppd{display:none !important}
+.bw-knapper{display:flex;align-items:center;justify-content:flex-end;gap:10px;margin-left:auto}
+.bw-port{height:26px;padding:0 12px;font-size:12px;white-space:nowrap}
+/* The bubble may use two lines: a sentence cut at "Slå dem på u…" helps nobody. */
+.nabe-boble{white-space:normal;max-width:min(520px,58vw)}
+.nabe-boble .nb-tekst{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden}
 .kort-rest{flex:0 0 auto;font-family:var(--mono);font-size:10px;color:var(--fg-3);cursor:default}
 .as-varsel{flex:0 0 auto;display:inline-flex;align-items:center;gap:4px;height:18px;padding:0 6px;margin-left:6px;border-radius:var(--r-pill);color:var(--warn);font-size:11px;cursor:pointer}
 .as-varsel b{font-family:var(--mono);font-weight:600}
@@ -4940,8 +4945,8 @@ html.mini .ki-gruppe,html.mini .sb-oppd{display:none !important}
    colour is pulled a little toward the grey of the page for the same reason. */
 :root.levfarge .vgroup-bar{width:3px;height:12px;flex:0 0 3px;border-radius:2px;background:color-mix(in oklab,var(--vc) 80%,var(--fg-3))}
 :root.levfarge .ctx-under .vendor i,:root.levfarge .insp-sub .vendor i{width:3px;height:10px;flex:0 0 3px;border-radius:2px}
-:root.levfarge .dev{box-shadow:inset 3px 0 0 color-mix(in oklab,var(--vc) 50%,transparent)}
-:root.levfarge .dev.sel{box-shadow:inset 3px 0 0 color-mix(in oklab,var(--vc) 85%,var(--fg-3))}
+:root.levfarge .dev{box-shadow:inset 3px 0 0 color-mix(in srgb,var(--vc) 50%,transparent)}
+:root.levfarge .dev.sel{box-shadow:inset 3px 0 0 color-mix(in srgb,var(--vc) 85%,var(--fg-3))}
 .kort-brikke{display:inline-flex;flex:0 1 auto;min-width:0;align-items:center;gap:6px;height:20px;padding:0 8px;border:1px solid var(--line-2);border-radius:var(--r-pill);background:transparent;color:var(--fg-2);font:inherit;font-size:11px;cursor:pointer;max-width:100%}
 .kort-brikke span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .kort-brikke:hover,.kort-brikke:focus-visible{border-color:var(--fg-3);color:var(--fg)}
