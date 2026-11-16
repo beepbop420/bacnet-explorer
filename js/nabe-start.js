@@ -203,6 +203,11 @@ const FAKTA = [
   ['COV betyr at regulatoren sier fra selv. Mindre spørring, mer ro.', 'COV means the controller speaks up itself. Less asking, more peace.'],
 ];
 const NYTT = {
+  '1.73': [
+    ['Skjema: aggregat og varmekurser tegnes av seg selv ut fra navn og beskrivelse på punktene. Bytt mellom Tabell og Skjema over punktlista. Klikk en vifte, føler eller ventil for å se punktet. Virker med TFM-koder (RT40, JV401), med lange stier og med enheter uten koder', 'Schematic: air handling units and heating circuits draw themselves from the names and descriptions of the points. Switch between Table and Schematic above the point list. Click a fan, sensor or valve to see its point. Works with TFM codes (RT40, JV401), with long paths and with devices that have no codes'],
+    ['Innstillinger med flere valg åpner en liste i stedet for å bla til neste', 'Settings with several choices open a list instead of stepping to the next one'],
+    ['Verktøymenyen (⋯) er delt i to kolonner og er ikke lenger én lang liste', 'The tools menu (⋯) is split in two columns and is no longer one long list'],
+  ],
   '1.72': [
     ['Snakkeboblen til NABE legger seg ikke lenger over søkefeltet. Den bruker plassen foran feltet og bryter linja', 'The speech bubble no longer covers the search field. It uses the room in front of the field and wraps the line'],
     ['Anleggsraden under skannefeltet skjules når den bare viser anlegget du allerede står i. Klikk i feltet for å få den fram', 'The site row under the scan field is hidden when it only shows the plant you are already in. Click the field to bring it back'],

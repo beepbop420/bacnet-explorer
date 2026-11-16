@@ -422,6 +422,43 @@ function nabeDialog(tekst, o = {}) {
 const nabeBekreft = (tekst, o) => nabeDialog(tekst, o);
 const nabeSpor = (tekst, standard) => nabeDialog(tekst, {standard: standard || ''});
 
+/* A setting with more than two answers opens a list of them. It used to step
+   to the next one on every click, which meant clicking through "2 t" and "av"
+   to get from 30 minutes to 15, and never seeing what there was to choose
+   from. `valg` is [[value, label], ...]; `velg` gets the value picked. */
+function aapneValg(anker, valg, naa, velg) {
+  document.querySelectorAll('.valg-pop').forEach(e => e.remove());
+  const pop = document.createElement('div');
+  pop.className = 'menu-pop valg-pop';
+  pop.setAttribute('role', 'listbox');
+  pop.innerHTML = valg.map(([v, navn], i) => `<button type="button" class="menu-item${v === naa ? ' sel' : ''}" role="option" aria-selected="${v === naa}" data-i="${i}">
+    <span class="valg-hake" aria-hidden="true">${v === naa ? '✓' : ''}</span>${esc(navn)}</button>`).join('');
+  document.body.append(pop);
+  const r = (anker.querySelector('.menu-state') || anker).getBoundingClientRect();
+  pop.style.minWidth = Math.max(150, Math.round(r.width)) + 'px';
+  const h = pop.offsetHeight, b = pop.offsetWidth;
+  pop.style.left = Math.max(8, Math.min(window.innerWidth - b - 8, Math.round(r.right - b))) + 'px';
+  pop.style.top = (r.bottom + 6 + h > window.innerHeight - 8 ? Math.max(8, Math.round(r.top - h - 6)) : Math.round(r.bottom + 6)) + 'px';
+  const lukk = () => { pop.remove(); document.removeEventListener('mousedown', ute, true); document.removeEventListener('keydown', tast, true); try { anker.focus(); } catch {} };
+  const ute = (e) => { if (!pop.contains(e.target)) lukk(); };
+  const knapper = [...pop.querySelectorAll('button')];
+  const tast = (e) => {
+    const i = knapper.indexOf(document.activeElement);
+    if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); lukk(); }
+    else if (e.key === 'ArrowDown') { e.preventDefault(); knapper[(i + 1) % knapper.length].focus(); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); knapper[(i - 1 + knapper.length) % knapper.length].focus(); }
+  };
+  pop.addEventListener('click', (e) => {
+    const k = e.target.closest('[data-i]');
+    if (!k) return;
+    const v = valg[+k.dataset.i][0];
+    lukk();
+    if (v !== naa) velg(v);
+  });
+  setTimeout(() => { document.addEventListener('mousedown', ute, true); document.addEventListener('keydown', tast, true); }, 0);
+  (pop.querySelector('.sel') || knapper[0]).focus();
+}
+
 function toast(msg, isErr) {
   let el = document.querySelector('.toast');
   if (!el) {
@@ -4639,6 +4676,7 @@ function commands() {
   add('Handling', 'Spør NABE…', () => { closeCmd(); aapneSpor(); });
   add('Handling', 'Opptak av punkter…', () => { closeCmd(); aapneOpptak(); });
   add('Handling', 'Trafikklogg…', () => { closeCmd(); aapneTrafikk(); });
+  add('Handling', 'Skjema: aggregat og varmekurser', () => { closeCmd(); aapneSkjema(); }, {when: harEnhet});
   add('Handling', 'Siden sist…', () => { closeCmd(); aapneBesok(); }, {when: () => S.devices.length > 0});
   add('Handling', 'Besøksrapport…', () => { closeCmd(); aapneRapport(); }, {when: () => S.devices.length > 0});
   add('Handling', 'Nettverkskart…', () => { closeCmd(); aapneKart(); });
@@ -9508,13 +9546,10 @@ const GROUP_AKSER = ['auto', 'vendor', 'range', 'none'];
 const GROUP_NAVN = {auto: 'automatisk', vendor: 'leverandør', range: 'nett', none: 'av'};
 const GROUP_EN = {auto: 'automatic', vendor: 'vendor', range: 'network', none: 'off'};
 $('groupBtn').onclick = () => {
-  const naa = grupperingsValg();
-  const neste = GROUP_AKSER[(GROUP_AKSER.indexOf(naa) + 1) % GROUP_AKSER.length];
-  savePrefs({groupBy: neste, groupVendor: neste !== 'none'});
-  renderDevices(); syncMenuStates();
-  toast(neste === 'none' ? 'Enheter vises i én liste'
-      : neste === 'auto' ? T('Grupperes etter nett når flere er skannet, ellers etter leverandør', 'Grouped by network when several are scanned, otherwise by vendor')
-      : T('Grupperes etter ', 'Grouped by ') + T(GROUP_NAVN[neste], GROUP_EN[neste]));
+  aapneValg($('groupBtn'), GROUP_AKSER.map(k => [k, T(GROUP_NAVN[k], GROUP_EN[k])]), grupperingsValg(), (neste) => {
+    savePrefs({groupBy: neste, groupVendor: neste !== 'none'});
+    renderDevices(); syncMenuStates();
+  });
 };
 
 /* Schedules, calendars, trend logs and notification classes are objects like
@@ -10368,6 +10403,7 @@ const ORDBOK = {
   'Vis': 'View',
   'Verktøy': 'Tools',
   'Overvåk': 'Monitor',
+  'Nett': 'Network',
   'Tilkobling': 'Connection',
   'Sikkerhet': 'Safety',
   'Siden sist': 'Since last time',
@@ -10697,6 +10733,7 @@ const ORDBOK = {
   'Trafikklogg…': 'Traffic log…',
   'Bytt BACnet-port…': 'Change BACnet port…',
   'Siden sist…': 'Since last visit…',
+  'Skjema: aggregat og varmekurser': 'Schematic: air handling and heating circuits',
   'Besøksrapport…': 'Visit report…',
   'Nettverkskart…': 'Network map…',
   'Åpne lagret overvåkingsliste': 'Open saved watch list',

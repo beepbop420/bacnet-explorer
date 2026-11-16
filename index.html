@@ -76,34 +76,33 @@
            on lives in Innstillinger, because a dropdown you reopen to flip a
            switch is a settings window wearing the wrong clothes - and mixing
            the two is what made this list fourteen items long. -->
-      <div id="toolsPop" class="menu-pop menu-right" hidden>
-        <div class="menu-gruppe">Verktøy</div>
-        <button id="cmpBtn" class="menu-item">Sammenlign to enheter…</button>
-        <button id="besokBtn" class="menu-item">Siden sist…</button>
-        <button id="rapportBtn" class="menu-item">Besøksrapport…</button>
-        <button id="avvikBtn" class="menu-item">Avvik fra settpunkt…</button>
-        <button id="schBtn" class="menu-item">Ukeprogram…</button>
-        <button id="diagBtn" class="menu-item">Sjekk en adresse…<span class="menu-hint">Ctrl+D</span></button>
-        <button id="simBtn" class="menu-item">Simulator…</button>
-        <div class="menu-sep"></div>
-        <div class="menu-gruppe">Overvåk</div>
-        <button id="opptakBtn" class="menu-item">Opptak av punkter…</button>
-        <button id="bakoverBtn" class="menu-item">Se bakover…</button>
-        <button id="kartBtn" class="menu-item">Nettverkskart…</button>
-        <button id="trafikkBtn" class="menu-item">Trafikklogg…</button>
-        <div class="menu-sep"></div>
-        <div class="menu-gruppe">Tilkobling</div>
-        <button id="rescanNow" class="menu-item">Søk etter enheter nå</button>
-        <button id="reconnBtn" class="menu-item" title="Binder hvert kort som er i bruk på nytt, uten å miste de andre anleggene">Koble til på nytt</button>
-        <div class="menu-sep"></div>
-        <div class="menu-gruppe">Sikkerhet</div>
-        <button id="wlogBtn" class="menu-item">Skrivelogg</button>
-        <div class="menu-sep"></div>
-        <div class="menu-gruppe">Vis</div>
-        <button id="colsBtn" class="menu-item">Kolonner…</button>
-        <button id="gardBtn" class="menu-item" title="Klær til NABE og NABO, låst opp av arbeid">Garderobe…</button>
-        <div class="menu-sep"></div>
-        <button id="temaBtn" class="menu-item menu-tung">Innstillinger…<span class="menu-hint">Ctrl+,</span></button>
+      <div id="toolsPop" class="menu-pop menu-right menu-to" hidden>
+        <div class="menu-kol">
+          <div class="menu-gruppe">Verktøy</div>
+          <button id="besokBtn" class="menu-item">Siden sist…</button>
+          <button id="rapportBtn" class="menu-item">Besøksrapport…</button>
+          <button id="avvikBtn" class="menu-item">Avvik fra settpunkt…</button>
+          <button id="schBtn" class="menu-item">Ukeprogram…</button>
+          <button id="cmpBtn" class="menu-item">Sammenlign to enheter…</button>
+          <button id="diagBtn" class="menu-item">Sjekk en adresse…<span class="menu-hint">Ctrl+D</span></button>
+        </div>
+        <div class="menu-kol">
+          <div class="menu-gruppe">Overvåk</div>
+          <button id="opptakBtn" class="menu-item">Opptak av punkter…</button>
+          <button id="bakoverBtn" class="menu-item">Se bakover…</button>
+          <button id="trafikkBtn" class="menu-item">Trafikklogg…</button>
+          <div class="menu-gruppe menu-gruppe-2">Nett</div>
+          <button id="kartBtn" class="menu-item">Nettverkskart…</button>
+          <button id="rescanNow" class="menu-item">Søk etter enheter nå</button>
+          <button id="reconnBtn" class="menu-item" title="Binder hvert kort som er i bruk på nytt, uten å miste de andre anleggene">Koble til på nytt</button>
+        </div>
+        <div class="menu-fot">
+          <button id="wlogBtn" class="menu-item">Skrivelogg</button>
+          <button id="simBtn" class="menu-item">Simulator…</button>
+          <button id="colsBtn" class="menu-item">Kolonner…</button>
+          <button id="gardBtn" class="menu-item" title="Klær til NABE og NABO, låst opp av arbeid">Garderobe…</button>
+          <button id="temaBtn" class="menu-item menu-tung">Innstillinger…<span class="menu-hint">Ctrl+,</span></button>
+        </div>
       </div>
     </div>
     <button id="themeBtn" class="theme-tgl" title="Bytt mellom mørk og lys visning" aria-label="Bytt visning"><i></i></button>
@@ -544,6 +543,8 @@
 <script src="/js/nabe-opptak.js"></script>
 <script src="/js/nabe-trafikk.js"></script>
 <script src="/js/nabe-besok.js"></script>
+<script src="/js/nabe-skjema-ordbok.js"></script>
+<script src="/js/nabe-skjema.js"></script>
 <script src="/js/nabe-runde.js"></script>
 <script src="/js/nabe-kart.js"></script>
 <script src="/js/nabe-syn.js"></script>

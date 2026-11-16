@@ -239,11 +239,11 @@ etter('pollTick', () => merkFlat());
 etter('syncMenuStates', syncFlat);
 if ($('flatBtn')) {
   $('flatBtn').onclick = () => {
-    const neste = FLAT_VALG[(FLAT_VALG.indexOf(flatMin()) + 1) % FLAT_VALG.length];
-    savePrefs({flatMin: neste});
-    syncFlat(); merkFlat(true);
-    toast(neste ? T(`Flat linje etter ${flatTekst()}`, `Flatline after ${flatTekst()}`)
-                : T('Flat linje av', 'Flatline off'));
+    const navn = (m) => !m ? T('av', 'off') : m < 60 ? `${m} min` : T(`${m / 60} t`, `${m / 60} h`);
+    aapneValg($('flatBtn'), FLAT_VALG.map(m => [m, navn(m)]), flatMin(), (neste) => {
+      savePrefs({flatMin: neste});
+      syncFlat(); merkFlat(true);
+    });
   };
   syncFlat();
 }

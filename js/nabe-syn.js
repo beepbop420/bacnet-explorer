@@ -63,20 +63,20 @@
     const skriving = [...side.querySelectorAll('.sett-gruppe')].find(g => g.querySelector('#roBtn'));
     if (skriving) { skriving.before(syn); skriving.before(hum); } else { side.append(syn, hum); }
     document.getElementById('fargesynBtn').onclick = () => {
-      const neste = FARGER[(FARGER.indexOf(fargesyn()) + 1) % FARGER.length];
-      savePrefs({fargesyn: neste});
-      bruk(); synk();
-      toast(T(`Fargesyn: ${farger()[neste]}`, `Colour vision: ${farger()[neste]}`));
+      aapneValg(document.getElementById('fargesynBtn'), FARGER.map(k => [k, farger()[k]]), fargesyn(), (neste) => {
+        savePrefs({fargesyn: neste});
+        bruk(); synk();
+      });
     };
     document.getElementById('formerBtn').onclick = () => {
       savePrefs({former: !formerPaa()});
       bruk(); synk();
     };
     document.getElementById('humorBtn').onclick = () => {
-      const neste = HUMOR[(HUMOR.indexOf(humorNiva()) + 1) % HUMOR.length];
-      savePrefs({humor: neste});
-      synk();
-      toast(T(`Humørnivå: ${humor()[neste]}`, `Mood: ${humor()[neste]}`));
+      aapneValg(document.getElementById('humorBtn'), HUMOR.map(k => [k, humor()[k]]), humorNiva(), (neste) => {
+        savePrefs({humor: neste});
+        synk();
+      });
     };
   }
 

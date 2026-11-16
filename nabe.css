@@ -5172,3 +5172,96 @@ button.sp-rad:hover{background:var(--hover)}
 .gd-arb[hidden]{display:none}
 .pk-tittel{font-size:12px;color:var(--fg-3)}
 .pk-prove{display:flex;flex-wrap:wrap;gap:12px;justify-content:center}
+
+/* ---- the schematic (nabe-skjema.js) ---------------------------------
+   Air and water get colours of their own, none of them a status colour:
+   red, amber and green stay with alarm, hand and running. Every stretch of
+   duct is also named in words, so the colour is never the only way to tell
+   supply from extract. */
+:root{--sk-ute:#5b9bd8;--sk-til:#d98a52;--sk-avt:#b59a5a;--sk-avk:#8d93a0;--sk-tur:#d9744a;--sk-ret:#7fa3c7}
+:root[data-theme="light"]{--sk-ute:#2f6fb3;--sk-til:#b8602a;--sk-avt:#8c7430;--sk-avk:#6d7480;--sk-tur:#b8532a;--sk-ret:#4f7ba6}
+.sk-bryter{display:flex;gap:2px;padding:2px;margin-right:8px;border:1px solid var(--line);border-radius:var(--radius);flex:0 0 auto}
+.sk-bryter[hidden]{display:none}
+.sk-bryter button{height:26px;padding:0 12px;border-radius:calc(var(--radius) - 2px);color:var(--fg-3);font:inherit;font-size:12px;cursor:pointer}
+.sk-bryter button:hover{color:var(--fg)}
+.sk-bryter button.sel{background:var(--raised);color:var(--fg)}
+.skjema{flex:1 1 auto;min-height:0;overflow:auto;display:flex;flex-direction:column;gap:18px;padding:20px 24px 28px;background:var(--bg)}
+.skjema[hidden]{display:none}
+.sk-hode{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap}
+.sk-faner{display:flex;gap:6px;flex-wrap:wrap}
+.sk-faner button{height:30px;padding:0 14px;border:1px solid var(--line);border-radius:var(--r-pill);color:var(--fg-2);font:inherit;font-size:12px;cursor:pointer;white-space:nowrap}
+.sk-faner button:hover{border-color:var(--fg-3);color:var(--fg)}
+.sk-faner button.sel{background:var(--raised);border-color:var(--line-2);color:var(--fg);font-weight:500}
+.sk-forkl{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--fg-3)}
+.sk-prikk{width:8px;height:8px;border-radius:50%;margin-left:10px}
+.sk-prikk.drift{background:var(--ok)}
+.sk-prikk.haand{background:var(--warn);border-radius:2px}
+.sk-prikk.alarm{background:var(--err);clip-path:polygon(50% 0,100% 100%,0 100%);border-radius:0}
+.sk-lerret{flex:0 0 auto;overflow-x:auto;padding:22px 24px;border:1px solid var(--line);border-radius:var(--r-lg);background:var(--panel)}
+.sk-lerret svg{display:block;width:100%;height:auto}
+.sk-utvid{height:26px;padding:0 12px;margin-left:16px;font-size:12px}
+body.sk-stor .pane-devices,body.sk-stor .splitter[data-pane="devices"]{display:none}
+.sk-kanal{stroke-width:1.2;fill-opacity:.2}
+.sk-kanal.ute{fill:var(--sk-ute);stroke:var(--sk-ute)}
+.sk-kanal.tilluft{fill:var(--sk-til);stroke:var(--sk-til)}
+.sk-kanal.avtrekk{fill:var(--sk-avt);stroke:var(--sk-avt)}
+.sk-kanal.avkast{fill:var(--sk-avk);stroke:var(--sk-avk)}
+.sk-ror{stroke-width:3;stroke-linecap:round;fill:none}
+.sk-ror.tur{stroke:var(--sk-tur)}
+.sk-ror.retur{stroke:var(--sk-ret)}
+.sk-flyt{fill:none;stroke:var(--fg-3);stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.sk-etikett{font:500 11.5px var(--sans);fill:var(--fg-3);letter-spacing:.05em;text-transform:uppercase}
+.sk-kropp{fill:var(--panel);stroke:var(--fg-2);stroke-width:1.6;stroke-linejoin:round;transition:stroke .2s ease,fill .2s ease}
+.sk-strek{fill:none;stroke:var(--fg-2);stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+.sk-strek.svak{stroke:var(--line-2);stroke-width:1}
+.sk-pil{fill:var(--fg-3);stroke:none;transition:fill .2s ease}
+.sk-dot{fill:var(--fg-2)}
+.sk-stilk{stroke:var(--fg-3);stroke-width:1.2}
+.sk-ring{fill:var(--panel);stroke:var(--fg-2);stroke-width:1.4}
+.sk-bok{font:600 10px var(--mono);fill:var(--fg-2)}
+.sk-kode{font:600 14px var(--sans);fill:var(--fg)}
+.sk-v{font:500 13.5px var(--mono);fill:var(--fg-2)}
+.sk-sp{font:500 13.5px var(--mono);fill:var(--accent)}
+.sk-tittel{font:600 15px var(--mono);fill:var(--fg)}
+.sk-under{font:400 13px var(--sans);fill:var(--fg-2)}
+.sk-under.svak{fill:var(--fg-3);font-size:12px}
+.sk-k{cursor:pointer;outline:none}
+.sk-k:hover .sk-kropp,.sk-k:hover .sk-ring,.sk-k:focus-visible .sk-kropp,.sk-k:focus-visible .sk-ring{stroke:var(--accent)}
+.sk-k:hover .sk-kode,.sk-k:focus-visible .sk-kode{fill:var(--accent)}
+.sk-k.valgt .sk-kropp,.sk-k.valgt .sk-ring{stroke:var(--accent);stroke-width:2.2}
+.sk-k.drift .sk-pil{fill:var(--ok)}
+.sk-k.drift.rotor .sk-kropp{stroke:var(--ok)}
+.sk-k.alarm .sk-kropp,.sk-k.alarm .sk-ring{stroke:var(--err)}
+.sk-k.alarm .sk-v{fill:var(--err)}
+.sk-k.feil .sk-ring,.sk-k.feil .sk-kropp{stroke-dasharray:3 3}
+.sk-am{fill:var(--err)}
+.sk-hm rect{fill:var(--warn)}
+.sk-hm text{font:700 9px var(--sans);fill:#1b1b1d}
+.sk-rest{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.sk-rest-t{flex:0 0 100%;font-size:11px;font-weight:600;color:var(--fg-3)}
+.sk-rom{font-size:12px;color:var(--fg-2);padding:0 4px}
+.sk-brikke{display:inline-flex;align-items:baseline;gap:8px;height:28px;padding:0 12px;border:1px solid var(--line);border-radius:var(--r-pill);font:inherit;font-size:12px;color:var(--fg-2);cursor:pointer}
+.sk-brikke b{font-weight:600;color:var(--fg)}
+.sk-brikke i{font-style:normal;font-size:11px;color:var(--fg-3)}
+.sk-brikke span{font-family:var(--mono);font-size:11px}
+.sk-brikke:hover,.sk-brikke:focus-visible{border-color:var(--fg-3)}
+.sk-brikke.alarm{border-color:var(--err)}
+.sk-brikke.alarm span{color:var(--err)}
+.sk-brikke.haand{border-color:var(--warn)}
+.sk-brikke.valgt{border-color:var(--accent)}
+.sk-fot{font-size:11px;color:var(--fg-3);max-width:70ch}
+body.viser-skjema .filterbar > :not(.sk-bryter):not(.spacer):not(#pollBtn):not(#refreshBtn){visibility:hidden}
+/* The list a setting with several answers opens. */
+.valg-pop{position:fixed;z-index:9995;padding:6px;display:flex;flex-direction:column;gap:2px}
+.valg-pop .menu-item{display:flex;align-items:center;gap:8px;height:32px;padding:0 12px 0 8px;border-radius:var(--radius);white-space:nowrap}
+.valg-pop .menu-item.sel{color:var(--fg);font-weight:500}
+.valg-hake{flex:0 0 14px;color:var(--accent);font-size:12px}
+/* The tools menu in two columns with a foot, instead of one list of seventeen. */
+.menu-pop.menu-to:not([hidden]){display:grid;grid-template-columns:auto auto;gap:6px 22px;padding:16px 16px 12px;max-height:none}
+.menu-kol{display:flex;flex-direction:column;gap:2px;min-width:200px}
+.menu-kol .menu-gruppe{padding:0 10px 6px}
+.menu-kol .menu-gruppe-2{padding-top:14px}
+.menu-fot{grid-column:1 / -1;display:flex;flex-wrap:wrap;gap:2px 4px;margin-top:8px;padding-top:10px;border-top:1px solid var(--line)}
+.menu-fot .menu-item{width:auto;flex:0 0 auto;color:var(--fg-2)}
+.menu-fot .menu-tung{margin-left:auto;color:var(--fg)}
+@media (max-width:600px){.menu-pop.menu-to:not([hidden]){grid-template-columns:minmax(0,1fr)}}

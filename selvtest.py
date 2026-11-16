@@ -292,6 +292,22 @@ def royktest():
               "    const ok = !!document.querySelector('.dlg-lag [data-d=ja]'); document.querySelector('.dlg-lag [data-d=nei]').click();"
               "    return ok && !document.querySelector('.dlg-lag'); })(),"
               " port: typeof byttPort === 'function',"
+              " skjema: typeof aapneSkjema === 'function' && typeof aapneValg === 'function' && (() => {"
+              "  const P = (o, n, d, t, v, u) => ({objid: o, name: n, description: d, type: t, value: v, units: u || ''});"
+              "  const s = nabeSkjema.byggSystemer([P('ai,1', 'A_360_001_RT43', 'SD2T Temperaturføler Tilluft', 'analog-input', 20.4, 'degrees-celsius'),"
+              "    P('ai,2', 'A_360_001_RT40', 'SD2T Temperaturføler Inntak', 'analog-input', 3.7, 'degrees-celsius'),"
+              "    P('ao,1', 'A_360_001_JV40 _JV_AU', 'SD0T Frekvensomformer Tilluftsvifte - viftepådrag', 'analog-output', 55, 'percent'),"
+              "    P('bo,1', 'A_360_001_JV40 _Start', 'SD0T Frekvensomformer Tilluftsvifte - Start', 'binary-output', 'active'),"
+              "    P('av,1', 'A_360_001_IV001_AktSpTill', 'SD0T Blokk A - tilluftstemperatur', 'analog-value', 19, 'degrees-celsius'),"
+              "    P('ai,3', 'A_320_012_RT41', 'SD2T Temperaturføler Tur hovedstokk', 'analog-input', 75, 'degrees-celsius'),"
+              "    P('bo,2', 'A_320_012_JP40 _Start', 'SD0T Sirkulasjonspumpe - Start', 'binary-output', 'active')]);"
+              "  const v = s.find(x => x.id === '360.001'), h = s.find(x => x.id === '320.012');"
+              "  const rt = v && v.komp.find(k => k.kode === 'RT43'), jv = v && v.komp.find(k => k.kode === 'JV40');"
+              "  const n = nabeSkjema.tolkNavn('564001-OS001/FCB.320002.320002.320_002-RT400_SP');"
+              "  const c = nabeSkjema.tolkPunkt(P('av,9', 'SupplyAirTemp', 'Supply air temperature', 'analog-value', 19.8, 'degrees-celsius'));"
+              "  return !!v && v.type === 'ventilasjon' && !!h && h.type === 'varme' && rt.sted === 'tilluft' && rt.pkt.sp.value === 19"
+              "    && jv.art === 'vifte' && jv.pkt.paadrag.value === 55 && n.sys === '320.002' && n.kode === 'RT400' && n.hale === 'SP'"
+              "    && c.art === 'temp' && c.sted === 'tilluft' && c.rolle === 'pv' && nabeSkjema.tegnAggregat(v).svg.includes('RT43'); })(),"
               " anleggsrad: typeof bareDetteAnlegget === 'function',"
               " kort: typeof flereKortIBruk === 'function' && typeof anKompakt === 'function',"
               " ukeprogram: typeof urEnheter === 'function' && typeof urLesAlle === 'function' && !!document.getElementById('anStatusBtn')"
@@ -916,7 +932,7 @@ def kjor_tester():
     # Last: it silences the simulated device on 127.0.0.6.
     mine_uten_kontakt()
 
-    for fil in ("nabe-start", "nabe-verktoy", "nabe-felt", "nabe-moro", "nabe-finn", "nabe-skann", "nabe-anlegg", "nabe-bunn", "nabe-graf", "nabe-tunnel", "nabe-sammen", "nabe-flyt", "nabe-peker", "nabe-pekere", "nabe-skrift", "nabo", "nabo-brodre", "nabo-fasit", "nabe-garderobe", "nabe-opptak", "nabe-trafikk", "nabe-besok", "nabe-runde", "nabe-fortsett", "nabe-simulator", "nabe-oppdatering", "nabe-bakover", "nabe-kart", "nabe-syn", "nabe-raad", "nabe-dialoger-innhold", "nabe-dialoger-mer", "nabe-dialoger", "nabe-tilbehor", "nabe-kunnskap", "nabe-spor"):
+    for fil in ("nabe-start", "nabe-verktoy", "nabe-felt", "nabe-moro", "nabe-finn", "nabe-skann", "nabe-anlegg", "nabe-bunn", "nabe-graf", "nabe-tunnel", "nabe-sammen", "nabe-flyt", "nabe-peker", "nabe-pekere", "nabe-skrift", "nabo", "nabo-brodre", "nabo-fasit", "nabe-garderobe", "nabe-opptak", "nabe-trafikk", "nabe-besok", "nabe-runde", "nabe-skjema-ordbok", "nabe-skjema", "nabe-fortsett", "nabe-simulator", "nabe-oppdatering", "nabe-bakover", "nabe-kart", "nabe-syn", "nabe-raad", "nabe-dialoger-innhold", "nabe-dialoger-mer", "nabe-dialoger", "nabe-tilbehor", "nabe-kunnskap", "nabe-spor"):
         try:
             with urllib.request.urlopen(f"{BASE}/js/{fil}.js", timeout=5) as rr:
                 ok = rr.status == 200
