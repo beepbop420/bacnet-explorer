@@ -199,6 +199,11 @@ const FAKTA = [
   ['COV betyr at regulatoren sier fra selv. Mindre spørring, mer ro.', 'COV means the controller speaks up itself. Less asking, more peace.'],
 ];
 const NYTT = {
+  '1.65': [
+    ['Ukeprogram viser nå alle enhetene du har skannet, ikke bare den som er åpen. Enhetene leses i bakgrunnen noen om gangen, og lista fyller seg opp. Sortert på anlegg, så enhetsnavn (med tall i riktig rekkefølge), så navn på ur. «Denne enheten» gir den gamle visningen', 'Schedule now shows every device you have scanned, not only the open one. The devices are read in the background a few at a time, and the list fills in. Sorted by site, then device name (numbers in their natural order), then schedule name. "This device" gives the old view'],
+    ['Anleggsstatus brettes sammen til én rolig linje med alarmer og feil, og åpnes ved å trykke på den. Den kan skjules med ✕ og slås på igjen i innstillinger', 'The plant status folds into one quiet line with alarms and faults, and opens when you click it. It can be hidden with ✕ and turned back on in Settings'],
+    ['«Feil klokke» er ryddet: enhetsnavn og avvik i stedet for ID og IP, delt per anlegg, og «Still klokka» vises bare når du peker på raden', 'The wrong-clock list is tidied: device name and deviation instead of ID and IP, split per site, and "Set clock" only shows when you point at the row'],
+  ],
   '1.64': [
     ['Megapakke med dialoger: NABE og NABO har fått over tusen nye replikker som passer til det du gjør, til tiden på døgnet, til leverandøren du leser og til hvordan det går. Ingenting gjentas før alt annet er sagt. Humørnivå i innstillinger (Stille, Normal, Kaos) styrer hvor mye', 'A mega pack of dialogue: NABE and NABO have over a thousand new lines that fit what you are doing, the time of day, the vendor you are reading and how it is going. Nothing repeats before everything else has been said. Mood in Settings (Quiet, Normal, Chaos) sets how much'],
     ['De to snakker også sammen når det er stille, og kommenterer verktøyene du åpner. NABO har fått mer å skrive i terminalen sin', 'The two also talk to each other when it is quiet, and comment on the tools you open. NABO has more to type in his terminal'],

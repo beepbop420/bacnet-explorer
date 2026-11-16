@@ -48,6 +48,18 @@
       + `<div class="syn-prov" id="synProv" aria-hidden="true"></div>`);
     const hum = gruppe(T('NABE og NABO', 'NABE and NABO'),
       rad('humorBtn', T('Humørnivå', 'Mood'), T('Stille: bare det som hjelper. Normal: som vanlig. Kaos: også en og annen bemerkning når det er stille', 'Quiet: only what helps. Normal: as usual. Chaos: the odd remark when it is quiet too')));
+    // Where the plant status lives, next to the other things about the device list.
+    const lista = [...side.querySelectorAll('.sett-gruppe')].find(g => g.querySelector('#groupBtn'));
+    if (lista && !document.getElementById('anStatusBtn')) {
+      const r = document.createElement('div');
+      r.innerHTML = rad('anStatusBtn', T('Anleggsstatus', 'Plant status'), T('Linja over enhetslista med alarmer og feil, delt per anlegg. Brettes ut ved å trykke på den', 'The line above the device list with alarms and faults, split per site. Click it to unfold'), true);
+      lista.append(r.firstElementChild);
+      document.getElementById('anStatusBtn').onclick = () => {
+        savePrefs({anSkjult: !loadPrefs().anSkjult});
+        synk();
+        if (typeof tegnAnlegg === 'function') tegnAnlegg();
+      };
+    }
     const skriving = [...side.querySelectorAll('.sett-gruppe')].find(g => g.querySelector('#roBtn'));
     if (skriving) { skriving.before(syn); skriving.before(hum); } else { side.append(syn, hum); }
     document.getElementById('fargesynBtn').onclick = () => {
@@ -76,6 +88,9 @@
     const s = document.getElementById('formerState');
     if (s) s.textContent = formerPaa() ? T('på', 'on') : T('av', 'off');
     document.getElementById('formerBtn')?.classList.toggle('on', formerPaa());
+    const an = document.getElementById('anStatusState');
+    if (an) an.textContent = loadPrefs().anSkjult ? T('av', 'off') : T('på', 'on');
+    document.getElementById('anStatusBtn')?.classList.toggle('on', !loadPrefs().anSkjult);
     const h = document.getElementById('humorState');
     if (h) h.textContent = humor()[humorNiva()];
     // What the colours look like right now, with the real classes, so the choice is seen and not guessed.

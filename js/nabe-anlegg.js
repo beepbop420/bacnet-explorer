@@ -176,6 +176,8 @@ function tegnAnlegg() {
   }
   const t = anleggTall();
   if (!t.total || !t.lest) { el.hidden = true; el.innerHTML = ''; return; }
+  // Hidden by choice: it is still worked out (the comparison with last time runs), just not shown.
+  if (loadPrefs().anSkjult) { if (t.ferdig) anSammenlign(t); el.hidden = true; el.innerHTML = ''; return; }
   el.hidden = false;
   const tall = AN_REKKE.filter(f => t.flagg[f].length);
   // An alarm is red; a fault is a point the device cannot trust, a quieter red; the rest are warnings.
@@ -235,9 +237,22 @@ function tegnAnlegg() {
     const deler = [e.alarm ? `<span class="a">${e.alarm} ${T('i alarm', 'in alarm')}</span>` : '', e.feil ? `${e.feil} ${T('med feil', 'faulty')}` : ''].filter(Boolean);
     return `<span><b>${esc(navn)}</b> ${deler.join(' · ') || T('rolig', 'quiet')}</span>`;
   }).join('')}</div>` : '';
-  const html = `<div class="as-linje">
-      <span class="as-tittel">${flere ? T('Anleggene', 'The plants') : T('Anlegget', 'The plant')}</span>
-      <span class="as-tallene">${hoved}</span>
+  const tittel = flere ? T('Anleggene', 'The plants') : T('Anlegget', 'The plant');
+  const apen = !!loadPrefs().anApen || !!AN.apen;
+  const skjulKnapp = `<button type="button" class="as-skjul" data-skjul title="${esc(T('Skjul anleggsstatus. Slås på igjen i innstillinger.', 'Hide the plant status. Turn it back on in Settings.'))}" aria-label="${esc(T('Skjul anleggsstatus', 'Hide the plant status'))}">✕</button>`;
+  // Folded: one quiet line with the two numbers that matter. Open: everything, as before.
+  const alarm = t.flagg['in-alarm'].length, feilN = t.flagg['fault'].length;
+  const kort = [alarm ? `<span class="as-k bad"><b>${alarm}</b> ${T('i alarm', 'in alarm')}</span>` : '',
+                feilN ? `<span class="as-k feil"><b>${feilN}</b> ${T('med feil', 'faulty')}</span>` : ''].filter(Boolean).join('')
+    || `<span class="as-k rolig">${t.ferdig ? T('ingen alarmer', 'no alarms') : T('leser…', 'reading…')}</span>`;
+  const html = !apen
+    ? `<div class="as-linje as-kompakt">
+        <button type="button" class="as-vis" data-vis aria-expanded="false" title="${esc(T('Vis detaljer', 'Show details'))}">
+          <span class="as-tittel">${tittel}</span><span class="as-tallene">${kort}</span><span class="as-chev" aria-hidden="true">⌄</span></button>${skjulKnapp}
+      </div>`
+    : `<div class="as-linje">
+      <button type="button" class="as-vis as-tittel-knapp" data-vis aria-expanded="true" title="${esc(T('Skjul detaljer', 'Hide details'))}"><span class="as-tittel">${tittel}</span></button>
+      <span class="as-tallene">${hoved}</span>${skjulKnapp}
     </div>${sted}
     <div class="as-linje2">
       <span class="as-fram">${fram}${sist ? ` · <span class="as-sist">${sist}</span>` : ''}</span>
@@ -249,8 +264,22 @@ function tegnAnlegg() {
 }
 
 async function anKlikk(e) {
+  if (e.target.closest('[data-skjul]')) {
+    savePrefs({anSkjult: true});
+    tegnAnlegg();
+    toast(T('Anleggsstatus skjult. Slå den på igjen under Innstillinger.', 'Plant status hidden. Turn it back on in Settings.'));
+    if (typeof syncMenuStates === 'function') syncMenuStates();
+    return;
+  }
+  if (e.target.closest('[data-vis]')) {
+    const og = !(loadPrefs().anApen || AN.apen);
+    savePrefs({anApen: og});
+    if (!og) AN.apen = '';
+    tegnAnlegg();
+    return;
+  }
   const b = e.target.closest('[data-f]');
-  if (b) { AN.apen = AN.apen === b.dataset.f ? '' : b.dataset.f; tegnAnlegg(); return; }
+  if (b) { AN.apen = AN.apen === b.dataset.f ? '' : b.dataset.f; savePrefs({anApen: true}); tegnAnlegg(); return; }
   if (e.target.closest('[data-kopier]')) { anKopier(e.target.closest('[data-kopier]')); return; }
   const apne = e.target.closest('[data-apne]');
   if (apne) {

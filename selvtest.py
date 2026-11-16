@@ -283,6 +283,8 @@ def royktest():
               " helhet: !!window.nabeSyn && !!window.nabeRaad && typeof kobleTilPaaNytt === 'function' && typeof navngiNett === 'function'"
               "  && !!document.getElementById('devRescan') && !!document.getElementById('fargesynBtn') && !!document.getElementById('humorBtn')"
               "  && !!document.getElementById('bakoverBtn') && !document.getElementById('expPop').contains(document.getElementById('schBtn')),"
+              " ukeprogram: typeof urEnheter === 'function' && typeof urLesAlle === 'function' && !!document.getElementById('anStatusBtn')"
+              "  && cmpAdr('10.0.0.9', '10.0.0.10') < 0 && cmpAdr('10.0.1.1', '10.0.0.200') > 0,"
               " dialoger: !!window.nabeDialoger && nabeDialoger.antall() > 600 && PLAGG.length >= 55 && !!PLAGG_REPLIKK.sydvest"
               "  && Object.values(DIA_INNHOLD).every(d => d.l.every(x => String(JSON.stringify(x)).includes(' | '))),"
               " co2grense: (() => { const mk = (v, i) => ({a: [{objid: 'ai,' + i, name: 'CO2_PV', units: 'parts-per-million', value: v}, {objid: 'av,' + i, name: 'CO2_SP', units: 'parts-per-million', value: 700}]});"

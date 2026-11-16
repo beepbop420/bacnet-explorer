@@ -991,9 +991,9 @@ function siteWarnings() {
   if (dup.length) {
     ut.push({
       nokkel: 'dup',
-      tittel: `${dup.length} enhets-ID i konflikt`,
-      note: 'Forespørsler treffer den som svarer først, så lesinger og skrivinger '
-          + 'kan lande på feil sentral.',
+      tittel: T(`${dup.length} enhets-ID i konflikt`, `${dup.length} device ID ${dup.length === 1 ? 'conflict' : 'conflicts'}`),
+      note: T('Forespørsler treffer den som svarer først, så lesinger og skrivinger kan lande på feil sentral.',
+              'Requests reach whichever answers first, so reads and writes can land on the wrong controller.'),
       rader: dup.map(([inst, ips]) => ({
         alvorlig: true, id: inst, adresse: ips.join('  '),
         tekst: T(`svarer fra ${ips.length} adresser`, `answers from ${ips.length} addresses`), ip: ips[0],
@@ -1025,7 +1025,8 @@ function siteWarnings() {
         alvorlig: false,
         id: String(e.device_instance ?? '?'),
         adresse: e.address, ip: e.address,
-        tekst: (e.object_name || '') + (e.vendor ? ' · ' + e.vendor : ''),
+        navn: e.object_name || '', omr: e._range || '',
+        tekst: e.vendor || '',
         savnet: true,
       })),
     });
@@ -1041,10 +1042,12 @@ function siteWarnings() {
     ut.push({
       nokkel: 'klokke',
       tittel: T(`${skjeve.length} ${skjeve.length === 1 ? 'enhet har' : 'enheter har'} feil klokke`, `${skjeve.length} ${skjeve.length === 1 ? 'device has' : 'devices have'} the wrong clock`),
-      note: 'Ukeprogram kjører etter enhetens egen klokke, og trendlogger stemples med den.',
+      note: T('Ukeprogram kjører etter enhetens egen klokke, og trendlogger stemples med den.',
+              'Weekly schedules run on the device’s own clock, and trend logs are stamped with it.'),
       rader: skjeve.map(({d, sek}) => ({
         alvorlig: Math.abs(sek) > CLOCK_SEVERE,
         id: String(d.device_instance ?? '?'), adresse: d.address, ip: d.address,
+        navn: d.object_name || '', omr: d._range || '',
         tekst: klokkeTekst(sek, (S.identity[d.address] || {})['device-time']),
       })),
     });
@@ -1066,26 +1069,43 @@ function renderSiteWarnings() {
   const antall = seksjoner.reduce((n, s) => n + s.rader.length, 0);
   const alvorlige = seksjoner.reduce((n, s) => n + s.rader.filter(r => r.alvorlig).length, 0);
 
+  const ikon = seksjoner.length === 1 && seksjoner[0].nokkel === 'klokke' ? '⏱' : '●';
   const hode = `<button class="warn-head${alvorlige ? ' severe' : ''}" id="warnToggle"
       aria-expanded="${apen}" title="${apen ? T('Skjul detaljer', 'Hide details') : T('Vis detaljer', 'Show details')}">
+    <span class="warn-ikon" aria-hidden="true">${ikon}</span>
     <span class="warn-title">${seksjoner.map(s => esc(s.tittel)).join(' · ')}</span>
     <span class="warn-chev">${apen ? '⌃' : '⌄'}</span>
   </button>`;
 
+  // The end of the address is enough inside one network; a different network gets the whole one.
+  const kortAdr = (a, alle) => {
+    const m = /^(\d+\.\d+\.\d+)\.(\d+)$/.exec(a);
+    return m && alle.every(x => String(x.adresse).startsWith(m[1] + '.')) ? '.' + m[2] : a;
+  };
+  const rad = (s, r, grp) => {
+    const navn = r.navn || r.id;
+    const fiks = s.nokkel === 'klokke' && !S.readOnly
+      ? `<span class="wr-fiks" data-synk="${esc(r.ip)}" title="${esc(T('Sett klokka på denne enheten fra denne PC-en', 'Set this device’s clock from this PC'))}">${T('Still klokka', 'Set clock')}</span>` : '';
+    const ping = r.savnet
+      ? `<span class="wr-fiks" data-pingen="${esc(r.ip)}" title="${esc(T('Svarer denne adressen på ping?', 'Does this address answer a ping?'))}">Ping</span>` : '';
+    return `<button class="warn-row${r.alvorlig ? ' severe' : ''}" data-goto="${esc(r.ip)}" title="${esc(T('Gå til', 'Go to') + ' ' + r.adresse)}">
+        <span class="wr-navn">${esc(navn)}<small>${esc(kortAdr(r.adresse, grp || s.rader))}</small></span>
+        <span class="wr-txt">${esc(r.tekst)}</span>${fiks}${ping}
+      </button>`;
+  };
+  // Several networks in one list: a heading per network, so "which plant" is answered at a glance.
+  const grupper = (s) => {
+    const omr = [...new Set(s.rader.map(r => r.omr).filter(Boolean))];
+    if (omr.length < 2) return s.rader.map(r => rad(s, r, s.rader)).join('');
+    return omr.map(o => {
+      const rs = s.rader.filter(r => r.omr === o);
+      const navn = (typeof nettNavn === 'function' && nettNavn(o)) || o;
+      return `<div class="wr-sted"><span>${esc(navn)}</span><b>${rs.length}</b></div>${rs.map(r => rad(s, r, rs)).join('')}`;
+    }).join('');
+  };
   const kropp = !apen ? '' : '<div class="warn-body">' + seksjoner.map(s => `
     <div class="warn-sect">
-      ${s.rader.map(r => `<button class="warn-row${r.alvorlig ? ' severe' : ''}" data-goto="${esc(r.ip)}"
-          title="${T('Gå til', 'Go to')} ${esc(r.adresse)}">
-        <span class="wr-id">${esc(r.id)}</span>
-        <span class="wr-ip">${esc(r.adresse)}</span>
-        <span class="wr-txt">${esc(r.tekst)}</span>
-        ${s.nokkel === 'klokke' && !S.readOnly
-          ? `<span class="wr-fiks" data-synk="${esc(r.ip)}"
-               title="Sett klokka på denne enheten fra denne PC-en">Still klokka</span>` : ''}
-        ${r.savnet
-          ? `<span class="wr-fiks" data-pingen="${esc(r.ip)}"
-               title="Svarer denne adressen på ping?">Ping</span>` : ''}
-      </button>`).join('')}
+      ${grupper(s)}
       <div class="warn-note">${esc(s.note)}</div>
     </div>`).join('') + '</div>';
 
@@ -1108,19 +1128,19 @@ function renderSiteWarnings() {
       ev.stopPropagation();
       const ip = sp.dataset.pingen;
       const foer = sp.textContent;
-      sp.textContent = 'pinger…';
+      sp.textContent = T('pinger…', 'pinging…');
       try {
         const d = await api('/api/ping', {subnet: ip + '/32', timeout_ms: 900});
         const lever = (d.alive || []).length > 0;
-        sp.textContent = lever ? 'svarer på ping' : 'stille';
+        sp.textContent = lever ? T('svarer på ping', 'answers ping') : T('stille', 'silent');
         sp.classList.toggle('wr-ok', lever);
         sp.classList.toggle('wr-nei', !lever);
         if (lever) toast(ip + ' svarer på ping, prøv «Sweep, grundig»');
       } catch (e) {
         sp.textContent = /404|not found/i.test(e.message || '')
-          ? 'krever omstart' : 'feilet';
+          ? T('krever omstart', 'needs a restart') : T('feilet', 'failed');
         sp.title = /404|not found/i.test(e.message || '')
-          ? 'Ping kom i en nyere serverversjon, kjør start.bat igjen'
+          ? T('Ping kom i en nyere serverversjon, kjør start.bat igjen', 'Ping came in a newer server version, run start.bat again')
           : e.message;
       }
     });
@@ -6723,7 +6743,7 @@ function renderInspector() {
   const hb = $('tlHent');
   if (hb) hb.onclick = () => hentTrendlogg(p);
   const ub = $('ukeAapne');
-  if (ub) ub.onclick = () => openSchedules(p.objid);
+  if (ub) ub.onclick = () => openSchedules(p.objid, S.activeDev && S.activeDev.address);
 }
 
 /* Everything the object has, on request: its own property-list read out,
@@ -8029,7 +8049,8 @@ function schedNow(p) {
    so apply it to the current time instead. Falls back to this PC's clock when
    the device never answered local-date/local-time. */
 function deviceNow() {
-  const id = (S.identity || {})[(S.activeDev || {}).address] || {};
+  const dev = (!$('schOverlay').hidden && S.urDev) || S.activeDev || {};
+  const id = (S.identity || {})[dev.address] || {};
   const drift = id['clock-drift'];
   return typeof drift === 'number' ? new Date(Date.now() + drift * 1000) : new Date();
 }
@@ -8582,7 +8603,7 @@ async function lagreUke() {
   let d;
   try {
     d = await api('/api/schedule/write',
-                  {address: S.activeDev.address, objid: sch.objid, dager});
+                  {address: (S.urDev || S.activeDev).address, objid: sch.objid, dager});
   } catch (e) {
     d = {status: 'error', error: e.message};
   }
@@ -8595,7 +8616,7 @@ async function lagreUke() {
   S.ukeOrig = JSON.parse(JSON.stringify(S.ukeKladd));
   S.ukeRort = false;
   // Read it back: what the controller stored is the truth, not what we sent.
-  await openSchedules(sch.objid);
+  await openSchedules(sch.objid, (S.urDev || S.activeDev).address, true);
 }
 
 /* The list, not a tab strip: a controller with thirty schedules has to be
@@ -8603,61 +8624,149 @@ async function lagreUke() {
    that tells them apart. Filtering matches the name, the description and the
    object id, because on site you are as likely to be given "3004247" as a
    name. */
+/* The schedules of every device that has been scanned, not only the open one: a plant has
+   its time programs spread over the controllers, and the one you want is rarely on the
+   device you happen to be looking at. Each device is read once, a few at a time in the
+   background, and the list fills in as they answer. Order: the sites as they were
+   scanned, the devices by name (numbers in their natural order), the schedules by name. */
+S.urCache = S.urCache || {};
+const cmpAdr = (x, y) => {
+  const p = String(x).split('.').map(Number), q = String(y).split('.').map(Number);
+  for (let i = 0; i < 4; i++) { const d = (p[i] || 0) - (q[i] || 0); if (d) return d; }
+  return String(x).localeCompare(String(y));
+};
+function urEnheter(bare) {
+  const rekke = S.scanRanges || [];
+  const plass = d => { const i = rekke.indexOf(d._range); return i < 0 ? 1e6 : i; };
+  let ut = S.devices.slice();
+  if (bare && S.activeDev) ut = ut.filter(d => d.address === S.activeDev.address);
+  return ut.sort((a, b) => plass(a) - plass(b) || NORSK.compare(a.object_name || '', b.object_name || '') || cmpAdr(a.address, b.address));
+}
+async function urLes(d, tvang) {
+  const c = S.urCache[d.address];
+  if (c && c.henter) return c.henter;
+  if (c && c.klar && !tvang) return c;
+  const lopende = api('/api/device/schedules', {address: d.address, device_instance: d.device_instance})
+    .then(r => { S.urCache[d.address] = {klar: true, schedules: r.status === 'done' ? (r.schedules || []) : [], feil: r.status === 'done' ? '' : (r.error || 'Feil'), trend: r.trend_logs || []}; })
+    .catch(e => { S.urCache[d.address] = {klar: true, schedules: [], feil: e.message, trend: []}; });
+  S.urCache[d.address] = {henter: lopende};
+  await lopende;
+  return S.urCache[d.address];
+}
+/* A few at a time: a plant of forty controllers should not be forty requests at once. */
+async function urLesAlle(enheter, etterHver) {
+  const ko = enheter.filter(d => !(S.urCache[d.address] && S.urCache[d.address].klar));
+  const arbeid = async () => {
+    for (let d = ko.shift(); d; d = ko.shift()) { await urLes(d); if (etterHver) etterHver(); }
+  };
+  await Promise.all([arbeid(), arbeid(), arbeid()]);
+}
+function urBygg(bare) {
+  const flat = [];
+  let leser = 0;
+  for (const d of urEnheter(bare)) {
+    const c = S.urCache[d.address];
+    if (!c || !c.klar) { leser++; continue; }
+    const rekke = (c.schedules || []).slice().sort((x, y) => NORSK.compare(x.name || x.objid, y.name || y.objid));
+    for (const s of rekke) { s._adr = d.address; s._dev = d.object_name || d.address; s._omr = d._range || ''; flat.push(s); }
+  }
+  S.schedules = flat;
+  return leser;
+}
+function urNokkel(s) { return s ? `${s._adr}|${s.objid}` : ''; }
+
 function tegnUrListe(filter) {
   const boks = $('schTabs');
   if (!boks) return;
-  const q = (filter || '').toLowerCase().trim();
-  const treff = S.schedules
-    .map((s, i) => ({s, i}))
-    .filter(({s}) => !q
-      || (s.name || '').toLowerCase().includes(q)
-      || (s.description || '').toLowerCase().includes(q)
-      || s.objid.toLowerCase().includes(q));
-
+  if (filter !== undefined) S.urFilter = filter;
+  const q = (S.urFilter || '').toLowerCase().trim();
+  const bare = S.urModus === 'en';
+  const leser = urBygg(bare);
+  const valgt = S.urValgtNokkel;
+  S.urValgt = valgt ? S.schedules.findIndex(s => urNokkel(s) === valgt) : -1;
+  const treff = S.schedules.map((s, i) => ({s, i})).filter(({s}) => !q
+    || (s.name || '').toLowerCase().includes(q) || (s.description || '').toLowerCase().includes(q)
+    || s.objid.toLowerCase().includes(q) || s._dev.toLowerCase().includes(q) || s._adr.includes(q));
+  const enheter = urEnheter(bare);
+  const utenUr = enheter.filter(d => { const c = S.urCache[d.address]; return c && c.klar && !(c.schedules || []).length; }).length;
+  $('schCount').textContent = T(`${S.schedules.length} ur på ${new Set(S.schedules.map(s => s._adr)).size} enheter`,
+                                `${S.schedules.length} schedules on ${new Set(S.schedules.map(s => s._adr)).size} devices`);
   if (!treff.length) {
-    boks.innerHTML = '<div class="gs-empty" style="padding:10px">Ingen ur matcher</div>';
+    boks.innerHTML = `<div class="gs-empty" style="padding:10px">${leser ? T('Leser enhetene…', 'Reading the devices…')
+      : T('Ingen ur matcher', 'No schedules match')}</div>`;
     return;
   }
-
-  const felles = commonNamePrefix(S.schedules.map(x => ({name: x.name || ''})));
-  boks.innerHTML = treff.map(({s, i}) => {
-    const navn = (s.name || s.objid).slice(felles.length) || (s.name || s.objid);
-    const st = s.entry_count === 0 ? 'tomt' : `${s.entry_count} skift`;
-    return `<button class="sch-tab${i === S.urValgt ? ' sel' : ''}" data-i="${i}"
-              title="${esc(s.name || s.objid)}">${esc(navn)}<span class="st-sub">${
-              esc(s.objid)} · ${st}</span></button>`;
-  }).join('');
-
-  boks.querySelectorAll('.sch-tab').forEach(b => b.onclick = () => {
-    showSchedule(+b.dataset.i);
-  });
+  const flereSteder = new Set(treff.map(({s}) => s._omr).filter(Boolean)).size > 1;
+  let sisteDev = '', sisteOmr = null, html = '';
+  for (const {s, i} of treff) {
+    if (flereSteder && s._omr !== sisteOmr) {
+      sisteOmr = s._omr;
+      const nn = (typeof nettNavn === 'function' && nettNavn(s._omr)) || s._omr || T('Ukjent nett', 'Unknown network');
+      html += `<div class="sch-sted">${esc(nn)}</div>`;
+    }
+    if (s._adr !== sisteDev) {
+      sisteDev = s._adr;
+      const n = treff.filter(x => x.s._adr === s._adr).length;
+      html += `<div class="sch-dev"><b>${esc(s._dev)}</b><span>${esc(s._adr)}</span><i>${n}</i></div>`;
+    }
+    const delt = s._dev && (s.name || '').startsWith(s._dev) ? (s.name || '').slice(s._dev.length).replace(/^[._\-\s]+/, '') : '';
+    const navn = delt || s.name || s.objid;
+    const st = s.entry_count === 0 ? T('tomt', 'empty') : T(`${s.entry_count} skift`, `${s.entry_count} changes`);
+    html += `<button class="sch-tab${i === S.urValgt ? ' sel' : ''}" data-i="${i}" title="${esc((s.name || s.objid) + ' · ' + s._dev)}">${esc(navn)}<span class="st-sub">${esc(s.objid)} · ${st}</span></button>`;
+  }
+  html += `<div class="sch-fot">${leser ? T(`Leser ${leser} enheter til…`, `Reading ${leser} more devices…`)
+    : utenUr ? T(`${utenUr} enheter uten ukeprogram`, `${utenUr} devices without a schedule`) : ''}</div>`;
+  boks.innerHTML = html;
+  boks.querySelectorAll('.sch-tab').forEach(b => b.onclick = () => showSchedule(+b.dataset.i));
 }
 
-async function openSchedules(velgObjid) {
-  if (!S.activeDev) { toast('Velg en enhet først', true); return; }
+async function openSchedules(velgObjid, velgAdr, tvang) {
+  if (typeof velgObjid !== 'string') velgObjid = null;
+  if (!S.devices.length) { toast(T('Skann et anlegg først', 'Scan a site first'), true); return; }
   $('schOverlay').hidden = false;
-  $('schBody').innerHTML = '<div class="gs-empty"><span class="spin"></span> Leser skjema…</div>';
-  $('schTabs').innerHTML = '';
-  const d = await api('/api/device/schedules', {
-    address: S.activeDev.address, device_instance: S.activeDev.device_instance,
-  });
-  if (d.status !== 'done') { $('schBody').innerHTML = `<div class="gs-empty">${esc(d.error || 'Feil')}</div>`; return; }
-
-  S.schedules = d.schedules || [];
-  S.trendLogs = d.trend_logs || [];
-  if (!S.schedules.length) {
-    $('schBody').innerHTML = '<div class="gs-empty">Enheten har ingen skjema-objekter.</div>';
-    return;
+  S.urModus = loadPrefs().urModus === 'en' && S.activeDev ? 'en' : 'alle';
+  // Two choices above the list, made once.
+  if (!$('schModus')) {
+    const m = document.createElement('div');
+    m.id = 'schModus'; m.className = 'sch-modus';
+    m.innerHTML = `<button type="button" data-m="alle">${T('Alle enheter', 'All devices')}</button><button type="button" data-m="en">${T('Denne enheten', 'This device')}</button>`;
+    $('schFilter').before(m);
+    m.onclick = (e) => {
+      const b = e.target.closest('button[data-m]');
+      if (!b || S.urModus === b.dataset.m || (b.dataset.m === 'en' && !S.activeDev)) return;
+      savePrefs({urModus: b.dataset.m});
+      S.urModus = b.dataset.m;
+      urSynkModus();
+      tegnUrListe();
+      urLesAlle(urEnheter(S.urModus === 'en'), () => tegnUrListe());
+    };
   }
-  $('schCount').textContent = `${S.schedules.length} ur`;
-  tegnUrListe();
+  urSynkModus();
+  $('schTabs').innerHTML = `<div class="gs-empty" style="padding:10px"><span class="spin"></span> ${T('Leser skjema…', 'Reading schedules…')}</div>`;
   const f = $('schFilter');
-  if (f) {
-    f.value = '';
-    f.oninput = () => tegnUrListe(f.value);
+  if (f) { f.value = ''; S.urFilter = ''; f.oninput = () => tegnUrListe(f.value); }
+  const forst = (velgAdr && S.devices.find(d => d.address === velgAdr)) || S.activeDev || urEnheter(false)[0];
+  if (forst) await urLes(forst, tvang);
+  S.trendLogs = (S.urCache[(S.activeDev || forst || {}).address] || {}).trend || [];
+  S.urValgtNokkel = '';
+  tegnUrListe();
+  const valgNokkel = velgObjid ? `${(forst || {}).address}|${velgObjid}` : '';
+  let i = valgNokkel ? S.schedules.findIndex(x => urNokkel(x) === valgNokkel) : -1;
+  if (i < 0 && forst) i = S.schedules.findIndex(x => x._adr === forst.address);
+  if (i < 0) i = 0;
+  if (S.schedules.length) { showSchedule(i); $('schTabs').querySelector('.sch-tab.sel')?.scrollIntoView({block: 'center'}); }
+  else $('schBody').innerHTML = `<div class="gs-empty">${esc(T('Enheten har ingen skjema-objekter. Resten leses fortsatt.', 'The device has no schedule objects. The rest is still being read.'))}</div>`;
+  await urLesAlle(urEnheter(S.urModus === 'en'), () => { if (!$('schOverlay').hidden) tegnUrListe(); });
+  if (!$('schOverlay').hidden) {
+    tegnUrListe();
+    if (!S.schedules.length) $('schBody').innerHTML = `<div class="gs-empty">${esc(T('Ingen av enhetene har skjema-objekter.', 'None of the devices has schedule objects.'))}</div>`;
+    else if (!S.ukeKladd) showSchedule(0);
   }
-  const i = velgObjid ? S.schedules.findIndex(x => x.objid === velgObjid) : 0;
-  showSchedule(i >= 0 ? i : 0);
+}
+function urSynkModus() {
+  document.querySelectorAll('#schModus button').forEach(b => b.classList.toggle('sel', b.dataset.m === S.urModus));
+  const en = document.querySelector('#schModus [data-m="en"]');
+  if (en) en.disabled = !S.activeDev;
 }
 function closeSchedules() {
   if (S.ukeRort && !confirm('Ulagrede endringer i ukeprogrammet går tapt. Lukke likevel?')) return;
@@ -8670,6 +8779,8 @@ function showSchedule(i) {
   if (!s) return;
   if (S.ukeRort && !confirm('Du har ulagrede endringer i ukeprogrammet. Forkaste dem?')) return;
   S.urValgt = i;
+  S.urValgtNokkel = urNokkel(s);
+  S.urDev = S.devices.find(d => d.address === s._adr) || S.activeDev;
   const boks = $('schTabs');
   if (boks) boks.querySelectorAll('.sch-tab').forEach(b =>
     b.classList.toggle('sel', +b.dataset.i === i));
@@ -8680,7 +8791,7 @@ function showSchedule(i) {
   S.ukeKladd = JSON.parse(JSON.stringify(s));
   S.ukeRort = false;
   S.ukeValgt = null;
-  $('schMeta').textContent =
+  $('schMeta').textContent = (s._dev ? `${s._dev} · ${s._adr} · ` : '') +
     T(`${s.objid} · ${s.entry_count} tidspunkt · skriver på prioritet ${s.priority ?? '?'}`, `${s.objid} · ${s.entry_count} times · writes at priority ${s.priority ?? '?'}`)
     + (s.description ? ' · ' + s.description : '');
   tegnUke();

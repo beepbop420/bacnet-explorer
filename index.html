@@ -2926,10 +2926,22 @@ body.drar,body.drar .wk-blk.redigerbar{cursor:grabbing;user-select:none}
    it, does not care how many there are. */
 .sch-split{display:flex;min-height:0;flex:1}
 .sch-side{
-  width:230px;flex:none;display:flex;flex-direction:column;min-height:0;
+  width:268px;flex:none;display:flex;flex-direction:column;min-height:0;
   border-right:1px solid var(--line);
 }
 .sch-filter{margin:8px;flex:none}
+.sch-modus{display:flex;gap:2px;margin:8px 8px 0;padding:2px;border:1px solid var(--line);border-radius:var(--radius);flex:none}
+.sch-modus button{flex:1;height:22px;border-radius:var(--radius);color:var(--fg-3);font:inherit;font-size:11px;cursor:pointer}
+.sch-modus button:hover:not(:disabled){color:var(--fg)}
+.sch-modus button.sel{background:var(--raised);color:var(--fg)}
+.sch-modus button:disabled{opacity:.4;cursor:default}
+.sch-sted{margin:10px 4px 2px;font-size:10px;font-weight:600;letter-spacing:.03em;color:var(--fg-2)}
+.sch-sted:first-child{margin-top:2px}
+.sch-dev{display:flex;align-items:baseline;gap:6px;margin:8px 4px 3px;padding-bottom:2px;border-bottom:1px solid var(--line);font-size:11px;min-width:0}
+.sch-dev b{font-weight:600;color:var(--fg);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.sch-dev span{font:10px var(--mono);color:var(--fg-3);white-space:nowrap}
+.sch-dev i{margin-left:auto;font:500 10px var(--mono);color:var(--fg-3);font-style:normal}
+.sch-fot{padding:8px 6px 2px;font-size:10px;color:var(--fg-3)}
 .sch-list{overflow-y:auto;flex:1;padding:0 6px 8px}
 .sch-main{flex:1;min-width:0;display:flex;flex-direction:column}
 .sch-grid{flex:1;min-height:0;overflow:auto;padding:14px}
@@ -3903,8 +3915,6 @@ thead th{color:var(--fg-3);font-size:12px;background:var(--panel)}
 .dup-warn{background:transparent!important;border-bottom:1px solid var(--line)!important;box-shadow:none!important}
 .warn-head{font-weight:500;font-size:12px;padding:8px 12px}
 .warn-head:hover{background:var(--raised)}
-.warn-title::before{content:'';display:inline-block;width:6px;height:6px;border-radius:50%;
-  background:currentColor;margin-right:8px;vertical-align:1px}
 
 /* The address the tool sends from, at the right of the status bar. */
 .statusbar .conn{color:var(--fg-3);font-size:11px}
@@ -4928,6 +4938,37 @@ html.peker-egen *:not(input):not(textarea):not(select):not(.splitter):not([conte
 :root[data-former] .syn-prov .syn-ok::before{content:'✓ '}
 .nabo-unike{margin-left:6px;height:22px;padding:0 9px;border:1px solid var(--accent-edge);border-radius:var(--radius);background:none;color:var(--accent);font:inherit;font-size:11px;cursor:pointer}
 .nabo-unike:hover,.nabo-unike:focus-visible{background:var(--accent-dim)}
+/* the plant status, folded: one quiet line, a way to open it, a way to be rid of it */
+.as-kompakt{align-items:center;padding:0 4px 0 0;gap:0}
+.as-vis{display:flex;flex:1 1 auto;min-width:0;align-items:baseline;gap:8px;padding:6px 4px 6px 11px;text-align:left;font:inherit;color:inherit;cursor:pointer}
+.as-vis:hover .as-tittel,.as-vis:focus-visible .as-tittel{color:var(--fg)}
+.as-kompakt .as-tallene{flex:1 1 auto;min-width:0;display:flex;gap:10px}
+.as-k{color:var(--fg-3);font-size:11px;white-space:nowrap}
+.as-k b{font-family:var(--mono);font-weight:600}
+.as-k.bad,.as-k.bad b{color:var(--err)}
+.as-k.feil b{color:color-mix(in srgb,var(--err) 62%,var(--fg-2))}
+.as-k.rolig{color:var(--ok)}
+.as-chev{flex:0 0 auto;color:var(--fg-3);font-size:11px}
+.as-tittel-knapp{display:inline-flex;padding:0;gap:0;flex:0 0 auto}
+.as-skjul{flex:0 0 auto;width:18px;height:18px;margin-left:auto;display:grid;place-items:center;border-radius:var(--radius);color:var(--fg-3);font-size:10px;opacity:0;cursor:pointer}
+.as-status:hover .as-skjul,.as-skjul:focus-visible{opacity:1}
+.as-skjul:hover{color:var(--fg);background:var(--hover)}
+.as-linje .as-skjul{align-self:center}
+/* the clock list: a name and what is wrong with it, nothing else shouting */
+.warn-head{padding:7px 12px}
+.warn-ikon{flex:0 0 auto;font-size:11px;opacity:.85}
+.warn-row{position:relative;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 10px;align-items:baseline;padding:4px 6px;font-family:var(--sans);font-size:11px}
+.wr-navn{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--fg);font-weight:500}
+.wr-navn small{margin-left:6px;font:400 10px var(--mono);color:var(--fg-3)}
+.warn-row .wr-txt{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums;font-size:11px}
+/* the action sits over the number only while the row is pointed at, so it costs no width */
+.warn-row .wr-fiks{position:absolute;right:4px;top:50%;transform:translateY(-50%);margin:0;padding:1px 8px;background:var(--panel);opacity:0;pointer-events:none;transition:opacity .12s}
+.warn-row:hover .wr-fiks,.warn-row:focus-visible .wr-fiks{opacity:1;pointer-events:auto}
+.warn-row .wr-fiks[data-pingen]{opacity:.85;pointer-events:auto;position:static;transform:none}
+.wr-sted{display:flex;justify-content:space-between;gap:8px;margin:8px 0 2px;padding:0 6px;font-size:10px;letter-spacing:.02em;color:var(--fg-3)}
+.wr-sted:first-child{margin-top:2px}
+.wr-sted span{font-weight:600;color:var(--fg-2)}
+.wr-sted b{font:500 10px var(--mono)}
 .as-siter{display:flex;flex-wrap:wrap;gap:2px 12px;padding:3px 9px 0 11px;font-size:11px;color:var(--fg-3)}
 .as-siter b{font-weight:500;color:var(--fg-2)}
 .as-siter .a{color:var(--err)}
