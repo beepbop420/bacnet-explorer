@@ -5386,7 +5386,7 @@ function tegnSammenlign() {
           + `<span class="cmp-v">${vFmt(r.b)}</span>`
           + `<span class="cmp-merke">${merke[r.art]}</span></div>`;
       }).join('')
-    + (vis.length > 600 ? `<div class="gs-empty">…og ${vis.length - 600} til</div>` : '');
+    + (vis.length > 600 ? `<div class="gs-empty">${T(`…og ${vis.length - 600} til`, `…and ${vis.length - 600} more`)}</div>` : '');
 }
 
 function openSammenlign() {
@@ -8304,9 +8304,8 @@ function ukeFot() {
     return `<div class="wk-foot"><span class="wk-hint">Lesemodus er på, ukeprogrammet kan ikke endres.</span></div>`;
   }
   return `<div class="wk-foot">
-    <span class="wk-hint">Klikk en blokk og endre tidene nederst · «Del i to» lager en ny
-      periode · dra blokken for å flytte · dra kanten for å endre lengden ·
-      dra i en tom dag for å tegne en periode</span>
+    <span class="wk-hint">${T('Klikk en blokk og endre tidene nederst · «Del i to» lager en ny periode · dra blokken for å flytte · dra kanten for å endre lengden · dra i en tom dag for å tegne en periode',
+      'Click a block and change the times below · "Split in two" makes a new period · drag the block to move it · drag the edge to change the length · drag in an empty day to draw a period')}</span>
     <span>
       <button class="btn" id="ukeAngre"${S.ukeRort ? '' : ' disabled'}>Forkast</button>
       <button class="btn primary" id="ukeLagre"${S.ukeRort ? '' : ' disabled'}>Lagre til kontroller</button>
@@ -9006,7 +9005,7 @@ function renderEdeResult(r, filename) {
   const sec = (title, items, render, cls) => items.length
     ? `<div class="ede-sec"><div class="ede-h ${cls}">${title} <span>${items.length}</span></div>
        ${items.slice(0, 150).map(render).join('')}
-       ${items.length > 150 ? `<div class="ede-more">…og ${items.length - 150} til</div>` : ''}</div>`
+       ${items.length > 150 ? `<div class="ede-more">${T(`…og ${items.length - 150} til`, `…and ${items.length - 150} more`)}</div>` : ''}</div>`
     : '';
 
   $('edeMeta').textContent =

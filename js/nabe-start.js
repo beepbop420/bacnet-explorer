@@ -203,6 +203,9 @@ const FAKTA = [
   ['COV betyr at regulatoren sier fra selv. Mindre spørring, mer ro.', 'COV means the controller speaks up itself. Less asking, more peace.'],
 ];
 const NYTT = {
+  '1.71': [
+    ['Tre tekster som sto på norsk i engelsk visning er oversatt: hjelpelinja i ukeprogrammet og «…og N til» i to lister', 'Three texts that stayed Norwegian in the English view are translated: the hint line in the schedule and "…and N more" in two lists'],
+  ],
   '1.70': [
     ['Anleggslinja holder seg på én linje. Når det er trangt, vises former (▲ alarm, ◆ feil) i stedet for ord, og ordene står når du peker', 'The plant line stays on one row. When space is tight it shows shapes (▲ alarm, ◆ fault) instead of words, and the words are there when you point'],
     ['NABO teller enheter riktig når flere har samme navn, og enheten står på én linje i tabellen', 'NABO counts devices correctly when several share a name, and the unit stays on one line in the table'],
