@@ -4892,14 +4892,28 @@ html.peker-egen *:not(input):not(textarea):not(select):not(.splitter):not([conte
 .sp-meta{color:var(--fg-3);font-size:11px}
 /* adapters in use, as chips under the scan field */
 .vei-linje.flere{flex-direction:column;align-items:stretch;gap:5px}
-.kort-rad{display:flex;flex-direction:column;gap:3px}
-.kort-brikke{display:flex;align-items:center;gap:6px;height:22px;padding:0 8px;border:1px solid var(--line-2);border-radius:var(--r-pill);background:transparent;color:var(--fg-2);font:inherit;font-size:11px;cursor:pointer;max-width:100%}
+.kort-rad{display:flex;flex-wrap:wrap;align-items:center;gap:4px 6px}
+.kort-rad .vei-tekst{flex:0 0 auto;color:var(--fg-3);font-size:11px}
+.kort-rest{flex:0 0 auto;font-family:var(--mono);font-size:10px;color:var(--fg-3);cursor:default}
+.as-varsel{flex:0 0 auto;display:inline-flex;align-items:center;gap:4px;height:18px;padding:0 6px;margin-left:6px;border-radius:var(--r-pill);color:var(--warn);font-size:11px;cursor:pointer}
+.as-varsel b{font-family:var(--mono);font-weight:600}
+.as-varsel.severe{color:var(--err)}
+.as-varsel:hover,.as-varsel:focus-visible{background:var(--hover)}
+/* The maker's mark is a short upright bar, the same bar the cards carry down
+   their left edge. Round dots are left to status (alarm, fault, online), so a
+   green WAGO or a red Regin is never taken for "fine" or "in alarm". The
+   colour is pulled a little toward the grey of the page for the same reason. */
+:root.levfarge .vgroup-bar{width:3px;height:12px;flex:0 0 3px;border-radius:2px;background:color-mix(in oklab,var(--vc) 80%,var(--fg-3))}
+:root.levfarge .ctx-under .vendor i,:root.levfarge .insp-sub .vendor i{width:3px;height:10px;flex:0 0 3px;border-radius:2px}
+:root.levfarge .dev{box-shadow:inset 3px 0 0 color-mix(in oklab,var(--vc) 50%,transparent)}
+:root.levfarge .dev.sel{box-shadow:inset 3px 0 0 color-mix(in oklab,var(--vc) 85%,var(--fg-3))}
+.kort-brikke{display:inline-flex;flex:0 1 auto;min-width:0;align-items:center;gap:6px;height:20px;padding:0 8px;border:1px solid var(--line-2);border-radius:var(--r-pill);background:transparent;color:var(--fg-2);font:inherit;font-size:11px;cursor:pointer;max-width:100%}
 .kort-brikke span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .kort-brikke:hover,.kort-brikke:focus-visible{border-color:var(--fg-3);color:var(--fg)}
 .kort-brikke i{flex:0 0 auto;width:6px;height:6px;border-radius:50%;background:var(--ok)}
 .kort-brikke.hoved{color:var(--fg);border-color:var(--accent-edge)}
 .kort-brikke.rute{box-shadow:inset 0 -2px 0 var(--accent)}
-.kort-brikke em{margin-left:auto;font-style:normal;font-family:var(--mono);font-size:10px;color:var(--fg-3)}
+.kort-brikke em{margin-left:2px;font-style:normal;font-family:var(--mono);font-size:10px;color:var(--fg-3)}
 .vei-under{display:flex;align-items:baseline;gap:8px;min-width:0}
 .kp-handlinger{display:flex;gap:6px;padding-top:4px}
 .kp-knapp{flex:1;height:26px;border:1px solid var(--line-2);border-radius:var(--radius);background:transparent;color:var(--fg-2);font:inherit;font-size:11px;cursor:pointer}
@@ -4939,7 +4953,8 @@ html.peker-egen *:not(input):not(textarea):not(select):not(.splitter):not([conte
 .nabo-unike{margin-left:6px;height:22px;padding:0 9px;border:1px solid var(--accent-edge);border-radius:var(--radius);background:none;color:var(--accent);font:inherit;font-size:11px;cursor:pointer}
 .nabo-unike:hover,.nabo-unike:focus-visible{background:var(--accent-dim)}
 /* the plant status, folded: one quiet line, a way to open it, a way to be rid of it */
-.as-kompakt{align-items:center;padding:0 4px 0 0;gap:0}
+.as-kompakt{align-items:center;flex-wrap:nowrap;padding:0 4px 0 0;gap:0}
+.as-kompakt .as-tallene{overflow:hidden}
 .as-vis{display:flex;flex:1 1 auto;min-width:0;align-items:baseline;gap:8px;padding:6px 4px 6px 11px;text-align:left;font:inherit;color:inherit;cursor:pointer}
 .as-vis:hover .as-tittel,.as-vis:focus-visible .as-tittel{color:var(--fg)}
 .as-kompakt .as-tallene{flex:1 1 auto;min-width:0;display:flex;gap:10px}

@@ -124,13 +124,17 @@ function tegnVei() {
   el.classList.toggle('flere', aktive.length > 0);
   if (aktive.length) {
     const ms = S.kortMs || {};
-    const chips = aktive.map(k => {
+    // An adapter with nothing behind it is not worth a chip: only the ones the plant
+    // is on, the main one and the one the typed range goes through.
+    const vis = aktive.filter(k => k.primary || k.enheter || k.ip === (SK.rute && SK.rute.ip));
+    const skjult = aktive.length - vis.length;
+    const chips = vis.map(k => {
       const tips = [k.local_address, k.primary ? T('hovedkort', 'main adapter') : '', k.enheter ? `${k.enheter} ${T('enheter', 'devices')}` : '',
                     k.ip === (SK.rute && SK.rute.ip) ? T('området i feltet går hit', 'the range in the field goes here') : ''].filter(Boolean).join(' · ');
       return `<button type="button" class="kort-brikke${k.primary ? ' hoved' : ''}${k.ip === (SK.rute && SK.rute.ip) ? ' rute' : ''}" data-ip="${esc(k.ip)}" title="${esc(tips)}"><i></i><span>${esc(k.interface || k.ip)}</span>${ms[k.ip] ? `<em>${ms[k.ip]} ms</em>` : ''}</button>`;
     }).join('');
-    el.innerHTML = `<div class="kort-rad">${chips}</div>
-      <div class="vei-under"><span class="vei-tekst">${esc(mtekst)}${las ? ` · ${T('låst', 'locked')}` : ''}</span>
+    const rest = skjult ? `<span class="kort-rest" title="${esc(aktive.filter(k => !vis.includes(k)).map(k => k.interface || k.ip).join(', ') + ': ' + T('åpent, ingen enheter', 'open, no devices'))}">+${skjult}</span>` : '';
+    el.innerHTML = `<div class="kort-rad">${chips}${rest}<span class="vei-tekst">${esc(mtekst)}${las ? ` · ${T('låst', 'locked')}` : ''}</span>
       <button type="button" class="vei-endre">${SK.apen ? T('lukk', 'close') : T('endre', 'change')}</button></div>`;
     tegnBbmd();
     return;

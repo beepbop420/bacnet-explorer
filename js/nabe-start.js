@@ -130,7 +130,7 @@ const MILEPAELER = {
   aapnet: [[10, 'Tiende gang. Vi begynner å bli venner.', 'Tenth time. We are becoming friends.'],
            [50, 'Femti åpninger. Du fortjener en NABE-kopp.', 'Fifty opens. You deserve a NABE mug.'],
            [200, 'To hundre. Jeg tror jeg er favoritten din.', 'Two hundred. I think I am your favourite.']],
-  skann:  [[1, 'Første skann! Jeg skal huske denne dagen.', 'First scan! I will remember this day.'],
+  skann:  [[1, 'Første skann. Jeg skal huske denne dagen.', 'First scan. I will remember this day.'],
            [25, '25 skann. Du skanner mer enn en flyplass.', '25 scans. You scan more than an airport.'],
            [100, 'Hundre skann. YABE kunne aldri.', 'A hundred scans. YABE could never.']],
   enheter:[[100, 'Hundre enheter funnet. Noen var til og med konfigurert riktig.', 'A hundred devices found. Some were even configured properly.'],

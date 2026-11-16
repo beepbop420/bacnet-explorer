@@ -283,6 +283,7 @@ def royktest():
               " helhet: !!window.nabeSyn && !!window.nabeRaad && typeof kobleTilPaaNytt === 'function' && typeof navngiNett === 'function'"
               "  && !!document.getElementById('devRescan') && !!document.getElementById('fargesynBtn') && !!document.getElementById('humorBtn')"
               "  && !!document.getElementById('bakoverBtn') && !document.getElementById('expPop').contains(document.getElementById('schBtn')),"
+              " kort: typeof flereKortIBruk === 'function' && typeof anKompakt === 'function',"
               " ukeprogram: typeof urEnheter === 'function' && typeof urLesAlle === 'function' && !!document.getElementById('anStatusBtn')"
               "  && cmpAdr('10.0.0.9', '10.0.0.10') < 0 && cmpAdr('10.0.1.1', '10.0.0.200') > 0,"
               " dialoger: !!window.nabeDialoger && nabeDialoger.antall() > 600 && PLAGG.length >= 55 && !!PLAGG_REPLIKK.sydvest"
@@ -450,6 +451,17 @@ def tilkobling():
     """Reconnecting binds every adapter in use again, as it was, and the known devices
     can be asked directly whether they answer."""
     for_ = kall("/api/status")
+    # A page that points its own domain name at 127.0.0.1 is stopped on the Host header.
+    def med_vert(vert):
+        req = urllib.request.Request(BASE + "/api/status", headers={"Host": vert})
+        try:
+            with urllib.request.urlopen(req, timeout=5) as rr:
+                return rr.status
+        except urllib.error.HTTPError as e:
+            return e.code
+    sjekk("fremmed vertsnavn avvises, adresse og localhost slipper inn",
+          med_vert(f"ond.example:{PORT}") == 403 and med_vert(f"localhost:{PORT}") == 200
+          and med_vert(f"127.0.0.1:{PORT}") == 200)
     r = kall("/api/reconnect", {})
     sjekk("koble til på nytt: hvert kort i bruk bindes på nytt", r.get("status") == "done" and bool(r.get("kort"))
           and all(k.get("ok") for k in r["kort"]), str(r))

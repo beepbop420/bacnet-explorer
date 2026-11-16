@@ -175,9 +175,9 @@ function tegnAnlegg() {
     el.addEventListener('click', anKlikk);
   }
   const t = anleggTall();
-  if (!t.total || !t.lest) { el.hidden = true; el.innerHTML = ''; return; }
+  if (!t.total || !t.lest) { el.hidden = true; el.innerHTML = ''; anKompakt(false); return; }
   // Hidden by choice: it is still worked out (the comparison with last time runs), just not shown.
-  if (loadPrefs().anSkjult) { if (t.ferdig) anSammenlign(t); el.hidden = true; el.innerHTML = ''; return; }
+  if (loadPrefs().anSkjult) { if (t.ferdig) anSammenlign(t); el.hidden = true; el.innerHTML = ''; anKompakt(false); return; }
   el.hidden = false;
   const tall = AN_REKKE.filter(f => t.flagg[f].length);
   // An alarm is red; a fault is a point the device cannot trust, a quieter red; the rest are warnings.
@@ -245,10 +245,13 @@ function tegnAnlegg() {
   const kort = [alarm ? `<span class="as-k bad"><b>${alarm}</b> ${T('i alarm', 'in alarm')}</span>` : '',
                 feilN ? `<span class="as-k feil"><b>${feilN}</b> ${T('med feil', 'faulty')}</span>` : ''].filter(Boolean).join('')
     || `<span class="as-k rolig">${t.ferdig ? T('ingen alarmer', 'no alarms') : T('leser…', 'reading…')}</span>`;
+  // The warnings (wrong clock, same name, did not answer) ride on this line while both are folded.
+  const v = !apen && !loadPrefs().warnOpen ? S._varsel : null;
+  const varsel = v ? `<button type="button" class="as-varsel${v.alvorlig ? ' severe' : ''}" data-varsel title="${esc(v.tittel)}" aria-label="${esc(v.tittel)}"><span aria-hidden="true">${v.klokke ? '⏱' : '●'}</span><b>${v.n}</b></button>` : '';
   const html = !apen
     ? `<div class="as-linje as-kompakt">
         <button type="button" class="as-vis" data-vis aria-expanded="false" title="${esc(T('Vis detaljer', 'Show details'))}">
-          <span class="as-tittel">${tittel}</span><span class="as-tallene">${kort}</span><span class="as-chev" aria-hidden="true">⌄</span></button>${skjulKnapp}
+          <span class="as-tittel">${tittel}</span><span class="as-tallene">${kort}</span><span class="as-chev" aria-hidden="true">⌄</span></button>${varsel}${skjulKnapp}
       </div>`
     : `<div class="as-linje">
       <button type="button" class="as-vis as-tittel-knapp" data-vis aria-expanded="true" title="${esc(T('Skjul detaljer', 'Hide details'))}"><span class="as-tittel">${tittel}</span></button>
@@ -259,11 +262,26 @@ function tegnAnlegg() {
       <button type="button" class="as-kopier" data-kopier title="${T('Kopier status som tekst, til servicerapporten', 'Copy the status as text, for the service report')}">${T('Kopier', 'Copy')}</button>
     </div>${liste}`;
   if (el.innerHTML !== html) el.innerHTML = html;
+  anKompakt(!apen);
   el.classList.toggle('bad', tall.some(f => alvor(f) === 'bad' || alvor(f) === 'feil'));
   el.classList.toggle('warn', tall.length > 0 && !tall.some(f => alvor(f) === 'bad'));
 }
 
+/* Tells the warning list whether the folded plant line is on screen, so the
+   warning is shown in exactly one place. */
+function anKompakt(ja) {
+  if (!!S._anKompakt === !!ja) return;
+  S._anKompakt = !!ja;
+  if (typeof renderSiteWarnings === 'function') renderSiteWarnings();
+}
+
 async function anKlikk(e) {
+  if (e.target.closest('[data-varsel]')) {
+    savePrefs({warnOpen: true});
+    tegnAnlegg();
+    renderSiteWarnings();
+    return;
+  }
   if (e.target.closest('[data-skjul]')) {
     savePrefs({anSkjult: true});
     tegnAnlegg();

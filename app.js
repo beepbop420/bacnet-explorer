@@ -810,7 +810,7 @@ async function runScan() {
   skannPing();
   const t0 = performance.now();
   const perOmraade = [];
-  b.innerHTML = 'Avbryt';
+  b.textContent = T('Avbryt', 'Cancel');
   b.disabled = false;
   b.onclick = () => cancelScan();
 
@@ -1062,12 +1062,19 @@ function renderSiteWarnings() {
   /* Toem ogsaa innholdet. Med bare hidden=true blir forrige varsel liggende i
      dokumentet - usynlig, men det er fortsatt der for skjermlesere og for alt
      som leser teksten. */
-  if (!seksjoner.length) { el.hidden = true; el.innerHTML = ''; return; }
-  el.hidden = false;
-
   const apen = !!loadPrefs().warnOpen;
   const antall = seksjoner.reduce((n, s) => n + s.rader.length, 0);
   const alvorlige = seksjoner.reduce((n, s) => n + s.rader.filter(r => r.alvorlig).length, 0);
+  /* Folded, the warning is one mark on the plant status line instead of a row
+     of its own. The plant status draws it from S._varsel. Without that line
+     (hidden by choice, or nothing read yet) the row is shown as before. */
+  const merke = seksjoner.length ? {n: antall, alvorlig: alvorlige > 0,
+    klokke: seksjoner.every(s => s.nokkel === 'klokke'), tittel: seksjoner.map(s => s.tittel).join(' · ')} : null;
+  const foer = JSON.stringify(S._varsel || null);
+  S._varsel = merke;
+  if (foer !== JSON.stringify(merke) && typeof tegnAnlegg === 'function') tegnAnlegg();
+  if (!seksjoner.length || (!apen && S._anKompakt)) { el.hidden = true; el.innerHTML = ''; return; }
+  el.hidden = false;
 
   const ikon = seksjoner.length === 1 && seksjoner[0].nokkel === 'klokke' ? '⏱' : '●';
   const hode = `<button class="warn-head${alvorlige ? ' severe' : ''}" id="warnToggle"
@@ -1279,7 +1286,7 @@ function nettVia(omr) {
 function kortChip(d) {
   // The simulator is never mistaken for a plant.
   if (String(d.address).startsWith('127.')) return `<span class="dev-kort dev-sim" title="${esc(T('Simulert enhet', 'Simulated device'))}">${T('simulert', 'simulated')}</span>`;
-  if (!S.kort || S.kort.length < 2) return '';
+  if (!flereKortIBruk()) return '';
   // Grouped by network the heading already says which adapter; saying it on every
   // card as well is the same word repeated.
   if (grupperingsAkse() === 'range') return '';
@@ -1290,10 +1297,17 @@ function kortChip(d) {
   return `<span class="dev-kort" title="${esc(T('Leses via ', 'Read via ') + navn + ' ' + k.local_address)}">${esc(navn)}</span>`;
 }
 
+/* Which adapter a device is read through only matters when the devices are
+   spread over more than one. A second adapter that is open with nothing behind
+   it would put the same name on every card. */
+function flereKortIBruk() {
+  return new Set(Object.values(S.via || {}).filter(Boolean)).size > 1;
+}
+
 /* The same, in the heading of the open device: which adapter its points are read through. */
 function kortFelt(d) {
   if (String(d.address).startsWith('127.')) return `<span class="tf"><small>${T('Via', 'Via')}</small><b class="sim-merke">${T('Simulator', 'Simulator')}</b></span>`;
-  if (!S.kort || S.kort.length < 2) return '';
+  if (!flereKortIBruk()) return '';
   const k = S.kort.find(x => x.ip === (S.via && S.via[d.address]));
   if (!k) return '';
   return `<span class="tf"><small>${T('Via', 'Via')}</small><b title="${esc(k.local_address)}">${esc(k.interface || k.ip)}</b></span>`;
@@ -1811,7 +1825,7 @@ function loadingSkall(ip) {
   return `<div class="loadbox" id="loadbox">
     <div class="loadbox-top"><span class="spin"></span>
       <span id="lbWhat">Kobler til ${esc(ip)}</span>
-      <button id="cancelLoad" class="btn">Avbryt</button></div>
+      <button id="cancelLoad" class="btn">${T('Avbryt', 'Cancel')}</button></div>
     <div class="prog"><div class="prog-fill" id="lbFill" style="width:0%"></div>
       <div class="prog-fill2" id="lbFill2" style="width:0%"></div></div>
     <div class="loadbox-meta" id="lbMeta">venter på svar fra enheten…</div>

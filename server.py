@@ -121,6 +121,30 @@ READ_ONLY_PATHS = {"/api/sites",
 }
 
 
+# Host names this server answers to, beside every literal IP address.
+TILLATTE_VERTER = {"localhost"} | {
+    o.split("//", 1)[-1].split(":")[0].lower() for o in ALLOWED_ORIGINS
+} | {v.strip().lower() for v in _env("ALLOWED_HOSTS", "").split(",") if v.strip()}
+
+
+def _host_ok(request) -> bool:
+    """The Host header must be an address or a name we know. A web page that
+    points its own domain name at 127.0.0.1 (DNS rebinding) is same-origin in
+    the browser's eyes, and the Host header is the only place it shows. An IP
+    address cannot be rebound, so every literal address is let through."""
+    host = (request.headers.get("host") or "").strip().lower()
+    if not host:
+        return True
+    navn = host.rsplit("]", 1)[0].lstrip("[") if host.startswith("[") else host.split(":")[0]
+    if navn in TILLATTE_VERTER:
+        return True
+    try:
+        ipaddress.ip_address(navn)
+        return True
+    except ValueError:
+        return False
+
+
 def _origin_ok(request) -> bool:
     origin = (request.headers.get("origin") or "").rstrip("/")
     if not origin:
@@ -157,6 +181,8 @@ async def guard_and_cors(request, call_next):
     preflight is answered here and never reaches it.
     """
     origin = (request.headers.get("origin") or "").rstrip("/")
+    if not _host_ok(request):
+        return Response(status_code=403, content="Host ikke tillatt")
     tillatt = _origin_ok(request)
 
     if request.method == "OPTIONS":
@@ -1067,6 +1093,21 @@ def _noter_enheter(devices: List[Dict[str, Any]], ip: Optional[str]) -> None:
             DEVICE_KORT[str(d["address"])] = ip
 
 
+def _hovedkort_etter_funn(kort: Optional[str], funnet: int) -> None:
+    """The main adapter is the one the plant is on. Connecting picks an
+    adapter before anything is known; when the first devices turn up behind
+    another one, and the main adapter has none, that one takes over. Both
+    stay open, only the label and the fallback move."""
+    prim = state.get("primary")
+    if not funnet or not kort or kort == prim or kort not in POOL:
+        return
+    if any(v == prim for v in DEVICE_KORT.values()):
+        return
+    e = POOL[kort]
+    state["app"], state["local_address"], state["bbmd"], state["primary"] = (
+        e["app"], e["local"], e.get("bbmd"), kort)
+
+
 async def _vakt_kort() -> None:
     """An adapter that has gone (a tunnel taken down, a cable pulled) leaves a
     dead socket behind. It is closed here, so the next request binds afresh
@@ -1665,6 +1706,7 @@ async def _run_scan(job, body: "ScanBody", hosts: List[str], net, kort: Optional
         job["phase"] = t("henter navn", "fetching names")
         await berik_navn(bacnet_app, devices)
     _noter_enheter(devices, kort)
+    _hovedkort_etter_funn(kort, len(devices))
 
     devices.sort(key=lambda d: (d["device_instance"] is None, d["device_instance"]))
     for d in devices:
