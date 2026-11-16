@@ -252,9 +252,11 @@ function tegnAnlegg() {
     if (n >= 20 && n >= (S.cache[ip] || []).length * 0.8) { heleN++; heleP += n; }
   }
   const feilN = t.flagg['fault'].length - heleP;
-  const kort = [alarm ? `<span class="as-k bad"><b>${alarm}</b> ${T('i alarm', 'in alarm')}</span>` : '',
-                feilN ? `<span class="as-k feil"><b>${feilN}</b> ${T('med feil', 'faulty')}</span>` : '',
-                heleN ? `<span class="as-k feil" title="${esc(T(`${heleP} punkter på ${heleN === 1 ? 'én enhet' : heleN + ' enheter'} der nesten alt har feil. Ofte en buss eller en modul.`, `${heleP} points on ${heleN === 1 ? 'one device' : heleN + ' devices'} where nearly everything is faulty. Often a bus or a module.`))}"><b>${heleN}</b> ${T(heleN === 1 ? 'enhet med alt i feil' : 'enheter med alt i feil', heleN === 1 ? 'device all faulty' : 'devices all faulty')}</span>` : ''].filter(Boolean).join('')
+  // Words while there is room for them. When the pane is narrow the words give way to
+  // the shapes the device list already uses (▲ alarm, ◆ fault), and the words move to the tooltip.
+  const kort = [alarm ? `<span class="as-k bad" title="${alarm} ${T('i alarm', 'in alarm')}"><i class="as-form">▲</i><b>${alarm}</b><span class="as-ord"> ${T('i alarm', 'in alarm')}</span></span>` : '',
+                feilN ? `<span class="as-k feil" title="${feilN} ${T('med feil', 'faulty')}"><i class="as-form">◆</i><b>${feilN}</b><span class="as-ord"> ${T('med feil', 'faulty')}</span></span>` : '',
+                heleN ? `<span class="as-k feil" title="${esc(T(`${heleP} punkter på ${heleN === 1 ? 'én enhet' : heleN + ' enheter'} der nesten alt har feil. Ofte en buss eller en modul.`, `${heleP} points on ${heleN === 1 ? 'one device' : heleN + ' devices'} where nearly everything is faulty. Often a bus or a module.`))}"><b>+${heleN}</b><span class="as-ord"> ${T(heleN === 1 ? 'enhet' : 'enheter', heleN === 1 ? 'device' : 'devices')}</span></span>` : ''].filter(Boolean).join('')
     || `<span class="as-k rolig">${t.ferdig ? T('ingen alarmer', 'no alarms') : T('leser…', 'reading…')}</span>`;
   // The warnings (wrong clock, same name, did not answer) ride on this line while both are folded.
   const v = !apen && !loadPrefs().warnOpen ? S._varsel : null;
@@ -273,6 +275,8 @@ function tegnAnlegg() {
       <button type="button" class="as-kopier" data-kopier title="${T('Kopier status som tekst, til servicerapporten', 'Copy the status as text, for the service report')}">${T('Kopier', 'Copy')}</button>
     </div>${liste}`;
   if (el.innerHTML !== html) el.innerHTML = html;
+  const tl = el.querySelector('.as-kompakt .as-tallene');
+  if (tl) { tl.classList.remove('trang'); tl.classList.toggle('trang', tl.scrollWidth > tl.clientWidth + 1); }
   anKompakt(!apen);
   el.classList.toggle('bad', tall.some(f => alvor(f) === 'bad' || alvor(f) === 'feil'));
   el.classList.toggle('warn', tall.length > 0 && !tall.some(f => alvor(f) === 'bad'));

@@ -1020,9 +1020,9 @@ function eksporterVariabel(bare) {
     const navn = ren([r.t.prefiks, 'Variabel', r.anlegg, tid, dev, bare ? 'endringer' : ''].filter(Boolean).join(' ') + '.csv');
     naboLagre(navn, '\uFEFF' + rader.map(x => x.linje).join('\r\n') + '\r\n', 'text/csv;charset=utf-8');
   });
-  toast(T(`Variabel-fil laget: ${r.rader.length} punkter fra ${new Set(r.rader.map(x => x.enhetNavn)).size} enheter`
+  toast(T(`Variabel-fil laget: ${r.rader.length} punkter fra ${new Set(r.rader.map(x => x.kilde)).size} enheter`
           + (feil ? ` · ${feil} med feil` : '') + ` → ${mappeNavn()}`,
-          `Variabel file made: ${r.rader.length} points from ${new Set(r.rader.map(x => x.enhetNavn)).size} devices`
+          `Variabel file made: ${r.rader.length} points from ${new Set(r.rader.map(x => x.kilde)).size} devices`
           + (feil ? ` · ${feil} with errors` : '') + ` → ${mappeNavn()}`), !!feil);
   naboFigur('vink');
   const hus = $('naboHus');
@@ -1468,8 +1468,11 @@ function tegnNabo(helt) {
   }
 
   const feil = r.rader.filter(x => x.feil.length).length;
-  const enh = new Set(r.rader.map(x => x.enhetNavn)).size;
-  $('naboSum').innerHTML = `<b>${r.rader.length}</b> ${T('variabler', 'variables')} · <b>${enh}</b> ${T(enh === 1 ? 'enhet' : 'enheter', enh === 1 ? 'device' : 'devices')}`
+  // Counted by device, not by device name: three controllers that share a name are
+  // still three, and the list on the left says so too.
+  const enh = new Set(r.rader.map(x => x.kilde)).size;
+  const avAlle = enh < NABO.kilder.length ? ` ${T('av', 'of')} ${NABO.kilder.length}` : '';
+  $('naboSum').innerHTML = `<b>${r.rader.length}</b> ${T('variabler', 'variables')} · <b>${enh}</b>${avAlle} ${T(enh === 1 && !avAlle ? 'enhet' : 'enheter', enh === 1 && !avAlle ? 'device' : 'devices')}`
     + (feil ? ` · <span class="f">${feil} ${T('med feil', 'with errors')}</span>` : '')
     + (r.hoppet ? ` · <span title="${T('Kalendere, ukeplaner, trendlogger og andre typer blir ikke variabler', 'Calendars, schedules, trend logs and other types do not become variables')}">${r.hoppet} ${T('hoppet over', 'skipped')}</span>` : '');
   // Several devices under one name would be one device to NTI. The fix is one click: the

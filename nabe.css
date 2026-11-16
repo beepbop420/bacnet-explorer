@@ -4893,6 +4893,8 @@ html.peker-egen *:not(input):not(textarea):not(select):not(.splitter):not([conte
 .kort-rad .vei-tekst{flex:0 0 auto;color:var(--fg-3);font-size:11px}
 .kort-brikke.treg em{color:var(--warn)}
 html.mini .ki-gruppe,html.mini .sb-oppd{display:none !important}
+/* NABO: the unit is one line. It is the name that goes into the file, so it is not shortened, only kept together. */
+.nabo-tabell tbody td.u{white-space:nowrap;width:auto;max-width:none}
 .bw-knapper{display:flex;align-items:center;justify-content:flex-end;gap:10px;margin-left:auto}
 .bw-port{height:26px;padding:0 12px;font-size:12px;white-space:nowrap}
 /* The bubble may use two lines: a sentence cut at "Slå dem på u…" helps nobody. */
@@ -4994,8 +4996,11 @@ html.mini .ki-gruppe,html.mini .sb-oppd{display:none !important}
 .nabo-unike:hover,.nabo-unike:focus-visible{background:var(--accent-dim)}
 /* the plant status, folded: one quiet line, a way to open it, a way to be rid of it */
 .as-kompakt{align-items:center;flex-wrap:nowrap;padding:0 4px 0 0;gap:0}
-.as-kompakt .as-tallene{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.as-kompakt .as-k{margin-right:10px}
+.as-status .as-kompakt .as-tallene{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.as-status .as-kompakt .as-k{display:inline;margin-right:10px}
+.as-form{display:none;font-style:normal;font-size:9px;margin-right:3px}
+.as-tallene.trang .as-ord{display:none}
+.as-tallene.trang .as-form{display:inline}
 .as-kompakt .as-k:last-child{margin-right:0}
 .as-kompakt .as-tittel{flex:0 0 auto;white-space:nowrap}
 .as-kompakt .as-vis{flex-wrap:nowrap}
