@@ -292,6 +292,7 @@ def royktest():
               "    const ok = !!document.querySelector('.dlg-lag [data-d=ja]'); document.querySelector('.dlg-lag [data-d=nei]').click();"
               "    return ok && !document.querySelector('.dlg-lag'); })(),"
               " port: typeof byttPort === 'function',"
+              " anleggsrad: typeof bareDetteAnlegget === 'function',"
               " kort: typeof flereKortIBruk === 'function' && typeof anKompakt === 'function',"
               " ukeprogram: typeof urEnheter === 'function' && typeof urLesAlle === 'function' && !!document.getElementById('anStatusBtn')"
               "  && cmpAdr('10.0.0.9', '10.0.0.10') < 0 && cmpAdr('10.0.1.1', '10.0.0.200') > 0,"

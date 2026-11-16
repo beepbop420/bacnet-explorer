@@ -3750,8 +3750,15 @@ function nabeSnakk(tekst) {
   // Beside the name, in the empty top bar, so it never covers the scan box.
   const navn = document.getElementById('naboHus') || m.closest('.brand') || m;
   const r = navn.getBoundingClientRect();
-  b.style.left = Math.round(r.right + 14) + 'px';
+  const venstre = Math.round(r.right + 14);
+  b.style.left = venstre + 'px';
   b.style.top = Math.round(r.top + r.height / 2) + 'px';
+  // Never over the search field: the bubble gets the room between the name and
+  // the field, and the line wraps instead. With the field folded away (narrow
+  // window) there is nothing to stay clear of.
+  const sok = document.getElementById('tbSok');
+  const sr = sok && sok.offsetParent ? sok.getBoundingClientRect() : null;
+  b.style.maxWidth = sr && sr.left - venstre > 170 ? Math.round(sr.left - venstre - 12) + 'px' : '';
   const ut = b.querySelector('.nb-tekst');
   b.classList.remove('ut');
   b.classList.add('inne');

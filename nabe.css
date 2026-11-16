@@ -4899,7 +4899,7 @@ html.mini .ki-gruppe,html.mini .sb-oppd{display:none !important}
 .bw-port{height:26px;padding:0 12px;font-size:12px;white-space:nowrap}
 /* The bubble may use two lines: a sentence cut at "Slå dem på u…" helps nobody. */
 .nabe-boble{white-space:normal;max-width:min(520px,58vw)}
-.nabe-boble .nb-tekst{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden}
+.nabe-boble .nb-tekst{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3;overflow:hidden}
 .kort-rest{flex:0 0 auto;font-family:var(--mono);font-size:10px;color:var(--fg-3);cursor:default}
 .as-varsel{flex:0 0 auto;display:inline-flex;align-items:center;gap:4px;height:18px;padding:0 6px;margin-left:6px;border-radius:var(--r-pill);color:var(--warn);font-size:11px;cursor:pointer}
 .as-varsel b{font-family:var(--mono);font-weight:600}

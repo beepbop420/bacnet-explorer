@@ -203,6 +203,10 @@ const FAKTA = [
   ['COV betyr at regulatoren sier fra selv. Mindre spørring, mer ro.', 'COV means the controller speaks up itself. Less asking, more peace.'],
 ];
 const NYTT = {
+  '1.72': [
+    ['Snakkeboblen til NABE legger seg ikke lenger over søkefeltet. Den bruker plassen foran feltet og bryter linja', 'The speech bubble no longer covers the search field. It uses the room in front of the field and wraps the line'],
+    ['Anleggsraden under skannefeltet skjules når den bare viser anlegget du allerede står i. Klikk i feltet for å få den fram', 'The site row under the scan field is hidden when it only shows the plant you are already in. Click the field to bring it back'],
+  ],
   '1.71': [
     ['Tre tekster som sto på norsk i engelsk visning er oversatt: hjelpelinja i ukeprogrammet og «…og N til» i to lister', 'Three texts that stayed Norwegian in the English view are translated: the hint line in the schedule and "…and N more" in two lists'],
   ],

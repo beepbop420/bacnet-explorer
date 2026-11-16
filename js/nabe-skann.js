@@ -325,6 +325,17 @@ function radHtml(r, i) {
       ${a.navn ? `<span class="an-ip">${esc(a.key.split(' ')[0])}${a.key.includes(' ') ? ' …' : ''}</span>` : ''}</button>`;
 }
 
+/* The one site in the list is the one on screen: its range is in the field and
+   its devices are listed below, so the row would only say it a third time. It
+   comes back when the field has focus, where its name and "forget" are reached. */
+function bareDetteAnlegget() {
+  if (!S.devices.length || document.activeElement === $('rangeInput')) return false;
+  const her = typeof asNokkel === 'function' ? asNokkel() : '';
+  if (!her) return false;
+  const anlegg = SK.rader.filter(r => r.type === 'anlegg');
+  return anlegg.length > 0 && anlegg.length === SK.rader.length && anlegg.every(r => r.a && r.a.key === her);
+}
+
 function tegnListe() {
   const el = $('anleggListe');
   if (!el) return;
@@ -332,7 +343,7 @@ function tegnListe() {
   SK.rader = byggRader();
   const klikkbare = SK.rader.filter(r => r.type === 'anlegg' || r.type === 'rute' || r.type === 'nabo').length;
   if (SK.valgt >= klikkbare) SK.valgt = klikkbare - 1;
-  el.hidden = !SK.rader.length || document.body.classList.contains('skanner');
+  el.hidden = !SK.rader.length || document.body.classList.contains('skanner') || bareDetteAnlegget();
   el.innerHTML = (!$('rangeInput').value.trim() && SK.anlegg.length
     ? `<div class="an-hode">${T('Anlegg', 'Sites')}</div>` : '') + SK.rader.map(radHtml).join('');
   // Rows come in one after another the first time, not on every keystroke.
@@ -345,6 +356,11 @@ function tegnListe() {
     });
   }
 }
+
+$('rangeInput').addEventListener('focus', () => tegnListe());
+// After the click that took the focus has landed on a row, not before it.
+$('rangeInput').addEventListener('blur', () => setTimeout(tegnListe, 200));
+etter('renderDevices', () => { const el = $('anleggListe'); if (el && el.hidden !== (!SK.rader.length || document.body.classList.contains('skanner') || bareDetteAnlegget())) tegnListe(); });
 
 /* The list refreshes on its own every few seconds. What changed is what the
    app has to say: a site that just became reachable, or one that dropped. */
