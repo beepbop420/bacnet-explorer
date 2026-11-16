@@ -101,6 +101,11 @@ def _env(navn: str, standard: str = "") -> str:
     return os.environ.get("NABE_" + navn, os.environ.get("NM_" + navn, standard))
 
 
+# NABE Mini: the edition for a remote desktop. No local AI, no self-update and
+# no call out to the internet. Chosen by a file called MINI beside server.py
+# (the mini package has one) or by NABE_MINI=1.
+MINI = _env("MINI", "") == "1" or (Path(__file__).parent / "MINI").is_file()
+
 ALLOWED_ORIGINS = {
     o.strip().rstrip("/")
     for o in _env(
@@ -228,7 +233,7 @@ def t(nb: str, en: str) -> str:
     return en if SPRAAK_VAR.get() == "en" else nb
 
 
-VERSJON = "1.66"
+VERSJON = "1.67"
 
 state = {"app": None, "local_address": None, "read_only": False, "bbmd": None, "primary": None}
 # The simulator: a scanned site run as devices on 127.0.0.x, in a process of its own.
@@ -484,6 +489,7 @@ def status():
     return {
         "running": state["app"] is not None,
         "versjon": VERSJON,
+        "mini": MINI,
         "local_address": state["local_address"],
         "bbmd": state.get("bbmd"),
         "port_advarsel": port_advarsel(port_naboer()) if state["app"] else None,
@@ -2833,7 +2839,10 @@ def glem_mine(body: GlemBody):
 # An installed NABE can fetch the newest release itself. The file is checked
 # against the maintainer's signature (nabe_signatur.py) before anything is
 # unpacked, and the installer inside it runs only after NABE has closed.
-import nabe_oppdater as _opp
+if MINI:
+    _opp = None
+else:
+    import nabe_oppdater as _opp
 
 OPPD_DIR = DATA_DIR / "oppdatering"
 OPPD: Dict[str, Any] = {"status": "ledig", "tekst": "", "feil": "", "versjon": None}
@@ -2845,6 +2854,9 @@ _OPPD_GAAR = ("laster", "sjekker", "pakker ut", "starter", "klar")
 async def oppdatering():
     """The newest release, checked at most every fifteen minutes, and what an
     update in progress is doing. Without internet the answer is "nothing known"."""
+    if MINI:
+        return {"status": "done", "her": VERSJON, "ny": None, "notater": "", "signert": False,
+                "kanOppdatere": False, "jobb": dict(OPPD), "mini": True}
     if time.time() - OPPD_INFO["t"] > 900:
         OPPD_INFO["t"] = time.time()
         try:
@@ -2860,7 +2872,7 @@ async def oppdatering():
 
 @app.post("/api/oppdater")
 async def oppdater():
-    if not _opp.er_installert(Path(__file__).parent):
+    if MINI or not _opp.er_installert(Path(__file__).parent):
         return {"status": "error", "error": t(
             "Oppdatering i appen virker bare for installert NABE. Last ned den nye versjonen fra GitHub.",
             "Updating from inside the app only works for an installed NABE. Download the new version from GitHub.")}
@@ -2893,7 +2905,7 @@ NY_VERSJON: Dict[str, Any] = {"t": 0.0, "versjon": None}
 async def ny_versjon():
     """The version on GitHub, checked at most once an hour. Never blocks:
     without internet the answer is simply that nothing is known."""
-    if time.time() - NY_VERSJON["t"] > 3600:
+    if not MINI and time.time() - NY_VERSJON["t"] > 3600:
         NY_VERSJON["t"] = time.time()
 
         def hent():
@@ -3457,11 +3469,13 @@ class KiBody(BaseModel):
 
 @app.get("/api/ki")
 async def ki_status():
-    return dict(KI, stor=KI_STOR)
+    return dict(KI, stor=KI_STOR, mini=MINI)
 
 
 @app.post("/api/ki/installer")
 async def ki_installer_start():
+    if MINI:
+        return {"status": "error", "error": t("NABE Mini har ikke lokal KI.", "NABE Mini has no local AI.")}
     if KI["tilstand"] != "laster":
         threading.Thread(target=_ki_installer, daemon=True).start()
     return {"status": "done"}
@@ -3489,7 +3503,8 @@ async def ki_svar(body: KiBody):
     return {"status": "done", "tekst": r["tekst"]}
 
 
-ki_start()
+if not MINI:
+    ki_start()
 
 
 # A recording: the chosen points read on an interval, one CSV row each time,

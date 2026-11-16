@@ -9,7 +9,11 @@
    with T(), and the containers are left out of the language sweep, so nothing
    is translated twice. */
 let NABE_VERSJON = '';
-fetch('/api/status').then(r => r.json()).then(d => { NABE_VERSJON = d.versjon || ''; }).catch(() => {});
+fetch('/api/status').then(r => r.json()).then(d => {
+  NABE_VERSJON = (d.versjon || '') + (d.mini ? ' Mini' : '');
+  // Mini: no local AI and no self-update, so their controls are not shown either.
+  document.documentElement.classList.toggle('mini', !!d.mini);
+}).catch(() => {});
 
 /* ------------------------------------------------------------ alarm list */
 const ALARM_CACHE = {};
@@ -199,6 +203,9 @@ const FAKTA = [
   ['COV betyr at regulatoren sier fra selv. Mindre spørring, mer ro.', 'COV means the controller speaks up itself. Less asking, more peace.'],
 ];
 const NYTT = {
+  '1.67': [
+    ['NABE Mini: en egen pakke for fjernskrivebord. Pakk ut og start, uten installasjon, uten lokal KI, uten selvoppdatering og uten internett. Ligger som NABE-Mini.zip i utgivelsen', 'NABE Mini: a package of its own for remote desktops. Extract and start, with no installation, no local AI, no self-update and no internet. It is NABE-Mini.zip in the release'],
+  ],
   '1.66': [
     ['Siden sist: NABE husker anlegget når det er lest til ende, og sammenligner neste besøk med det. Nye alarmer, endrede settpunkt, overstyringer og enheter som ikke svarer lenger. Ligger i menyen under Verktøy', 'Since last visit: NABE remembers the plant once it is read to the end, and compares the next visit with it. New alarms, changed setpoints, overrides and devices that no longer answer. In the menu under Tools'],
     ['Besøksrapport: ett ark med alarmer, feil, overstyringer, klokker, avvik fra settpunkt og notatene dine. Skriv ut eller lagre som PDF', 'Visit report: one sheet with alarms, faults, overrides, clocks, setpoint deviations and your notes. Print it or save it as PDF'],

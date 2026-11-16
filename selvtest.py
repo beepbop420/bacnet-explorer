@@ -468,6 +468,8 @@ def tilkobling():
           med_vert(f"ond.example:{PORT}") == 403 and med_vert(f"localhost:{PORT}") == 200
           and med_vert(f"127.0.0.1:{PORT}") == 200)
     # A visit is kept, and a second one within the hour replaces it rather than becoming "last time".
+    sjekk("vanlig utgave er ikke Mini, og KI-status sier det samme",
+          kall("/api/status").get("mini") is False and kall("/api/ki").get("mini") is False)
     b1 = kall("/api/besok", {"key": "selvtest 127.0.0.0/8", "data": {"enheter": {"127.0.0.2": {"n": "X", "p": {}}}}})
     b2 = kall("/api/besok", {"key": "selvtest 127.0.0.0/8", "data": {"enheter": {}}})
     b3 = kall("/api/besok", {"key": "", "data": {"enheter": {}}})

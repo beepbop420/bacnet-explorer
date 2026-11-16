@@ -40,7 +40,9 @@ def notater(versjon: str, forrige: str = "") -> str:
         for v in imellom:
             deler.append(f"Also in {v}:\n" + "\n".join(f"- {l}" for l in _linjer(src, v)))
     return ("\n\n".join(deler) + "\n\n**Install:** download `NABE-Installasjon.zip`, right-click it and choose "
-            "*Extract All*, then double-click **Installer NABE**. No administrator rights needed.")
+            "*Extract All*, then double-click **Installer NABE**. No administrator rights needed.\n\n"
+            "**Remote desktop:** download `NABE-Mini.zip`, extract it anywhere and double-click **NABE.bat**. "
+            "No installation, no local AI, no self-update and no internet. It runs in Edge or Chrome.")
 
 
 def forrige_release() -> str:
@@ -68,6 +70,13 @@ def main():
     except (OSError, ValueError) as e:
         print(f"ADVARSEL: ingen signatur ({e}). Appen oppdaterer seg ikke selv fra denne utgivelsen.")
         filer = [str(zipfil)]
+    # The edition for a remote desktop, under a name that stays the same between releases.
+    import shutil
+    import lag_mini
+    lag_mini.main()
+    mini = HER / "dist" / "NABE-Mini.zip"
+    shutil.copy2(HER / "dist" / f"NABE-mini-{versjon}.zip", mini)
+    filer.append(str(mini))
     finnes = subprocess.run(["gh", "release", "view", tag], cwd=HER, capture_output=True).returncode == 0
     if finnes:
         cmd = ["gh", "release", "upload", tag, *filer, "--clobber"]
