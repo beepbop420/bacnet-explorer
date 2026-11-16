@@ -203,6 +203,12 @@ const FAKTA = [
   ['COV betyr at regulatoren sier fra selv. Mindre spørring, mer ro.', 'COV means the controller speaks up itself. Less asking, more peace.'],
 ];
 const NYTT = {
+  '1.68': [
+    ['Spørsmål som «Fortsette?» og «Hva heter anlegget?» kommer i NABEs egen dialog, ikke nettleserens grå boks', 'Questions like "Continue?" and "What is this site called?" come in a dialog of NABE itself, not the grey box of the browser'],
+    ['Skriv og Frigi er synlige uten rulling på 1366×768, som er vanlig på fjernskrivebord', 'Write and Release are visible without scrolling at 1366×768, which is common on remote desktops'],
+    ['En enhet der nesten alle punktene har feil, telles som én enhet på anleggslinja i stedet for flere hundre punkter', 'A device where nearly every point is faulty counts as one device on the plant line instead of several hundred points'],
+    ['En enhet uten punkter sier hvorfor. Handlingene i søket følger språket', 'A device with no points says why. The actions in the search follow the language'],
+  ],
   '1.67': [
     ['NABE Mini: en egen pakke for fjernskrivebord. Pakk ut og start, uten installasjon, uten lokal KI, uten selvoppdatering og uten internett. Ligger som NABE-Mini.zip i utgivelsen', 'NABE Mini: a package of its own for remote desktops. Extract and start, with no installation, no local AI, no self-update and no internet. It is NABE-Mini.zip in the release'],
   ],
@@ -787,12 +793,12 @@ async function visStartskjerm(igjen = false) {
       e.stopPropagation();
       const key = (navngi || glem).dataset[navngi ? 'navngi' : 'glem'];
       if (navngi) {
-        const navn = prompt(T('Hva heter dette anlegget?', 'What is this site called?'), (MINNE[key] || {}).navn || '');
+        const navn = await nabeSpor(T('Hva heter dette anlegget?', 'What is this site called?'), (MINNE[key] || {}).navn || '');
         if (navn === null) return;
         const d = await api('/api/sites/name', {key, name: navn});
         if (d.status === 'done') MINNE[key] = d.site;
       } else {
-        if (!confirm(T(`Glemme ${key}? Enhetene og navnet NABE husker for det, forsvinner.`, `Forget ${key}? The devices and name NABE remembers for it go.`))) return;
+        if (!await nabeBekreft(T(`Glemme ${key}? Enhetene og navnet NABE husker for det, forsvinner.`, `Forget ${key}? The devices and name NABE remembers for it go.`))) return;
         const d = await api('/api/sites/delete', {key});
         if (d.status === 'done') delete MINNE[key];
       }

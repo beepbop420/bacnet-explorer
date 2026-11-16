@@ -241,9 +241,20 @@ function tegnAnlegg() {
   const apen = !!loadPrefs().anApen || !!AN.apen;
   const skjulKnapp = `<button type="button" class="as-skjul" data-skjul title="${esc(T('Skjul anleggsstatus. Slås på igjen i innstillinger.', 'Hide the plant status. Turn it back on in Settings.'))}" aria-label="${esc(T('Skjul anleggsstatus', 'Hide the plant status'))}">✕</button>`;
   // Folded: one quiet line with the two numbers that matter. Open: everything, as before.
-  const alarm = t.flagg['in-alarm'].length, feilN = t.flagg['fault'].length;
+  /* A controller where nearly every point is faulty is one thing that is wrong
+     (a bus, a module, the reliability of the whole unit), not five hundred. It
+     is counted as one device, and its points are kept out of the point count. */
+  const alarm = t.flagg['in-alarm'].length;
+  const perEnhet = new Map();
+  for (const {d} of t.flagg['fault']) perEnhet.set(d.address, (perEnhet.get(d.address) || 0) + 1);
+  let heleN = 0, heleP = 0;
+  for (const [ip, n] of perEnhet) {
+    if (n >= 20 && n >= (S.cache[ip] || []).length * 0.8) { heleN++; heleP += n; }
+  }
+  const feilN = t.flagg['fault'].length - heleP;
   const kort = [alarm ? `<span class="as-k bad"><b>${alarm}</b> ${T('i alarm', 'in alarm')}</span>` : '',
-                feilN ? `<span class="as-k feil"><b>${feilN}</b> ${T('med feil', 'faulty')}</span>` : ''].filter(Boolean).join('')
+                feilN ? `<span class="as-k feil"><b>${feilN}</b> ${T('med feil', 'faulty')}</span>` : '',
+                heleN ? `<span class="as-k feil" title="${esc(T(`${heleP} punkter på ${heleN === 1 ? 'én enhet' : heleN + ' enheter'} der nesten alt har feil. Ofte en buss eller en modul.`, `${heleP} points on ${heleN === 1 ? 'one device' : heleN + ' devices'} where nearly everything is faulty. Often a bus or a module.`))}"><b>${heleN}</b> ${T(heleN === 1 ? 'enhet med alt i feil' : 'enheter med alt i feil', heleN === 1 ? 'device all faulty' : 'devices all faulty')}</span>` : ''].filter(Boolean).join('')
     || `<span class="as-k rolig">${t.ferdig ? T('ingen alarmer', 'no alarms') : T('leser…', 'reading…')}</span>`;
   // The warnings (wrong clock, same name, did not answer) ride on this line while both are folded.
   const v = !apen && !loadPrefs().warnOpen ? S._varsel : null;

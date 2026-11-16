@@ -294,8 +294,8 @@
       const tekst = s.tilstand === 'treg'
         ? T(`Denne PC-en klarer bare ${s.tok_s} tokens i sekundet, så NABE lar KI-en stå av. Fjerne den og få igjen 5 GB?`, `This PC only manages ${s.tok_s} tokens a second, so NABE leaves the AI off. Remove it and get 5 GB back?`)
         : T(`Lokal KI er på (${s.tok_s} tokens i sekundet). Fjerne den og få igjen 5 GB?`, `The local AI is on (${s.tok_s} tokens a second). Remove it and get 5 GB back?`);
-      if (confirm(tekst)) { await api('/api/ki/fjern', {}); kiVis(); }
-    } else if (confirm(T('Laste ned lokal KI? Det er 5 GB, og alt kjører på denne PC-en. Svarene er forslag og vises med kilden sin.', 'Download the local AI? It is 5 GB, and all of it runs on this PC. Answers are suggestions and shown with their source.'))) {
+      if (await nabeBekreft(tekst)) { await api('/api/ki/fjern', {}); kiVis(); }
+    } else if (await nabeBekreft(T('Laste ned lokal KI? Det er 5 GB, og alt kjører på denne PC-en. Svarene er forslag og vises med kilden sin.', 'Download the local AI? It is 5 GB, and all of it runs on this PC. Answers are suggestions and shown with their source.'))) {
       await api('/api/ki/installer', {});
       setTimeout(kiVis, 400);
     }

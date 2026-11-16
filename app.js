@@ -377,6 +377,51 @@ setInterval(async () => {
 }, 4000);
 
 let toastTimer;
+/* A question in NABE's own clothes instead of the browser's grey box. One
+   function for both kinds: without `standard` it is yes or no and resolves to
+   true or false, with it there is a field and it resolves to the text, or null
+   when cancelled. Enter answers yes, Escape and a click outside answer no.
+   Keys are held here while it is open, so no shortcut fires behind it. */
+function nabeDialog(tekst, o = {}) {
+  return new Promise(losning => {
+    const harFelt = o.standard !== undefined;
+    const lag = document.createElement('div');
+    lag.className = 'gs-overlay dlg-lag';
+    lag.setAttribute('role', 'alertdialog');
+    lag.setAttribute('aria-modal', 'true');
+    lag.innerHTML = `<div class="gs-modal dlg-modal"><div class="dlg-tekst"></div>${harFelt ? '<input class="field dlg-felt" type="text" autocomplete="off" spellcheck="false">' : ''}
+      <div class="op-knapper"><button type="button" class="btn" data-d="nei">${esc(o.avbryt || T('Avbryt', 'Cancel'))}</button>
+      <button type="button" class="btn primary" data-d="ja">${esc(o.ok || 'OK')}</button></div></div>`;
+    lag.querySelector('.dlg-tekst').textContent = tekst;
+    const felt = lag.querySelector('.dlg-felt');
+    if (felt) felt.value = o.standard || '';
+    const forrige = document.activeElement;
+    const ferdig = (ja) => {
+      document.removeEventListener('keydown', tast, true);
+      lag.remove();
+      try { if (forrige && forrige.focus) forrige.focus(); } catch {}
+      losning(harFelt ? (ja ? felt.value : null) : !!ja);
+    };
+    const tast = (e) => {
+      if (e.key === 'Tab') return;
+      e.stopPropagation();
+      if (e.key === 'Escape') { e.preventDefault(); ferdig(false); }
+      else if (e.key === 'Enter') { e.preventDefault(); ferdig(e.target.dataset?.d !== 'nei'); }
+    };
+    document.addEventListener('keydown', tast, true);
+    lag.addEventListener('click', (e) => {
+      const b = e.target.closest('[data-d]');
+      if (b) ferdig(b.dataset.d === 'ja');
+      else if (e.target === lag) ferdig(false);
+    });
+    document.body.append(lag);
+    (felt || lag.querySelector('[data-d="ja"]')).focus();
+    if (felt) felt.select();
+  });
+}
+const nabeBekreft = (tekst, o) => nabeDialog(tekst, o);
+const nabeSpor = (tekst, standard) => nabeDialog(tekst, {standard: standard || ''});
+
 function toast(msg, isErr) {
   let el = document.querySelector('.toast');
   if (!el) {
@@ -1165,12 +1210,12 @@ function renderSiteWarnings() {
 async function stillKlokka(ip) {
   const d = S.devices.find(x => x.address === ip);
   const naavaerende = (S.identity[ip] || {})['device-time'];
-  if (!confirm(T(`Sette klokka på ${d ? (d.device_instance ?? ip) : ip} til denne PC-ens tid?\n\n`, `Set the clock of ${d ? (d.device_instance ?? ip) : ip} to this PC’s time?\n\n`)
+  if (!await nabeBekreft(T(`Sette klokka på ${d ? (d.device_instance ?? ip) : ip} til denne PC-ens tid?\n\n`, `Set the clock of ${d ? (d.device_instance ?? ip) : ip} to this PC’s time?\n\n`)
              + T(`Enheten står nå på: ${naavaerende || 'ukjent'}\n`, `The device now says: ${naavaerende || 'unknown'}\n`)
              + T(`Denne PC-en:        ${new Date().toLocaleString('no')}\n\n`, `This PC:            ${new Date().toLocaleString('en-GB')}\n\n`)
              + `Ukeprogram og trendlogger på enheten følger denne klokka.`)) return;
 
-  toast('Stiller klokka…');
+  toast(T('Stiller klokka…', 'Setting the clock…'));
   let r;
   try {
     r = await api('/api/device/clock', {address: ip});
@@ -1388,7 +1433,9 @@ function renderDevices() {
         ${kortChip(d)}
         ${presenceTag(d)}
         ${noteFor(d) ? `<span class="dev-note" title="${esc(noteFor(d))}">${T('notat', 'note')}</span>` : ''}
-        ${S.cache[d.address] ? `<em class="dev-pkt">${S.cache[d.address].length} pkt</em>` : ''}
+        ${S.cache[d.address] ? (S.cache[d.address].length
+            ? `<em class="dev-pkt">${S.cache[d.address].length} pkt</em>`
+            : `<em class="dev-pkt" title="${esc(T('Enheten svarte, men har ingen objekter med verdi. Slå på «alle objekttyper» under Filter for å se det den har.', 'The device answered, but has no objects with a value. Turn on "all object types" under Filter to see what it has.'))}">${T('ingen punkter', 'no points')}</em>`) : ''}
       </span>
     </button>`;
   };
@@ -1734,7 +1781,7 @@ setInterval(markFreshness, 15000);
 async function cancelJob() {
   if (!S.job) return;
   await api('/api/job/' + S.job + '/cancel');
-  toast('Lasting avbrutt');
+  toast(T('Lasting avbrutt', 'Loading cancelled'));
 }
 
 const IDENT_LABELS = {
@@ -2245,8 +2292,8 @@ async function releaseSelected() {
   const msg = T(`Frigi prioritet ${pri} på ${rows.length} punkter`, `Release priority ${pri} on ${rows.length} points`) + NL + NL
             + S.activeDev.address + NL + vis + NL + NL
             + T('Punktene faller tilbake til anleggets egen styring.', 'The points fall back to the plant’s own control.') + NL
-            + 'Dette endrer et anlegg i drift. Fortsette?';
-  if (!confirm(msg)) return;
+            + T('Dette endrer et anlegg i drift. Fortsette?', 'This changes a plant in operation. Continue?');
+  if (!await nabeBekreft(msg)) return;
 
   const btn = $('selRel');
   btn.disabled = true;
@@ -5130,9 +5177,9 @@ function tegnVisninger() {
     tegnVisninger();
   });
   const lagre = $('visLagre');
-  if (lagre) lagre.onclick = () => {
-    const navn = prompt('Navn på visningen:', forslagVisningsnavn());
-    if (navn && lagreVisning(navn)) { toast('Visning lagret: ' + navn.trim()); }
+  if (lagre) lagre.onclick = async () => {
+    const navn = await nabeSpor(T('Navn på visningen:', 'Name of the view:'), forslagVisningsnavn());
+    if (navn && lagreVisning(navn)) { toast(T('Visning lagret: ', 'View saved: ') + navn.trim()); }
     tegnVisninger();
   };
 }
@@ -6375,7 +6422,7 @@ function renderGlobal() {
         + `<small>${esc(d.address)} · ${d.device_instance ?? '?'}</small>`
         + `<small>${S.cache[d.address] ? T(`${S.cache[d.address].length} pkt`, `${S.cache[d.address].length} pts`) : T('ikke lest', 'not read')}</small></button>`).join('') : '')
     + (handlinger.length ? `<div class="gs-nett">${T('Handlinger', 'Actions')}</div>`
-      + handlinger.map((x, i) => `<button class="gs-enhet gs-handling" data-h="${i}"><span>${esc(x.etikett)}</span><small>${esc(x.gruppe)}</small><small>${esc(x.hint || '')}</small></button>`).join('') : '');
+      + handlinger.map((x, i) => `<button class="gs-enhet gs-handling" data-h="${i}"><span>${esc(SPRAAK === 'en' ? oversettTekst(x.etikett, true) : x.etikett)}</span><small>${esc(x.gruppe)}</small><small>${esc(x.hint || '')}</small></button>`).join('') : '');
   const kobleTopp = () => {
     box.querySelectorAll('.gs-enhet[data-ip]').forEach(b => b.onclick = () => { closeGlobal(); selectDevice(b.dataset.ip); });
     box.querySelectorAll('.gs-handling').forEach(b => b.onclick = () => { closeGlobal(); kjorCmd(handlinger[+b.dataset.h]); });
@@ -7333,7 +7380,7 @@ function wireWriteForm(p) {
                             : T('Blir stående til du frigir den.', 'Stays until you release it.')));
     const msg = head + NL + NL + (p.name || p.objid) + NL + S.activeDev.address
               + detail + tail + NL + NL + T('Dette endrer et anlegg i drift. Fortsette?', 'This changes a plant in operation. Continue?');
-    if (!confirm(msg)) return;
+    if (!await nabeBekreft(msg)) return;
     const r = await api('/api/write', {
       address: S.activeDev.address, objid: p.objid,
       value, priority: pri, release, auto_release_min: autoMin,
@@ -8639,7 +8686,7 @@ async function lagreUke() {
   const linjer = dager.map((d, i) => `  ${schedDag(i)}: ` +
     (d.length ? d.map(e => `${e.time}=${e.value === null ? 'null' : e.value}`).join('  ')
               : '(ingen)')).join('\n');
-  if (!confirm(T(`Skrive ukeprogrammet til ${sch.name || sch.objid}?\n\n`
+  if (!await nabeBekreft(T(`Skrive ukeprogrammet til ${sch.name || sch.objid}?\n\n`
              + `Dette endrer når anlegget går, fra nå av.\n\n${linjer}\n\n`
              + `${antall} skift totalt.`, `Write the schedule to ${sch.name || sch.objid}?\n\n`
              + `This changes when the plant runs, from now on.\n\n${linjer}\n\n`
@@ -8816,7 +8863,11 @@ function urSynkModus() {
   if (en) en.disabled = !S.activeDev;
 }
 function closeSchedules() {
-  if (S.ukeRort && !confirm('Ulagrede endringer i ukeprogrammet går tapt. Lukke likevel?')) return;
+  if (S.ukeRort) {
+    nabeBekreft(T('Ulagrede endringer i ukeprogrammet går tapt. Lukke likevel?', 'Unsaved changes to the schedule will be lost. Close anyway?'))
+      .then(ja => { if (ja) { S.ukeRort = false; closeSchedules(); } });
+    return;
+  }
   S.ukeRort = false;
   $('schOverlay').hidden = true;
 }
@@ -8824,7 +8875,11 @@ function closeSchedules() {
 function showSchedule(i) {
   const s = S.schedules[i];
   if (!s) return;
-  if (S.ukeRort && !confirm('Du har ulagrede endringer i ukeprogrammet. Forkaste dem?')) return;
+  if (S.ukeRort) {
+    nabeBekreft(T('Du har ulagrede endringer i ukeprogrammet. Forkaste dem?', 'You have unsaved changes to the schedule. Discard them?'))
+      .then(ja => { if (ja) { S.ukeRort = false; showSchedule(i); } });
+    return;
+  }
   S.urValgt = i;
   S.urValgtNokkel = urNokkel(s);
   S.urDev = S.devices.find(d => d.address === s._adr) || S.activeDev;
@@ -9349,8 +9404,8 @@ function visSettFane(navn) {
 }
 $('temaEksport').onclick = temaEksporter;
 $('temaImport').onclick = temaImporter;
-$('temaNullstill').onclick = () => {
-  if (!confirm('Tilbakestille alle farger og størrelser til standard?')) return;
+$('temaNullstill').onclick = async () => {
+  if (!await nabeBekreft(T('Tilbakestille alle farger og størrelser til standard?', 'Reset every colour and size to the default?'))) return;
   savePrefs({tema: {}, uiSkala: 100, radHoyde: 26, radius: 4,
              bgStyrke: 40, bgUskarp: 0, bgMorkne: 0, flateGjennom: 0,
              bgModus: 'dekk', tittel: 'NABE', undertittel: '',
