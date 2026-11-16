@@ -129,9 +129,9 @@ function tegnVei() {
     const vis = aktive.filter(k => k.primary || k.enheter || k.ip === (SK.rute && SK.rute.ip));
     const skjult = aktive.length - vis.length;
     const chips = vis.map(k => {
-      const tips = [k.local_address, k.primary ? T('hovedkort', 'main adapter') : '', k.enheter ? `${k.enheter} ${T('enheter', 'devices')}` : '',
+      const tips = [k.local_address, k.primary ? T('hovedkort', 'main adapter') : '', ms[k.ip] >= 300 ? T('treg lenke', 'slow link') : '', k.enheter ? `${k.enheter} ${T('enheter', 'devices')}` : '',
                     k.ip === (SK.rute && SK.rute.ip) ? T('området i feltet går hit', 'the range in the field goes here') : ''].filter(Boolean).join(' · ');
-      return `<button type="button" class="kort-brikke${k.primary ? ' hoved' : ''}${k.ip === (SK.rute && SK.rute.ip) ? ' rute' : ''}" data-ip="${esc(k.ip)}" title="${esc(tips)}"><i></i><span>${esc(k.interface || k.ip)}</span>${ms[k.ip] ? `<em>${ms[k.ip]} ms</em>` : ''}</button>`;
+      return `<button type="button" class="kort-brikke${k.primary ? ' hoved' : ''}${k.ip === (SK.rute && SK.rute.ip) ? ' rute' : ''}${ms[k.ip] >= 300 ? ' treg' : ''}" data-ip="${esc(k.ip)}" title="${esc(tips)}"><i></i><span>${esc(k.interface || k.ip)}</span>${ms[k.ip] ? `<em>${ms[k.ip]} ms</em>` : ''}</button>`;
     }).join('');
     const rest = skjult ? `<span class="kort-rest" title="${esc(aktive.filter(k => !vis.includes(k)).map(k => k.interface || k.ip).join(', ') + ': ' + T('åpent, ingen enheter', 'open, no devices'))}">+${skjult}</span>` : '';
     el.innerHTML = `<div class="kort-rad">${chips}${rest}<span class="vei-tekst">${esc(mtekst)}${las ? ` · ${T('låst', 'locked')}` : ''}</span>

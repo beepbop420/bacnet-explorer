@@ -74,8 +74,70 @@
       `${en} at once. Each site goes out of its own adapter.`, 'fornoyd');
   }
 
+  /* A slow link, said once per adapter: the plant is not slow, the road to it is.
+     Three measurements in a row, so one late answer is not a diagnosis. */
+  const TREG_MS = 300, tregTeller = {};
+  function tregLenke() {
+    for (const k of S.kort || []) {
+      const ms = (S.kortMs || {})[k.ip];
+      if (!ms || !k.enheter) continue;
+      tregTeller[k.ip] = ms >= TREG_MS ? (tregTeller[k.ip] || 0) + 1 : 0;
+      if (tregTeller[k.ip] < 3) continue;
+      const navn = k.interface || k.ip;
+      sier('raad:treg:' + k.ip,
+        `${navn} svarer på ${ms} ms. Lesingen tar tid, og det er veien dit, ikke anlegget.`,
+        `${navn} answers in ${ms} ms. Reading takes a while, and that is the road there, not the plant.`);
+    }
+  }
+
+  /* What the plant looks like once all of it is read: one remark on the thing
+     that stands out, and the records this plant holds. Kept per plant on this PC. */
+  const rekorder = () => loadPrefs().rekorder || {};
+  function funn() {
+    let t;
+    try { t = anleggTall(); } catch { return; }
+    if (!t.ferdig || t.lest < 2) return;
+    const key = asNokkel();
+    if (!key || SAGT.has('raad:funn:' + key)) return;
+    SAGT.add('raad:funn:' + key);
+    const feil = t.flagg['fault'].length, alarm = t.flagg['in-alarm'].length, over = t.flagg['overridden'].length;
+    let verst = 0, verstD = null;
+    for (const d of S.devices) {
+      const sek = clockDrift(d.address);
+      // A clock stuck on a factory date is a dead battery, not a record.
+      if (sek === null || Math.abs(sek) > 2592000) continue;
+      if (Math.abs(sek) > Math.abs(verst)) { verst = sek; verstD = d; }
+    }
+    const alle = rekorder(), foer = alle[key] || {};
+    const naa = {klokke: Math.max(Math.abs(verst), foer.klokke || 0), feil: Math.max(feil, foer.feil || 0), t: Date.now()};
+    const nokler = Object.keys(alle).concat(key).filter((k, i, a) => a.indexOf(k) === i).slice(-40);
+    alle[key] = naa;
+    savePrefs({rekorder: Object.fromEntries(nokler.map(k => [k, alle[k]]))});
+
+    if (verstD && foer.klokke && Math.abs(verst) > foer.klokke * 1.2 && Math.abs(verst) > 1800) {
+      sier('raad:rekord:' + key,
+        `Ny rekord her: ${navnPaa(verstD)} går ${driftText(verst)}. Den forrige var ${driftText(foer.klokke).replace(/ (foran|etter)$/, '')}.`,
+        `A new record here: ${navnPaa(verstD)} is ${driftText(verst)}. The previous was ${driftText(foer.klokke).replace(/ (ahead|behind)$/, '')}.`, 'skvatt');
+      return;
+    }
+    if (feil >= 100) {
+      sier('raad:feil:' + key,
+        `${feil} punkter med feil. Enten er en buss nede, eller så er dette anleggets personlighet.`,
+        `${feil} faulty points. Either a bus is down, or this is the personality of the plant.`, 'nervos');
+    } else if (over >= 10) {
+      sier('raad:over:' + key,
+        `${over} overstyringer. Noen har hatt en travel dag i hånd.`,
+        `${over} overrides. Somebody has had a busy day in hand.`, 'nervos');
+    } else if (!alarm && !feil && t.total >= 5) {
+      sier('raad:rolig:' + key,
+        `${t.total} enheter og ingen alarmer. Jeg tar et skjermbilde, ingen kommer til å tro oss.`,
+        `${t.total} devices and no alarms. I am taking a screenshot, nobody will believe us.`, 'fornoyd');
+    }
+  }
+
   etter('renderDevices', () => { dupNavn(); toKort(); });
-  etter('renderSiteWarnings', klokker);
+  etter('renderSiteWarnings', () => { klokker(); funn(); });
+  if (typeof tegnVei === 'function') etter('tegnVei', tregLenke);
 
   /* Chaos: the odd remark when it has been quiet for a while. */
   const REPLIKKER = [
@@ -104,5 +166,5 @@
   (function neste() {
     setTimeout(() => { kaos(); neste(); }, (6 + Math.random() * 4) * 60000);
   })();
-  window.nabeRaad = {dupNavn, klokker, toKort, REPLIKKER};
+  window.nabeRaad = {dupNavn, klokker, toKort, tregLenke, funn, REPLIKKER};
 })();

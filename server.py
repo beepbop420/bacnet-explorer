@@ -228,7 +228,7 @@ def t(nb: str, en: str) -> str:
     return en if SPRAAK_VAR.get() == "en" else nb
 
 
-VERSJON = "1.65"
+VERSJON = "1.66"
 
 state = {"app": None, "local_address": None, "read_only": False, "bbmd": None, "primary": None}
 # The simulator: a scanned site run as devices on 127.0.0.x, in a process of its own.
@@ -5318,6 +5318,11 @@ def nabe_js(navn: str):
     if not _re.fullmatch(r"[a-z0-9-]+", navn) or not fil.is_file():
         return JSONResponse({"detail": "Not Found"}, status_code=404)
     return FileResponse(fil, media_type="application/javascript", headers=NO_CACHE)
+
+
+@app.get("/nabe.css")
+def nabe_css():
+    return FileResponse(Path(__file__).parent / "nabe.css", media_type="text/css", headers=NO_CACHE)
 
 
 @app.get("/app.js")

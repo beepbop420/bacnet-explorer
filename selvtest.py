@@ -287,6 +287,7 @@ def royktest():
               "  && (() => { const a = {t: 1, enheter: {x: {n: 'A', p: {o1: ['RT-SP', 21, '', ''], o2: ['RT', 20, '', '']}}, y: {n: 'B', p: {}}}};"
               "    const b = {t: 2, enheter: {x: {n: 'A', p: {o1: ['RT-SP', 23, '', ''], o2: ['RT', 20.2, 'in-alarm', '']}}}};"
               "    const d = besokDiff(a, b, false); return d.verdi.length === 1 && d.alarmNy.length === 1 && d.borte.length === 1 && d.nye.length === 0; })(),"
+              " runde: typeof rundeLagret === 'function' && typeof nabeRaad.funn === 'function' && typeof nabeRaad.tregLenke === 'function',"
               " kort: typeof flereKortIBruk === 'function' && typeof anKompakt === 'function',"
               " ukeprogram: typeof urEnheter === 'function' && typeof urLesAlle === 'function' && !!document.getElementById('anStatusBtn')"
               "  && cmpAdr('10.0.0.9', '10.0.0.10') < 0 && cmpAdr('10.0.1.1', '10.0.0.200') > 0,"
@@ -905,7 +906,7 @@ def kjor_tester():
     # Last: it silences the simulated device on 127.0.0.6.
     mine_uten_kontakt()
 
-    for fil in ("nabe-start", "nabe-verktoy", "nabe-felt", "nabe-moro", "nabe-finn", "nabe-skann", "nabe-anlegg", "nabe-bunn", "nabe-graf", "nabe-tunnel", "nabe-sammen", "nabe-flyt", "nabe-peker", "nabe-pekere", "nabe-skrift", "nabo", "nabo-brodre", "nabo-fasit", "nabe-garderobe", "nabe-opptak", "nabe-trafikk", "nabe-besok", "nabe-fortsett", "nabe-simulator", "nabe-oppdatering", "nabe-bakover", "nabe-kart", "nabe-syn", "nabe-raad", "nabe-dialoger-innhold", "nabe-dialoger-mer", "nabe-dialoger", "nabe-tilbehor", "nabe-kunnskap", "nabe-spor"):
+    for fil in ("nabe-start", "nabe-verktoy", "nabe-felt", "nabe-moro", "nabe-finn", "nabe-skann", "nabe-anlegg", "nabe-bunn", "nabe-graf", "nabe-tunnel", "nabe-sammen", "nabe-flyt", "nabe-peker", "nabe-pekere", "nabe-skrift", "nabo", "nabo-brodre", "nabo-fasit", "nabe-garderobe", "nabe-opptak", "nabe-trafikk", "nabe-besok", "nabe-runde", "nabe-fortsett", "nabe-simulator", "nabe-oppdatering", "nabe-bakover", "nabe-kart", "nabe-syn", "nabe-raad", "nabe-dialoger-innhold", "nabe-dialoger-mer", "nabe-dialoger", "nabe-tilbehor", "nabe-kunnskap", "nabe-spor"):
         try:
             with urllib.request.urlopen(f"{BASE}/js/{fil}.js", timeout=5) as rr:
                 ok = rr.status == 200

@@ -199,6 +199,17 @@ const FAKTA = [
   ['COV betyr at regulatoren sier fra selv. Mindre spørring, mer ro.', 'COV means the controller speaks up itself. Less asking, more peace.'],
 ];
 const NYTT = {
+  '1.66': [
+    ['Siden sist: NABE husker anlegget når det er lest til ende, og sammenligner neste besøk med det. Nye alarmer, endrede settpunkt, overstyringer og enheter som ikke svarer lenger. Ligger i menyen under Verktøy', 'Since last visit: NABE remembers the plant once it is read to the end, and compares the next visit with it. New alarms, changed setpoints, overrides and devices that no longer answer. In the menu under Tools'],
+    ['Besøksrapport: ett ark med alarmer, feil, overstyringer, klokker, avvik fra settpunkt og notatene dine. Skriv ut eller lagre som PDF', 'Visit report: one sheet with alarms, faults, overrides, clocks, setpoint deviations and your notes. Print it or save it as PDF'],
+    ['Lagre alle verdiene til en fil før du endrer noe, og sammenlign anlegget med fila etterpå', 'Save every value to a file before you change anything, and compare the plant with the file afterwards'],
+    ['Overvåkingslista huskes per anlegg. Punktene du festet sist, ligger der når du skanner anlegget igjen', 'The watch list is remembered per plant. The points you pinned last time are there when you scan the plant again'],
+    ['Ctrl F finner nå enheter og handlinger, ikke bare punkter', 'Ctrl F now finds devices and actions, not only points'],
+    ['Kortet enhetene faktisk ligger bak blir hovedkort. Kortene står på én linje, og varselet om klokker ligger som et lite merke på anleggslinja', 'The adapter the devices are actually behind becomes the main one. The adapters sit on one line, and the clock warning is a small mark on the plant line'],
+    ['Leverandørfargen vises som en liten stolpe i stedet for en rund prikk, så den ikke forveksles med status', 'The vendor colour is a small bar instead of a round dot, so it is not mistaken for status'],
+    ['Statuslinja viser kortnavn og svartid. En treg lenke merkes på kortet', 'The status bar shows the adapter name and the response time. A slow link is marked on the adapter'],
+    ['Sikkerhet: forespørsler med et fremmed vertsnavn avvises', 'Security: requests with a foreign host name are rejected'],
+  ],
   '1.65': [
     ['Ukeprogram viser nå alle enhetene du har skannet, ikke bare den som er åpen. Enhetene leses i bakgrunnen noen om gangen, og lista fyller seg opp. Sortert på anlegg, så enhetsnavn (med tall i riktig rekkefølge), så navn på ur. «Denne enheten» gir den gamle visningen', 'Schedule now shows every device you have scanned, not only the open one. The devices are read in the background a few at a time, and the list fills in. Sorted by site, then device name (numbers in their natural order), then schedule name. "This device" gives the old view'],
     ['Anleggsstatus brettes sammen til én rolig linje med alarmer og feil, og åpnes ved å trykke på den. Den kan skjules med ✕ og slås på igjen i innstillinger', 'The plant status folds into one quiet line with alarms and faults, and opens when you click it. It can be hidden with ✕ and turned back on in Settings'],

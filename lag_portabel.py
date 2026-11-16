@@ -21,7 +21,7 @@ DIST = HER / "dist"
 MAPPE = DIST / "NABE"
 PY_KILDE = Path(getattr(sys, "_base_executable", sys.executable)).parent
 
-APPFILER = ["server.py", "bacnet_core.py", "app.js", "index.html", "requirements.txt",
+APPFILER = ["server.py", "bacnet_core.py", "app.js", "index.html", "nabe.css", "requirements.txt",
             "requirements-app.txt", "nabe_app.py", "nabe_ki_arbeider.py", "nabe_sim.py", "nabe_signatur.py", "nabe_oppdater.py"]
 # Det en kjørende NABE aldri bruker. Uten dette er Python fire ganger så stor.
 HOPP_OVER = {"test", "tests", "idlelib", "tkinter", "turtledemo", "ensurepip", "lib2to3",

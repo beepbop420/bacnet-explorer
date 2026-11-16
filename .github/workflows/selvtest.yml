@@ -1,0 +1,29 @@
+name: Selvtest
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  selvtest:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Avhengigheter
+        run: python -m pip install -r requirements.txt
+      - name: Syntaks
+        shell: bash
+        run: |
+          node --check app.js
+          for f in js/*.js; do node --check "$f"; done
+          python -m py_compile server.py bacnet_core.py selvtest.py
+      - name: Selvtest
+        run: python selvtest.py

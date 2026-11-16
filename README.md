@@ -146,7 +146,7 @@ trustworthy. The installer is a zip with a script rather than an unsigned
 |---|---|
 | `server.py` | FastAPI backend: scanning, reading, writing, COV, diagnostics |
 | `bacnet_core.py` | BACnet helpers on top of bacpypes3 |
-| `index.html`, `app.js` | The interface, one page |
+| `index.html`, `nabe.css`, `app.js` | The interface, one page |
 | `js/` | The rest of it: start screen, tools, field safety, and the jokes |
 | `nabe_app.py` | The desktop window around it |
 | `installasjon/` | The installer, uninstaller, icon and the terms |
