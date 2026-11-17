@@ -62,7 +62,9 @@
         <div class="mb-sek"><div class="mb-tittel">${T('ETS-lister', 'ETS lists')} <span class="sp-meta">${lister.length}</span></div>
           <div class="sp-meta">${T('Gruppeadressene fra ETS gir punktene navn og datapunkttype. Importer prosjektfilen (.knxproj, uten passord) eller CSV-eksporten av gruppeadresser.', 'The group addresses from ETS give the points a name and a datapoint type. Import the project file (.knxproj, no password) or the CSV export of group addresses.')}</div>
           ${lister.length ? `<table class="sp-tab"><tbody>${lister.map(k => `<tr><td>${esc(k.name)}</td><td class="sp-meta">${k.points} ${T('gruppeadresser', 'group addresses')}</td>
-            <td style="text-align:right"><button type="button" class="btn" data-kx="slett" data-id="${esc(k.id)}">${T('Slett', 'Delete')}</button></td></tr>`).join('')}</tbody></table>` : ''}
+            <td class="mb-knapper"><button type="button" class="btn" data-kx="last" data-id="${esc(k.id)}" title="${esc(T('Last ned lista som CSV, med endringene du har gjort i appen', 'Download the list as CSV, with the changes you made in the app'))}">${T('Last ned', 'Download')}</button>
+              <button type="button" class="btn" data-kx="oppdater" data-id="${esc(k.id)}" title="${esc(T('Velg en ny versjon av filen. Navn du har endret selv i appen beholdes, og du får se hva som er nytt.', 'Pick a new version of the file. Names you changed yourself in the app are kept, and you see what is new.'))}">${T('Oppdater …', 'Update …')}</button>
+              <button type="button" class="btn" data-kx="slett" data-id="${esc(k.id)}">${T('Slett', 'Delete')}</button></td></tr>`).join('')}</tbody></table>` : ''}
           <div class="op-knapper"><button type="button" class="btn primary" data-kx="importer">${T('Importer ETS-liste …', 'Import ETS list …')}</button></div>
           <input type="file" id="kxFil" accept=".knxproj,.csv,.txt,.zip" hidden></div>
       </div></div>`;
@@ -132,14 +134,27 @@
     } catch (e) { sett(e.message); }
   }
 
+  async function lastNed(id) {
+    const d = await api2('/api/knx/lister/innhold?id=' + encodeURIComponent(id));
+    if (d.status !== 'done') { toast(d.error || T('Kunne ikke hente lista', 'Could not fetch the list'), true); return; }
+    const ga = (n) => `${n >> 11}/${(n >> 8) & 7}/${n & 255}`;
+    const rader = ['Group name;Address;Datapoint Type;Description'].concat(d.punkter.map(p => [p.name, ga(p.ga), p.dpt || '', p.description || ''].map(x => String(x).replace(/[;\r\n]+/g, ' ')).join(';')));
+    downloadText(rader.join('\r\n') + '\r\n', d.navn.replace(/[^\w.-]+/g, '_') + '.csv');
+  }
+
+  let oppdaterNavn = '';     // set when a file is picked to replace a list that is already there
+
   async function importer(fil) {
     if (!fil) return;
     if (fil.size > 40_000_000) { toast(T('Filen er for stor', 'The file is too large'), true); return; }
-    const navn = fil.name.replace(/\.[^.]+$/, '');
+    const navn = oppdaterNavn || fil.name.replace(/\.[^.]+$/, '');
+    oppdaterNavn = '';
     const d = await api2('/api/knx/lister', {navn, innhold: base64(await fil.arrayBuffer()), filnavn: fil.name});
     if (d.status !== 'done') { toast(d.error || T('Kunne ikke lese ETS-lista', 'Could not read the ETS list'), true); return; }
-    toast(T(`ETS-lista «${navn}» importert: ${d.punkter} gruppeadresser.`, `ETS list "${navn}" imported: ${d.punkter} group addresses.`));
+    toast(d.endringer ? T(`ETS-lista «${navn}» oppdatert: ${d.punkter} gruppeadresser.`, `ETS list "${navn}" updated: ${d.punkter} group addresses.`)
+      : T(`ETS-lista «${navn}» importert: ${d.punkter} gruppeadresser.`, `ETS list "${navn}" imported: ${d.punkter} group addresses.`));
     await hentLister(); tegn();
+    if (d.endringer && window.nabeListeEndringer) sett(window.nabeListeEndringer(d.endringer).join('\n'));
   }
 
   async function tilordne(adr, id) {
@@ -212,7 +227,9 @@
     const k = b.dataset.kx;
     if (k === 'skann') skann();
     else if (k === 'routing') lyttRouting();
-    else if (k === 'importer') $('kxFil').click();
+    else if (k === 'importer') { oppdaterNavn = ''; $('kxFil').click(); }
+    else if (k === 'last') lastNed(b.dataset.id);
+    else if (k === 'oppdater') { oppdaterNavn = (lister.find(l => l.id === b.dataset.id) || {}).name || ''; $('kxFil').click(); }
     else if (k === 'lesalle') lesAlle(b.dataset.adr);
     else if (k === 'monitor') aapneMonitor(b.dataset.adr);
     else if (k === 'aapne') { lukk(); selectDevice(b.dataset.adr); }

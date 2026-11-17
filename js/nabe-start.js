@@ -28,6 +28,8 @@ async function fyllAlarmer() {
   const boks = document.getElementById('alarmSect');
   const d = S.activeDev;
   if (!boks || !d) return;
+  // KNX and Modbus have no alarm list to ask for, and their points carry no status flags: the box would only say nothing was found.
+  if (d.protocol === 'knx' || d.protocol === 'modbus') { boks.hidden = true; return; }
   let data = ALARM_CACHE[d.address];
   if (!data || Date.now() - data.t > 60000) {
     try {
@@ -203,6 +205,11 @@ const FAKTA = [
   ['COV betyr at regulatoren sier fra selv. Mindre spørring, mer ro.', 'COV means the controller speaks up itself. Less asking, more peace.'],
 ];
 const NYTT = {
+  '2.6': [
+    ['ETS-lister og registerkart kan oppdateres: velg en ny versjon av filen, så får du se hva som er nytt, omdøpt og borte, og navn og skala du har endret selv i appen beholdes. Kartene kan lastes ned igjen som CSV med endringene', 'ETS lists and register maps can be updated: pick a new version of the file and you see what is new, renamed and gone, while names and scales you changed yourself in the app are kept. The maps can be downloaded again as CSV with the changes'],
+    ['Skjemaet: pumper og ventiler på kurser står på røret beskrivelsen sier (tur eller retur), og innstillinger, moduser og romventiler tegnes ikke lenger som deler av kursen. Aggregater med varmegjenvinner får en velger for roterende, kryss eller væskekoblet veksler, husket per anlegg', 'The schematic: pumps and valves on circuits sit on the pipe the description names (flow or return), and settings, modes and room valves are no longer drawn as parts of the circuit. Air handlers with heat recovery get a choice of rotary, cross-flow or liquid-coupled exchanger, remembered per plant'],
+    ['KNX og Modbus: bedre på smal skjerm, ukjente gruppeadresser vises ikke lenger som meningsløse tall, KNX-enheter viser ikke lenger «baud», og alarmboksen skjules der protokollen ikke har alarmer', 'KNX and Modbus: better on a narrow screen, unknown group addresses no longer show as meaningless numbers, KNX devices no longer say "baud", and the alarm box is hidden where the protocol has no alarms'],
+  ],
   '2.5': [
     ['Modbus: registerkart kan leses fra Excel og fra Niagaras eksport av Modbus-punkter, Modicon-adresser som 40012 forstås, punkter kan få nytt navn, skala og enhet i appen, og en enhet av en kjent type får kartet sitt igjen ved neste skann. Ledige Modbus-forbindelser lukkes etter noen minutter', 'Modbus: register maps can be read from Excel and from the Niagara export of Modbus points, Modicon addresses like 40012 are understood, points can be renamed, rescaled and given a unit in the app, and a device of a known type gets its map back at the next scan. Idle Modbus connections are closed after a few minutes'],
     ['KNX: rom i ETS-navn som 563.9-303-RT601 vises som romkort i skjemaet, med temperatur, settpunkt, varmepådrag, CO2 og lux. Gruppeadresser kan få nytt navn og datapunkttype i appen. Telegrammonitor som i ETS, og alder på hver verdi («hørt for 3 timer siden»). Uten verdi skjules som standard, for KNX og for Modbus uten kart', 'KNX: rooms in ETS names like 563.9-303-RT601 show as room cards in the schematic, with temperature, setpoint, heating output, CO2 and lux. Group addresses can be renamed and given a datapoint type in the app. A telegram monitor like the one in ETS, and the age of each value ("heard 3 hours ago"). Points without a value are hidden by default, for KNX and for Modbus without a map'],

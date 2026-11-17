@@ -82,11 +82,13 @@
         <div class="mb-sek"><div class="mb-tittel">${T('Registerkart', 'Register maps')} <span class="sp-meta">${kart.length}</span></div>
           <div class="sp-meta">${T('Et registerkart gir registrene navn, type, skalering og enhet. CSV, Excel (.xlsx), JSON, Regin EXOL-lister og Niagara-eksport av Modbus-punkter.', 'A register map gives the registers a name, type, scale and unit. CSV, Excel (.xlsx), JSON, Regin EXOL lists and Niagara exports of Modbus points.')}</div>
           ${kart.length ? `<table class="sp-tab"><tbody>${kart.map(k => `<tr><td>${esc(k.name)}</td><td class="sp-meta">${k.points} ${T('punkter', 'points')}</td>
-            <td style="text-align:right"><button type="button" class="btn" data-mb="slett" data-id="${esc(k.id)}">${T('Slett', 'Delete')}</button></td></tr>`).join('')}</tbody></table>` : ''}
+            <td class="mb-knapper"><button type="button" class="btn" data-mb="last" data-id="${esc(k.id)}" title="${esc(T('Last ned kartet som CSV, med endringene du har gjort i appen', 'Download the map as CSV, with the changes you made in the app'))}">${T('Last ned', 'Download')}</button>
+              <button type="button" class="btn" data-mb="oppdater" data-id="${esc(k.id)}" title="${esc(T('Velg en ny versjon av filen. Endringer du har gjort selv i appen beholdes, og du får se hva som er nytt.', 'Pick a new version of the file. Changes you made yourself in the app are kept, and you see what is new.'))}">${T('Oppdater …', 'Update …')}</button>
+              <button type="button" class="btn" data-mb="slett" data-id="${esc(k.id)}">${T('Slett', 'Delete')}</button></td></tr>`).join('')}</tbody></table>` : ''}
           <div class="mb-rad mb-valg"><label>${T('Adresser teller fra', 'Addresses count from')}
               <select class="field" id="mbBase"><option value="">${T('Auto', 'Auto')}</option><option value="0">0</option><option value="1">1</option></select></label>
             <label>${T('Reelle verdier (Regin R)', 'Reals (Regin R)')}
-              <select class="field" id="mbSkala"><option value="0.1">× 0,1</option><option value="1">× 1</option><option value="0.01">× 0,01</option></select></label></div>
+              <select class="field" id="mbSkala"><option value="0.1">× ${T('0,1', '0.1')}</option><option value="1">× 1</option><option value="0.01">× ${T('0,01', '0.01')}</option></select></label></div>
           <div class="sp-meta mb-notater" id="mbNotater">${(notater || []).map(n => `<div>${esc(n)}</div>`).join('')}</div>
           <div class="op-knapper"><button type="button" class="btn" data-mb="mal">${T('Last ned mal', 'Download template')}</button>
             <button type="button" class="btn primary" data-mb="importer">${T('Importer registerkart …', 'Import register map …')}</button></div>
@@ -154,19 +156,48 @@
     } catch (e) { sett(e.message); }
   }
 
+  let oppdaterNavn = '';     // set when a file is picked to replace a map that is already there
+
   async function importer(fil) {
     if (!fil) return;
     if (fil.size > 6_000_000) { toast(T('Filen er for stor', 'The file is too large'), true); return; }
     const buf = new Uint8Array(await fil.arrayBuffer());
     let s = ''; for (let i = 0; i < buf.length; i += 0x8000) s += String.fromCharCode.apply(null, buf.subarray(i, i + 0x8000));
     const innhold = btoa(s);
-    const navn = fil.name.replace(/\.[^.]+$/, '');
+    const navn = oppdaterNavn || fil.name.replace(/\.[^.]+$/, '');
+    oppdaterNavn = '';
     const base = $('mbBase') ? $('mbBase').value : '';
     const d = await api2('/api/modbus/kart', {navn, innhold, filnavn: fil.name, base: base === '' ? null : parseInt(base, 10), real_skala: parseFloat($('mbSkala') ? $('mbSkala').value : '0.1') || 0.1});
     if (d.status !== 'done') { notater = []; toast(d.error || T('Kunne ikke lese registerkartet', 'Could not read the register map'), true); await hentKart(); tegn(); return; }
-    notater = d.merknader || [];
-    toast(T(`Registerkart «${navn}» importert: ${d.punkter} punkter.`, `Register map "${navn}" imported: ${d.punkter} points.`));
+    notater = [...window.nabeListeEndringer(d.endringer), ...(d.merknader || [])];
+    toast(d.endringer ? T(`Registerkart «${navn}» oppdatert: ${d.punkter} punkter.`, `Register map "${navn}" updated: ${d.punkter} points.`)
+      : T(`Registerkart «${navn}» importert: ${d.punkter} punkter.`, `Register map "${navn}" imported: ${d.punkter} points.`));
     await hentKart(); tegn();
+  }
+
+  /* What a re-imported list changed: a summary line, then a few examples of each kind. Shared with the KNX window. */
+  window.nabeListeEndringer = function (e) {
+    if (!e) return [];
+    const rader = [];
+    const sum = [];
+    if (e.nye.antall) sum.push(T(`${e.nye.antall} nye`, `${e.nye.antall} new`));
+    if (e.omdopt.antall) sum.push(T(`${e.omdopt.antall} omdøpt`, `${e.omdopt.antall} renamed`));
+    if (e.borte.antall) sum.push(T(`${e.borte.antall} borte`, `${e.borte.antall} gone`));
+    rader.push((sum.length ? T('Lista er oppdatert: ', 'The list is updated: ') + sum.join(', ') + '.' : T('Lista er oppdatert, ingen forskjell.', 'The list is updated, no difference.'))
+      + (e.beholdt ? ' ' + T(`${e.beholdt} egne endringer er beholdt.`, `${e.beholdt} of your own changes are kept.`) : ''));
+    for (const [k, tittel] of [['nye', T('Nye', 'New')], ['omdopt', T('Omdøpt', 'Renamed')], ['borte', T('Borte', 'Gone')]]) {
+      if (e[k].antall) rader.push(`${tittel}: ${e[k].eksempler.join(' · ')}${e[k].antall > e[k].eksempler.length ? ' …' : ''}`);
+    }
+    return rader;
+  };
+
+  async function lastNed(id) {
+    const d = await api2('/api/modbus/kart/innhold?id=' + encodeURIComponent(id));
+    if (d.status !== 'done') { toast(d.error || T('Kunne ikke hente kartet', 'Could not fetch the map'), true); return; }
+    const tall = (v) => String(v).replace('.', ',');
+    const rader = ['address;function;type;name;scale;unit;description;order;bit;offset'].concat(d.punkter.map(p => [p.address, p.function, p.type, p.name, tall(p.scale), p.unit, p.description,
+      p.order === 'ABCD' ? '' : p.order, p.bit === null || p.bit === undefined ? '' : p.bit, p.offset ? tall(p.offset) : ''].map(x => String(x ?? '').replace(/[;\r\n]+/g, ' ')).join(';')));
+    downloadText(rader.join('\r\n') + '\r\n', d.navn.replace(/[^\w.-]+/g, '_') + '.csv');
   }
 
   async function tilordne(adr, id) {
@@ -186,7 +217,9 @@
     if (!b) return;
     const k = b.dataset.mb;
     if (k === 'skann') skann();
-    else if (k === 'importer') $('mbFil').click();
+    else if (k === 'importer') { oppdaterNavn = ''; $('mbFil').click(); }
+    else if (k === 'last') lastNed(b.dataset.id);
+    else if (k === 'oppdater') { oppdaterNavn = (kart.find(m => m.id === b.dataset.id) || {}).name || ''; $('mbFil').click(); }
     else if (k === 'mal') downloadText(MAL, 'nabe-modbus-registerkart-mal.csv');
     else if (k === 'utforsk') utforsk(b.dataset.adr);
     else if (k === 'aapne') { lukk(); selectDevice(b.dataset.adr); }

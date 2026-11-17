@@ -5148,8 +5148,11 @@ tbody tr.fault td.c-act::before{content:'';position:absolute;left:0;top:2px;bott
 .mb-sek{display:flex;flex-direction:column;gap:10px;padding:6px 0 20px}
 .mb-sek + .mb-sek{border-top:1px solid var(--line);padding-top:20px}
 .mb-tittel{font-size:13px;font-weight:600}
-.mb-rad{display:flex;gap:8px;align-items:center}
-.mb-rad .field:first-child{flex:1}
+.mb-rad{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.mb-knapper{text-align:right}
+.mb-knapper .btn{margin-left:6px;margin-top:2px}
+.mb-rad[hidden]{display:none}
+.mb-rad .field:first-child{flex:1;min-width:150px}
 .mb-port{width:84px}
 .mb-kart{min-width:170px}
 .mb-valg{gap:16px;flex-wrap:wrap}
@@ -5220,6 +5223,11 @@ button.sp-rad:hover{background:var(--hover)}
 .sk-kanal.avtrekk{fill:var(--sk-avt);stroke:var(--sk-avt)}
 .sk-kanal.avkast{fill:var(--sk-avk);stroke:var(--sk-avk)}
 .sk-ror{stroke-width:3;stroke-linecap:round;fill:none}
+.sk-veksler{display:inline-flex;align-items:center;gap:4px;margin:0 12px 0 16px}
+.sk-veksler .sk-vtekst{padding-right:4px;font-size:11px;color:var(--fg-3)}
+.sk-veksler button{height:26px;padding:0 11px;border:1px solid var(--line);border-radius:var(--r-pill);background:transparent;color:var(--fg-2);font:inherit;font-size:12px;cursor:pointer;white-space:nowrap;transition:border-color .15s,color .15s,background .15s}
+.sk-veksler button:hover{border-color:var(--fg-3);color:var(--fg)}
+.sk-veksler button.sel{background:var(--raised);border-color:var(--line-2);color:var(--fg);font-weight:500}
 .sk-ror.tur.varme{stroke:var(--sk-v-tur)}
 .sk-ror.retur.varme{stroke:var(--sk-v-ret)}
 .sk-ror.tur.kjol{stroke:var(--sk-k-tur)}
@@ -5411,3 +5419,5 @@ body.liste-smal #devList .dev.st-feil > .dev-smal,body.sk-stor #devList .dev.st-
 .rd-rad > span{font-size:12px;color:var(--fg-2)}
 .rd-rad small{font-size:11px;color:var(--fg-3)}
 .rd-knapp{margin-left:auto;height:26px;padding:0 10px;font-size:12px}
+#kxMelding{white-space:pre-line}
+.mb-modal .sp-tab{display:block;max-width:100%;overflow-x:auto}

@@ -651,6 +651,50 @@ class GroupStore:
                                                            ensure_ascii=False), encoding="utf-8")
         return slug
 
+    # --- what the technician changed by hand, kept apart from the list so a new export does not wipe it
+    def _egne(self) -> Dict[str, Dict[str, Dict[str, Any]]]:
+        try:
+            return json.loads((self.folder / "egne.json").read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return {}
+
+    def _noter_egen(self, lid: str, ga: int, changes: Dict[str, Any]) -> None:
+        e = self._egne()
+        e.setdefault(lid, {}).setdefault(str(ga), {}).update(changes)
+        self.folder.mkdir(parents=True, exist_ok=True)
+        (self.folder / "egne.json").write_text(json.dumps(e, ensure_ascii=False), encoding="utf-8")
+
+    def save_merge(self, name: str, parsed: Dict[str, Any]) -> Tuple[str, Optional[Dict[str, Any]]]:
+        """Save a list. When a list of that name exists the new one replaces it, the hand-made changes are laid over it again,
+        and what differs is returned: new addresses, ones that are gone, ones that were renamed, and how many own names were kept."""
+        slug = re.sub(r"[^A-Za-z0-9_.-]+", "_", (name or parsed.get("name") or "ets").strip()).strip("_") or "ets"
+        gammel = self.load(slug)
+        egne = self._egne().get(slug, {})
+        pts = [dict(p) for p in parsed["points"]]
+        diff = None
+        if gammel is not None:
+            old = {p["ga"]: p for p in gammel["points"]}
+            new = {p["ga"]: p for p in pts}
+            eg = {int(k) for k in egne}
+            diff = {"nye": [f"{ga_text(g)} {new[g]['name']}" for g in sorted(new) if g not in old],
+                    "borte": [f"{ga_text(g)} {old[g]['name']}" for g in sorted(old) if g not in new and g not in eg],
+                    "omdopt": [f"{ga_text(g)} {old[g]['name']} → {new[g]['name']}" for g in sorted(new) if g in old and g not in eg and old[g]["name"] != new[g]["name"]],
+                    "beholdt": 0}
+        by = {p["ga"]: p for p in pts}
+        for k, ch in egne.items():
+            ga = int(k)
+            p = by.get(ga)
+            if p is None:
+                p = {"ga": ga, "name": ga_text(ga), "dpt": "", "description": ""}
+                pts.append(p)
+                by[ga] = p
+            p.update(ch)
+            if diff is not None:
+                diff["beholdt"] += 1
+        parsed = {**parsed, "points": sorted(pts, key=lambda x: x["ga"])}
+        self.save(name, parsed)
+        return slug, diff
+
     def list_all(self) -> List[Dict[str, Any]]:
         out = []
         for f in sorted(self.lists.glob("*.json")) if self.lists.exists() else []:
@@ -703,6 +747,7 @@ class GroupStore:
         if "dpt" in changes:
             t = parse_dpt(changes["dpt"])
             p["dpt"] = f"{t[0]}.{t[1]:03d}" if t[0] else ""
+        self._noter_egen(lid, ga, {k: p[k] for k in ("name", "description", "dpt") if k in changes})
         self.lists.mkdir(parents=True, exist_ok=True)
         (self.lists / f"{lid}.json").write_text(json.dumps({"name": d["name"], "points": sorted(pts, key=lambda x: x["ga"])}, ensure_ascii=False), encoding="utf-8")
         self.assign(address, lid)

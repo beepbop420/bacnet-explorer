@@ -1481,8 +1481,8 @@ function renderDevices() {
         ${devStatus(d)}
       </span>
       <span class="dev-l2">
-        <span class="dev-ip">${esc(d.serial ? d.ip + ' ' + d.port + ' baud' : d.protocol === 'modbus' || d.protocol === 'knx' ? d.ip + ':' + d.port : d.address)}</span>
-        <span class="dev-id${dup ? ' dup' : ''}"${dup ? ` title="${T('Flere enheter svarer på denne ID-en', 'Several devices answer to this ID')}"` : ''}>${d.protocol === 'modbus' ? (d.serial ? 'RTU ' : d.address.startsWith('mr:') ? 'RTU ' : 'MB ') + d.unit : d.protocol === 'knx' ? 'KNX' : (d.device_instance ?? '?')}</span>
+        <span class="dev-ip">${esc(d.serial === true ? d.ip + ' ' + d.port + ' baud' : d.protocol === 'modbus' || d.protocol === 'knx' ? d.ip + ':' + d.port : d.address)}</span>
+        <span class="dev-id${dup ? ' dup' : ''}"${dup ? ` title="${T('Flere enheter svarer på denne ID-en', 'Several devices answer to this ID')}"` : ''}>${d.protocol === 'modbus' ? (d.serial === true ? 'RTU ' : d.address.startsWith('mr:') ? 'RTU ' : 'MB ') + d.unit : d.protocol === 'knx' ? 'KNX' : (d.device_instance ?? '?')}</span>
         ${gruppert ? '' : `<span class="dev-lev">${esc(v.label)}</span>`}
         ${kortChip(d)}
         ${presenceTag(d)}

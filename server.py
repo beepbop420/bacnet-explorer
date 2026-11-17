@@ -235,7 +235,7 @@ def t(nb: str, en: str) -> str:
     return en if SPRAAK_VAR.get() == "en" else nb
 
 
-VERSJON = "2.5"
+VERSJON = "2.6"
 
 state = {"app": None, "local_address": None, "read_only": False, "bbmd": None, "primary": None}
 # The simulator: a scanned site run as devices on 127.0.0.x, in a process of its own.
@@ -5716,9 +5716,25 @@ async def modbus_utforsk(body: ModbusUtforsk):
     return {"status": "started", "job_id": job["id"]}
 
 
+def _diff_kort(diff: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    """What a re-imported list changed, with at most six examples of each kind. None when the list is new."""
+    if diff is None:
+        return None
+    return {k: ({"antall": len(v), "eksempler": v[:6]} if isinstance(v, list) else v) for k, v in diff.items()}
+
+
 @app.get("/api/modbus/kart")
 def modbus_kart():
     return {"status": "done", "kart": MODBUS_KART.list_maps(), "tilordning": MODBUS_KART.assignments()}
+
+
+@app.get("/api/modbus/kart/innhold")
+def modbus_kart_innhold(id: str):
+    """The points of a stored register map, for downloading it again with the changes made in the app."""
+    m = MODBUS_KART.load_map(id)
+    if m is None:
+        return {"status": "error", "error": t("Ukjent registerkart", "Unknown register map")}
+    return {"status": "done", "navn": m["name"], "punkter": m["points"]}
 
 
 class ModbusKartBody(BaseModel):
@@ -5744,9 +5760,9 @@ def modbus_kart_lagre(body: ModbusKartBody):
         parsed = nm.parse_map_bytes(data, body.filnavn, base=body.base if body.base in (0, 1) else None, real_scale=body.real_skala or 0.1)
     except (nm.MapError, ValueError) as e:
         return {"status": "error", "error": str(e)}
-    kid = MODBUS_KART.save_map(body.navn, parsed)
+    kid, diff = MODBUS_KART.save_merge(body.navn, parsed)
     return {"status": "done", "id": kid, "punkter": len(parsed["points"]), "base": parsed["base"], "merknader": parsed["notes"],
-            "format": parsed["format"]}
+            "format": parsed["format"], "endringer": _diff_kort(diff)}
 
 
 class ModbusTilordne(BaseModel):
@@ -5959,7 +5975,14 @@ def _knx_dpt(punkt: Dict[str, Any], tel: Optional[Dict[str, Any]]):
 def _knx_verdi(punkt: Dict[str, Any], tel: Optional[Dict[str, Any]]) -> Any:
     if tel is None:
         return None
-    return nkx.decode(_knx_dpt(punkt, tel)[0], tel["raw"], tel["small"])
+    dpt = _knx_dpt(punkt, tel)[0]
+    if not dpt[0]:
+        # Nothing says what it is: a byte is a number, two bytes are most often a float, and anything longer is left alone
+        # rather than shown as a number that means nothing.
+        if len(tel["raw"]) > 2:
+            return None
+        dpt = (5, 10) if len(tel["raw"]) == 1 else (9, 0)
+    return nkx.decode(dpt, tel["raw"], tel["small"])
 
 
 def _knx_punkter(address: str, tun: Optional["nkx.KnxTunnel"]) -> List[Dict[str, Any]]:
@@ -5974,7 +5997,7 @@ def _knx_punkter(address: str, tun: Optional["nkx.KnxTunnel"]) -> List[Dict[str,
         if tel is not None:
             rec["sist"] = tel["t"]
         if gjettet:
-            rec["description"] = (p.get("description") or p["name"]) + t(" (type antatt: ", " (type guessed: ") + f"{dpt[0]}.{dpt[1]:03d})"
+            rec["description"] = (p.get("description") or f"KNX {nkx.ga_text(p['ga'])}") + t(" (type antatt: ", " (type guessed: ") + f"{dpt[0]}.{dpt[1]:03d})"
             rec["knx"]["dpt_gjettet"] = f"{dpt[0]}.{dpt[1]:03d}"
         if tel is None:
             rec["unread"] = True
@@ -5982,8 +6005,19 @@ def _knx_punkter(address: str, tun: Optional["nkx.KnxTunnel"]) -> List[Dict[str,
     if tun:
         for ga, tel in sorted(tun.values.items()):
             if ga not in kjent:
-                rec = nkx.point_for(ga, "", (0, 0), t("Hørt på bussen, ikke i ETS-lista", "Heard on the bus, not in the ETS list"),
-                                    _knx_verdi({"dpt": ""}, tel))
+                # Nothing says what it is. One or two bytes can be guessed at; longer ones are shown as they are, not as a number
+                # that means nothing.
+                dpt, gjettet = _knx_dpt({"dpt": "", "name": ""}, tel)
+                kort = len(tel["raw"]) <= 2
+                verdi = _knx_verdi({"dpt": "", "name": ""}, tel)
+                tekst = t("Hørt på bussen, ikke i ETS-lista", "Heard on the bus, not in the ETS list")
+                if not kort:
+                    tekst += f" · {tel['raw'].hex(' ')}"
+                rec = nkx.point_for(ga, "", dpt if dpt[0] else (0, 0), tekst, verdi)
+                if verdi is None:
+                    rec["unread"] = True
+                else:
+                    rec["sist"] = tel["t"]
                 ut.append(rec)
     return ut
 
@@ -6215,6 +6249,15 @@ class KnxListeBody(BaseModel):
     filnavn: str = ""
 
 
+@app.get("/api/knx/lister/innhold")
+def knx_liste_innhold(id: str):
+    """The group addresses of a stored list, for downloading it again with the changes made in the app."""
+    d = KNX_LISTER.load(id)
+    if d is None:
+        return {"status": "error", "error": t("Ukjent gruppeliste", "Unknown group list")}
+    return {"status": "done", "navn": d.get("name") or id, "punkter": d["points"]}
+
+
 @app.post("/api/knx/lister")
 def knx_liste_lagre(body: KnxListeBody):
     """Import the group addresses of an ETS project (.knxproj without password) or a CSV export."""
@@ -6229,8 +6272,8 @@ def knx_liste_lagre(body: KnxListeBody):
         parsed = nkx.parse_group_list(data, body.filnavn)
     except nkx.KnxError as e:
         return {"status": "error", "error": str(e)}
-    lid = KNX_LISTER.save(body.navn, parsed)
-    return {"status": "done", "id": lid, "punkter": len(parsed["points"])}
+    lid, diff = KNX_LISTER.save_merge(body.navn, parsed)
+    return {"status": "done", "id": lid, "punkter": len(parsed["points"]), "endringer": _diff_kort(diff)}
 
 
 class KnxTilordne(BaseModel):

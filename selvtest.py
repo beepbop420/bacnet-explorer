@@ -347,6 +347,13 @@ def royktest():
               "    P('563.9-99999-RT601 Er-temperatur SDw', 19, 'degrees-celsius')]);"
               "  const rom = sys.flatMap(s => [...s.romData.values()]), r = rom.find(x => x.rom === '303');"
               "  return !!r && r.sys === '563.9' && r.temp.value === 21.5 && r.tempSp.value === 21 && r.varme.value === 40 && r.lux.value === 300 && rom.some(x => x.rom === '303/304') && rom.length === 2; })(),"
+              " kurs: (() => { const P = (n, d, v, u, t) => ({objid: n, name: n, description: d, type: t || 'analog-input', value: v, units: u || ''});"
+              "  const sys = nabeSkjema.byggSystemer([P('320.001-RT401', 'Temperaturføler Tur hovedstokk', 70, 'degrees-celsius'), P('320.001-RT501', 'Temperaturføler Retur hovedstokk', 50, 'degrees-celsius'),"
+              "    P('320.001-RT405', 'Hysterese start el.kjele vinter', 5, 'degrees-celsius'), P('320.001-JP401', 'Sirkulasjonspumpe hovedstokk', 1, '', 'binary-input'),"
+              "    P('320.001-JP402', 'Settpunkt varmepumpe', 1, '', 'binary-input'), P('320.001-SB501', '1=Av 2=Manuell 3=Auto', 3, '', 'analog-value'), P('320.001-SB502', 'Ventilmotor hovedstokk', 40, 'percent', 'analog-output')]);"
+              "  const svg = nabeSkjema.tegnKurser(sys.filter(x => x.type === 'varme'), 'varme').svg;"
+              "  return /RT401/.test(svg) && !/RT405/.test(svg) && !/SB501/.test(svg) && /SB502/.test(svg) && !/JP402/.test(svg); })(),"
+              " veksler: (() => { const a = nabeSkjema.tegnAggregat; return typeof a === 'function'; })(),"
               " modbus: typeof aapneModbus === 'function' && !!document.getElementById('modbusBtn'),"
               " bussfilter: typeof alderTekst === 'function' && S.filters.medVerdi === false && !!document.getElementById('fMedVerdi') && /min/.test(alderTekst(Date.now() / 1000 - 300)),"
               " knx: typeof aapneKnx === 'function' && !!document.getElementById('knxBtn'),"
@@ -1266,6 +1273,32 @@ def knx_monitor():
           f"{len(po['values'].get(adr, {}))} verdier, {len(tider)} tider")
 
 
+def ny_liste():
+    """A list imported again under the same name: what differs is said, and the names made by hand stay."""
+    import base64
+    import nabe_knx as nk
+    csv1 = b"Group name;Address\r\nTemp;7/1/1\r\nLys;7/1/2\r\nGammel;7/1/3\r\n"
+    csv2 = b"Group name;Address\r\nTemp ny;7/1/1\r\nLys;7/1/2\r\nNy;7/1/4\r\n"
+    k1 = kall("/api/knx/lister", {"navn": "Ny liste test", "innhold": base64.b64encode(csv1).decode(), "filnavn": "a.csv"})
+    sjekk("liste: første import har ingen sammenligning", k1.get("status") == "done" and k1.get("endringer") is None, str(k1))
+    jk = vent_jobb(kall("/api/knx/scan", {"subnet": "127.0.0.1", "port": KXSIM.port, "timeout": 1.5})["job_id"])
+    adr = jk["result"]["devices"][0]["address"]
+    kall("/api/knx/tilordne", {"address": adr, "liste": k1["id"]})
+    kall("/api/knx/punkt", {"address": adr, "objid": "analog-value,%d" % nk.parse_ga("7/1/2"), "felter": {"name": "Min lampe"}})
+    k2 = kall("/api/knx/lister", {"navn": "Ny liste test", "innhold": base64.b64encode(csv2).decode(), "filnavn": "b.csv"})
+    e = k2.get("endringer") or {}
+    sjekk("liste: ny import sier hva som er nytt, omdøpt og borte, og beholder navn gjort for hånd",
+          e.get("nye", {}).get("antall") == 1 and e.get("borte", {}).get("antall") == 1 and e.get("omdopt", {}).get("antall") == 1 and e.get("beholdt") == 1, str(k2))
+    inn = kall("/api/knx/lister/innhold?id=" + k2["id"])
+    sjekk("liste: lista kan hentes ut igjen med endringene", inn.get("status") == "done" and any(p["name"] == "Min lampe" for p in inn.get("punkter", [])), str(inn)[:160])
+    mk = kall("/api/modbus/kart", {"navn": "Eksport", "tekst": "address;function;type;name;scale\n0;holding;s16;Temperatur;0,1\n"})
+    mi = kall("/api/modbus/kart/innhold?id=" + mk["id"])
+    sjekk("liste: registerkartet kan hentes ut igjen", mi.get("status") == "done" and mi["punkter"][0]["name"] == "Temperatur" and abs(mi["punkter"][0]["scale"] - 0.1) < 1e-9, str(mi)[:160])
+    pp = vent_jobb(kall("/api/device/points", {"address": adr, "device_instance": 1})["job_id"], 90)
+    navn = {x["objid"]: x["name"] for x in pp["result"]["points"]}
+    sjekk("liste: det egne navnet ligger i den nye lista", navn.get("analog-value,%d" % nk.parse_ga("7/1/2")) == "Min lampe" and navn.get("analog-value,%d" % nk.parse_ga("7/1/1")) == "Temp ny", str(navn)[:200])
+
+
 def knx_routing():
     """Routing: listening to the multicast group, with no tunnel taken and nothing sent."""
     import socket
@@ -1434,6 +1467,7 @@ def kjor_tester():
     modbus_ledig()
     knx_monitor()
     knx_routing()
+    ny_liste()
     modbus_import()
     redigering()
     flere_kort()

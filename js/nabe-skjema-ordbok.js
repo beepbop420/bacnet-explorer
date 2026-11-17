@@ -42,7 +42,7 @@ const SKJEMA_ORDBOK = {
     [/varmebatteri|ettervarme|heating\s*coil|heat\s*coil|\bheater\b|\bheatcv|heating y\d|re\s*-?\s*heat|pre\s*-?\s*heat|preheater|\bheat\s*(valve|input|output)\b|\bheat\s*water/, 'varmebatteri'],
     [/kjølebatteri|kjolebatteri|cooling\s*coil|cool\s*coil|\bcooler\b|\bcoolcv|cool\s*(input|output|valve|level)|\bcooling\b|\bchilled\b|\bcw\b|cool\w*\s*water/, 'kjolebatteri'],
     [/tilluftsvifte|avtrekksvifte|vifte|\bsaf\b|\beaf\b|\bfan\b|ventilator|\bmtr\s*fan|\bblower\b|\bmotor\b|\bmtr\b/, 'vifte'],
-    [/sirkulasjonspumpe|sirk\.?\s*pumpe|pumpe|\bpump/, 'pumpe'],
+    [/sirkulasjonspumpe|sirk\.?\s*pumpe|(?<!varme)pumpe|\bpump(?!\s*varme)/, 'pumpe'],
     [/ekspansjon|expansion/, 'ekspansjon'],
     [/stengeventil|serviceventil|sperreventil|avstengningsventil|shut-?off|isolation valve|isolasjonsventil/, 'stengeventil'],
     [/ventilmotor|reguleringsventil|varmeventil|ventil(?!asjon)|\bvalve/, 'ventil'],

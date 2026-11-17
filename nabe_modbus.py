@@ -1009,6 +1009,44 @@ class MapStore:
         (self.maps / f"{slug}.json").write_text(json.dumps({"name": name or slug, "points": parsed["points"]}, ensure_ascii=False, indent=1), encoding="utf-8")
         return slug
 
+    # --- what the technician changed by hand, kept apart from the map so a new export does not wipe it
+    def _egne(self) -> Dict[str, Dict[str, Dict[str, Any]]]:
+        try:
+            return json.loads((self.maps.parent / "egne.json").read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return {}
+
+    def _noter_egen(self, mid: str, objid: str, changes: Dict[str, Any]) -> None:
+        e = self._egne()
+        e.setdefault(mid, {}).setdefault(objid, {}).update(changes)
+        self._ensure()
+        (self.maps.parent / "egne.json").write_text(json.dumps(e, ensure_ascii=False), encoding="utf-8")
+
+    def save_merge(self, name: str, parsed: Dict[str, Any]) -> Tuple[str, Optional[Dict[str, Any]]]:
+        """Save a map. When a map of that name exists the new one replaces it, the changes made by hand in the app are laid over it
+        again, and what differs is returned: new registers, ones that are gone, ones that were renamed, and how many own changes were kept."""
+        slug = re.sub(r"[^A-Za-z0-9_.-]+", "_", name.strip() or parsed.get("name") or "kart").strip("_") or "kart"
+        gammel = self.load_map(slug)
+        egne = self._egne().get(slug, {})
+        pts = [dict(p) for p in parsed["points"]]
+        diff = None
+        key = lambda p: point_record(p)["objid"]
+        if gammel is not None:
+            old = {key(p): p for p in gammel["points"]}
+            new = {key(p): p for p in pts}
+            diff = {"nye": [f"{new[k]['address']} {new[k]['name']}" for k in new if k not in old],
+                    "borte": [f"{old[k]['address']} {old[k]['name']}" for k in old if k not in new and k not in egne],
+                    "omdopt": [f"{old[k]['address']} {old[k]['name']} → {new[k]['name']}" for k in new if k in old and k not in egne and old[k]["name"] != new[k]["name"]],
+                    "beholdt": 0}
+        for i, p in enumerate(pts):
+            ch = egne.get(key(p))
+            if ch:
+                pts[i] = normalise_point({**p, **ch})
+                if diff is not None:
+                    diff["beholdt"] += 1
+        self.save_map(name, {**parsed, "points": pts})
+        return slug, diff
+
     def list_maps(self) -> List[Dict[str, Any]]:
         if not self.maps.exists():
             return []
@@ -1069,6 +1107,7 @@ class MapStore:
                 break
         else:
             raise MapError("the point is not in the register map")
+        self._noter_egen(re.sub(r"[^A-Za-z0-9_.-]+", "_", mid), objid, allowed)
         self._ensure()
         (self.maps / f"{re.sub(r'[^A-Za-z0-9_.-]+', '_', mid)}.json").write_text(
             json.dumps({"name": m["name"], "points": m["points"]}, ensure_ascii=False, indent=1), encoding="utf-8")
