@@ -203,6 +203,9 @@ const FAKTA = [
   ['COV betyr at regulatoren sier fra selv. Mindre spørring, mer ro.', 'COV means the controller speaks up itself. Less asking, more peace.'],
 ];
 const NYTT = {
+  '2.4': [
+    ['KNX leser lesefanen og datapunkttypen fra kommunikasjonsobjektene i ETS-prosjektet, så NABE bare spør adresser som kan svare og aldri de som har lesefanen av. «Les alle lesbare» spør bussen om dem på forespørsel (fem i sekundet, med bekreftelse), og en adresse som ikke svarte spørres ikke igjen på ti minutter. Tunnelen lukkes ryddig. Prøvd mot en ekte KNX-gateway og et eksisterende prosjekt på 5260 gruppeadresser, bare lesing', 'KNX reads the read flag and the datapoint type from the communication objects in the ETS project, so NABE only asks addresses that can answer and never those with the read flag off. "Read all readable" asks the bus for them on request (five a second, with confirmation), and an address that did not answer is not asked again for ten minutes. The tunnel is closed cleanly. Tried against a real KNX gateway and an existing project of 5260 group addresses, read only'],
+  ],
   '2.3': [
     ['Modbus RTU: seriell port (RS-485 via USB-adapter) og RTU over TCP for serielle gatewayer som slipper bytene gjennom. Enheter leses fra beskrivelsene i lister uten enhetskolonne. «Utforsk» finner hvilke registre en enhet svarer på og lagrer dem som et registerkart du kan gi navn. Alarmstatusregistre tegnes ikke lenger som følere i skjemaet. Prøvd mot en ekte Regin-regulator over VPN, bare lesing', 'Modbus RTU: serial port (RS-485 through a USB adapter) and RTU over TCP for serial gateways that pass the bytes through. Units are read from the descriptions in lists with no unit column. "Explore" finds which registers a device answers to and keeps them as a register map you can name. Alarm status registers are no longer drawn as sensors in the schematic. Tried against a real Regin controller over VPN, read only'],
   ],

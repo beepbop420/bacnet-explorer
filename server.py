@@ -235,7 +235,7 @@ def t(nb: str, en: str) -> str:
     return en if SPRAAK_VAR.get() == "en" else nb
 
 
-VERSJON = "2.3"
+VERSJON = "2.4"
 
 state = {"app": None, "local_address": None, "read_only": False, "bbmd": None, "primary": None}
 # The simulator: a scanned site run as devices on 127.0.0.x, in a process of its own.
@@ -5726,6 +5726,30 @@ _KNX_ROR: Dict[str, "nkx.KnxTunnel"] = {}
 _KNX_LAS: Dict[str, asyncio.Lock] = {}
 _KNX_RENNER: Dict[str, "asyncio.Task"] = {}
 _KNX_OPPRYDDER: List["asyncio.Task"] = []
+_KNX_SPURT: Dict[Any, float] = {}              # (gateway, group address) -> when it was last asked for
+KNX_SPOR_PAUSE = 600.0                          # an address that did not answer is not asked again for ten minutes
+KNX_MAKS_LESINGER = 120                         # reads one load may send; the rest arrives as the bus speaks
+
+
+def _knx_lesekø(liste: List[Dict[str, Any]], values: Dict[int, Any]) -> List[int]:
+    """The addresses to ask for: those whose object has the read flag on first, those nothing is known about after them,
+    and never those whose objects have it off. An address that has already been heard is not asked."""
+    uten = [p for p in liste if p["ga"] not in values]
+    return [p["ga"] for p in uten if p.get("leser") is True] + [p["ga"] for p in uten if p.get("leser") is None]
+
+
+def _knx_ikke_spurt(key: str, gas: List[int]) -> List[int]:
+    na = time.monotonic()
+    return [g for g in gas if na - _KNX_SPURT.get((key, g), -1e9) > KNX_SPOR_PAUSE]
+
+
+def _knx_noter(key: str, gas: List[int]) -> None:
+    na = time.monotonic()
+    for g in gas:
+        _KNX_SPURT[(key, g)] = na
+    if len(_KNX_SPURT) > 20000:
+        for k in sorted(_KNX_SPURT, key=_KNX_SPURT.get)[:5000]:
+            _KNX_SPURT.pop(k, None)
 
 
 async def _knx_tunnel(host: str, port: int) -> "nkx.KnxTunnel":
@@ -5755,6 +5779,29 @@ async def _knx_rydd():
             if time.monotonic() - tun.last_used > 300:
                 _KNX_ROR.pop(key, None)
                 await tun.close()
+
+
+async def _knx_lukk_alle() -> int:
+    n = 0
+    for key, tun in list(_KNX_ROR.items()):
+        _KNX_ROR.pop(key, None)
+        try:
+            await tun.close()
+            n += 1
+        except Exception:
+            pass
+    return n
+
+
+@app.on_event("shutdown")
+async def _knx_ved_stopp():
+    await _knx_lukk_alle()
+
+
+@app.post("/api/knx/koble-fra")
+async def knx_koble_fra():
+    """Close every KNX tunnel NABE holds, so the gateway has its tunnels back."""
+    return {"status": "done", "lukket": await _knx_lukk_alle()}
 
 
 class KnxScanBody(BaseModel):
@@ -5850,8 +5897,9 @@ def _knx_points_job(body) -> Dict[str, Any]:
             liste = KNX_LISTER.points_for(body.address)
             job["identity"] = {"model-name": "KNXnet/IP", "description": f"KNX tunnel {tun.address}", "firmware-revision": ""}
             await asyncio.sleep(1.5)                       # the bus is talking: take what it says first
-            mangler = [p["ga"] for p in liste if p["ga"] not in tun.values][:400]
+            mangler = _knx_ikke_spurt(f"{host}:{port}", _knx_lesekø(liste, tun.values))[:KNX_MAKS_LESINGER]
             if mangler:
+                _knx_noter(f"{host}:{port}", mangler)
                 job["phase"] = t("spør bussen", "asking the bus")
                 job["total"], job["done"] = len(mangler), 0
                 def fremdrift(n, _tot):
@@ -5916,15 +5964,18 @@ async def _knx_poll(targets: Dict[str, List[str]]) -> Dict[str, Dict[str, Any]]:
                 continue
             tel = tun.values.get(ga)
             if tel is None:
-                mangler.append(ga)
+                if dpt.get(ga, {}).get("leser") is not False:
+                    mangler.append(ga)
                 continue
             v = _knx_verdi(dpt.get(ga, {"dpt": ""}), tel)
             if v is not None:
                 vals[oid] = v
         out[address] = vals
         key = f"{parsed[0]}:{parsed[1]}"
+        mangler = _knx_ikke_spurt(key, mangler)[:40]
         if mangler and key not in _KNX_RENNER:
-            _KNX_RENNER[key] = asyncio.create_task(_knx_les_bak(key, tun, mangler[:40]))
+            _knx_noter(key, mangler)
+            _KNX_RENNER[key] = asyncio.create_task(_knx_les_bak(key, tun, mangler))
     await asyncio.gather(*[one(a, o) for a, o in targets.items()])
     return out
 
@@ -5945,6 +5996,50 @@ def _knx_detail(body) -> Dict[str, Any]:
         props["last-source"] = nkx.ia_text(tel["src"])
         props["raw"] = tel["raw"].hex()
     return {"status": "done", "objid": body.objid, "properties": props}
+
+
+class KnxLesAlle(BaseModel):
+    address: str
+    maks: int = 1500
+
+
+@app.post("/api/knx/les-alle")
+async def knx_les_alle(body: KnxLesAlle):
+    """Ask the bus once for every group address whose object has the read flag on and that has not been heard yet, five a
+    second. It is an explicit action, since it puts one telegram on the bus for each address."""
+    parsed = nkx.parse_address(body.address)
+    if not parsed:
+        return {"status": "error", "error": t("Ikke en KNX-gateway", "Not a KNX gateway")}
+    liste = KNX_LISTER.points_for(body.address)
+    if not liste:
+        return {"status": "error", "error": t("Gatewayen har ingen ETS-liste. Importer en først.", "The gateway has no ETS list. Import one first.")}
+    job = _new_job("knx-les")
+    job["phase"] = t("spør bussen", "asking the bus")
+
+    async def run():
+        try:
+            tun = await _knx_tunnel(*parsed)
+            gas = [p["ga"] for p in liste if p.get("leser") is True and p["ga"] not in tun.values][:max(1, min(3000, body.maks))]
+            job["total"], job["done"] = len(gas), 0
+            før = len(tun.values)
+
+            def fremdrift(n, _t):
+                job["done"] = n
+            _knx_noter(f"{parsed[0]}:{parsed[1]}", gas)
+            spurt = await tun.read_many(gas, wait=4.0, progress=fremdrift)
+            job["result"] = {"status": "done", "spurt": spurt, "nye_verdier": len(tun.values) - før, "lesbare": sum(1 for p in liste if p.get("leser") is True)}
+            job["status"] = "done"
+        except asyncio.CancelledError:
+            job["status"] = "cancelled"
+            raise
+        except nkx.KnxError as e:
+            job["status"] = "error"
+            job["error"] = str(e)
+        except Exception as e:
+            job["status"] = "error"
+            job["error"] = f"{type(e).__name__}: {e}"
+    job["task"] = asyncio.create_task(run())
+    return {"status": "started", "job_id": job["id"]}
 
 
 @app.get("/api/knx/lister")

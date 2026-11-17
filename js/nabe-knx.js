@@ -55,7 +55,7 @@
             ${enheter.map(d => `<tr><td>${esc(d.object_name || '')}<div class="sp-meta">${esc(d.knx_address || '')}${d.secure ? ' · ' + T('KNX Secure: støttes ikke', 'KNX Secure: not supported') : ''}${!d.tunnelling ? ' · ' + T('ingen tunnel', 'no tunnelling') : ''}</div></td>
               <td class="tr-mono">${esc(d.ip)}:${d.port}</td>
               <td><select class="field mb-kart" data-adr="${esc(d.address)}">${valg(d.address)}</select></td>
-              <td><button type="button" class="btn" data-kx="aapne" data-adr="${esc(d.address)}"${d.secure || !d.tunnelling ? ' disabled' : ''}>${T('Åpne', 'Open')}</button></td></tr>`).join('')}</tbody></table>`
+              <td style="white-space:nowrap">${tilordning[d.address] ? `<button type="button" class="btn" data-kx="lesalle" data-adr="${esc(d.address)}"${d.secure || !d.tunnelling ? ' disabled' : ''} title="${esc(T('Spør bussen én gang om hver gruppeadresse som har lesefanen på, fem i sekundet', 'Asks the bus once for each group address with the read flag on, five a second'))}">${T('Les alle lesbare', 'Read all readable')}</button> ` : ''}<button type="button" class="btn" data-kx="aapne" data-adr="${esc(d.address)}"${d.secure || !d.tunnelling ? ' disabled' : ''}>${T('Åpne', 'Open')}</button></td></tr>`).join('')}</tbody></table>`
             : `<div class="sp-meta">${T('Ingen KNX-gatewayer ennå. Skann over.', 'No KNX gateways yet. Scan above.')}</div>`}</div>
         <div class="mb-sek"><div class="mb-tittel">${T('ETS-lister', 'ETS lists')} <span class="sp-meta">${lister.length}</span></div>
           <div class="sp-meta">${T('Gruppeadressene fra ETS gir punktene navn og datapunkttype. Importer prosjektfilen (.knxproj, uten passord) eller CSV-eksporten av gruppeadresser.', 'The group addresses from ETS give the points a name and a datapoint type. Import the project file (.knxproj, no password) or the CSV export of group addresses.')}</div>
@@ -93,6 +93,30 @@
     opptatt = false; tegn();
   }
 
+  async function lesAlle(adr) {
+    const liste = lister.find(l => l.id === tilordning[adr]);
+    const n = liste ? liste.lesbare : 0;
+    if (!n) { sett(T('Ingen adresser i lista har lesefanen på, så det er ingenting å spørre om.', 'No address in the list has the read flag on, so there is nothing to ask for.')); return; }
+    const min = Math.ceil(n / 5 / 60);
+    if (!await nabeBekreft(T(`Dette spør bussen om ${n} gruppeadresser, fem i sekundet, og tar omtrent ${min} min. Hver spørring er ett telegram på bussen. Fortsette?`, `This asks the bus for ${n} group addresses, five a second, and takes about ${min} min. Each request is one telegram on the bus. Continue?`), {ok: T('Spør', 'Ask')})) return;
+    sett(T('Spør bussen …', 'Asking the bus …'));
+    try {
+      const start = await api2('/api/knx/les-alle', {address: adr});
+      if (start.status !== 'started') throw new Error(start.error || T('Feilet', 'Failed'));
+      for (;;) {
+        await new Promise(r => setTimeout(r, 1000));
+        const j = await api2('/api/job/' + start.job_id);
+        if (j.status === 'running') { sett(`${j.phase || ''} ${j.done || 0}/${j.total || 0}`.trim()); continue; }
+        if (j.status === 'error') throw new Error(j.error || T('Feilet', 'Failed'));
+        const r = j.result || {};
+        sett(T(`Spurte ${r.spurt} adresser og fikk verdi fra ${r.nye_verdier} til.`, `Asked ${r.spurt} addresses and got a value from ${r.nye_verdier} more.`));
+        delete S.cache[adr];
+        if (S.activeDev && S.activeDev.address === adr) selectDevice(adr, {force: true});
+        break;
+      }
+    } catch (e) { sett(e.message); }
+  }
+
   async function importer(fil) {
     if (!fil) return;
     if (fil.size > 40_000_000) { toast(T('Filen er for stor', 'The file is too large'), true); return; }
@@ -120,6 +144,7 @@
     const k = b.dataset.kx;
     if (k === 'skann') skann();
     else if (k === 'importer') $('kxFil').click();
+    else if (k === 'lesalle') lesAlle(b.dataset.adr);
     else if (k === 'aapne') { lukk(); selectDevice(b.dataset.adr); }
     else if (k === 'slett') {
       if (!await nabeBekreft(T('Slette ETS-lista? Gatewayer som bruker den viser det som høres på bussen.', 'Delete the ETS list? Gateways that use it show what is heard on the bus.'), {ok: T('Slett', 'Delete')})) return;

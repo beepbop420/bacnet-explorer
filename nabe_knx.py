@@ -84,9 +84,9 @@ UNITS = {  # (main, sub) -> unit as a register map writes it
     (9, 1): "°C", (9, 2): "K", (9, 3): "K/h", (9, 4): "lux", (9, 5): "m/s", (9, 6): "Pa", (9, 7): "%", (9, 8): "ppm",
     (9, 9): "m3/h", (9, 10): "s", (9, 20): "mV", (9, 21): "mA", (9, 24): "kW",
     (5, 1): "%", (5, 3): "°", (7, 5): "s", (7, 6): "min", (7, 7): "h", (14, 19): "A", (14, 27): "V", (14, 56): "W",
-    (14, 68): "°C", (14, 65): "m/s", (14, 58): "Pa", (14, 74): "s", (13, 13): "kWh", (13, 10): "Wh",
+    (14, 68): "°C", (14, 65): "m/s", (14, 58): "Pa", (14, 74): "s", (13, 13): "kWh", (13, 10): "Wh", (14, 77): "m3/s", (9, 9): "m3/h",
 }
-UNIT_BY_SYMBOL = dict(UNIT_NAMES, **{"k/h": "kelvins-per-hour", "°": "degrees-angular", "lux": "lux", "m/s": "meters-per-second",
+UNIT_BY_SYMBOL = dict(UNIT_NAMES, **{"m3/s": "cubic-meters-per-second", "k/h": "kelvins-per-hour", "°": "degrees-angular", "lux": "lux", "m/s": "meters-per-second",
                                      "m3/h": "cubic-meters-per-hour", "mv": "millivolts", "ma": "milliamperes"})
 
 
@@ -505,6 +505,28 @@ def _from_knxproj(data: bytes) -> Dict[str, Any]:
             root = ET.fromstring(z.read(n))
         except ET.ParseError:
             continue
+        # What the communication objects say about the group addresses they are linked to: the read flag (an object that
+        # has it on answers a GroupValueRead) and the datapoint type some of them carry.
+        by_suffix: Dict[str, int] = {}
+        for el in root.iter():
+            if el.tag.split("}")[-1] == "GroupAddress" and (el.get("Address") or "").isdigit():
+                by_suffix[(el.get("Id") or "").rsplit("_", 1)[-1]] = int(el.get("Address"))
+        leser: Dict[int, Optional[bool]] = {}
+        refdpt: Dict[int, str] = {}
+        for el in root.iter():
+            if el.tag.split("}")[-1] != "ComObjectInstanceRef" or not el.get("Links"):
+                continue
+            flag = el.get("ReadFlag")
+            for link in el.get("Links").split():
+                ga = by_suffix.get(link)
+                if ga is None:
+                    continue
+                if flag == "Enabled":
+                    leser[ga] = True
+                elif flag == "Disabled" and leser.get(ga) is None:
+                    leser[ga] = False
+                if el.get("DatapointType") and ga not in refdpt:
+                    refdpt[ga] = el.get("DatapointType").split(" ")[0]
         for el in root.iter():
             if el.tag.split("}")[-1] != "GroupAddress":
                 continue
@@ -515,9 +537,12 @@ def _from_knxproj(data: bytes) -> Dict[str, Any]:
             if ga in seen or not 0 <= ga <= 0xFFFF:
                 continue
             seen.add(ga)
-            dpt = parse_dpt((el.get("DatapointType") or "").split(" ")[0])
-            points.append({"ga": ga, "name": el.get("Name") or ga_text(ga), "dpt": f"{dpt[0]}.{dpt[1]:03d}" if dpt[0] else "",
-                           "description": el.get("Description") or ""})
+            dpt = parse_dpt((el.get("DatapointType") or refdpt.get(ga) or "").split(" ")[0])
+            p = {"ga": ga, "name": el.get("Name") or ga_text(ga), "dpt": f"{dpt[0]}.{dpt[1]:03d}" if dpt[0] else "",
+                 "description": el.get("Description") or ""}
+            if ga in leser:
+                p["leser"] = leser[ga]
+            points.append(p)
     if not points:
         raise KnxError("the project has no group addresses")
     return {"name": "", "points": sorted(points, key=lambda p: p["ga"])}
@@ -543,7 +568,8 @@ class GroupStore:
         for f in sorted(self.lists.glob("*.json")) if self.lists.exists() else []:
             try:
                 d = json.loads(f.read_text(encoding="utf-8"))
-                out.append({"id": f.stem, "name": d.get("name") or f.stem, "points": len(d.get("points", []))})
+                pts = d.get("points", [])
+                out.append({"id": f.stem, "name": d.get("name") or f.stem, "points": len(pts), "lesbare": sum(1 for p in pts if p.get("leser") is True)})
             except (OSError, ValueError):
                 continue
         return out

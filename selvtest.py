@@ -1189,6 +1189,36 @@ def modbus_rtu():
           str({n: x["unit"] for n, x in pp.items()}))
 
 
+def knx_lesefane():
+    """The read flag of an ETS project decides which addresses NABE asks: those with it on, never those with it off."""
+    import base64
+    import io
+    import zipfile
+    import nabe_knx as nk
+    xml = ('<KNX xmlns="http://knx.org/xml/project/20"><Project><Installations>'
+           '<GroupAddress Id="P-1-0_GA-1" Address="%d" Name="Av"/><GroupAddress Id="P-1-0_GA-2" Address="%d" Name="Pa"/>'
+           '<GroupAddress Id="P-1-0_GA-3" Address="%d" Name="Ukjent"/>'
+           '<ComObjectInstanceRef RefId="O-1" ReadFlag="Disabled" Links="GA-1"/><ComObjectInstanceRef RefId="O-2" ReadFlag="Enabled" DatapointType="DPST-9-1" Links="GA-2"/>'
+           '<ComObjectInstanceRef RefId="O-3" Links="GA-3"/></Installations></Project></KNX>') % (nk.parse_ga("6/6/6"), nk.parse_ga("6/6/7"), nk.parse_ga("6/6/8"))
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as z:
+        z.writestr("P-0001/0.xml", xml)
+    pts = {p["name"]: p for p in nk.parse_group_list(buf.getvalue(), "x.knxproj")["points"]}
+    sjekk("knx: lesefanen og datapunkttypen leses fra kommunikasjonsobjektene i ETS-prosjektet",
+          pts["Av"].get("leser") is False and pts["Pa"].get("leser") is True and "leser" not in pts["Ukjent"] and pts["Pa"]["dpt"] == "9.001", str(pts))
+    j = vent_jobb(kall("/api/knx/scan", {"subnet": "127.0.0.1", "port": KXSIM.port, "timeout": 1.5})["job_id"])
+    adr = j["result"]["devices"][0]["address"]
+    k = kall("/api/knx/lister", {"navn": "Lesefane", "innhold": base64.b64encode(buf.getvalue()).decode(), "filnavn": "l.knxproj"})
+    kall("/api/knx/tilordne", {"address": adr, "liste": k["id"]})
+    la = vent_jobb(kall("/api/knx/les-alle", {"address": adr})["job_id"], 60)
+    spurt = set(KXSIM.reads_received)
+    sjekk("knx: «les alle lesbare» spør de med lesefanen på og hopper over de med den av",
+          la.get("status") == "done" and nk.parse_ga("6/6/7") in spurt and nk.parse_ga("6/6/6") not in spurt and la["result"]["lesbare"] == 1, str(la.get("result")))
+    p = vent_jobb(kall("/api/device/points", {"address": adr, "device_instance": 1})["job_id"], 90)
+    sjekk("knx: lastingen spør heller ikke de med lesefanen av, og ingenting skrives", nk.parse_ga("6/6/6") not in set(KXSIM.reads_received) and KXSIM.writes_received == [])
+    sjekk("knx: volumstrøm (14.077) får enhet", nk.point_for(1, "q", (14, 77), value=1.0)["units"] == "cubic-meters-per-second")
+
+
 def kjor_tester():
     s = kall("/api/start", {"local_address": "127.0.0.1/8"})
     sjekk("kobler til", s.get("status") == "done", s.get("local_address", s.get("error", "")))
@@ -1241,6 +1271,7 @@ def kjor_tester():
     modbus_exol()
     knx_gjetting()
     modbus_rtu()
+    knx_lesefane()
     flere_kort()
     simulator()
     oppdatering()
