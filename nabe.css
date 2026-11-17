@@ -5309,8 +5309,8 @@ body.viser-skjema .filterbar > :not(.sk-bryter):not(.spacer):not(#pollBtn):not(#
 .rk-linje em{font:500 11px var(--mono);font-style:normal;text-align:right}
 .rk-bar{height:4px;border-radius:2px;background:var(--line)}
 .rk-bar b{display:block;height:100%;border-radius:2px;background:var(--accent)}
-.rk-co2{display:flex;align-items:baseline;gap:8px;font:500 11px var(--mono);margin-top:2px}
-.rk-co2 i{font:400 11px var(--sans);font-style:normal;color:var(--fg-3);width:44px}
+.rk-co2{display:flex;align-items:baseline;gap:6px;white-space:nowrap;font:500 11px var(--mono);margin-top:2px}
+.rk-co2 i{font:400 11px var(--sans);font-style:normal;color:var(--fg-3);width:36px}
 .rk-co2 small{color:var(--fg-3);font-size:11px}
 .rk-co2.over{color:var(--warn)}
 /* The card that follows the pointer in the schematic. */

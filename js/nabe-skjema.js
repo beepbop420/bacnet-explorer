@@ -243,6 +243,8 @@
     for (const s of systemer.values()) {
       const arter = new Set([...s.komp.values()].map(k => k.art));
       s.type = s.type || slaa(O.SYSTEM, s.id.replace('.', '')) || '';
+      // 310 is water and drain in general; it is a sprinkler system only where a point says so (a shut-off valve, the word).
+      if (s.type === 'sprinkler' && /^310/.test(s.id) && ![...s.komp.values()].some(k => k.spr || k.art === 'stengeventil')) s.type = 'sanitaer';
       const harVent = O.VENT.some(a => arter.has(a)) && arter.has('vifte');
       const harVarme = O.VARME.some(a => arter.has(a));
       if (s.type === 'ventilasjon' && !harVent) s.type = arter.has('spjeld') || arter.has('vav') ? 'ventilasjon-rom' : '';
@@ -690,7 +692,7 @@
     return k.sted === 'retur' || k.sted === '5' ? 'retur' : k.sted === 'tur' || k.sted === '4' ? 'tur' : '';
   };
   const emneAv = (k) => {
-    const o = String(k.beskr || '').toLowerCase().replace(/\b(re)?tur(temperatur|trykk|temp)\b/g, ' ').replace(STOPP, ' ').replace(/[^a-zæøå ]+/g, ' ').replace(/\s+/g, ' ').trim().split(' ').filter(Boolean);
+    const o = String(k.beskr || '').toLowerCase().replace(/^\s*[a-zæøå]{2}\d{2,4}\b/, ' ').replace(/\b(re)?tur(temperatur|trykk|temp)\b/g, ' ').replace(STOPP, ' ').replace(/[^a-zæøå ]+/g, ' ').replace(/\s+/g, ' ').trim().split(' ').filter(Boolean);
     while (o.length > 1 && o[o.length - 1].length <= 2 && o[o.length - 1] !== 'vp') o.pop();
     return o.slice(0, 2).join(' ');
   };
@@ -715,10 +717,23 @@
     if (g.size < 2) return [s];
     const standard = g.has('hovedstokk') ? 'hovedstokk' : [...g.values()].filter(x => x.komp.some(k => retningAv(k))).sort((a, b) => b.komp.length - a.komp.length)[0].del;
     const tilordnet = new Set([...g.values()].flatMap(x => x.komp));
+    // The words of a subject that a part's own words contain: "Pumpe gulvvarme sekundær" belongs with "gulvvarme".
+    const treff = (e) => {
+      const ord = new Set(e.split(' '));
+      let best = null;
+      for (const x of g.values()) {
+        const nok = x.del.split(' ').filter(o => o.length > 2);
+        if (nok.length && nok.every(o => ord.has(o)) && (!best || nok.length > best.n)) best = {x, n: nok.length};
+      }
+      return best && best.x;
+    };
     for (const k of s.komp) {
       if (tilordnet.has(k)) continue;
       const e = emneAv(k);
-      (g.get(e) || g.get(standard)).komp.push(k);
+      const hit = g.get(e) || (e ? treff(e) : null);
+      if (hit) hit.komp.push(k);
+      else if (e && !INNST_KURS.test(k.beskr || '') && !romDel(k) && ((k.art === 'pumpe' && (k.pkt.paadrag || k.pkt.start || k.pkt.drift || k.pkt.pv)) || (k.art === 'ventil' && (k.pkt.paadrag || k.pkt.pv)))) g.set(e, {del: e, komp: [k]});
+      else g.get(standard).komp.push(k);
     }
     return [...g.values()].map(x => ({id: s.id, del: x.del, komp: x.komp, rom: s.rom, romData: s.romData, type: s.type,
       symbol: (SYMBOL.find(([re]) => re.test(x.del)) || [])[1] || ''}));
@@ -744,7 +759,7 @@
   }
   function kursNavn(s) {
     const k = s.komp.find(z => z.art === 'temp' && z.sted === 'tur' && !GENERISK.test(z.beskr || '')) || s.komp.find(z => z.beskr && !GENERISK.test(z.beskr) && z.beskr.length > 7);
-    const n = (k ? k.beskr : '').replace(/temperaturf[øo]ler|tempgiver|turtemp\.?|\btemp\b\.?|trykkgiver|sirkulasjonspumpe|ventilmotor|\btur\b|\bretur\b/gi, '').replace(/\s+/g, ' ').trim();
+    const n = (k ? k.beskr : '').replace(/^\s*[A-Za-zÆØÅæøå]{2}\d{2,4}\b/, '').replace(/\b(re)?tur(temperatur|temp\.?)\b/gi, '').replace(/temperaturf[øo]ler|tempgiver|turtemp\.?|\btemp\b\.?|trykkgiver|sirkulasjonspumpe|ventilmotor|\btur\b|\bretur\b/gi, '').replace(/\s+/g, ' ').trim();
     return n ? n[0].toUpperCase() + n.slice(1) : systemTittel(s);
   }
   /* The symbol of a part of the plant that has no pipe of its own, drawn between the two pipes. */
@@ -799,13 +814,13 @@
       // A pump with something to show, and a valve with a position: not a setting, not a mode switch, not a room's radiator valve.
       const pumper = ta(k => k.art === 'pumpe' && (k.pkt.paadrag || k.pkt.start || k.pkt.drift || k.pkt.pv)).slice(0, 3);
       pumper.forEach((k) => {
-        const [side, n] = plass(k, 'tur'), x = side === 'tur' ? xt : xr, v = side === 'tur', y = (side === 'tur' ? yTur : yRet) - 118 + n * 60, p = k.pkt.paadrag || k.pkt.start || k.pkt.drift;
+        const [side, n] = plass(k, 'tur'), x = side === 'tur' ? xt : xr, v = side === 'tur', y = (side === 'tur' ? yTur : yRet) - 118 + n * 44, p = k.pkt.paadrag || k.pkt.start || k.pkt.drift;
         d += gruppe(k, 'rotor', `<circle class="sk-kropp" cx="${x}" cy="${y}" r="14"/><path class="sk-pil" d="M${x - 8} ${y + 6}L${x} ${y - 9}L${x + 8} ${y + 6}z"/>
           ${tekst(v ? x - 22 : x + 22, y - 2, merke(k), 'sk-kode', v ? 'end' : 'start')}${p ? tekst(v ? x - 22 : x + 22, y + 14, verdi(p), 'sk-v', v ? 'end' : 'start') : ''}${haandMerke(k, x + 17, y + 15)}${varsel(k, x + 17, y - 9)}`);
       });
       ta(k => k.art === 'ventil' && (k.pkt.paadrag || k.pkt.pv) && !INNST_KURS.test(k.beskr || '') && !romDel(k)).slice(0, 3).forEach((k) => {
         const [side, n] = plass(k, 'retur');
-        d += ventil(k, side === 'tur' ? xt : xr, (side === 'tur' ? yTur : yRet) - 118 + n * 60, true);
+        d += ventil(k, side === 'tur' ? xt : xr, (side === 'tur' ? yTur : yRet) - 118 + n * 44, true);
       });
       // what else the circuit has, as quiet labels under its name
       const annet = ta(k => ['varmepumpe', 'elkjel', 'kjel', 'tank', 'veksler', 'energimaaler', 'fjernvarme', 'kompressor'].includes(k.art) && !INNST_KURS.test(k.beskr || ''));
@@ -950,7 +965,7 @@
       return `<button type="button" class="${klasser(k, 'sk-brikke')}" data-o="${esc(h.objid)}" title="${esc(h.name || '')}"><b>${esc(k.kode || k.beskr || merke(k))}</b>${k.sted && NAVN[k.sted] ? `<i>${esc(tn(NAVN, k.sted))}</i>` : ''}<span>${esc(verdi(h))}</span></button>`; };
     const vpHtml = vp.length ? `<div class="sk-rest"><span class="sk-rest-t">${T('Varmepumpe, kuldekrets', 'Heat pump, refrigerant circuit')}</span>${vp.map(brikke).join('')}</div>` : '';
     const rom = valgt.type === 'aggregat' && valgt.s.rom.size ? `<span class="sk-rom">${valgt.s.rom.size} ${valgt.s.rom.size === 1 ? T('rom styres herfra', 'room is controlled from here') : T('rom styres herfra', 'rooms are controlled from here')}</span>` : '';
-    const minB = valgt.type === 'kurser' ? Math.max(520, r.bredde * 0.72) : valgt.type === 'aggregat' ? Math.min(r.bredde, 1000) * 0.9 : 0;
+    const minB = valgt.type === 'kurser' ? Math.max(520, r.bredde * 0.72) : valgt.type === 'aggregat' ? Math.min(r.bredde, 1000) * 0.66 : 0;
     const stor = document.body.classList.contains('sk-stor');
     const vekslerVelger = r.veksler ? `<span class="sk-veksler" role="group" aria-label="${esc(T('Type varmegjenvinner', 'Type of heat recovery'))}"><span class="sk-vtekst">${T('Veksler', 'Recovery')}</span>${
       VEKSLER.map(([id, n]) => `<button type="button" data-veksler="${id}" class="${r.veksler === id ? 'sel' : ''}" aria-pressed="${r.veksler === id}">${esc(T(n[0], n[1]))}</button>`).join('')}</span>` : '';
@@ -1015,7 +1030,7 @@
         ${r.co2 ? `<span class="rk-co2${over ? ' over' : ''}"><i>CO2</i>${esc(verdi(r.co2))}${r.co2Sp ? ` <small>/ ${esc(verdi(r.co2Sp))}</small>` : ''}</span>` : ''}
       </button>`;
     }).join('')}</div>
-    <div class="sk-fot">${T('Rommene er funnet i navnene på punktene (A109, C126, 563.9-303). Sortert etter avstand til settpunkt. Klikk et rom for å se temperaturpunktet.', 'The rooms are found in the names of the points (A109, C126, 563.9-303). Sorted by distance from the setpoint. Click a room to see its temperature point.')}</div>`;
+    <div class="sk-fot">${T('Rommene er funnet i navnene på punktene (A109, C126). Sortert etter avstand til settpunkt. Klikk et rom for å se temperaturpunktet.', 'The rooms are found in the names of the points (A109, C126). Sorted by distance from the setpoint. Click a room to see its temperature point.')}</div>`;
   }
 
 
