@@ -203,6 +203,9 @@ const FAKTA = [
   ['COV betyr at regulatoren sier fra selv. Mindre spørring, mer ro.', 'COV means the controller speaks up itself. Less asking, more peace.'],
 ];
 const NYTT = {
+  '1.90': [
+    ['Snarveiene som installasjonen lager får ikonet med indeks, og Windows får beskjed om at de er nye, så skrivebordet og startmenyen ikke viser tomme ikoner', 'The shortcuts the installer makes get the icon with its index, and Windows is told they are new, so the desktop and Start menu do not show blank icons'],
+  ],
   '1.89': [
     ['Varmepumpas kuldekrets (fordamper, kondensator, sugegass, overheting, høy- og lavtrykk) står i en egen gruppe under aggregatet, med navn og verdi, i stedet for blant det andre', 'The refrigerant circuit of a heat pump (evaporator, condenser, suction gas, superheat, high and low pressure) is in a group of its own under the air handler, with name and value, instead of among the rest'],
   ],

@@ -53,7 +53,7 @@ def snarvei(lnk: Path, maal: Path, args: str, mappe: Path, ikon: Path, beskrivel
         "$s.Description=$env:NABE_BESKR;$s.Save()"
     )
     env = dict(os.environ, NABE_LNK=str(lnk), NABE_MAAL=str(maal), NABE_ARGS=args,
-               NABE_MAPPE=str(mappe), NABE_IKON=str(ikon), NABE_BESKR=beskrivelse)
+               NABE_MAPPE=str(mappe), NABE_IKON=f"{ikon},0", NABE_BESKR=beskrivelse)
     subprocess.run(["powershell", "-NoProfile", "-Command", ps], env=env, check=True,
                    capture_output=True, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
 
@@ -118,6 +118,13 @@ def installer(mappe: Path, valg: dict, fremdrift=lambda n, av, tekst: None):
         snarvei(laget[-1], mappe / "NABE i nettleser.bat", "", mappe, ikon,
                 "NABE i nettleseren din i stedet for eget vindu")
 
+    # Tell Explorer the shortcuts are new, or the desktop and Start menu show a blank icon until the icon cache
+    # is rebuilt (SHCNE_ASSOCCHANGED).
+    try:
+        import ctypes
+        ctypes.windll.shell32.SHChangeNotify(0x08000000, 0, None, None)
+    except Exception:
+        pass
     with winreg.CreateKey(winreg.HKEY_CURRENT_USER, AVINST_NOKKEL) as k:
         for navn, verdi in {
             "DisplayName": "NABE – Not Another BACnet Explorer",
