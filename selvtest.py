@@ -330,6 +330,7 @@ def royktest():
               "  return a.sys === '350.002' && a.kode === 'RT401' && b.sys === '601' && b.rom === '613' && c.sys === '350.002' && c.kode === 'RP401' && e.sted === 'tilluft' && e.art === 'temp' && !!d"
               "    && nabeSkjema.tolkPunkt({objid: 'z', name: 'Supply air temperature', description: 'min:-50.0, max:+120.0, error: -32768', type: 'analog-input', value: 16.6, units: 'degrees-celsius'}).rolle === 'pv'"
               "    && nabeSkjema.tolkPunkt({objid: 'w', name: 'Water temperature', description: 'min:-50.0, max:+120.0, error: -32768', type: 'analog-input', value: 13, units: 'degrees-celsius'}).sted === 'batteriretur'"
+              "    && (q => q.rom === '02.85' && q.rolle === 'paadrag' && q.art === 'vav')(nabeSkjema.tolkPunkt({objid: 'v', name: 'pMpBus.MP_BUS_1.POS[1]', description: 'SD0T SQ401-02.85 Spjeldposisjon', type: 'analog-value', value: 90, units: 'degrees-celsius'}))"
               "    && nabeSkjema.byggSystemer([{objid: 'u', name: 'A_320_012_Utekomp_Y1', description: 'Y1', type: 'analog-value', value: 80, units: 'degrees-celsius'}]).every(s => !s.komp.size)"
               "    && nabeSkjema.byggSystemer([{objid: 'm', name: 'Supply air mode', description: '0-m3/h, 1-l/s, 3-Pa', type: 'analog-value', value: 3, units: 'pascals'}]).every(s => !s.komp.size); })(),"
               " flater: typeof aapneOversikt === 'function' &&!!document.getElementById('listeSmalBtn') && !!document.getElementById('oversiktBtn') && (() => {"

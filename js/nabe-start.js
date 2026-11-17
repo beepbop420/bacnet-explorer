@@ -203,6 +203,9 @@ const FAKTA = [
   ['COV betyr at regulatoren sier fra selv. Mindre spørring, mer ro.', 'COV means the controller speaks up itself. Less asking, more peace.'],
 ];
 const NYTT = {
+  '1.81': [
+    ['Romstyringer som står med buss og rom i beskrivelsen («SQ401-02.85 Spjeldposisjon») blir romkort med spjeldpådrag, i stedet for hundrevis av løse målinger i et varmeanlegg. En posisjon er en posisjon uansett hvilken enhet programmereren ga den, og punkter uten navn («Input (Float)») holdes utenfor', 'Room controllers that carry bus and room in the description ("SQ401-02.85 Damper position") become room cards with damper output, instead of hundreds of loose readings in a heating plant. A position is a position whatever unit the programmer gave it, and unnamed points ("Input (Float)") are kept out'],
+  ],
   '1.80': [
     ['Anlegg uten systemnummer i taggene som har rør, pumper og ventiler men bare et reléutgang for en nødvifte, tegnes som kjøle- eller varmekurser i stedet for som et tomt aggregat. Punkter på varmekurven (Utekomp Y1 til Y5) regnes som innstillinger', 'Plants with no system number in the tags that have pipes, pumps and valves but only a relay for an emergency fan are drawn as cooling or heating circuits instead of an empty air handler. Points on the heating curve (Utekomp Y1 to Y5) count as settings'],
   ],

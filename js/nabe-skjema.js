@@ -47,6 +47,10 @@
     if (!sys && beskr && (m = /(?<![0-9])(\d{3})\.(\d{3,4}|00X)\b[^A-Za-z0-9]{0,2}([A-Z]{2}\d{2,4})\b/.exec(String(beskr)))) {
       sys = m[1] + '.' + m[2]; n = n + ' ' + m[3];
     }
+    // A room controller named by its bus position, with the room in the description: "SQ401-02.85 Spjeldposisjon".
+    if (!sys && !romNavn && beskr && (m = /(?<![A-Za-z0-9])([A-Z]{2}\d{3})-(\d{2}\.\d{1,3}[a-z]?)(?![0-9])/.exec(String(beskr)))) {
+      romNavn = m[2]; n = n + ' ' + m[1];
+    }
     const reK = /(?<![A-Za-z0-9])([A-Z]{2})(\d{2,4})(?![0-9])/g;
     reK.lastIndex = etterSys;
     let valgt = null;
@@ -94,6 +98,8 @@
     if ((art === 'trykk' || art === 'difftrykk') && type.startsWith('binary')) art = iOrd === 'ekspansjon' ? 'ekspansjon' : 'filter';
     if (art === 'frost') rolle = 'alarm';
     if (!art) art = maalt && (!rolle || rolle === 'pv' || rolle === 'sp' || rolle === 'innstilling') ? maalt : iOrd;
+    // A position is a position whatever unit the programmer gave it: "Spjeldposisjon" in degrees is still a damper.
+    if (!t.kode && maalt === 'temp' && ['ventil', 'spjeld', 'vifte'].includes(iOrd) && /posisjon|position|åpning|pådrag/.test(ord)) { art = iOrd; rolle = 'paadrag'; }
     // The refrigerant circuit of a heat pump or a DX coil is its own thing, not a reading in the duct.
     if (['temp', 'trykk', 'difftrykk', 'mengde', 'fukt'].includes(art) && !t.kode
         && /heat\s*pump|heatpump|compressor|\bevap|\bcond\b|condens|suction|discharge|superheat|\bh\/c\b|\bhc\s+in\b|defrost|\bdx\b|outdoor\s*coil|outd\s*coil/.test(ord)) art = 'varmepumpe';
@@ -110,6 +116,7 @@
     }
     if (rolle === 'pv' && type.startsWith('binary')) rolle = art === 'filter' || art === 'royk' ? 'alarm' : 'drift';
     if (rolle === 'pv' && ['vifte', 'ventil', 'spjeld', 'pumpe', 'gjenvinner'].includes(art) && /percent|%/.test(enhet)) rolle = 'paadrag';
+    if (rolle === 'pv' && ['vav', 'spjeld', 'ventil', 'vifte'].includes(art) && /posisjon|position|pådrag/.test(b)) rolle = 'paadrag';
     // A number cannot be a run state or a switch. Without a code to say otherwise it is a setting.
     if (!t.kode && type.startsWith('analog') && ['start', 'drift', 'vender'].includes(rolle)) rolle = 'annet';
 
@@ -140,6 +147,8 @@
     const t = String(p.type || '');
     if (/second|minute|hour|day|ampere|volt|watt|revolutions|joule/.test(x.enhet)) return false;
     const inn = t === 'analog-input' || t === 'analog-output';
+    // A point the programmer never named ("Input (Float)") says nothing about the plant
+    if (/^\s*(input|output)\s*\((float|int|bool)/i.test(String(p.description || '') + ' ' + String(p.name || '')) && !String(p.description || '').replace(/^\s*(input|output)\s*\([a-z]+\)\s*/i, '')) return false;
     // Read-only inputs have a narrower list of what is not live: their "RegSet" is a regulator's own setpoint.
     if (O.NAVN.some(([re]) => re.test(String(p.name || ''))) && inn) return true;
     if (inn ? O.INNSTILLING_AI.test(x.ord + ' ' + String(p.name || '')) : O.INNSTILLING_ORD.test(x.ord + ' ' + String(p.name || ''))) return false;
