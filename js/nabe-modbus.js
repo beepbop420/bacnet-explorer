@@ -80,7 +80,7 @@
                 <button type="button" class="btn" data-mb="aapne" data-adr="${esc(d.address)}">${T('Åpne', 'Open')}</button></td></tr>`).join('')}</tbody></table>`
             : `<div class="sp-meta">${T('Ingen Modbus-enheter ennå. Skann over, eller gi en adresse direkte.', 'No Modbus devices yet. Scan above, or give an address directly.')}</div>`}</div>
         <div class="mb-sek"><div class="mb-tittel">${T('Registerkart', 'Register maps')} <span class="sp-meta">${kart.length}</span></div>
-          <div class="sp-meta">${T('Et registerkart gir registrene navn, type, skalering og enhet. CSV med overskrifter (address, function, type, name, scale, unit, description) eller JSON.', 'A register map gives the registers a name, type, scale and unit. CSV with a header row (address, function, type, name, scale, unit, description) or JSON.')}</div>
+          <div class="sp-meta">${T('Et registerkart gir registrene navn, type, skalering og enhet. CSV, Excel (.xlsx), JSON, Regin EXOL-lister og Niagara-eksport av Modbus-punkter.', 'A register map gives the registers a name, type, scale and unit. CSV, Excel (.xlsx), JSON, Regin EXOL lists and Niagara exports of Modbus points.')}</div>
           ${kart.length ? `<table class="sp-tab"><tbody>${kart.map(k => `<tr><td>${esc(k.name)}</td><td class="sp-meta">${k.points} ${T('punkter', 'points')}</td>
             <td style="text-align:right"><button type="button" class="btn" data-mb="slett" data-id="${esc(k.id)}">${T('Slett', 'Delete')}</button></td></tr>`).join('')}</tbody></table>` : ''}
           <div class="mb-rad mb-valg"><label>${T('Adresser teller fra', 'Addresses count from')}
@@ -90,7 +90,7 @@
           <div class="sp-meta mb-notater" id="mbNotater">${(notater || []).map(n => `<div>${esc(n)}</div>`).join('')}</div>
           <div class="op-knapper"><button type="button" class="btn" data-mb="mal">${T('Last ned mal', 'Download template')}</button>
             <button type="button" class="btn primary" data-mb="importer">${T('Importer registerkart …', 'Import register map …')}</button></div>
-          <input type="file" id="mbFil" accept=".csv,.json,.txt,text/csv,application/json" hidden></div>
+          <input type="file" id="mbFil" accept=".csv,.xlsx,.json,.txt,text/csv,application/json,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden></div>
       </div></div>`;
   }
 
@@ -121,8 +121,11 @@
         funnet = (j.result && j.result.devices) || [];
         mergeDevices(funnet, omr);
         renderDevices();
+        const kjente = funnet.filter(d => d.forslag && d.forslag.brukt);
+        if (kjente.length) await hentKart();
         sett(funnet.length
           ? T(`Fant ${funnet.length} enheter på ${(j.result.open_hosts || []).length} maskiner.`, `Found ${funnet.length} units on ${(j.result.open_hosts || []).length} hosts.`)
+            + (kjente.length ? T(` Brukte kjente registerkart for ${kjente.length}: ${[...new Set(kjente.map(d => d.forslag.navn))].join(', ')}. Bytt i lista hvis det er feil.`, ` Used known register maps for ${kjente.length}: ${[...new Set(kjente.map(d => d.forslag.navn))].join(', ')}. Change it in the list if it is wrong.`) : '')
           : ser ? T('Ingen enheter svarte på bussen. Sjekk baudrate, paritet og at A og B ikke er byttet om.', 'No units answered on the bus. Check the baud rate, the parity and that A and B are not swapped.')
           : T('Ingen Modbus-enheter svarte. Port 502 kan være stengt, eller enheten bruker en annen enhets-ID.', 'No Modbus devices answered. Port 502 may be closed, or the device uses another unit ID.'));
         break;
@@ -153,11 +156,13 @@
 
   async function importer(fil) {
     if (!fil) return;
-    if (fil.size > 2_000_000) { toast(T('Filen er for stor', 'The file is too large'), true); return; }
-    const tekst = await fil.text();
+    if (fil.size > 6_000_000) { toast(T('Filen er for stor', 'The file is too large'), true); return; }
+    const buf = new Uint8Array(await fil.arrayBuffer());
+    let s = ''; for (let i = 0; i < buf.length; i += 0x8000) s += String.fromCharCode.apply(null, buf.subarray(i, i + 0x8000));
+    const innhold = btoa(s);
     const navn = fil.name.replace(/\.[^.]+$/, '');
     const base = $('mbBase') ? $('mbBase').value : '';
-    const d = await api2('/api/modbus/kart', {navn, tekst, base: base === '' ? null : parseInt(base, 10), real_skala: parseFloat($('mbSkala') ? $('mbSkala').value : '0.1') || 0.1});
+    const d = await api2('/api/modbus/kart', {navn, innhold, filnavn: fil.name, base: base === '' ? null : parseInt(base, 10), real_skala: parseFloat($('mbSkala') ? $('mbSkala').value : '0.1') || 0.1});
     if (d.status !== 'done') { notater = []; toast(d.error || T('Kunne ikke lese registerkartet', 'Could not read the register map'), true); await hentKart(); tegn(); return; }
     notater = d.merknader || [];
     toast(T(`Registerkart «${navn}» importert: ${d.punkter} punkter.`, `Register map "${navn}" imported: ${d.punkter} points.`));
@@ -165,7 +170,8 @@
   }
 
   async function tilordne(adr, id) {
-    const d = await api2('/api/modbus/tilordne', {address: adr, kart: id || null});
+    const enhet = S.devices.find(x => x.address === adr) || {};
+    const d = await api2('/api/modbus/tilordne', {address: adr, kart: id || null, vendor: enhet.vendor_name || '', model: enhet.model_name || ''});
     if (d.status !== 'done') { toast(d.error || T('Fikk ikke tilordnet', 'Could not assign'), true); return; }
     tilordning[adr] = id || undefined;
     delete S.cache[adr];

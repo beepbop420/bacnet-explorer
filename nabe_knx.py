@@ -601,6 +601,31 @@ class GroupStore:
             a.pop(address, None)
         self.assign_file.write_text(json.dumps(a, ensure_ascii=False), encoding="utf-8")
 
+    def edit_point(self, address: str, ga: int, changes: Dict[str, Any]) -> Tuple[str, int]:
+        """Change the name, description or datapoint type of one group address in the ETS list a gateway uses, or add it when the list
+        does not have it (an address heard on the bus). A gateway with no list gets one of its own. Returns the list and how many gateways use it."""
+        lid = self.assignments().get(address)
+        d = self.load(lid) if lid else None
+        if d is None:
+            d = {"name": f"Egen {address}", "points": []}
+            lid = re.sub(r"[^A-Za-z0-9_.-]+", "_", f"Egen {address}").strip("_")
+        pts = d["points"]
+        p = next((x for x in pts if x["ga"] == ga), None)
+        if p is None:
+            p = {"ga": ga, "name": ga_text(ga), "dpt": "", "description": ""}
+            pts.append(p)
+        if "name" in changes:
+            p["name"] = str(changes["name"]).strip() or ga_text(ga)
+        if "description" in changes:
+            p["description"] = str(changes["description"]).strip()
+        if "dpt" in changes:
+            t = parse_dpt(changes["dpt"])
+            p["dpt"] = f"{t[0]}.{t[1]:03d}" if t[0] else ""
+        self.lists.mkdir(parents=True, exist_ok=True)
+        (self.lists / f"{lid}.json").write_text(json.dumps({"name": d["name"], "points": sorted(pts, key=lambda x: x["ga"])}, ensure_ascii=False), encoding="utf-8")
+        self.assign(address, lid)
+        return lid, sum(1 for v in self.assignments().values() if v == lid)
+
     def points_for(self, address: str) -> List[Dict[str, Any]]:
         lid = self.assignments().get(address)
         d = self.load(lid) if lid else None

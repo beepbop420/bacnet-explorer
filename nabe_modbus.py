@@ -23,8 +23,10 @@ import json
 import re
 import struct
 import time
+import zipfile
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
+from xml.etree import ElementTree as ET
 
 MODBUS_PORT = 502
 # Units to try on a host. 0 is the broadcast address and is never used. 255 is what TCP-only gateways answer to.
@@ -570,6 +572,208 @@ def _exol_rows(reader_rows: List[Dict[str, Any]], real_scale: float) -> List[Dic
     return out
 
 
+_ALIAS = {
+    "address": ("address", "adresse", "register", "reg", "regno", "regnr", "registeradresse", "modbusadresse", "modbusaddress", "dataaddress",
+                "adr", "regadr", "regadresse", "startadresse", "newaddress", "nyadresse"),
+    "function": ("function", "funksjon", "fn", "fc", "functioncode", "funksjonskode", "regtype", "registertype", "registrertype"),
+    "type": ("type", "datatype", "dataformat", "format", "datatyp"),
+    "name": ("name", "navn", "signal", "signalname", "signalnavn", "tag", "tagname", "punkt", "punktnavn", "variabel", "variable", "newname", "nyttnavn"),
+    "description": ("description", "beskrivelse", "kommentar", "comment", "desc", "tekst", "text"),
+    "unit": ("unit", "units", "enhet"),
+    "scale": ("scale", "skala", "faktor", "multiplier", "gain", "factor"),
+    "offset": ("offset",), "order": ("order", "wordorder", "byteorder"), "bit": ("bit", "bitnr", "bitnumber"),
+}
+_ALIAS_REV = {a: k for k, names in _ALIAS.items() for a in names}
+
+
+def _alias_row(r: Dict[str, Any]) -> Dict[str, Any]:
+    """The columns of a list under their own names, by the many names a technician gives them."""
+    out: Dict[str, Any] = {}
+    for k, v in r.items():
+        key = _ALIAS_REV.get(re.sub(r"[\s_.\-]", "", str(k).lower()))
+        if key and key not in out:
+            out[key] = v
+    return out
+
+
+_MODICON = re.compile(r"^(?:([0134])x(\d{4,5})|([0134])(\d{4,5}))$")
+
+
+def _modicon(a: Any) -> Optional[Tuple[str, int]]:
+    """40012, 30066, 300066 or 3x0661: the leading digit says what it is (0 coil, 1 discrete input, 3 input register, 4 holding
+    register) and the rest is the address, counted from 1. Returns (function, address as written)."""
+    m = _MODICON.match(str(a).strip().lower())
+    if not m:
+        return None
+    d, n = (m.group(1), m.group(2)) if m.group(1) else (m.group(3), m.group(4))
+    return {"0": "coil", "1": "discrete", "3": "input", "4": "holding"}[d], int(n)
+
+
+_NIAGARA_TYPES = {"signed integer": "s16", "integer type": "u16", "unsigned integer": "u16", "float": "f32", "boolean": "bool"}
+
+
+def _niagara_rows(raw_rows: List[Dict[str, Any]], notes: List[str]) -> List[Dict[str, Any]]:
+    """A Niagara export of the points of a Modbus TCP network: Path, Name, Type, Absolute Address (Modbus:30066), Data Type,
+    Conversion and Facets. The folders above a point carry the system and the component, so the name is built from them."""
+    folders = {str(r.get("path", "")): str(r.get("name", "")) for r in raw_rows if "folder" in str(r.get("type", "")).lower()}
+    out, uten_omregning = [], 0
+    for r in raw_rows:
+        typ = str(r.get("type", "")).lower()
+        if "folder" in typ or not ("point" in typ or "writable" in typ):
+            continue
+        mod = _modicon(re.sub(r"(?i)^modbus:", "", str(r.get("absolute address") or r.get("data address") or "")))
+        if not mod:
+            continue
+        path = str(r.get("path", ""))
+        ancestors, cur = [], ""
+        if "/points/" in path:
+            for seg in path.split("/points/", 1)[1].split("/")[:-1]:
+                cur = f"{cur}/{seg}"
+                ancestors.append(folders.get(path.split("/points/", 1)[0] + "/points" + cur) or seg)
+        navn = str(r.get("name", ""))
+        deler = [x for x in ancestors[1:] if x] + [navn]
+        sys_ = ancestors[0] if ancestors and re.fullmatch(r"\d{3}\.\d{2,3}", ancestors[0]) else ""
+        full = (f"{sys_}-" if sys_ else "") + "_".join(deler)
+        fac = str(r.get("facets", ""))
+        um = re.search(r"units=u:\w+;([^;|]*)", fac)
+        conv = str(r.get("conversion", ""))
+        sm = re.search(r"\*\s*([0-9]*\.?[0-9]+)", conv)
+        if conv.startswith("Linear|"):
+            uten_omregning += 1
+        dt = _NIAGARA_TYPES.get(str(r.get("data type", "")).strip().lower(), "bool" if "boolean" in typ else "u16")
+        out.append({"address": re.sub(r"(?i)^modbus:", "", str(r.get("absolute address") or r.get("data address"))).strip(), "type": dt, "name": full,
+                    "description": "/".join(deler),
+                    "unit": (um.group(1) if um else "").replace("\ufffd", "°"), "scale": float(sm.group(1)) if sm else 1})
+    if uten_omregning:
+        notes.append(f"{uten_omregning} punkter har en lineær omregning NABE ikke kan tolke fra eksporten. De står med skala 1")
+    return out
+
+
+def read_xlsx(data: bytes) -> List[List[str]]:
+    """The rows of the sheet that looks like a register list (else the first one), as text. Only the standard library."""
+    try:
+        z = zipfile.ZipFile(io.BytesIO(data))
+    except zipfile.BadZipFile as e:
+        raise MapError("not a valid Excel file") from e
+    ns = "{http://schemas.openxmlformats.org/spreadsheetml/2006/main}"
+    ss: List[str] = []
+    if "xl/sharedStrings.xml" in z.namelist():
+        for si in ET.fromstring(z.read("xl/sharedStrings.xml")).iter(ns + "si"):
+            ss.append("".join(t.text or "" for t in si.iter(ns + "t")))
+    sheets = []
+    for n in sorted((x for x in z.namelist() if re.fullmatch(r"xl/worksheets/sheet\d+\.xml", x)), key=lambda x: int(re.findall(r"\d+", x)[0])):
+        if z.getinfo(n).file_size > 60_000_000:
+            raise MapError("the Excel sheet is too large")
+        rows: List[List[str]] = []
+        for row in ET.fromstring(z.read(n)).iter(ns + "row"):
+            cells: Dict[int, str] = {}
+            for c in row:
+                col = 0
+                for ch in re.match(r"[A-Z]+", c.get("r") or "A").group(0):
+                    col = col * 26 + ord(ch) - 64
+                v = c.find(ns + "v")
+                if c.get("t") == "s" and v is not None:
+                    val = ss[int(v.text)] if int(v.text) < len(ss) else ""
+                elif c.get("t") == "inlineStr":
+                    val = "".join(t.text or "" for t in c.iter(ns + "t"))
+                else:
+                    val = "" if v is None or v.text is None else v.text
+                    if re.fullmatch(r"-?\d+\.0", val):
+                        val = val[:-2]
+                cells[col - 1] = val
+            if cells:
+                rows.append([cells.get(i, "") for i in range(max(cells) + 1)])
+        sheets.append(rows)
+    if not sheets:
+        raise MapError("the Excel file has no sheets")
+    for rows in sheets:
+        for r in rows[:10]:
+            if any(_ALIAS_REV.get(re.sub(r"[\s_.\-]", "", c.lower())) == "address" for c in r):
+                return rows
+    return max(sheets, key=len)
+
+
+def _xlsx_dicts(rows: List[List[str]]) -> List[Dict[str, Any]]:
+    head_i = next((i for i, r in enumerate(rows[:10]) if any(_ALIAS_REV.get(re.sub(r"[\s_.\-]", "", c.lower())) == "address" for c in r)), 0)
+    head = [c.strip().lower() for c in rows[head_i]]
+    return [{h: (r[i] if i < len(r) else "") for i, h in enumerate(head) if h} for r in rows[head_i + 1:]]
+
+
+def parse_map_bytes(data: bytes, filename: str = "", base: Optional[int] = None, real_scale: float = 0.1) -> Dict[str, Any]:
+    """A register map from the bytes of a file: Excel (.xlsx), or text (CSV, JSON, Regin EXOL, Niagara export)."""
+    if data[:2] == b"PK":
+        tabell = _xlsx_dicts(read_xlsx(data))
+        rows = [_alias_row(r) for r in tabell]
+        rows = [r for r in rows if any(str(v).strip() for v in r.values())]
+        if tabell and not rows:
+            cols = ", ".join(sorted({k for r in tabell for k in r})[:12])
+            raise MapError(f"no address column found (the columns are: {cols}). NABE reads CSV, Excel or JSON with address, function, type, name, "
+                           "scale, unit, description, Regin EXOL lists and Niagara exports of Modbus points")
+        return _build_map(rows, "", False, ["Excel-fil lest"], base, real_scale, "xlsx")
+    try:
+        text = data.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        text = data.decode("cp1252", "replace")
+    return parse_map(text, base, real_scale)
+
+
+def _build_map(rows: List[Dict[str, Any]], name: str, exol: bool, notes: List[str], base: Optional[int], real_scale: float, fmt: str) -> Dict[str, Any]:
+    rows = [r for r in rows if any(str(v).strip() for v in r.values() if v is not None)]
+    if rows and not any("address" in r for r in rows):
+        cols = ", ".join(sorted({k for r in rows for k in r})[:12])
+        raise MapError(f"no address column found (the columns are: {cols}). NABE reads CSV, Excel or JSON with address, function, type, name, "
+                       "scale, unit, description, Regin EXOL lists and Niagara exports of Modbus points")
+    # 40012 / 3x0661: the address says what it is, and counts from 1
+    modicon = False
+    if not any(r.get("function") for r in rows):
+        mods = [_modicon(r.get("address")) for r in rows]
+        if rows and sum(1 for m in mods if m) >= 0.8 * len(rows):
+            for r, m in zip(rows, mods):
+                if m:
+                    r["function"], r["address"] = m[0], m[1]
+            modicon = True
+            notes.append("Adressene er skrevet som 40012 eller 3x0661: første siffer sier hva det er (1 diskret inngang, 3 inngangsregister, 4 holdingregister), og de teller fra 1")
+    addrs = []
+    for r in rows:
+        try:
+            addrs.append(int(str(r.get("address")).strip(), 0))
+        except (TypeError, ValueError):
+            pass
+    if base is None:
+        base = 1 if (exol or modicon) and addrs and min(addrs) >= 1 else 0
+        if base and not modicon:
+            notes.append("Adressene teller fra 1 (listen har ingen adresse 0): 1 er trukket fra, så register 1 leses som 0 på ledningen")
+    if exol and any(r["type"] == "s16" and r["scale"] != 1 for r in rows):
+        notes.append(f"Reelle verdier (R) er antatt skalert med {real_scale}. Sjekk mot et punkt du kjenner")
+    points, seen, dubletter = [], set(), 0
+    for i, r in enumerate(rows, 1):
+        r = dict(r)
+        if base:
+            try:
+                r["address"] = int(str(r.get("address")).strip(), 0) - base
+            except (TypeError, ValueError):
+                pass
+        try:
+            p = normalise_point(r)
+        except MapError as e:
+            raise MapError(f"row {i}: {e}")
+        key = (p["function"], p["address"], p["bit"])
+        if key in seen:
+            # An export from another system often has several points on one register, and a list of address changes maps
+            # several old addresses to one new. The first one stays; the others are said to be left out.
+            if fmt in ("niagara", "xlsx"):
+                dubletter += 1
+                continue
+            raise MapError(f"row {i}: {p['function']} {p['address']} is in the map twice")
+        seen.add(key)
+        points.append(p)
+    if dubletter:
+        notes.append(f"{dubletter} punkter bruker et register som et tidligere punkt allerede bruker. De er hoppet over, det første beholdt")
+    if not points:
+        raise MapError("the map has no points")
+    return {"name": name, "points": points, "base": base, "notes": notes, "format": fmt}
+
+
 def parse_map(text: str, base: Optional[int] = None, real_scale: float = 0.1) -> Dict[str, Any]:
     """A register map from JSON ({"name": ..., "points": [...]}) or from CSV with a header row:
     address,function,type,name,scale,unit,description (extra columns: order, offset, bit), or a Regin EXOL list.
@@ -591,51 +795,19 @@ def parse_map(text: str, base: Optional[int] = None, real_scale: float = 0.1) ->
         reader.fieldnames = [str(h).strip().lower() for h in (reader.fieldnames or [])]
         raw_rows = [{k: v for k, v in r.items() if k} for r in reader]
         name = ""
+        fmt = "generic"
         if {"modbus type", "signal name", "modbus address"} <= set(reader.fieldnames):
-            exol = True
+            exol, fmt = True, "exol"
             rows = _exol_rows(raw_rows, real_scale)
             notes.append("Regin EXOL-format gjenkjent")
+        elif {"path", "name", "type", "absolute address"} <= set(reader.fieldnames):
+            fmt = "niagara"
+            rows = _niagara_rows(raw_rows, notes)
+            notes.insert(0, "Niagara-eksport av Modbus-punkter gjenkjent")
         else:
-            alias = {"register": "address", "reg": "address", "adresse": "address", "fn": "function", "funksjon": "function",
-                     "datatype": "type", "navn": "name", "beskrivelse": "description", "enhet": "unit", "units": "unit", "faktor": "scale"}
-            rows = [{alias.get(k, k): v for k, v in r.items() if k} for r in raw_rows]
-    rows = [r for r in rows if any(str(v).strip() for v in r.values() if v is not None)]
-    if rows and not any("address" in r for r in rows):
-        cols = ", ".join(sorted({k for r in rows for k in r})[:12])
-        raise MapError(f"no address column found (the columns are: {cols}). NABE reads CSV or JSON with address, function, type, name, "
-                       "scale, unit, description, and Regin EXOL lists. An export from another system has to be turned into one of those first")
-    addrs = []
-    for r in rows:
-        try:
-            addrs.append(int(str(r.get("address")).strip(), 0))
-        except (TypeError, ValueError):
-            pass
-    if base is None:
-        base = 1 if exol and addrs and min(addrs) >= 1 else 0
-        if base:
-            notes.append("Adressene teller fra 1 (listen har ingen adresse 0): 1 er trukket fra, så register 1 leses som 0 på ledningen")
-    if exol and any(r["type"] == "s16" and r["scale"] != 1 for r in rows):
-        notes.append(f"Reelle verdier (R) er antatt skalert med {real_scale}. Sjekk mot et punkt du kjenner")
-    points, seen = [], set()
-    for i, r in enumerate(rows, 1):
-        r = dict(r)
-        if base:
-            try:
-                r["address"] = int(str(r.get("address")).strip(), 0) - base
-            except (TypeError, ValueError):
-                pass
-        try:
-            p = normalise_point(r)
-        except MapError as e:
-            raise MapError(f"row {i}: {e}")
-        key = (p["function"], p["address"], p["bit"])
-        if key in seen:
-            raise MapError(f"row {i}: {p['function']} {p['address']} is in the map twice")
-        seen.add(key)
-        points.append(p)
-    if not points:
-        raise MapError("the map has no points")
-    return {"name": name, "points": points, "base": base, "notes": notes, "format": "exol" if exol else "generic"}
+            rows = [_alias_row(r) for r in raw_rows]
+        return _build_map(rows, name, exol, notes, base, real_scale, fmt)
+    return _build_map(rows, name, exol, notes, base, real_scale, "generic")
 
 
 def decode_value(point: Dict[str, Any], words: List[int]) -> Any:
@@ -826,6 +998,7 @@ class MapStore:
         self.folder = Path(folder) / "modbus"
         self.maps = self.folder / "kart"
         self.assign_file = self.folder / "tilordning.json"
+        self.profil_fil = self.folder / "profiler.json"
 
     def _ensure(self) -> None:
         self.maps.mkdir(parents=True, exist_ok=True)
@@ -855,6 +1028,52 @@ class MapStore:
             return {"name": d.get("name") or map_id, "points": [normalise_point(p) for p in d.get("points", [])]}
         except (OSError, ValueError, MapError):
             return None
+
+    # --- known device types: which map was used for a vendor and model, so the next one of that kind gets it
+    @staticmethod
+    def _profilnokkel(vendor: str, model: str) -> str:
+        return f"{str(vendor or '').strip().lower()}|{str(model or '').strip().lower()}"
+
+    def _profiler(self) -> Dict[str, str]:
+        try:
+            return json.loads(self.profil_fil.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return {}
+
+    def learn(self, vendor: str, model: str, map_id: Optional[str]) -> None:
+        if not (vendor or model) or not map_id:
+            return
+        self._ensure()
+        p = self._profiler()
+        p[self._profilnokkel(vendor, model)] = map_id
+        self.profil_fil.write_text(json.dumps(p, ensure_ascii=False, indent=1), encoding="utf-8")
+
+    def profile_for(self, vendor: str, model: str) -> Optional[str]:
+        """The map used before for exactly this vendor and model, and only if it still exists. A device of another model of the same
+        make is not given it: two models of one maker rarely share a register map."""
+        mid = self._profiler().get(self._profilnokkel(vendor, model))
+        return mid if mid and self.load_map(mid) else None
+
+    def edit_point(self, address: str, objid: str, changes: Dict[str, Any]) -> Tuple[str, int]:
+        """Change the name, description, unit, scale, type, offset or word order of one point in the map a device uses. A device with
+        no map gets one of its own, made from the registers shown, and keeps it. Returns the map and how many devices use it."""
+        allowed = {k: v for k, v in changes.items() if k in ("name", "description", "unit", "scale", "offset", "type", "order")}
+        mid = self.assignments().get(address)
+        m = self.load_map(mid) if mid else None
+        if m is None:
+            m = {"name": f"Egen {address}", "points": raw_points()}
+            mid = re.sub(r"[^A-Za-z0-9_.-]+", "_", f"Egen {address}").strip("_")
+        for i, p in enumerate(m["points"]):
+            if point_record(p)["objid"] == objid:
+                m["points"][i] = normalise_point({**p, **allowed})
+                break
+        else:
+            raise MapError("the point is not in the register map")
+        self._ensure()
+        (self.maps / f"{re.sub(r'[^A-Za-z0-9_.-]+', '_', mid)}.json").write_text(
+            json.dumps({"name": m["name"], "points": m["points"]}, ensure_ascii=False, indent=1), encoding="utf-8")
+        self.assign(address, mid)
+        return mid, sum(1 for v in self.assignments().values() if v == mid)
 
     def assignments(self) -> Dict[str, str]:
         try:

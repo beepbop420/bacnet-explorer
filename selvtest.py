@@ -1260,6 +1260,88 @@ def knx_monitor():
           f"{len(po['values'].get(adr, {}))} verdier, {len(tider)} tider")
 
 
+def modbus_import():
+    """Lists in the shapes a technician has them: a Niagara export, Excel, and addresses written as 40012."""
+    import base64
+    import io
+    import zipfile
+    import nabe_modbus as nm
+    kol = "Path,Name,Type,Out,Enabled,Tuning Policy Name,Absolute Address,Fault Cause,Poll Frequency,Data Address,Reg Type,Data Type,Status Type,Bit Number,Beginning Bit,Number of Bits,Data Source,Number Registers,Device Facets,Facets,Conversion"
+    def rad(path, navn, typ, adr="", dt="", fac="", conv="Default"):
+        f = [path, navn, typ, "", "true", "defaultPolicy", adr, "", "Normal", adr, "Input" if adr.startswith("Modbus:3") else "", dt, "", "", "", "", "Point Poll", "", "", fac, conv]
+        return ",".join(f)
+    p0 = "/Drivers/ModbusTcpNetwork/Site/Dev/points"
+    niagara = "\r\n".join([kol,
+        rad(p0 + "/system", "360.017", "Modbus Client Point Folder"), rad(p0 + "/system/Varmebatteri", "LV401", "Modbus Client Point Folder"),
+        rad(p0 + "/system/Varmebatteri/SB_C", "SB_C", "Numeric Point", "Modbus:30054", "Signed Integer", "units=u:percentNM;%;;;|precision=i:1", "Linear *0.1"),
+        rad(p0 + "/system/Varmebatteri/RT_P", "RT_P", "Numeric Point", "Modbus:30055", "Signed Integer", "units=u:celsius;\xb0C;(K);+273.15;|precision=i:1", "Linear *0.01"),
+        rad(p0 + "/system/Varmebatteri/SB_D", "SB_D", "Numeric Point", "Modbus:30054", "Signed Integer"),
+        rad(p0 + "/system/Varmebatteri/JP_S", "JP_S", "Boolean Point", "Modbus:10031")]).encode("cp1252")
+    m = nm.parse_map_bytes(niagara, "n.csv")
+    p = {x["name"]: x for x in m["points"]}
+    sjekk("modbus: Niagara-eksport av Modbus-punkter gir navn fra mappene, adresse fra 30054 og skala fra omregningen",
+          m["format"] == "niagara" and "360.017-LV401_SB_C" in p and p["360.017-LV401_SB_C"]["function"] == "input" and p["360.017-LV401_SB_C"]["address"] == 53
+          and p["360.017-LV401_SB_C"]["scale"] == 0.1 and p["360.017-LV401_RT_P"]["scale"] == 0.01 and p["360.017-LV401_SB_C"]["unit"] == "%"
+          and p["360.017-LV401_RT_P"]["unit"] == "°C" and p["360.017-LV401_JP_S"]["function"] == "discrete", str(m["notes"]))
+    sjekk("modbus: to punkter på samme register gir ett, og importen sier at det andre er hoppet over", len(m["points"]) == 3 and any("hoppet over" in n for n in m["notes"]), str(m["notes"]))
+
+    def xlsx(rader):
+        celler = lambda r, i: "".join(f'<c r="{chr(65 + j)}{i}" t="inlineStr"><is><t>{v}</t></is></c>' for j, v in enumerate(r))
+        xml = '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>' + "".join(f'<row r="{i}">{celler(r, i)}</row>' for i, r in enumerate(rader, 1)) + "</sheetData></worksheet>"
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w") as z:
+            z.writestr("xl/worksheets/sheet1.xml", xml)
+        return buf.getvalue()
+    arket = xlsx([["Prosjekt Y", "", ""], ["Adresse", "Navn", "Enhet", "Beskrivelse"], ["40012", "Settpunkt tilluft", "°C", "Settpunkt"], ["30001", "Tilluftstemperatur", "°C", "Måling"], ["10005", "Brannalarm", "", "Alarm"]])
+    mx = nm.parse_map_bytes(arket, "liste.xlsx")
+    px = {x["name"]: x for x in mx["points"]}
+    sjekk("modbus: Excel (.xlsx) leses, med overskriftsraden funnet og adresser som 40012 forstått",
+          mx["format"] == "xlsx" and px["Settpunkt tilluft"]["function"] == "holding" and px["Settpunkt tilluft"]["address"] == 11 and px["Tilluftstemperatur"]["function"] == "input"
+          and px["Tilluftstemperatur"]["address"] == 0 and px["Brannalarm"]["function"] == "discrete" and px["Tilluftstemperatur"]["unit"] == "°C", str(mx["notes"]))
+    k = kall("/api/modbus/kart", {"navn": "Fra Excel", "innhold": base64.b64encode(arket).decode(), "filnavn": "liste.xlsx"})
+    sjekk("modbus: Excel kan lastes opp gjennom API-et", k.get("status") == "done" and k.get("punkter") == 3 and k.get("format") == "xlsx", str(k))
+    feil = kall("/api/modbus/kart", {"navn": "x", "innhold": base64.b64encode(xlsx([["A", "B"], ["1", "2"]])).decode(), "filnavn": "x.xlsx"})
+    sjekk("modbus: en Excel-fil uten adressekolonne sier hvilke kolonner den har", feil.get("status") == "error" and "no address column" in feil.get("error", ""), str(feil)[:120])
+
+
+def redigering():
+    """Renaming and rescaling a point in the list a device uses, and a device type that gets its map back."""
+    import base64
+    import nabe_knx as nk
+    import nabe_knx_sim as ks
+    j = vent_jobb(kall("/api/modbus/scan", {"subnet": "127.0.0.1", "port": MBSIM.port, "units": [1], "timeout": 1.0})["job_id"])
+    d = j["result"]["devices"][0]
+    adr = d["address"]
+    k = kall("/api/modbus/kart", {"navn": "Til redigering", "tekst": "address;function;type;name;scale\n0;holding;s16;Temperatur;1\n"})
+    kall("/api/modbus/tilordne", {"address": adr, "kart": k["id"], "vendor": d["vendor_name"], "model": d["model_name"]})
+    r = kall("/api/modbus/punkt", {"address": adr, "objid": "analog-value,0", "felter": {"name": "Romtemperatur", "scale": "0,1", "unit": "°C", "description": "Rommet"}})
+    p = vent_jobb(kall("/api/device/points", {"address": adr, "device_instance": 1})["job_id"])
+    pt = {x["name"]: x for x in p["result"]["points"]}
+    sjekk("modbus: et punkt kan få nytt navn, skala og enhet i listen enheten bruker",
+          r.get("status") == "done" and "Romtemperatur" in pt and abs(pt["Romtemperatur"]["value"] - 21.0) < 1.2 and pt["Romtemperatur"]["units"] == "degrees-celsius"
+          and pt["Romtemperatur"]["description"] == "Rommet", str(r) + str({n: x["value"] for n, x in pt.items()}))
+    feil = kall("/api/modbus/punkt", {"address": adr, "objid": "analog-value,0", "felter": {"scale": "ti"}})
+    sjekk("modbus: en skala som ikke er et tall avvises", feil.get("status") == "error", str(feil))
+    kall("/api/modbus/tilordne", {"address": adr, "kart": None})
+    j2 = vent_jobb(kall("/api/modbus/scan", {"subnet": "127.0.0.1", "port": MBSIM.port, "units": [1], "timeout": 1.0})["job_id"])
+    d2 = j2["result"]["devices"][0]
+    sjekk("modbus: en enhet av en kjent type får kartet sitt igjen ved neste skann, og sier det", d2.get("forslag", {}).get("brukt") is True
+          and d2["forslag"]["kart"] == k["id"], str(d2.get("forslag")))
+    # a KNX point renamed and given a type
+    jk = vent_jobb(kall("/api/knx/scan", {"subnet": "127.0.0.1", "port": KXSIM.port, "timeout": 1.5})["job_id"])
+    kadr = jk["result"]["devices"][0]["address"]
+    kl = kall("/api/knx/lister", {"navn": "Redigering", "innhold": base64.b64encode(b"Group name;Address\r\nTemp;1/1/1\r\n").decode(), "filnavn": "r.csv"})
+    kall("/api/knx/tilordne", {"address": kadr, "liste": kl["id"]})
+    r2 = kall("/api/knx/punkt", {"address": kadr, "objid": "analog-value,%d" % nk.parse_ga("1/1/1"), "felter": {"name": "Romtemp 101", "dpt": "9.001", "description": "Rom 101"}})
+    r3 = kall("/api/knx/punkt", {"address": kadr, "objid": "analog-value,%d" % nk.parse_ga("9/1/9"), "felter": {"name": "Ny adresse"}})
+    p2 = vent_jobb(kall("/api/device/points", {"address": kadr, "device_instance": 1})["job_id"], 90)
+    pk = {x["name"]: x for x in p2["result"]["points"]}
+    sjekk("knx: en gruppeadresse kan få nytt navn og datapunkttype, og en adresse som ikke står i lista kan legges til",
+          r2.get("status") == "done" and "Romtemp 101" in pk and pk["Romtemp 101"]["units"] == "degrees-celsius" and "Ny adresse" in pk and r3.get("status") == "done",
+          str(r2) + str(sorted(pk)[:6]))
+    sjekk("knx: redigeringen skrev ingenting til bussen", KXSIM.writes_received == [])
+
+
 def kjor_tester():
     s = kall("/api/start", {"local_address": "127.0.0.1/8"})
     sjekk("kobler til", s.get("status") == "done", s.get("local_address", s.get("error", "")))
@@ -1315,6 +1397,8 @@ def kjor_tester():
     knx_lesefane()
     modbus_ledig()
     knx_monitor()
+    modbus_import()
+    redigering()
     flere_kort()
     simulator()
     oppdatering()
@@ -1365,7 +1449,7 @@ def kjor_tester():
     # Last: it silences the simulated device on 127.0.0.6.
     mine_uten_kontakt()
 
-    for fil in ("nabe-start", "nabe-verktoy", "nabe-felt", "nabe-moro", "nabe-finn", "nabe-skann", "nabe-anlegg", "nabe-bunn", "nabe-graf", "nabe-tunnel", "nabe-sammen", "nabe-flyt", "nabe-peker", "nabe-pekere", "nabe-skrift", "nabo", "nabo-brodre", "nabo-fasit", "nabe-garderobe", "nabe-opptak", "nabe-trafikk", "nabe-modbus", "nabe-knx", "nabe-besok", "nabe-runde", "nabe-skjema-ordbok", "nabe-skjema", "nabe-flater", "nabe-fortsett", "nabe-simulator", "nabe-oppdatering", "nabe-bakover", "nabe-kart", "nabe-syn", "nabe-raad", "nabe-dialoger-innhold", "nabe-dialoger-mer", "nabe-dialoger", "nabe-tilbehor", "nabe-kunnskap", "nabe-spor"):
+    for fil in ("nabe-start", "nabe-verktoy", "nabe-felt", "nabe-moro", "nabe-finn", "nabe-skann", "nabe-anlegg", "nabe-bunn", "nabe-graf", "nabe-tunnel", "nabe-sammen", "nabe-flyt", "nabe-peker", "nabe-pekere", "nabe-skrift", "nabo", "nabo-brodre", "nabo-fasit", "nabe-garderobe", "nabe-opptak", "nabe-trafikk", "nabe-modbus", "nabe-knx", "nabe-rediger", "nabe-besok", "nabe-runde", "nabe-skjema-ordbok", "nabe-skjema", "nabe-flater", "nabe-fortsett", "nabe-simulator", "nabe-oppdatering", "nabe-bakover", "nabe-kart", "nabe-syn", "nabe-raad", "nabe-dialoger-innhold", "nabe-dialoger-mer", "nabe-dialoger", "nabe-tilbehor", "nabe-kunnskap", "nabe-spor"):
         try:
             with urllib.request.urlopen(f"{BASE}/js/{fil}.js", timeout=5) as rr:
                 ok = rr.status == 200

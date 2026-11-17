@@ -5404,3 +5404,10 @@ body.liste-smal #devList .dev.st-feil > .dev-smal,body.sk-stor #devList .dev.st-
 
 /* A KNX value not heard for an hour is shown dimmer: it may no longer be true. */
 .c-val.gammel{opacity:.55}
+
+/* Editing a point */
+.rd-modal{width:min(520px,94vw)}
+.rd-rad{display:flex;flex-direction:column;gap:4px;margin:10px 0}
+.rd-rad > span{font-size:12px;color:var(--fg-2)}
+.rd-rad small{font-size:11px;color:var(--fg-3)}
+.rd-knapp{margin-left:auto;height:26px;padding:0 10px;font-size:12px}

@@ -5514,6 +5514,7 @@ async def modbus_scan(body: ModbusScanBody):
                 job["found"] = len(devices)
             await asyncio.gather(*[one(h) for h in open_hosts])
             devices.sort(key=lambda d: (tuple(int(x) for x in d["ip"].split(".")) if re.fullmatch(r"[\d.]+", d["ip"]) else (0,), d["unit"]))
+            _modbus_kjente(devices)
             job["result"] = {"status": "done", "subnet": body.subnet, "mode": "modbus", "hosts_scanned": len(hosts),
                              "open_hosts": open_hosts, "count": len(devices), "devices": devices, "note": None}
             job["status"] = "done"
@@ -5560,6 +5561,7 @@ async def modbus_serial_skann(body: ModbusSerialBody):
     async def run():
         try:
             devices = await nm.scan_serial(body.port, baud, body.parity, body.stopbits, units, max(0.3, min(3.0, body.timeout)))
+            _modbus_kjente(devices)
             job["result"] = {"status": "done", "subnet": body.port, "mode": "modbus-rtu", "hosts_scanned": 1, "open_hosts": [body.port],
                              "count": len(devices), "devices": devices, "note": None}
             job["status"] = "done"
@@ -5574,6 +5576,19 @@ async def modbus_serial_skann(body: ModbusSerialBody):
             job["error"] = f"{type(e).__name__}: {e}"
     job["task"] = asyncio.create_task(run())
     return {"status": "started", "job_id": job["id"]}
+
+
+def _modbus_kjente(devices: List[Dict[str, Any]]) -> None:
+    """A device of a kind that has had a register map before gets it again, with a note on the device saying so."""
+    tilordnet = MODBUS_KART.assignments()
+    for d in devices:
+        mid = MODBUS_KART.profile_for(d.get("vendor_name", ""), d.get("model_name", ""))
+        if not mid:
+            continue
+        brukt = d["address"] not in tilordnet
+        if brukt:
+            MODBUS_KART.assign(d["address"], mid)
+        d["forslag"] = {"kart": mid, "navn": (MODBUS_KART.load_map(mid) or {}).get("name", mid), "brukt": brukt}
 
 
 def _modbus_points_job(body) -> Dict[str, Any]:
@@ -5708,7 +5723,9 @@ def modbus_kart():
 
 class ModbusKartBody(BaseModel):
     navn: str = ""
-    tekst: str
+    tekst: str = ""
+    innhold: str = ""                   # the file as base64 (Excel is not text); `tekst` is the same for a text file
+    filnavn: str = ""
     base: Optional[int] = None          # 0 or 1: how the addresses in the file count. Left out, it is worked out.
     real_skala: float = 0.1             # Regin EXOL reals (R) are whole numbers in the register, scaled
 
@@ -5716,10 +5733,15 @@ class ModbusKartBody(BaseModel):
 @app.post("/api/modbus/kart")
 def modbus_kart_lagre(body: ModbusKartBody):
     """Import a register map (JSON or CSV). It is checked, and what is wrong is said by row."""
-    if len(body.tekst) > 2_000_000:
+    import base64
+    try:
+        data = base64.b64decode(body.innhold, validate=False) if body.innhold else body.tekst.encode("utf-8")
+    except Exception:
+        return {"status": "error", "error": t("Kunne ikke lese filen", "Could not read the file")}
+    if len(data) > 8_000_000:
         return {"status": "error", "error": t("Registerkartet er for stort", "The register map is too large")}
     try:
-        parsed = nm.parse_map(body.tekst, base=body.base if body.base in (0, 1) else None, real_scale=body.real_skala or 0.1)
+        parsed = nm.parse_map_bytes(data, body.filnavn, base=body.base if body.base in (0, 1) else None, real_scale=body.real_skala or 0.1)
     except (nm.MapError, ValueError) as e:
         return {"status": "error", "error": str(e)}
     kid = MODBUS_KART.save_map(body.navn, parsed)
@@ -5730,6 +5752,8 @@ def modbus_kart_lagre(body: ModbusKartBody):
 class ModbusTilordne(BaseModel):
     address: str
     kart: Optional[str] = None
+    vendor: str = ""                    # what the device said it was: the map is remembered for that kind of device
+    model: str = ""
 
 
 @app.post("/api/modbus/tilordne")
@@ -5739,7 +5763,39 @@ def modbus_tilordne(body: ModbusTilordne):
     if body.kart and MODBUS_KART.load_map(body.kart) is None:
         return {"status": "error", "error": t("Ukjent registerkart", "Unknown register map")}
     MODBUS_KART.assign(body.address, body.kart)
+    MODBUS_KART.learn(body.vendor, body.model, body.kart)
     return {"status": "done"}
+
+
+class PunktRediger(BaseModel):
+    address: str
+    objid: str
+    felter: Dict[str, Any]
+
+
+@app.post("/api/modbus/punkt")
+def modbus_punkt(body: PunktRediger):
+    """Rename a Modbus point, or change its scale, unit, type or word order, in the register map the device uses."""
+    if not nm.parse_any(body.address):
+        return {"status": "error", "error": t("Ikke en Modbus-enhet", "Not a Modbus device")}
+    try:
+        kid, delt = MODBUS_KART.edit_point(body.address, body.objid, body.felter)
+    except (nm.MapError, ValueError) as e:
+        return {"status": "error", "error": str(e)}
+    return {"status": "done", "kart": kid, "delt": delt}
+
+
+@app.post("/api/knx/punkt")
+def knx_punkt(body: PunktRediger):
+    """Rename a group address, or give it a description or a datapoint type, in the ETS list the gateway uses."""
+    if not nkx.parse_address(body.address):
+        return {"status": "error", "error": t("Ikke en KNX-gateway", "Not a KNX gateway")}
+    try:
+        ga = int(body.objid.split(",")[1])
+        kid, delt = KNX_LISTER.edit_point(body.address, ga, body.felter)
+    except (IndexError, ValueError, nkx.KnxError) as e:
+        return {"status": "error", "error": str(e)}
+    return {"status": "done", "kart": kid, "delt": delt}
 
 
 class ModbusSlett(BaseModel):
