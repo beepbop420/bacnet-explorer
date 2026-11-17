@@ -23,7 +23,7 @@ import lag_portabel as lp
 
 HER = Path(__file__).parent
 MAPPE = lp.DIST / "NABE-mini"
-APPFILER = ["server.py", "bacnet_core.py", "app.js", "index.html", "nabe.css", "nabe_sim.py", "nabe_modbus.py"]
+APPFILER = ["server.py", "bacnet_core.py", "app.js", "index.html", "nabe.css", "nabe_sim.py", "nabe_modbus.py", "nabe_knx.py"]
 
 LES_MEG = """NABE Mini - Not Another BACnet Explorer for fjernskrivebordet
 =============================================================

@@ -47,6 +47,10 @@ No administrator rights needed. Everything else in the zip is tucked away;
   bits. A register map (CSV or JSON) gives the registers names, types, scale and units; without one the
   first registers are shown as they are. The points sit in the same table, watch list, recording, export
   and schematic as the BACnet ones. The code has no function that writes.
+- **KNX, read only.** Finds KNXnet/IP gateways, opens one tunnel and listens to the bus: values arrive as
+  they change, and an address nobody has spoken on is asked for once, five a second at most. The group
+  addresses and their names come from the ETS project (the .knxproj file or the CSV export). The only
+  telegram NABE can send is a read. KNX Secure is not supported and the gateway says so.
 - **Writes with care:** confirmation, priority shown, optional automatic
   release, and a write log for handover.
 - **Exports** EDE 2.3, CSV, and a **«Variabel» file** for Niagara NTI
@@ -157,6 +161,7 @@ trustworthy. The installer is a zip with a script rather than an unsigned
 | `lag_installasjon.py`, `lag_portabel.py` | Build scripts |
 | `nabe_sim.py` | The simulator: a scanned site as BACnet devices on 127.0.0.x |
 | `nabe_modbus.py`, `nabe_modbus_sim.py` | Modbus TCP (read only) and a Modbus server for testing |
+| `nabe_knx.py`, `nabe_knx_sim.py` | KNXnet/IP (read only) and a KNX gateway for testing |
 | `nabe_oppdater.py`, `nabe_signatur.py` | Self-update and the Ed25519 signature it checks |
 | `selvtest.py` | The self-test |
 

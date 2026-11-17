@@ -203,6 +203,9 @@ const FAKTA = [
   ['COV betyr at regulatoren sier fra selv. Mindre spørring, mer ro.', 'COV means the controller speaks up itself. Less asking, more peace.'],
 ];
 const NYTT = {
+  '2.0': [
+    ['NABE 2.0: BACnet, Modbus og KNX i samme program. KNX leses gjennom én tunnel mot KNXnet/IP-gatewayen: verdiene kommer når de endrer seg, og en gruppeadresse ingen har snakket på spørres om én gang, fem i sekundet. Navnene kommer fra ETS (prosjektfilen eller CSV-eksporten). Det eneste NABE kan sende på KNX er en lesing. Åpnes fra ⋯-menyen eller paletten («KNX…»)', 'NABE 2.0: BACnet, Modbus and KNX in one program. KNX is read through one tunnel to the KNXnet/IP gateway: values arrive as they change, and a group address nobody has spoken on is asked for once, five a second. The names come from ETS (the project file or the CSV export). The only thing NABE can send on KNX is a read. Opened from the ⋯ menu or the palette ("KNX…")'],
+  ],
   '1.96': [
     ['Modbus TCP, bare lesing: skann etter enheter, importer et registerkart (CSV eller JSON) som gir registrene navn, type, skalering og enhet, og enhetene ligger i lista med samme tabell, overvåking, opptak, eksport og skjema som BACnet. Åpnes fra ⋯-menyen eller paletten («Modbus…»). Koden har ingen funksjon som skriver', 'Modbus TCP, read only: scan for devices, import a register map (CSV or JSON) that gives the registers a name, type, scale and unit, and the devices sit in the list with the same table, watch list, recording, export and schematic as BACnet. Opened from the ⋯ menu or the palette ("Modbus…"). The code has no function that writes'],
   ],

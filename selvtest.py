@@ -100,6 +100,8 @@ def lag_enhet(siste_oktett: int, instans: int, navn: str, skjev_klokke: bool = F
 LOOP = None
 APPS = {}
 MBSIM = None
+KXSIM = None
+KXSEC = None
 
 
 def i_loop(fn):
@@ -339,6 +341,7 @@ def royktest():
               "    && nabeSkjema.byggSystemer([{objid: 'u', name: 'A_320_012_Utekomp_Y1', description: 'Y1', type: 'analog-value', value: 80, units: 'degrees-celsius'}]).every(s => !s.komp.size)"
               "    && nabeSkjema.byggSystemer([{objid: 'm', name: 'Supply air mode', description: '0-m3/h, 1-l/s, 3-Pa', type: 'analog-value', value: 3, units: 'pascals'}]).every(s => !s.komp.size); })(),"
               " modbus: typeof aapneModbus === 'function' && !!document.getElementById('modbusBtn'),"
+              " knx: typeof aapneKnx === 'function' && !!document.getElementById('knxBtn'),"
               " flater: typeof aapneOversikt === 'function' &&!!document.getElementById('listeSmalBtn') && !!document.getElementById('oversiktBtn') && (() => {"
               "  const P = (o, n, d, t, v, u) => ({objid: o, name: n, description: d, type: t, value: v, units: u || ''});"
               "  const s = nabeSkjema.byggSystemer([P('ai,1', 'A_320_031_A109_RT603_PV', 'SD2T Romtemperatur', 'analog-input', 21.7, 'degrees-celsius'),"
@@ -971,6 +974,89 @@ def modbus():
     sjekk("modbus: klienten kan ikke sende en skrivefunksjon", asyncio.run(skriv()) and MBSIM.writes_received == [])
 
 
+def knx():
+    """KNX, read only: found, named by an ETS list, heard on the bus, asked once, and never written to."""
+    import base64
+    import io
+    import struct
+    import zipfile
+    import nabe_knx as nk
+    import nabe_knx_sim as ks
+    j = vent_jobb(kall("/api/knx/scan", {"subnet": "127.0.0.1", "port": KXSIM.port, "timeout": 1.5})["job_id"])
+    devs = (j.get("result") or {}).get("devices", [])
+    sjekk("knx: skann finner gatewayen med navn og tunnel", len(devs) == 1 and devs[0]["address"].startswith("kx:127.0.0.1:")
+          and devs[0]["tunnelling"] and not devs[0]["secure"], str([(d["object_name"], d["tunnelling"]) for d in devs]))
+    adr = devs[0]["address"]
+    k = kall("/api/knx/lister", {"navn": "Rom 101", "innhold": base64.b64encode(ks.DEMO_CSV.encode()).decode(), "filnavn": "ets.csv"})
+    sjekk("knx: ETS-liste importeres", k.get("status") == "done" and k.get("punkter") == 5, str(k))
+    feil = kall("/api/knx/lister", {"navn": "x", "innhold": base64.b64encode(b"foo;bar\n1;2\n").decode()})
+    sjekk("knx: en fil uten adressekolonne avvises med forklaring", feil.get("status") == "error" and "address" in feil.get("error", ""), str(feil))
+    kall("/api/knx/tilordne", {"address": adr, "liste": k["id"]})
+    p = vent_jobb(kall("/api/device/points", {"address": adr, "device_instance": 1})["job_id"], 90)
+    pts = {x["name"]: x for x in (p.get("result") or {}).get("points", [])}
+    sjekk("knx: gruppeadressene får navn, verdi og enhet fra ETS-lista og bussen",
+          abs((pts.get("Rom 101 Temperatur") or {}).get("value", 0) - 21.0) < 1.2 and pts["Rom 101 Temperatur"]["units"] == "degrees-celsius"
+          and pts["Rom 101 Lys"]["value"] == "active" and pts["Rom 101 Ventil"]["value"] == 40.0 and pts["Effekt"]["value"] == 1250.5,
+          str({n: x["value"] for n, x in pts.items()}))
+    sjekk("knx: det som høres på bussen uten å stå i lista vises også", "5/5/5" in pts)
+    sjekk("knx: punktene har BACnet-form og er ikke skrivbare", pts["Rom 101 Temperatur"]["writable"] is False
+          and pts["Rom 101 Temperatur"]["objid"].startswith("analog-value,") and pts["Rom 101 Lys"]["objid"].startswith("binary-value,"))
+    obj = [x["objid"] for x in pts.values()]
+    po = kall("/api/poll", {"targets": {adr: obj}})
+    sjekk("knx: live-lesing gir de siste verdiene", len(po["values"].get(adr, {})) == len(obj), str(po["values"].get(adr)))
+    d = kall("/api/object/detail", {"address": adr, "objid": pts["Rom 101 Temperatur"]["objid"]})
+    sjekk("knx: detaljer sier gruppeadresse og datapunkttype", d.get("properties", {}).get("group-address") == "1/1/1"
+          and d["properties"].get("datapoint-type") == "9.001", str(d.get("properties")))
+    w = kall("/api/write", {"address": adr, "objid": pts["Rom 101 Lys"]["objid"], "value": 0})
+    sjekk("knx: BACnet-funksjoner svarer tydelig, og ingenting skrives til bussen", w.get("status") == "error" and "KNX" in w.get("error", "")
+          and KXSIM.writes_received == [] and len(KXSIM.reads_received) >= 0, str(KXSIM.writes_received))
+
+    # the pieces, with no server
+    sjekk("knx: gruppeadresser leses i tre og to nivåer", nk.parse_ga("1/2/3") == 0x0A03 and nk.ga_text(0x0A03) == "1/2/3"
+          and nk.parse_ga("1/515") == (1 << 11 | 515))
+    sjekk("knx: temperatur (9.001), prosent (5.001), flyttall (14) og av/på (1) leses",
+          nk.decode((9, 1), ks.enc9(21.5), False) == 21.5 and nk.decode((9, 1), ks.enc9(-5.0), False) == -5.0
+          and nk.decode((5, 1), bytes([255]), False) == 100.0 and nk.decode((14, 56), struct.pack("!f", 12.5), False) == 12.5
+          and nk.decode((1, 1), bytes([1]), True) == "active" and nk.decode((1, 1), bytes([0]), True) == "inactive")
+    frame = nk.ldata_read(nk.parse_ga("1/1/1"))
+    sjekk("knx: det eneste NABE kan sende er en lesing (APCI 0), og modulen har ingen skrivefunksjon",
+          frame[9] == 0x00 and frame[10] == 0x00 and not any(n for n in dir(nk) if "write" in n.lower() and callable(getattr(nk, n))),
+          frame.hex())
+    xml = ('<KNX xmlns="http://knx.org/xml/project/20"><Project><GroupAddress Id="x" Address="2305" Name="Temp" DatapointType="DPST-9-1"/>'
+           '<GroupAddress Id="y" Address="2307" Name="Lys" DatapointType="DPST-1-1"/></Project></KNX>')
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as z:
+        z.writestr("P-0001/0.xml", xml)
+    prosjekt = nk.parse_group_list(buf.getvalue(), "hus.knxproj")
+    sjekk("knx: ETS-prosjektfilen (.knxproj) gir gruppeadresser med navn og type", [(nk.ga_text(p["ga"]), p["name"], p["dpt"]) for p in prosjekt["points"]]
+          == [("1/1/1", "Temp", "9.001"), ("1/1/3", "Lys", "1.001")], str(prosjekt["points"]))
+
+    async def tunnel():
+        egen = ks.KnxSim(ks.demo_groups())             # NABE's own tunnel to KXSIM is the one it has: this one is ours
+        port = await egen.start("127.0.0.1", 0)
+        t1 = nk.KnxTunnel("127.0.0.1", port, 1.0)
+        await t1.connect()
+        t2 = nk.KnxTunnel("127.0.0.1", port, 1.0)
+        try:
+            await t2.connect()
+            full = ""
+        except nk.KnxError as e:
+            full = str(e)
+        await t1.close()
+        await egen.stop()
+        t3 = nk.KnxTunnel("127.0.0.1", KXSEC.port, 1.0)
+        try:
+            await t3.connect()
+            sikker = ""
+        except nk.KnxError as e:
+            sikker = str(e)
+        return full, sikker
+    full, sikker = asyncio.run(tunnel())
+    sjekk("knx: en gateway uten ledig tunnel og en som krever KNX Secure sier det i klartekst",
+          "no free tunnel" in full and "tunnel of this kind" in sikker, f"{full} / {sikker}")
+    sjekk("knx: ingen skriving nådde gatewayen", KXSIM.writes_received == [] and KXSEC.writes_received == [])
+
+
 def kjor_tester():
     s = kall("/api/start", {"local_address": "127.0.0.1/8"})
     sjekk("kobler til", s.get("status") == "done", s.get("local_address", s.get("error", "")))
@@ -1019,6 +1105,7 @@ def kjor_tester():
     sommertid()
     trafikklogg()
     modbus()
+    knx()
     flere_kort()
     simulator()
     oppdatering()
@@ -1069,7 +1156,7 @@ def kjor_tester():
     # Last: it silences the simulated device on 127.0.0.6.
     mine_uten_kontakt()
 
-    for fil in ("nabe-start", "nabe-verktoy", "nabe-felt", "nabe-moro", "nabe-finn", "nabe-skann", "nabe-anlegg", "nabe-bunn", "nabe-graf", "nabe-tunnel", "nabe-sammen", "nabe-flyt", "nabe-peker", "nabe-pekere", "nabe-skrift", "nabo", "nabo-brodre", "nabo-fasit", "nabe-garderobe", "nabe-opptak", "nabe-trafikk", "nabe-modbus", "nabe-besok", "nabe-runde", "nabe-skjema-ordbok", "nabe-skjema", "nabe-flater", "nabe-fortsett", "nabe-simulator", "nabe-oppdatering", "nabe-bakover", "nabe-kart", "nabe-syn", "nabe-raad", "nabe-dialoger-innhold", "nabe-dialoger-mer", "nabe-dialoger", "nabe-tilbehor", "nabe-kunnskap", "nabe-spor"):
+    for fil in ("nabe-start", "nabe-verktoy", "nabe-felt", "nabe-moro", "nabe-finn", "nabe-skann", "nabe-anlegg", "nabe-bunn", "nabe-graf", "nabe-tunnel", "nabe-sammen", "nabe-flyt", "nabe-peker", "nabe-pekere", "nabe-skrift", "nabo", "nabo-brodre", "nabo-fasit", "nabe-garderobe", "nabe-opptak", "nabe-trafikk", "nabe-modbus", "nabe-knx", "nabe-besok", "nabe-runde", "nabe-skjema-ordbok", "nabe-skjema", "nabe-flater", "nabe-fortsett", "nabe-simulator", "nabe-oppdatering", "nabe-bakover", "nabe-kart", "nabe-syn", "nabe-raad", "nabe-dialoger-innhold", "nabe-dialoger-mer", "nabe-dialoger", "nabe-tilbehor", "nabe-kunnskap", "nabe-spor"):
         try:
             with urllib.request.urlopen(f"{BASE}/js/{fil}.js", timeout=5) as rr:
                 ok = rr.status == 200
@@ -1109,6 +1196,12 @@ async def main():
     global MBSIM
     MBSIM = mbsim.ModbusSim(mbsim.demo_units(), empty=[9])
     await MBSIM.start('127.0.0.1', 0)
+    import nabe_knx_sim as kxsim
+    global KXSIM, KXSEC
+    KXSIM = kxsim.KnxSim(kxsim.demo_groups())
+    await KXSIM.start('127.0.0.1', 0)
+    KXSEC = kxsim.KnxSim(kxsim.demo_groups(), secure=True)
+    await KXSEC.start('127.0.0.1', 0)
 
     async def sving():
         import math
@@ -1147,6 +1240,8 @@ async def main():
     finally:
         server.terminate()
         await MBSIM.stop()
+        await KXSIM.stop()
+        await KXSEC.stop()
         for a in apps:
             a.close()
     ok = all(RESULTAT)

@@ -62,6 +62,7 @@ from bacpypes3.service.device import WhoIsFuture
 import bacnet_core as bc
 from bacnet_core import COMM_ERRORS
 import nabe_modbus as nm
+import nabe_knx as nkx
 from bacpypes3.apdu import ErrorRejectAbortNack, ErrorPDU, RejectPDU, AbortPDU
 
 app = FastAPI(title="NABE")
@@ -234,7 +235,7 @@ def t(nb: str, en: str) -> str:
     return en if SPRAAK_VAR.get() == "en" else nb
 
 
-VERSJON = "1.96"
+VERSJON = "2.0"
 
 state = {"app": None, "local_address": None, "read_only": False, "bbmd": None, "primary": None}
 # The simulator: a scanned site run as devices on 127.0.0.x, in a process of its own.
@@ -513,6 +514,7 @@ def status():
         "via": dict(DEVICE_KORT),
         "sim": _sim_kort(),
         "modbus": True,
+        "knx": True,
     }
 
 
@@ -1086,15 +1088,15 @@ class ModbusUstottet(Exception):
 @app.exception_handler(ModbusUstottet)
 async def _modbus_ustottet(_request, _exc):
     return JSONResponse({"status": "error", "error": t(
-        "Dette finnes bare for BACnet. Modbus-enheter er bare lesbare i NABE.",
-        "This exists for BACnet only. Modbus devices are read only in NABE.")})
+        "Dette finnes bare for BACnet. Modbus- og KNX-enheter er bare lesbare i NABE.",
+        "This exists for BACnet only. Modbus and KNX devices are read only in NABE.")})
 
 
 async def _app_for(address, via: Optional[str] = None):
     """The BACnet stack for an address, opened when it is needed. None while
     not connected at all. An adapter that cannot be bound (the port is taken on
     it, or it is gone) falls back to the main one, as before."""
-    if str(address).startswith("mb:"):
+    if str(address).startswith(("mb:", "kx:")):
         raise ModbusUstottet()
     prim = state["app"]
     if prim is None:
@@ -2446,6 +2448,8 @@ async def device_points(body: LoadPointsBody):
     """Start the load as a job; the UI polls /api/job/{id} for progress."""
     if nm.parse_address(body.address):
         return _modbus_points_job(body)
+    if nkx.parse_address(body.address):
+        return _knx_points_job(body)
     bacnet_app = await _app_for(body.address)
     if bacnet_app is None:
         return {"status": "error", "error": t("Proxy er ikke startet.", "Not connected.")}
@@ -2502,11 +2506,14 @@ def job_promote(job_id: str):
 @app.post("/api/poll")
 async def poll(body: PollBody):
     mb_targets = {a: o for a, o in body.targets.items() if a.startswith("mb:")}
-    targets = {a: o for a, o in body.targets.items() if not a.startswith("mb:")}
+    kx_targets = {a: o for a, o in body.targets.items() if a.startswith("kx:")}
+    targets = {a: o for a, o in body.targets.items() if not a.startswith(("mb:", "kx:"))}
     out: Dict[str, Dict[str, Any]] = {}
     cov_ok: Dict[str, List[str]] = {}
     if mb_targets:
         out.update(await _modbus_poll(mb_targets))
+    if kx_targets:
+        out.update(await _knx_poll(kx_targets))
     if not targets:
         return {"status": "done", "ts": time.time(), "values": out, "cov": 0, "cov_stille": {}, "cov_ok": {}}
     bacnet_app = _require_app()
@@ -2535,6 +2542,8 @@ async def poll(body: PollBody):
 async def object_detail(body: DetailBody):
     if nm.parse_address(body.address):
         return _modbus_detail(body)
+    if nkx.parse_address(body.address):
+        return _knx_detail(body)
     bacnet_app = await _app_for(body.address)
     if bacnet_app is None:
         return {"status": "error", "error": t("Proxy er ikke startet.", "Not connected.")}
@@ -5611,6 +5620,285 @@ def modbus_slett(body: ModbusSlett):
     for a, m in list(MODBUS_KART.assignments().items()):
         if m == body.kart:
             MODBUS_KART.assign(a, None)
+    return {"status": "done"}
+
+
+# ------------------------------------------------------------------------ KNX
+# Read only: nabe_knx can send a GroupValueRead and nothing else. A device is a KNXnet/IP gateway, address kx:host:port;
+# its points are the group addresses of an ETS list the technician imports, in the shape of BACnet points. One tunnel is
+# held open per gateway and listens: KNX is event driven, so a poll returns the last value each address was heard with,
+# and an address nobody has spoken on is asked for once, at a pace the bus can bear.
+KNX_LISTER = nkx.GroupStore(DATA_DIR)
+_KNX_ROR: Dict[str, "nkx.KnxTunnel"] = {}
+_KNX_LAS: Dict[str, asyncio.Lock] = {}
+_KNX_RENNER: Dict[str, "asyncio.Task"] = {}
+_KNX_OPPRYDDER: List["asyncio.Task"] = []
+
+
+async def _knx_tunnel(host: str, port: int) -> "nkx.KnxTunnel":
+    """The open tunnel to a gateway, opened when it is needed. One per gateway: a gateway has few tunnels to give."""
+    key = f"{host}:{port}"
+    lock = _KNX_LAS.setdefault(key, asyncio.Lock())
+    async with lock:
+        tun = _KNX_ROR.get(key)
+        if tun is not None and tun.connected:
+            tun.last_used = time.monotonic()
+            return tun
+        if tun is not None:
+            await tun.close()
+        tun = nkx.KnxTunnel(host, port, 3.0)
+        await tun.connect()
+        _KNX_ROR[key] = tun
+        if not _KNX_OPPRYDDER:
+            _KNX_OPPRYDDER.append(asyncio.create_task(_knx_rydd()))
+        return tun
+
+
+async def _knx_rydd():
+    """A tunnel nobody has used for five minutes is closed, so the gateway gets its tunnel back."""
+    while True:
+        await asyncio.sleep(60)
+        for key, tun in list(_KNX_ROR.items()):
+            if time.monotonic() - tun.last_used > 300:
+                _KNX_ROR.pop(key, None)
+                await tun.close()
+
+
+class KnxScanBody(BaseModel):
+    subnet: str
+    port: int = nkx.KNX_PORT
+    timeout: float = 2.0
+
+
+@app.post("/api/knx/scan")
+async def knx_scan(body: KnxScanBody):
+    """Find KNXnet/IP gateways in an address range with a description request. Connects to nothing."""
+    try:
+        hosts, _net = parse_target(body.subnet.strip())
+    except Exception as e:
+        return {"status": "error", "error": t(f"Ugyldig subnet/IP-range: {e}", f"Invalid subnet/IP range: {e}")}
+    hosts = [str(h) for h in hosts]
+    if len(hosts) > 4096:
+        return {"status": "error", "error": t("Maks 4096 adresser i en KNX-skanning", "At most 4096 addresses in a KNX scan")}
+    port = max(1, min(65535, body.port))
+    job = _new_job("knx-scan")
+    job["phase"] = f"udp {port}"
+    job["total"] = len(hosts)
+
+    async def run():
+        try:
+            found: List[Dict[str, Any]] = []
+            for i in range(0, len(hosts), 256):
+                found.extend(await nkx.describe_hosts(hosts[i:i + 256], port, max(0.5, min(6.0, body.timeout))))
+                job["done"] = min(len(hosts), i + 256)
+                job["found"] = len(found)
+            devices = [nkx.device_record(d) for d in found]
+            job["result"] = {"status": "done", "subnet": body.subnet, "mode": "knx", "hosts_scanned": len(hosts),
+                             "count": len(devices), "devices": devices, "note": None}
+            job["status"] = "done"
+        except asyncio.CancelledError:
+            job["status"] = "cancelled"
+            raise
+        except Exception as e:
+            job["status"] = "error"
+            job["error"] = f"{type(e).__name__}: {e}"
+    job["task"] = asyncio.create_task(run())
+    return {"status": "started", "job_id": job["id"]}
+
+
+def _knx_verdi(punkt: Dict[str, Any], tel: Optional[Dict[str, Any]]) -> Any:
+    if tel is None:
+        return None
+    return nkx.decode(nkx.parse_dpt(punkt.get("dpt")), tel["raw"], tel["small"])
+
+
+def _knx_punkter(address: str, tun: Optional["nkx.KnxTunnel"]) -> List[Dict[str, Any]]:
+    """The points of a gateway: the ETS list, then the group addresses heard on the bus that are not in it."""
+    liste = KNX_LISTER.points_for(address)
+    kjent = {p["ga"] for p in liste}
+    ut = []
+    for p in liste:
+        tel = tun.values.get(p["ga"]) if tun else None
+        dpt = nkx.parse_dpt(p.get("dpt"))
+        rec = nkx.point_for(p["ga"], p["name"], dpt, p.get("description", ""), _knx_verdi(p, tel))
+        if tel is None:
+            rec["unread"] = True
+        ut.append(rec)
+    if tun:
+        for ga, tel in sorted(tun.values.items()):
+            if ga not in kjent:
+                rec = nkx.point_for(ga, "", (0, 0), t("Hørt på bussen, ikke i ETS-lista", "Heard on the bus, not in the ETS list"),
+                                    _knx_verdi({"dpt": ""}, tel))
+                ut.append(rec)
+    return ut
+
+
+def _knx_points_job(body) -> Dict[str, Any]:
+    host, port = nkx.parse_address(body.address)
+    job = _new_job("points")
+    job["phase"] = "knx"
+
+    async def run():
+        try:
+            tun = await _knx_tunnel(host, port)
+            liste = KNX_LISTER.points_for(body.address)
+            job["identity"] = {"model-name": "KNXnet/IP", "description": f"KNX tunnel {tun.address}", "firmware-revision": ""}
+            await asyncio.sleep(1.5)                       # the bus is talking: take what it says first
+            mangler = [p["ga"] for p in liste if p["ga"] not in tun.values][:400]
+            if mangler:
+                job["phase"] = t("spør bussen", "asking the bus")
+                job["total"], job["done"] = len(mangler), 0
+                def fremdrift(n, _tot):
+                    job["done"] = n
+                await tun.read_many(mangler, wait=2.5, progress=fremdrift)
+            elif not liste:
+                job["phase"] = t("lytter", "listening")
+                await asyncio.sleep(5.0)
+            records = _knx_punkter(body.address, tun)
+            counts: Dict[str, int] = {}
+            for r in records:
+                counts[r["type"]] = counts.get(r["type"], 0) + 1
+            job["counts"] = counts
+            job["result"] = {"status": "done", "partial": False, "address": body.address, "device_instance": 1,
+                             "total_objects": len(records), "type_counts": counts, "count": len(records),
+                             "unread": sum(1 for r in records if r.get("unread")), "rpm": None,
+                             "identity": job["identity"], "points": records,
+                             "knx": {"list": KNX_LISTER.assignments().get(body.address), "tunnel": tun.address}}
+            job["status"] = "done"
+        except asyncio.CancelledError:
+            job["status"] = "cancelled"
+            raise
+        except nkx.KnxError as e:
+            job["status"] = "error"
+            job["error"] = str(e)
+        except Exception as e:
+            job["status"] = "error"
+            job["error"] = f"{type(e).__name__}: {e}"
+    job["task"] = asyncio.create_task(run())
+    return {"status": "started", "job_id": job["id"]}
+
+
+async def _knx_les_bak(key: str, tun: "nkx.KnxTunnel", gas: List[int]) -> None:
+    try:
+        await tun.read_many(gas, wait=0.5)
+    except Exception:
+        pass
+    finally:
+        _KNX_RENNER.pop(key, None)
+
+
+async def _knx_poll(targets: Dict[str, List[str]]) -> Dict[str, Dict[str, Any]]:
+    """The last value each group address was heard with. An address with none yet is asked for in the background."""
+    out: Dict[str, Dict[str, Any]] = {}
+
+    async def one(address: str, objids: List[str]):
+        parsed = nkx.parse_address(address)
+        if not parsed or not objids:
+            return
+        try:
+            tun = await _knx_tunnel(*parsed)
+        except Exception:
+            out[address] = {}
+            return
+        dpt = {p["ga"]: p for p in KNX_LISTER.points_for(address)}
+        vals: Dict[str, Any] = {}
+        mangler: List[int] = []
+        for oid in objids:
+            try:
+                ga = int(oid.split(",")[1])
+            except (IndexError, ValueError):
+                continue
+            tel = tun.values.get(ga)
+            if tel is None:
+                mangler.append(ga)
+                continue
+            v = _knx_verdi(dpt.get(ga, {"dpt": ""}), tel)
+            if v is not None:
+                vals[oid] = v
+        out[address] = vals
+        key = f"{parsed[0]}:{parsed[1]}"
+        if mangler and key not in _KNX_RENNER:
+            _KNX_RENNER[key] = asyncio.create_task(_knx_les_bak(key, tun, mangler[:40]))
+    await asyncio.gather(*[one(a, o) for a, o in targets.items()])
+    return out
+
+
+def _knx_detail(body) -> Dict[str, Any]:
+    try:
+        ga = int(body.objid.split(",")[1])
+    except (IndexError, ValueError):
+        return {"status": "error", "error": t("Ugyldig punkt", "Invalid point")}
+    p = next((x for x in KNX_LISTER.points_for(body.address) if x["ga"] == ga), None)
+    tun = _KNX_ROR.get("%s:%d" % nkx.parse_address(body.address))
+    tel = tun.values.get(ga) if tun else None
+    props: Dict[str, Any] = {"object-name": (p or {}).get("name") or nkx.ga_text(ga), "description": (p or {}).get("description", ""),
+                             "group-address": nkx.ga_text(ga), "datapoint-type": (p or {}).get("dpt") or t("ukjent", "unknown")}
+    if tel:
+        props["last-telegram"] = time.strftime("%H:%M:%S", time.localtime(tel["t"]))
+        props["last-kind"] = tel["kind"]
+        props["last-source"] = nkx.ia_text(tel["src"])
+        props["raw"] = tel["raw"].hex()
+    return {"status": "done", "objid": body.objid, "properties": props}
+
+
+@app.get("/api/knx/lister")
+def knx_lister():
+    return {"status": "done", "lister": KNX_LISTER.list_all(), "tilordning": KNX_LISTER.assignments()}
+
+
+class KnxListeBody(BaseModel):
+    navn: str = ""
+    innhold: str            # base64, since an ETS project is a zip
+    filnavn: str = ""
+
+
+@app.post("/api/knx/lister")
+def knx_liste_lagre(body: KnxListeBody):
+    """Import the group addresses of an ETS project (.knxproj without password) or a CSV export."""
+    import base64
+    try:
+        data = base64.b64decode(body.innhold, validate=False)
+    except Exception:
+        return {"status": "error", "error": t("Kunne ikke lese filen", "Could not read the file")}
+    if len(data) > 60_000_000:
+        return {"status": "error", "error": t("Filen er for stor", "The file is too large")}
+    try:
+        parsed = nkx.parse_group_list(data, body.filnavn)
+    except nkx.KnxError as e:
+        return {"status": "error", "error": str(e)}
+    lid = KNX_LISTER.save(body.navn, parsed)
+    return {"status": "done", "id": lid, "punkter": len(parsed["points"])}
+
+
+class KnxTilordne(BaseModel):
+    address: str
+    liste: Optional[str] = None
+
+
+@app.post("/api/knx/tilordne")
+def knx_tilordne(body: KnxTilordne):
+    if not nkx.parse_address(body.address):
+        return {"status": "error", "error": t("Ikke en KNX-gateway", "Not a KNX gateway")}
+    if body.liste and KNX_LISTER.load(body.liste) is None:
+        return {"status": "error", "error": t("Ukjent gruppeliste", "Unknown group list")}
+    KNX_LISTER.assign(body.address, body.liste)
+    return {"status": "done"}
+
+
+class KnxSlett(BaseModel):
+    liste: str
+
+
+@app.post("/api/knx/slett")
+def knx_slett(body: KnxSlett):
+    f = KNX_LISTER.lists / f"{re.sub(r'[^A-Za-z0-9_.-]+', '_', body.liste)}.json"
+    try:
+        f.unlink()
+    except OSError:
+        return {"status": "error", "error": t("Fant ikke gruppelista", "Group list not found")}
+    for a, m in list(KNX_LISTER.assignments().items()):
+        if m == body.liste:
+            KNX_LISTER.assign(a, None)
     return {"status": "done"}
 
 
