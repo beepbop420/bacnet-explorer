@@ -61,6 +61,7 @@ from bacpypes3.service.device import WhoIsFuture
 
 import bacnet_core as bc
 from bacnet_core import COMM_ERRORS
+import nabe_modbus as nm
 from bacpypes3.apdu import ErrorRejectAbortNack, ErrorPDU, RejectPDU, AbortPDU
 
 app = FastAPI(title="NABE")
@@ -233,7 +234,7 @@ def t(nb: str, en: str) -> str:
     return en if SPRAAK_VAR.get() == "en" else nb
 
 
-VERSJON = "1.95"
+VERSJON = "1.96"
 
 state = {"app": None, "local_address": None, "read_only": False, "bbmd": None, "primary": None}
 # The simulator: a scanned site run as devices on 127.0.0.x, in a process of its own.
@@ -511,6 +512,7 @@ def status():
         "kort": _kort_liste(),
         "via": dict(DEVICE_KORT),
         "sim": _sim_kort(),
+        "modbus": True,
     }
 
 
@@ -1077,10 +1079,23 @@ def _adapter_for(address, via: Optional[str] = None) -> Optional[str]:
         return state.get("primary")
 
 
+class ModbusUstottet(Exception):
+    """A BACnet-only request (schedules, alarms, clock, writes) aimed at a Modbus device."""
+
+
+@app.exception_handler(ModbusUstottet)
+async def _modbus_ustottet(_request, _exc):
+    return JSONResponse({"status": "error", "error": t(
+        "Dette finnes bare for BACnet. Modbus-enheter er bare lesbare i NABE.",
+        "This exists for BACnet only. Modbus devices are read only in NABE.")})
+
+
 async def _app_for(address, via: Optional[str] = None):
     """The BACnet stack for an address, opened when it is needed. None while
     not connected at all. An adapter that cannot be bound (the port is taken on
     it, or it is gone) falls back to the main one, as before."""
+    if str(address).startswith("mb:"):
+        raise ModbusUstottet()
     prim = state["app"]
     if prim is None:
         return None
@@ -2429,6 +2444,8 @@ async def device_flagg(body: FlaggBody):
 @app.post("/api/device/points")
 async def device_points(body: LoadPointsBody):
     """Start the load as a job; the UI polls /api/job/{id} for progress."""
+    if nm.parse_address(body.address):
+        return _modbus_points_job(body)
     bacnet_app = await _app_for(body.address)
     if bacnet_app is None:
         return {"status": "error", "error": t("Proxy er ikke startet.", "Not connected.")}
@@ -2484,12 +2501,17 @@ def job_promote(job_id: str):
 
 @app.post("/api/poll")
 async def poll(body: PollBody):
+    mb_targets = {a: o for a, o in body.targets.items() if a.startswith("mb:")}
+    targets = {a: o for a, o in body.targets.items() if not a.startswith("mb:")}
+    out: Dict[str, Dict[str, Any]] = {}
+    cov_ok: Dict[str, List[str]] = {}
+    if mb_targets:
+        out.update(await _modbus_poll(mb_targets))
+    if not targets:
+        return {"status": "done", "ts": time.time(), "values": out, "cov": 0, "cov_stille": {}, "cov_ok": {}}
     bacnet_app = _require_app()
     if bacnet_app is None:
         return {"status": "error", "error": t("Proxy er ikke startet.", "Not connected.")}
-
-    out: Dict[str, Dict[str, Any]] = {}
-    cov_ok: Dict[str, List[str]] = {}
 
     async def one_device(ip: str, objids: List[str]):
         addr = device_address(ip)
@@ -2503,14 +2525,16 @@ async def poll(body: PollBody):
             out[ip] = {}
         out[ip].update(fra_cov)
 
-    await asyncio.gather(*[one_device(ip, oids) for ip, oids in body.targets.items() if oids])
+    await asyncio.gather(*[one_device(ip, oids) for ip, oids in targets.items() if oids])
     return {"status": "done", "ts": time.time(), "values": out,
             "cov": sum(1 for c in COV.values() if c.get("ok") and c.get("har") and c.get("status") != "stille"),
-            "cov_stille": _cov_stille_i(body.targets), "cov_ok": cov_ok}
+            "cov_stille": _cov_stille_i(targets), "cov_ok": cov_ok}
 
 
 @app.post("/api/object/detail")
 async def object_detail(body: DetailBody):
+    if nm.parse_address(body.address):
+        return _modbus_detail(body)
     bacnet_app = await _app_for(body.address)
     if bacnet_app is None:
         return {"status": "error", "error": t("Proxy er ikke startet.", "Not connected.")}
@@ -5382,6 +5406,212 @@ async def ping_range(body: PingBody):
     )
     lever = [ip for ip, ok in zip(hosts, svar) if ok]
     return {"status": "done", "checked": len(hosts), "alive": lever}
+
+
+# ---------------------------------------------------------------- Modbus
+# Read only, and by construction: nabe_modbus has no function code that writes. A device is an address of the form
+# mb:host:port/unit; its points have the shape of BACnet points, so the table, the watch list, recording, export and
+# the schematic need nothing special. Names, types and scale come from a register map the technician imports.
+MODBUS_KART = nm.MapStore(DATA_DIR)
+_MB_KLIENTER: Dict[str, "nm.ModbusClient"] = {}
+
+
+def _mb_klient(host: str, port: int) -> "nm.ModbusClient":
+    key = f"{host}:{port}"
+    k = _MB_KLIENTER.get(key)
+    if k is None:
+        k = _MB_KLIENTER[key] = nm.ModbusClient(host, port, 2.5)
+    return k
+
+
+class ModbusScanBody(BaseModel):
+    subnet: str
+    port: int = nm.MODBUS_PORT
+    units: Optional[List[int]] = None
+    timeout: float = 1.0
+
+
+@app.post("/api/modbus/scan")
+async def modbus_scan(body: ModbusScanBody):
+    """Find Modbus TCP servers in an address range, and the units behind them. Only reads."""
+    try:
+        hosts, _net = parse_target(body.subnet.strip())
+    except Exception as e:
+        return {"status": "error", "error": t(f"Ugyldig subnet/IP-range: {e}", f"Invalid subnet/IP range: {e}")}
+    hosts = [str(h) for h in hosts]
+    if len(hosts) > 2048:
+        return {"status": "error", "error": t("Maks 2048 adresser i en Modbus-skanning", "At most 2048 addresses in a Modbus scan")}
+    port = max(1, min(65535, body.port))
+    job = _new_job("modbus-scan")
+    job["phase"] = f"tcp {port}"
+    job["total"] = len(hosts)
+
+    async def run():
+        try:
+            open_hosts = await nm.tcp_sweep(hosts, port, 0.8)
+            job["done"], job["phase"], job["total"] = len(hosts), t("enheter", "units"), len(open_hosts)
+            devices: List[Dict[str, Any]] = []
+            job["done"] = 0
+            sem = asyncio.Semaphore(6)
+
+            async def one(h: str):
+                async with sem:
+                    devices.extend(await nm.scan_host(h, port, body.units, max(0.3, min(5.0, body.timeout))))
+                job["done"] += 1
+                job["found"] = len(devices)
+            await asyncio.gather(*[one(h) for h in open_hosts])
+            devices.sort(key=lambda d: (tuple(int(x) for x in d["ip"].split(".")) if re.fullmatch(r"[\d.]+", d["ip"]) else (0,), d["unit"]))
+            job["result"] = {"status": "done", "subnet": body.subnet, "mode": "modbus", "hosts_scanned": len(hosts),
+                             "open_hosts": open_hosts, "count": len(devices), "devices": devices, "note": None}
+            job["status"] = "done"
+        except asyncio.CancelledError:
+            job["status"] = "cancelled"
+            raise
+        except Exception as e:                    # a scan that fails says so instead of hanging
+            job["status"] = "error"
+            job["error"] = f"{type(e).__name__}: {e}"
+    job["task"] = asyncio.create_task(run())
+    return {"status": "started", "job_id": job["id"]}
+
+
+def _modbus_points_job(body) -> Dict[str, Any]:
+    host, port, unit = nm.parse_address(body.address)
+    job = _new_job("points")
+    job["phase"] = "modbus"
+
+    async def run():
+        try:
+            pts, har_kart = MODBUS_KART.points_for(body.address)
+            client = _mb_klient(host, port)
+            ident: Dict[str, Any] = {}
+            try:
+                i = await client.device_identification(unit)
+                ident = {"model-name": " ".join(x for x in (i.get("vendor"), i.get("product_name") or i.get("model_name")) if x),
+                         "firmware-revision": i.get("revision", ""), "description": "Modbus TCP"}
+            except (nm.ModbusError, nm.ModbusException):
+                ident = {"description": "Modbus TCP"}
+            job["identity"] = ident
+            job["total"], job["done"] = len(pts), 0
+            vals = await nm.read_points(client, unit, pts)
+            records, unread = [], 0
+            for p in pts:
+                rec = nm.point_record(p)
+                if rec["objid"] in vals:
+                    v = vals[rec["objid"]]
+                    rec["value"] = v
+                    rec["numeric"] = isinstance(v, (int, float)) and not isinstance(v, bool)
+                elif har_kart:
+                    rec["unread"] = True
+                    unread += 1
+                else:
+                    continue                      # no map: only the registers the device has
+                records.append(rec)
+            counts: Dict[str, int] = {}
+            for r in records:
+                counts[r["type"]] = counts.get(r["type"], 0) + 1
+            job["counts"] = counts
+            job["result"] = {"status": "done", "partial": False, "address": body.address, "device_instance": unit,
+                             "total_objects": len(pts) if har_kart else len(records), "type_counts": counts, "count": len(records), "unread": unread,
+                             "rpm": None, "identity": ident, "points": records,
+                             "modbus": {"map": MODBUS_KART.assignments().get(body.address), "raw": not har_kart}}
+            job["status"] = "done"
+        except asyncio.CancelledError:
+            job["status"] = "cancelled"
+            raise
+        except Exception as e:
+            job["status"] = "error"
+            job["error"] = f"{type(e).__name__}: {e}"
+    job["task"] = asyncio.create_task(run())
+    return {"status": "started", "job_id": job["id"]}
+
+
+async def _modbus_poll(targets: Dict[str, List[str]]) -> Dict[str, Dict[str, Any]]:
+    """The present values of the points asked for, per Modbus device. A point that was not read is left out."""
+    out: Dict[str, Dict[str, Any]] = {}
+
+    async def one(address: str, objids: List[str]):
+        parsed = nm.parse_address(address)
+        if not parsed or not objids:
+            return
+        host, port, unit = parsed
+        pts, _kart = MODBUS_KART.points_for(address)
+        want = set(objids)
+        sel = [p for p in pts if nm.point_record(p)["objid"] in want]
+        try:
+            out[address] = await nm.read_points(_mb_klient(host, port), unit, sel) if sel else {}
+        except Exception:
+            out[address] = {}
+    await asyncio.gather(*[one(a, o) for a, o in targets.items()])
+    return out
+
+
+def _modbus_detail(body) -> Dict[str, Any]:
+    pts, _kart = MODBUS_KART.points_for(body.address)
+    for p in pts:
+        rec = nm.point_record(p)
+        if rec["objid"] == body.objid:
+            props = {"object-name": p["name"], "description": rec["description"], "units": rec["units"],
+                     "modbus-function": p["function"], "modbus-address": p["address"], "data-type": p["type"],
+                     "scale": p["scale"], "offset": p["offset"], "word-order": p["order"]}
+            if p["bit"] is not None:
+                props["bit"] = p["bit"]
+            return {"status": "done", "objid": body.objid, "properties": props}
+    return {"status": "error", "error": t("Fant ikke punktet i registerkartet", "Point not found in the register map")}
+
+
+@app.get("/api/modbus/kart")
+def modbus_kart():
+    return {"status": "done", "kart": MODBUS_KART.list_maps(), "tilordning": MODBUS_KART.assignments()}
+
+
+class ModbusKartBody(BaseModel):
+    navn: str = ""
+    tekst: str
+
+
+@app.post("/api/modbus/kart")
+def modbus_kart_lagre(body: ModbusKartBody):
+    """Import a register map (JSON or CSV). It is checked, and what is wrong is said by row."""
+    if len(body.tekst) > 2_000_000:
+        return {"status": "error", "error": t("Registerkartet er for stort", "The register map is too large")}
+    try:
+        parsed = nm.parse_map(body.tekst)
+    except (nm.MapError, ValueError) as e:
+        return {"status": "error", "error": str(e)}
+    kid = MODBUS_KART.save_map(body.navn, parsed)
+    return {"status": "done", "id": kid, "punkter": len(parsed["points"])}
+
+
+class ModbusTilordne(BaseModel):
+    address: str
+    kart: Optional[str] = None
+
+
+@app.post("/api/modbus/tilordne")
+def modbus_tilordne(body: ModbusTilordne):
+    if not nm.parse_address(body.address):
+        return {"status": "error", "error": t("Ikke en Modbus-enhet", "Not a Modbus device")}
+    if body.kart and MODBUS_KART.load_map(body.kart) is None:
+        return {"status": "error", "error": t("Ukjent registerkart", "Unknown register map")}
+    MODBUS_KART.assign(body.address, body.kart)
+    return {"status": "done"}
+
+
+class ModbusSlett(BaseModel):
+    kart: str
+
+
+@app.post("/api/modbus/slett")
+def modbus_slett(body: ModbusSlett):
+    f = MODBUS_KART.maps / f"{re.sub(r'[^A-Za-z0-9_.-]+', '_', body.kart)}.json"
+    try:
+        f.unlink()
+    except OSError:
+        return {"status": "error", "error": t("Fant ikke registerkartet", "Register map not found")}
+    for a, m in list(MODBUS_KART.assignments().items()):
+        if m == body.kart:
+            MODBUS_KART.assign(a, None)
+    return {"status": "done"}
 
 
 @app.get("/")

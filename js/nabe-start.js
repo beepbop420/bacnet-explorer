@@ -203,6 +203,9 @@ const FAKTA = [
   ['COV betyr at regulatoren sier fra selv. Mindre spørring, mer ro.', 'COV means the controller speaks up itself. Less asking, more peace.'],
 ];
 const NYTT = {
+  '1.96': [
+    ['Modbus TCP, bare lesing: skann etter enheter, importer et registerkart (CSV eller JSON) som gir registrene navn, type, skalering og enhet, og enhetene ligger i lista med samme tabell, overvåking, opptak, eksport og skjema som BACnet. Åpnes fra ⋯-menyen eller paletten («Modbus…»). Koden har ingen funksjon som skriver', 'Modbus TCP, read only: scan for devices, import a register map (CSV or JSON) that gives the registers a name, type, scale and unit, and the devices sit in the list with the same table, watch list, recording, export and schematic as BACnet. Opened from the ⋯ menu or the palette ("Modbus…"). The code has no function that writes'],
+  ],
   '1.95': [
     ['System skrevet med bindestrek («OU01.1OX01 - 320-002-RT401») leses som 320.002, og varmekurser får egen kolonne per system selv når beskrivelsene er generelle engelske ord som «Miscellaneous Pressure»', 'Systems written with a hyphen ("OU01.1OX01 - 320-002-RT401") are read as 320.002, and heating circuits get a column of their own per system even when the descriptions are general English words like "Miscellaneous Pressure"'],
   ],

@@ -5143,6 +5143,15 @@ tbody tr.fault td.c-act::before{content:'';position:absolute;left:0;top:2px;bott
 .tr-filter .field{width:150px}
 .tr-feil{display:flex;align-items:center;gap:5px;cursor:pointer}
 .tr-mono{font-family:var(--mono);white-space:nowrap}
+/* Modbus */
+.mb-modal{width:min(820px,96vw)}
+.mb-sek{display:flex;flex-direction:column;gap:10px;padding:6px 0 20px}
+.mb-sek + .mb-sek{border-top:1px solid var(--line);padding-top:20px}
+.mb-tittel{font-size:13px;font-weight:600}
+.mb-rad{display:flex;gap:8px;align-items:center}
+.mb-rad .field:first-child{flex:1}
+.mb-port{width:84px}
+.mb-kart{min-width:170px}
 .sp-panel{position:fixed;right:18px;bottom:40px;z-index:9000;width:min(380px,92vw);max-height:min(520px,80vh);display:flex;flex-direction:column;gap:10px;padding:12px 14px 14px;
   background:var(--raised);border:1px solid var(--line-2);border-radius:var(--r-lg);box-shadow:0 12px 34px rgba(0,0,0,.4)}
 .sp-panel:not(.ved){bottom:auto;top:50px}

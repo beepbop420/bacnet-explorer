@@ -99,6 +99,7 @@ def lag_enhet(siste_oktett: int, instans: int, navn: str, skjev_klokke: bool = F
 
 LOOP = None
 APPS = {}
+MBSIM = None
 
 
 def i_loop(fn):
@@ -337,6 +338,7 @@ def royktest():
               "    && (q => q.rom === '02.85' && q.rolle === 'paadrag' && q.art === 'vav')(nabeSkjema.tolkPunkt({objid: 'v', name: 'pMpBus.MP_BUS_1.POS[1]', description: 'SD0T SQ401-02.85 Spjeldposisjon', type: 'analog-value', value: 90, units: 'degrees-celsius'}))"
               "    && nabeSkjema.byggSystemer([{objid: 'u', name: 'A_320_012_Utekomp_Y1', description: 'Y1', type: 'analog-value', value: 80, units: 'degrees-celsius'}]).every(s => !s.komp.size)"
               "    && nabeSkjema.byggSystemer([{objid: 'm', name: 'Supply air mode', description: '0-m3/h, 1-l/s, 3-Pa', type: 'analog-value', value: 3, units: 'pascals'}]).every(s => !s.komp.size); })(),"
+              " modbus: typeof aapneModbus === 'function' && !!document.getElementById('modbusBtn'),"
               " flater: typeof aapneOversikt === 'function' &&!!document.getElementById('listeSmalBtn') && !!document.getElementById('oversiktBtn') && (() => {"
               "  const P = (o, n, d, t, v, u) => ({objid: o, name: n, description: d, type: t, value: v, units: u || ''});"
               "  const s = nabeSkjema.byggSystemer([P('ai,1', 'A_320_031_A109_RT603_PV', 'SD2T Romtemperatur', 'analog-input', 21.7, 'degrees-celsius'),"
@@ -889,6 +891,86 @@ def vakt():
     sjekk("opptak bakover: tas et punkt av lista, slutter det", kall("/api/vakt").get("punkter") == 0)
 
 
+def modbus():
+    """Modbus TCP, read only: found, named by a register map, polled, and never written to."""
+    import nabe_modbus as nm
+    port = MBSIM.port
+    j = vent_jobb(kall("/api/modbus/scan", {"subnet": "127.0.0.1", "port": port, "units": [1, 2, 9]})["job_id"])
+    devs = (j.get("result") or {}).get("devices", [])
+    adr = {d["unit"]: d["address"] for d in devs}
+    sjekk("modbus: skann finner to enheter og tar ikke gatewayens «ingen enhet» for en enhet",
+          sorted(adr) == [1, 2] and all(a.startswith("mb:127.0.0.1:") for a in adr.values()), str(sorted(adr)))
+    sjekk("modbus: enheten får navn fra identifikasjonen", any("Room controller" in d["object_name"] for d in devs),
+          str([d["object_name"] for d in devs]))
+
+    p = vent_jobb(kall("/api/device/points", {"address": adr[1], "device_instance": 1})["job_id"])
+    r = p.get("result") or {}
+    sjekk("modbus: uten registerkart vises registrene som de er", r.get("modbus", {}).get("raw") is True and r.get("count") == 6,
+          f"{r.get('count')} punkter")
+
+    feil = kall("/api/modbus/kart", {"navn": "feil", "tekst": "address,function\nabc,holding\n"})
+    sjekk("modbus: et ødelagt registerkart sier hvilken rad som er feil", feil.get("status") == "error" and "row 1" in feil.get("error", ""), str(feil))
+    csv = ("address;function;type;name;scale;unit;description;bit\n0;holding;s16;Temperatur;0,1;°C;Romtemperatur;\n"
+           "1;holding;s16;Settpunkt;0,1;°C;Settpunkt rom;\n3;holding;u16;Drift;;;Drift;0\n0;coil;bool;Rele1;;;Relé 1;\n")
+    k = kall("/api/modbus/kart", {"navn": "Romregulator", "tekst": csv})
+    sjekk("modbus: registerkart importeres", k.get("status") == "done" and k.get("punkter") == 4, str(k))
+    kall("/api/modbus/tilordne", {"address": adr[1], "kart": k["id"]})
+    p = vent_jobb(kall("/api/device/points", {"address": adr[1], "device_instance": 1})["job_id"])
+    pts = {x["name"]: x for x in (p.get("result") or {}).get("points", [])}
+    sjekk("modbus: registerkartet gir navn, skalering og enhet", abs((pts.get("Temperatur") or {}).get("value", 0) - 21.0) < 1.2
+          and pts["Temperatur"]["units"] == "degrees-celsius" and pts["Drift"]["value"] == "active" and pts["Rele1"]["value"] == "active",
+          str({n: x["value"] for n, x in pts.items()}))
+    sjekk("modbus: punktene har BACnet-form, så tabellen kan vise dem", pts["Temperatur"]["objid"].startswith("analog-value,")
+          and pts["Temperatur"]["writable"] is False and "modbus" in pts["Temperatur"])
+
+    obj = [x["objid"] for x in pts.values()]
+    po = kall("/api/poll", {"targets": {adr[1]: obj}})
+    sjekk("modbus: live-lesing gir verdier for punktene", set(po["values"].get(adr[1], {})) == set(obj), str(po["values"].get(adr[1])))
+    d = kall("/api/object/detail", {"address": adr[1], "objid": pts["Temperatur"]["objid"]})
+    sjekk("modbus: detaljer sier funksjon og skalering", d.get("properties", {}).get("modbus-function") == "holding"
+          and d["properties"].get("scale") == 0.1, str(d.get("properties")))
+
+    s = kall("/api/device/schedules", {"address": adr[1], "device_instance": 1})
+    w = kall("/api/write", {"address": adr[1], "objid": pts["Temperatur"]["objid"], "value": 5})
+    sjekk("modbus: BACnet-funksjoner svarer tydelig, og ingenting skrives", s.get("status") == "error" and w.get("status") == "error"
+          and "BACnet" in w.get("error", "") and MBSIM.writes_received == [], str(MBSIM.writes_received))
+
+    # the pieces, with no server
+    def punkt(**kv):
+        return nm.normalise_point(dict({"function": "holding", "address": 0, "type": "u16"}, **kv))
+    fl = __import__("struct").unpack("!2H", __import__("struct").pack("!f", 12.5))
+    sjekk("modbus: flyttall leses i alle fire ordrekkefølger",
+          nm.decode_value(punkt(type="f32", order="ABCD"), [fl[0], fl[1]]) == 12.5
+          and nm.decode_value(punkt(type="f32", order="CDAB"), [fl[1], fl[0]]) == 12.5
+          and nm.decode_value(punkt(type="f32", order="BADC"), [int.from_bytes(fl[0].to_bytes(2, "big")[::-1], "big"), int.from_bytes(fl[1].to_bytes(2, "big")[::-1], "big")]) == 12.5
+          and nm.decode_value(punkt(type="f32", order="DCBA"), [int.from_bytes(fl[1].to_bytes(2, "big")[::-1], "big"), int.from_bytes(fl[0].to_bytes(2, "big")[::-1], "big")]) == 12.5)
+    sjekk("modbus: fortegn, 32 bit og skalering",
+          nm.decode_value(punkt(type="s16"), [0xFFFF]) == -1 and nm.decode_value(punkt(type="u32"), [1, 0]) == 65536
+          and nm.decode_value(punkt(type="s16", scale=0.1), [215]) == 21.5)
+    bl = nm.blocks([punkt(address=a) for a in (0, 2, 40)])
+    sjekk("modbus: små hull leses gjennom, store gir ny forespørsel", [(b[1], b[2]) for b in bl] == [(0, 3), (40, 1)], str([(b[1], b[2]) for b in bl]))
+    try:
+        nm.parse_map("address,function,type,name\n0,holding,u16,A\n0,holding,u16,B\n")
+        dobbel = False
+    except nm.MapError:
+        dobbel = True
+    sjekk("modbus: samme register to ganger i kartet avvises", dobbel)
+
+    async def skriv():
+        c = nm.ModbusClient("127.0.0.1", port, 1.0)
+        try:
+            for fn in (5, 6, 15, 16):
+                try:
+                    await c.request(1, bytes([fn, 0, 0, 0, 1]))
+                    return False
+                except nm.ModbusError:
+                    pass
+            return True
+        finally:
+            await c.close()
+    sjekk("modbus: klienten kan ikke sende en skrivefunksjon", asyncio.run(skriv()) and MBSIM.writes_received == [])
+
+
 def kjor_tester():
     s = kall("/api/start", {"local_address": "127.0.0.1/8"})
     sjekk("kobler til", s.get("status") == "done", s.get("local_address", s.get("error", "")))
@@ -936,6 +1018,7 @@ def kjor_tester():
     cov_vakt()
     sommertid()
     trafikklogg()
+    modbus()
     flere_kort()
     simulator()
     oppdatering()
@@ -986,7 +1069,7 @@ def kjor_tester():
     # Last: it silences the simulated device on 127.0.0.6.
     mine_uten_kontakt()
 
-    for fil in ("nabe-start", "nabe-verktoy", "nabe-felt", "nabe-moro", "nabe-finn", "nabe-skann", "nabe-anlegg", "nabe-bunn", "nabe-graf", "nabe-tunnel", "nabe-sammen", "nabe-flyt", "nabe-peker", "nabe-pekere", "nabe-skrift", "nabo", "nabo-brodre", "nabo-fasit", "nabe-garderobe", "nabe-opptak", "nabe-trafikk", "nabe-besok", "nabe-runde", "nabe-skjema-ordbok", "nabe-skjema", "nabe-flater", "nabe-fortsett", "nabe-simulator", "nabe-oppdatering", "nabe-bakover", "nabe-kart", "nabe-syn", "nabe-raad", "nabe-dialoger-innhold", "nabe-dialoger-mer", "nabe-dialoger", "nabe-tilbehor", "nabe-kunnskap", "nabe-spor"):
+    for fil in ("nabe-start", "nabe-verktoy", "nabe-felt", "nabe-moro", "nabe-finn", "nabe-skann", "nabe-anlegg", "nabe-bunn", "nabe-graf", "nabe-tunnel", "nabe-sammen", "nabe-flyt", "nabe-peker", "nabe-pekere", "nabe-skrift", "nabo", "nabo-brodre", "nabo-fasit", "nabe-garderobe", "nabe-opptak", "nabe-trafikk", "nabe-modbus", "nabe-besok", "nabe-runde", "nabe-skjema-ordbok", "nabe-skjema", "nabe-flater", "nabe-fortsett", "nabe-simulator", "nabe-oppdatering", "nabe-bakover", "nabe-kart", "nabe-syn", "nabe-raad", "nabe-dialoger-innhold", "nabe-dialoger-mer", "nabe-dialoger", "nabe-tilbehor", "nabe-kunnskap", "nabe-spor"):
         try:
             with urllib.request.urlopen(f"{BASE}/js/{fil}.js", timeout=5) as rr:
                 ok = rr.status == 200
@@ -1021,6 +1104,11 @@ async def main():
     # Outside the scanned range 127.0.0.2-4, so the scan tests do not see it.
     APPS["127.0.0.6"] = lag_enhet(6, 9004, "SIM-AVVIK", skjev_klokke=True)
     apps.append(APPS["127.0.0.6"])
+
+    import nabe_modbus_sim as mbsim
+    global MBSIM
+    MBSIM = mbsim.ModbusSim(mbsim.demo_units(), empty=[9])
+    await MBSIM.start('127.0.0.1', 0)
 
     async def sving():
         import math
@@ -1058,6 +1146,7 @@ async def main():
         await asyncio.get_event_loop().run_in_executor(None, kjor_tester)
     finally:
         server.terminate()
+        await MBSIM.stop()
         for a in apps:
             a.close()
     ok = all(RESULTAT)

@@ -43,6 +43,10 @@ No administrator rights needed. Everything else in the zip is tucked away;
 - **Reads every object** on a device: values, descriptions, state texts,
   units, priority arrays, weekly schedules, trend logs, **active alarms**.
 - **Live values by COV** where the controller allows it, polling otherwise.
+- **Modbus TCP, read only.** Scans for Modbus servers and the units behind them, and reads registers and
+  bits. A register map (CSV or JSON) gives the registers names, types, scale and units; without one the
+  first registers are shown as they are. The points sit in the same table, watch list, recording, export
+  and schematic as the BACnet ones. The code has no function that writes.
 - **Writes with care:** confirmation, priority shown, optional automatic
   release, and a write log for handover.
 - **Exports** EDE 2.3, CSV, and a **«Variabel» file** for Niagara NTI
@@ -152,6 +156,7 @@ trustworthy. The installer is a zip with a script rather than an unsigned
 | `installasjon/` | The installer, uninstaller, icon and the terms |
 | `lag_installasjon.py`, `lag_portabel.py` | Build scripts |
 | `nabe_sim.py` | The simulator: a scanned site as BACnet devices on 127.0.0.x |
+| `nabe_modbus.py`, `nabe_modbus_sim.py` | Modbus TCP (read only) and a Modbus server for testing |
 | `nabe_oppdater.py`, `nabe_signatur.py` | Self-update and the Ed25519 signature it checks |
 | `selvtest.py` | The self-test |
 
