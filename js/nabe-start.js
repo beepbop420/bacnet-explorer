@@ -203,6 +203,13 @@ const FAKTA = [
   ['COV betyr at regulatoren sier fra selv. Mindre spørring, mer ro.', 'COV means the controller speaks up itself. Less asking, more peace.'],
 ];
 const NYTT = {
+  '1.74': [
+    ['Skjema: sensorene settes på sin plass i luftveien (inntak, etter gjenvinner, tilluft, avtrekk, avkast) ut fra navn og beskrivelse, og ligger ikke lenger oppå hverandre. Tegningen blir bredere når det trengs', 'Schematic: the sensors are put at their place in the air path (intake, after recovery, supply, extract, exhaust) from the name and description, and no longer sit on top of each other. The drawing grows wider when it needs to'],
+    ['Varmekurser er røde (lys rød for retur) og kjølekurser blå (lys blå for retur)', 'Heating circuits are red (light red for return) and cooling circuits blue (light blue for return)'],
+    ['Sprinkler og stengeventiler (SM001) er et eget system og kommer ikke med i varme- eller kjølekurser', 'Sprinkler and shut-off valves (SM001) are a system of their own and do not come with the heating or cooling circuits'],
+    ['Rom som kort, med et eget vindu per rom: avstand til settpunkt på en skala, pådrag, CO2 og alle punktene i rommet. Svevekort over deler i skjemaet, og høyreklikk fester punktet', 'Rooms as cards, with a window of its own for each room: distance from the setpoint on a scale, signals, CO2 and every point in the room. A card over parts in the schematic, and right-click pins the point'],
+    ['Anleggsoversikt over alle aggregater og kurser, enhetslista som smal stripe og punktpanelet i faner', 'Plant overview of every air handling unit and circuit, the device list as a narrow strip and the point panel in tabs'],
+  ],
   '1.73': [
     ['Skjema: aggregat og varmekurser tegnes av seg selv ut fra navn og beskrivelse på punktene. Bytt mellom Tabell og Skjema over punktlista. Klikk en vifte, føler eller ventil for å se punktet. Virker med TFM-koder (RT40, JV401), med lange stier og med enheter uten koder', 'Schematic: air handling units and heating circuits draw themselves from the names and descriptions of the points. Switch between Table and Schematic above the point list. Click a fan, sensor or valve to see its point. Works with TFM codes (RT40, JV401), with long paths and with devices that have no codes'],
     ['Innstillinger med flere valg åpner en liste i stedet for å bla til neste', 'Settings with several choices open a list instead of stepping to the next one'],

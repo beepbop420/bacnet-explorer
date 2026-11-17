@@ -4677,6 +4677,7 @@ function commands() {
   add('Handling', 'Opptak av punkter…', () => { closeCmd(); aapneOpptak(); });
   add('Handling', 'Trafikklogg…', () => { closeCmd(); aapneTrafikk(); });
   add('Handling', 'Skjema: aggregat og varmekurser', () => { closeCmd(); aapneSkjema(); }, {when: harEnhet});
+  add('Handling', 'Anleggsoversikt…', () => { closeCmd(); aapneOversikt(); }, {when: () => S.devices.length > 0});
   add('Handling', 'Siden sist…', () => { closeCmd(); aapneBesok(); }, {when: () => S.devices.length > 0});
   add('Handling', 'Besøksrapport…', () => { closeCmd(); aapneRapport(); }, {when: () => S.devices.length > 0});
   add('Handling', 'Nettverkskart…', () => { closeCmd(); aapneKart(); });
@@ -10733,6 +10734,7 @@ const ORDBOK = {
   'Trafikklogg…': 'Traffic log…',
   'Bytt BACnet-port…': 'Change BACnet port…',
   'Siden sist…': 'Since last visit…',
+  'Anleggsoversikt…': 'Plant overview…',
   'Skjema: aggregat og varmekurser': 'Schematic: air handling and heating circuits',
   'Besøksrapport…': 'Visit report…',
   'Nettverkskart…': 'Network map…',

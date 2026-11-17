@@ -292,6 +292,29 @@ def royktest():
               "    const ok = !!document.querySelector('.dlg-lag [data-d=ja]'); document.querySelector('.dlg-lag [data-d=nei]').click();"
               "    return ok && !document.querySelector('.dlg-lag'); })(),"
               " port: typeof byttPort === 'function',"
+              " skjema2: (() => {"
+              "  const P = (o, n, d, t, v, u) => ({objid: o, name: n, description: d, type: t, value: v, units: u || ''});"
+              "  const T1 = (o, n, d, v) => P(o, n, d, 'analog-input', v, 'degrees-celsius');"
+              "  const s = nabeSkjema.byggSystemer([T1('a', 'A_360_001_RT40', 'Temperaturføler Inntak', 3.7), T1('b', 'A_360_001_RT41', 'Temperaturføler Etter varmegjv.', 17.7),"
+              "    T1('c', 'A_360_001_RT43', 'Temperaturføler Tilluft', 20.4), T1('d', 'A_360_001_RT50', 'Temperaturføler Avkast', 13.6), T1('e', 'A_360_001_RT52', 'Temperaturføler Avtrekk', 17.7),"
+              "    T1('f', 'A_360_001_RT901', 'Temperaturføler Uteluft', 3.5), P('g', 'A_360_001_JV40 _JV_AU', 'Frekvensomformer Tilluftsvifte - viftepådrag', 'analog-output', 55, 'percent'),"
+              "    P('h', 'A_360_001_JV50 _JV_AU', 'Frekvensomformer Avtrekksvifte - viftepådrag', 'analog-output', 40, 'percent'),"
+              "    P('i', 'A_310_001_SM001_Err', 'Serviceventil stengt sprinkler', 'binary-input', 'active'),"
+              "    T1('j', 'A_320_012_RT41', 'Temperaturføler Tur hovedstokk', 75)]);"
+              "  const v = s.find(x => x.type === 'ventilasjon'), spr = s.find(x => x.type === 'sprinkler');"
+              "  const st = nabeSkjema.stasjoner(v.komp), av = (kd) => st.get(v.komp.find(k => k.kode === kd));"
+              "  const svg = nabeSkjema.tegnAggregat(v).svg;"
+              "  return av('RT40') === 'inntak' && av('RT41') === 'etter' && av('RT43') === 'tilluft' && av('RT50') === 'avkast' && av('RT52') === 'avtrekk'"
+              "    && !!spr && spr.komp.every(k => k.art === 'stengeventil') && !s.some(x => x.type === 'varme' && x.komp.some(k => k.art === 'stengeventil')) && svg.includes('RT901') && svg.includes('JV50'); })(),"
+              " flater: typeof aapneOversikt === 'function' && !!document.getElementById('listeSmalBtn') && !!document.getElementById('oversiktBtn') && (() => {"
+              "  const P = (o, n, d, t, v, u) => ({objid: o, name: n, description: d, type: t, value: v, units: u || ''});"
+              "  const s = nabeSkjema.byggSystemer([P('ai,1', 'A_320_031_A109_RT603_PV', 'SD2T Romtemperatur', 'analog-input', 21.7, 'degrees-celsius'),"
+              "    P('av,1', 'A_320_031_A109_RT603_SP', 'SD0T Settpunkt dag', 'analog-value', 21, 'degrees-celsius'),"
+              "    P('av,2', 'A_320_031_A109_RT603_SPK', 'SD0T Arbeidende settpunkt', 'analog-value', 20, 'degrees-celsius'),"
+              "    P('ao,1', 'A_320_031_A109_SB15 _C', 'SD0T Varmepådrag', 'analog-output', 80, 'percent'),"
+              "    P('av,3', 'A_320_031_A109_Avvik', 'Avvik', 'analog-value', 0.7, 'degrees-celsius')]);"
+              "  const r = s[0] && s[0].romData.get('A109');"
+              "  return !!r && r.temp.value === 21.7 && r.tempSp.value === 20 && r.varme.value === 80 && nabeSkjema.romHtml([r]).includes('A109'); })(),"
               " skjema: typeof aapneSkjema === 'function' && typeof aapneValg === 'function' && (() => {"
               "  const P = (o, n, d, t, v, u) => ({objid: o, name: n, description: d, type: t, value: v, units: u || ''});"
               "  const s = nabeSkjema.byggSystemer([P('ai,1', 'A_360_001_RT43', 'SD2T Temperaturføler Tilluft', 'analog-input', 20.4, 'degrees-celsius'),"
@@ -932,7 +955,7 @@ def kjor_tester():
     # Last: it silences the simulated device on 127.0.0.6.
     mine_uten_kontakt()
 
-    for fil in ("nabe-start", "nabe-verktoy", "nabe-felt", "nabe-moro", "nabe-finn", "nabe-skann", "nabe-anlegg", "nabe-bunn", "nabe-graf", "nabe-tunnel", "nabe-sammen", "nabe-flyt", "nabe-peker", "nabe-pekere", "nabe-skrift", "nabo", "nabo-brodre", "nabo-fasit", "nabe-garderobe", "nabe-opptak", "nabe-trafikk", "nabe-besok", "nabe-runde", "nabe-skjema-ordbok", "nabe-skjema", "nabe-fortsett", "nabe-simulator", "nabe-oppdatering", "nabe-bakover", "nabe-kart", "nabe-syn", "nabe-raad", "nabe-dialoger-innhold", "nabe-dialoger-mer", "nabe-dialoger", "nabe-tilbehor", "nabe-kunnskap", "nabe-spor"):
+    for fil in ("nabe-start", "nabe-verktoy", "nabe-felt", "nabe-moro", "nabe-finn", "nabe-skann", "nabe-anlegg", "nabe-bunn", "nabe-graf", "nabe-tunnel", "nabe-sammen", "nabe-flyt", "nabe-peker", "nabe-pekere", "nabe-skrift", "nabo", "nabo-brodre", "nabo-fasit", "nabe-garderobe", "nabe-opptak", "nabe-trafikk", "nabe-besok", "nabe-runde", "nabe-skjema-ordbok", "nabe-skjema", "nabe-flater", "nabe-fortsett", "nabe-simulator", "nabe-oppdatering", "nabe-bakover", "nabe-kart", "nabe-syn", "nabe-raad", "nabe-dialoger-innhold", "nabe-dialoger-mer", "nabe-dialoger", "nabe-tilbehor", "nabe-kunnskap", "nabe-spor"):
         try:
             with urllib.request.urlopen(f"{BASE}/js/{fil}.js", timeout=5) as rr:
                 ok = rr.status == 200

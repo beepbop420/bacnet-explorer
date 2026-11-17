@@ -20,7 +20,7 @@ const SKJEMA_ORDBOK = {
     RT: 'temp', RP: 'trykk', RD: 'difftrykk', RF: 'mengde', RH: 'fukt', RM: 'fukt',
     RY: 'kvalitet', RQ: 'kvalitet', RB: 'bevegelse', RE: 'effekt', RN: 'nivaa',
     JV: 'vifte', JP: 'pumpe', JK: 'kompressor',
-    SB: 'ventil', SC: 'ventil', SA: 'ventil', SM: 'ventil',
+    SB: 'ventil', SC: 'ventil', SA: 'ventil', SM: 'stengeventil',
     SK: 'spjeld', KA: 'spjeld', SQ: 'vav', SV: 'vav',
     LX: 'gjenvinner', LV: 'varmebatteri', LK: 'kjolebatteri', LR: 'radiator', LB: 'varmebatteri',
     QD: 'filter', QT: 'frost', QF: 'filter',
@@ -43,6 +43,7 @@ const SKJEMA_ORDBOK = {
     [/kjølebatteri|kjolebatteri|cooling\s*coil|cool\s*coil|\bcooler\b|\bcoolcv/, 'kjolebatteri'],
     [/tilluftsvifte|avtrekksvifte|vifte|\bsaf\b|\beaf\b|\bfan\b|ventilator/, 'vifte'],
     [/sirkulasjonspumpe|sirk\.?\s*pumpe|pumpe|\bpump/, 'pumpe'],
+    [/stengeventil|serviceventil|sperreventil|avstengningsventil|shut-?off|isolation valve|isolasjonsventil/, 'stengeventil'],
     [/ventilmotor|reguleringsventil|varmeventil|ventil(?!asjon)|\bvalve/, 'ventil'],
     [/spjeldmotor|spjeld|\bdamper/, 'spjeld'],
     [/varmepumpe|\bvp\d|heat\s*pump/, 'varmepumpe'],
@@ -60,15 +61,17 @@ const SKJEMA_ORDBOK = {
 
   /* Where in the plant it sits. Air first, then water. */
   STED: [
-    [/etter\s*(varme)?gjenvinn|etter\s*veksler|after\s*(heat\s*)?(recovery|exchanger)/, 'ettergjenvinner'],
-    [/retur\s*varmebatteri|retur\s*batteri|return\s*(water|heating)|frostprotectiontemp|frost\s*protection\s*temp/, 'batteriretur'],
-    [/avkast|exhaust/, 'avkast'],
-    [/avtrekk|extract|\beaf\b|return\s*air/, 'avtrekk'],
-    [/inntak|uteluft|friskluft|outdoor\s*air\s*(intake|damper)|fresh\s*air|intake/, 'inntak'],
-    [/tilluft|supply\s*air|supply\s*(temp|setp|pid|controller)|\bsaf\b|innblåsing|\bsupply/, 'tilluft'],
+    // After the recovery unit on the extract side is the exhaust: both words in one text say so.
+    [/(etter|efter|after)[^|]{0,22}(gjenvinn|gjv|vgv|vvx|veksler|rotor|recovery|exchanger|\bhru\b|wheel)[^|]{0,30}(avtrekk|extract|avkast|exhaust|fortluft)|(avtrekk|extract)[^|]{0,30}(etter|efter|after)[^|]{0,22}(gjenvinn|gjv|vgv|vvx|recovery|exchanger)/, 'avkast'],
+    [/(etter|efter|after)\s*(varme)?\s*(gjenvinn|gjv|vgv|vvx|veksler|rotor|recovery|exchanger|\bhru\b|wheel)|etter\s*gj\w*v|ettergjenvinn/, 'ettergjenvinner'],
+    [/retur\s*(varme|kjøle|kjole)?batteri|batteri\s*retur|vannretur|return\s*(water|heating|coil)|frostprotectiontemp|frost\s*protection\s*temp/, 'batteriretur'],
+    [/avkast|fortluft|utkast|avblås|avblas|exhaust/, 'avkast'],
+    [/avtrekk|extract|\beaf\b|return\s*air|retur\s*luft|returluft|romluft|room\s*air\s*(return|extract)/, 'avtrekk'],
+    [/inntak|uteluft|ute\s*luft|friskluft|frisk\s*luft|fresh\s*air|outdoor\s*air|outside\s*air|intake|\boat\b/, 'inntak'],
+    [/\btur\b|turtemp|turtrykk|turvann|flow\s*temp|supply\s*water|\bftemp/, 'tur'],
+    [/tilluft|innblåsing|innblasing|supply\s*air|supply\s*(temp|setp|pid|controller|fan|pressure|flow)|\bsat\b|\bsaf\b|\bsupply/, 'tilluft'],
     [/utetemp|ute\b|utendørs|outdoor|outside/, 'ute'],
     [/romtemp|\brom\b|room|sone|zone/, 'rom'],
-    [/\btur\b|turtemp|turtrykk|turvann|flow\s*temp|supply\s*water|\bftemp/, 'tur'],
     [/\bretur\b|returtemp|returtrykk|return|\brtemp/, 'retur'],
   ],
 
@@ -104,7 +107,7 @@ const SKJEMA_ORDBOK = {
 
   /* What kind of plant a system number belongs to (first two digits, NS 3451). */
   SYSTEM: [
-    [/^31/, 'sanitaer'], [/^32/, 'varme'], [/^33/, 'brann'], [/^35/, 'kjoling'],
+    [/^310|^33/, 'sprinkler'], [/^31/, 'sanitaer'], [/^32/, 'varme'], [/^35/, 'kjoling'],
     [/^36/, 'ventilasjon'], [/^37/, 'kjoling'], [/^43|^44/, 'el'], [/^56/, 'sd'],
   ],
 

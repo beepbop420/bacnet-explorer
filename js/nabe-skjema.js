@@ -40,7 +40,8 @@
       if (art !== 'system') break;
     }
     const mellom = n.slice(etterSys, valgt ? valgt.index : n.length);
-    const rom = (/(?<![A-Za-z0-9])([A-Z]\d{3})(?![0-9])/.exec(mellom) || [])[1] || '';
+    // Room codes as they stand in the tag: A109, A219_A, or two rooms that share a zone (A026/A159).
+    const rom = [...new Set(mellom.match(/(?<![A-Za-z0-9])[A-Z]\d{3}(?:_[A-Z](?![A-Za-z0-9]))?(?![0-9])/g) || [])].join('/');
     let hale = valgt ? n.slice(valgt.index + valgt[0].length) : (sys ? n.slice(etterSys) : '');
     hale = hale.replace(/^[\s_.\-/]+/, '').trim();
     let under = '';
@@ -92,7 +93,8 @@
       else if (/^4/.test(t.nr)) sted = '4';
       else if (/^5/.test(t.nr)) sted = '5';
     }
-    return {p, sys: t.sys, rom: t.rom, kode: t.kode, under: t.under, art: art || '', rolle, sted: sted || '', hvor: hvor || '', beskr, maalt: maalt || ''};
+    const spr = /sprink|brannslukk|slokke|slukk|brannvann|fire\s*(suppress|sprink)/.test(ord + ' ' + String(p.name || '').toLowerCase());
+    return {p, sys: t.sys, rom: t.rom, kode: t.kode, under: t.under, art: art || '', rolle, sted: sted || '', hvor: hvor || '', beskr, maalt: maalt || '', spr};
   }
 
   /* ----------------------------------------------- points into systems */
@@ -102,9 +104,29 @@
       if (!p || p.type === 'schedule' || p.type === 'calendar' || String(p.type).startsWith('trend')) continue;
       const x = tolkPunkt(p);
       if (!x.art) continue;
-      if (!systemer.has(x.sys)) systemer.set(x.sys, {id: x.sys, komp: new Map(), rom: new Set(), type: ''});
-      const s = systemer.get(x.sys);
-      if (x.rom) { s.rom.add(x.rom); continue; }
+      // Sprinkler points (a shut-off valve, a low-pressure switch, the word itself) are their own system,
+      // so they do not pull a whole unnamed group of points with them into a drawing.
+      const sprinkler = x.spr || x.art === 'stengeventil';
+      const sk = sprinkler ? (x.sys || '-') + '|spr' : x.sys;
+      if (!systemer.has(sk)) systemer.set(sk, {id: x.sys, komp: new Map(), rom: new Set(), romData: new Map(), type: sprinkler ? 'sprinkler' : ''});
+      const s = systemer.get(sk);
+      if (x.rom) {
+        s.rom.add(x.rom);
+        // A room is its temperature, its setpoint, what the valve or damper is told, and its air quality.
+        if (!s.romData.has(x.rom)) s.romData.set(x.rom, {rom: x.rom, sys: x.sys, n: 0, alle: []});
+        const r = s.romData.get(x.rom), hale = tolkNavn(p.name).hale.toLowerCase();
+        r.n++;
+        if (!/avvik|diff|deviation/i.test(p.name)) r.alle.push(p);
+        if (/avvik|diff|deviation/i.test(p.name)) { /* a calculated difference, not a reading */ }
+        else if (x.art === 'temp' && x.rolle === 'pv') r.temp = r.temp || p;
+        else if (x.art === 'temp' && x.rolle === 'sp') { if (!r.tempSp || /spk|akt|arb/.test(hale)) r.tempSp = p; }
+        else if (x.art === 'co2' && x.rolle === 'pv') r.co2 = r.co2 || p;
+        else if (x.art === 'co2' && x.rolle === 'sp') r.co2Sp = r.co2Sp || p;
+        else if (x.rolle === 'paadrag' && (x.art === 'ventil' || x.art === 'radiator')) r.varme = r.varme || p;
+        else if (x.rolle === 'paadrag' && (x.art === 'spjeld' || x.art === 'vav')) r.luft = r.luft || p;
+        else if (x.art === 'bevegelse') r.bevegelse = r.bevegelse || p;
+        continue;
+      }
       const maaling = ['temp', 'trykk', 'difftrykk', 'mengde', 'fukt', 'co2'].includes(x.art);
       const nokkel = x.kode ? x.kode + (x.under ? '/' + x.under : '') : x.art + ':' + (x.sted || (maaling ? x.hvor : '') || '');
       if (!s.komp.has(nokkel)) {
@@ -114,6 +136,7 @@
       const k = s.komp.get(nokkel);
       if (!k.sted && x.sted) k.sted = x.sted;
       if (!k.hvor && x.hvor) k.hvor = x.hvor;
+      if (x.spr) k.spr = true;
       if (x.beskr && (!k.beskr || (x.rolle === 'pv' && !k.pkt.pv))) k.beskr = x.beskr.split(' - ')[0].trim();
       if (x.rolle === 'sp') (k.spAlle = k.spAlle || []).push({p, sted: x.sted});
       if (x.rolle === 'alarm') k.pkt.alarm.push(p);
@@ -125,10 +148,12 @@
     const ut = [];
     for (const s of systemer.values()) {
       const arter = new Set([...s.komp.values()].map(k => k.art));
-      s.type = slaa(O.SYSTEM, s.id.replace('.', '')) || '';
+      s.type = s.type || slaa(O.SYSTEM, s.id.replace('.', '')) || '';
       const harVent = O.VENT.some(a => arter.has(a)) && arter.has('vifte');
       const harVarme = O.VARME.some(a => arter.has(a));
       if (s.type === 'ventilasjon' && !harVent) s.type = arter.has('spjeld') || arter.has('vav') ? 'ventilasjon-rom' : '';
+      // Sprinkler is its own kind of system, by number (310, 33x) or by what the points say. A shut-off
+      // valve (SM) belongs to it and never to a heating or cooling circuit.
       if (!s.type || s.type === 'sd' || s.type === 'el') s.type = harVent ? 'ventilasjon' : harVarme ? 'varme' : '';
       // A setpoint that hangs on the system itself, or on a fan, belongs to the sensor it is the setpoint for.
       const alle = [...s.komp.values()];
@@ -173,7 +198,7 @@
     kjolebatteri: ['Kjølebatteri', 'Cooling coil'], royk: ['Røyk', 'Smoke'], frost: ['Frost', 'Frost'], varmepumpe: ['Varmepumpe', 'Heat pump'],
     elkjel: ['Elkjel', 'Electric boiler'], tank: ['Tank', 'Tank'], veksler: ['Veksler', 'Exchanger'], energimaaler: ['Energimåler', 'Energy meter'],
     bevegelse: ['Bevegelse', 'Motion'], vav: ['VAV', 'VAV'], kjel: ['Kjel', 'Boiler'], varmekabel: ['Varmekabel', 'Heating cable'],
-    kompressor: ['Kompressor', 'Compressor'], radiator: ['Radiator', 'Radiator'], omformer: ['Omformer', 'Drive'], fjernvarme: ['Fjernvarme', 'District heating'],
+    stengeventil: ['Stengeventil', 'Shutoff valve'], kompressor: ['Kompressor', 'Compressor'], radiator: ['Radiator', 'Radiator'], omformer: ['Omformer', 'Drive'], fjernvarme: ['Fjernvarme', 'District heating'],
   };
   const tn = (tabell, k) => tabell[k] ? T(tabell[k][0], tabell[k][1]) : k;
   // In a drawing the label has a few centimetres: the code when there is one, else a short word.
@@ -208,7 +233,7 @@
   const iFeil = (k) => Object.values(k.pkt).flat().some(p => p && (p.status || []).includes('fault'));
   const iDrift = (k) => paa(k.pkt.drift) || paa(k.pkt.start) || (k.pkt.paadrag && typeof k.pkt.paadrag.value === 'number' && k.pkt.paadrag.value > 0.5);
   // The point a click lands on: the reading for a sensor, the signal for a machine.
-  const MASKIN = ['vifte', 'pumpe', 'ventil', 'spjeld', 'gjenvinner', 'varmebatteri', 'kjolebatteri'];
+  const MASKIN = ['vifte', 'pumpe', 'ventil', 'stengeventil', 'spjeld', 'gjenvinner', 'varmebatteri', 'kjolebatteri'];
   const hoved = (k) => (MASKIN.includes(k.art) ? (k.pkt.paadrag || k.pkt.drift || k.pkt.start || k.pkt.pv) : (k.pkt.pv || k.pkt.paadrag || k.pkt.drift || k.pkt.start))
     || k.pkt.virkningsgrad || k.pkt.alarm[0] || k.pkt.vender || k.pkt.sp || k.pkt.annet[0];
   const tittel = (k) => [k.kode || k.eier, k.beskr, ...Object.entries(k.pkt).filter(([r, p]) => p && !Array.isArray(p)).map(([r, p]) => `${r}: ${verdi(p)}`),
@@ -218,7 +243,7 @@
   const klasser = (k, mer) => `sk-k${iAlarm(k) ? ' alarm' : iFeil(k) ? ' feil' : ''}${iHaand(k) ? ' haand' : ''}${iDrift(k) ? ' drift' : ''}${mer ? ' ' + mer : ''}`;
   const gruppe = (k, mer, inni) => {
     const h = hoved(k);
-    return `<g class="${klasser(k, mer)}" data-o="${esc(h ? h.objid : '')}" tabindex="0" role="button"><title>${esc(tittel(k))}</title>${inni}</g>`;
+    return `<g class="${klasser(k, mer)}" data-o="${esc(h ? h.objid : '')}" tabindex="0" role="button" aria-label="${esc(tittel(k))}">${inni}</g>`;
   };
   const tekst = (x, y, t, kl, anker) => `<text x="${x}" y="${y}" class="${kl}" text-anchor="${anker || 'middle'}">${esc(t)}</text>`;
   const haandMerke = (k, x, y) => iHaand(k) ? `<g class="sk-hm"><rect x="${x - 9}" y="${y - 8}" width="18" height="13" rx="3"/><text x="${x}" y="${y + 2}" text-anchor="middle">${T('H', 'H')}</text></g>` : '';
@@ -263,23 +288,100 @@
   }
 
   /* ------------------------------------------------------------- the AHU */
+  /* The air path is a row of stations: intake, after the recovery unit, supply
+     on one duct, extract and exhaust on the other. Every part is put at the
+     station its name and description name. A station holds as many parts as it
+     has, each with room of its own; the drawing grows to fit, and neighbouring
+     sensors take turns hanging outside the duct and in the gap between the two,
+     so nothing is ever drawn on top of anything else. */
+  const MAAL = ['temp', 'trykk', 'difftrykk', 'mengde', 'fukt', 'co2', 'royk', 'bevegelse'];
+  const harLevende = (k) => !!(k.pkt.pv || k.pkt.paadrag || k.pkt.drift || k.pkt.start || k.pkt.alarm.length || k.pkt.virkningsgrad);
+  const ARTRANG = {temp: 0, fukt: 1, trykk: 2, difftrykk: 2, mengde: 3, co2: 4, royk: 5, bevegelse: 6};
+
+  /* Which station of the air path each part belongs to. The words decide first, since
+     that is what the plant says. Where they say nothing the number does: 4x sensors follow
+     the supply air from intake to supply, 5x follow the extract air from room to exhaust. */
+  function stasjoner(K) {
+    const ut = new Map();
+    const tall = (k) => parseInt(String(k.kode || '').replace(/\D/g, ''), 10) || 0;
+    for (const k of K) {
+      const s = k.sted;
+      const st = s === 'inntak' || s === 'ute' ? 'inntak' : s === 'ettergjenvinner' ? 'etter' : s === 'tilluft' ? 'tilluft' : s === 'avtrekk' ? 'avtrekk' : s === 'avkast' ? 'avkast' : '';
+      if (st) ut.set(k, st);
+    }
+    for (const [siffer, orden] of [['4', ['inntak', 'etter', 'tilluft']], ['5', ['avtrekk', 'avtrekk', 'avkast']]]) {
+      const l = K.filter(k => k.sted === siffer && !ut.has(k) && k.art !== 'frost').sort((a, b) => tall(a) - tall(b));
+      l.forEach((k, i) => ut.set(k, l.length === 1 ? (k.art === 'spjeld' ? (siffer === '4' ? 'inntak' : 'avkast') : (siffer === '4' ? 'tilluft' : 'avtrekk'))
+        : i === 0 ? orden[0] : i === l.length - 1 ? orden[2] : orden[1]));
+    }
+    // Parts with no word and no number: dampers and filters sit at the start of the air path, fans by number.
+    const vifter = K.filter(k => k.art === 'vifte' && !ut.has(k)).sort((a, b) => tall(a) - tall(b));
+    vifter.forEach((k, i) => ut.set(k, i === 0 ? 'tilluft' : 'avtrekk'));
+    for (const k of K) if (!ut.has(k) && (k.art === 'spjeld' || k.art === 'filter') && k.hvor !== 'gjenvinner') ut.set(k, 'inntak');
+    // Two parts that name the same thing at the same station: the one with something to show wins.
+    const grp = new Map();
+    for (const k of K) if (MAAL.includes(k.art) && ut.has(k)) { const n = ut.get(k) + ':' + k.art; if (!grp.has(n)) grp.set(n, []); grp.get(n).push(k); }
+    for (const l of grp.values()) if (l.length > 1 && l.some(harLevende)) for (const k of l) if (!harLevende(k)) ut.delete(k);
+    return ut;
+  }
+
   function tegnAggregat(s) {
-    const B = 1000, yA = 190, yT = 368, hK = 38, xG = 430;
-    const K = s.komp, tatt = new Set();
-    const ta = (f) => { const l = K.filter(k => !tatt.has(k) && f(k)); l.forEach(k => tatt.add(k)); return l; };
+    const yA = 150, yT = 400, hK = 38, K = s.komp, tatt = new Set();
+    const st = stasjoner(K);
     const en = (f) => { const k = K.find(k => !tatt.has(k) && f(k)); if (k) tatt.add(k); return k; };
-    const paaSted = (art, ...steder) => (k) => (Array.isArray(art) ? art.includes(k.art) : k.art === art) && steder.includes(k.sted);
-    let d = '';
+    const alle = (f) => { const l = K.filter(k => !tatt.has(k) && f(k)); l.forEach(k => tatt.add(k)); return l; };
+    const sorter = (a, b) => (ARTRANG[a.art] ?? 9) - (ARTRANG[b.art] ?? 9) || String(a.kode).localeCompare(String(b.kode), 'no', {numeric: true});
+    const ved = (stas, f) => alle(k => st.get(k) === stas && f(k));
+    const maalFn = (k) => MAAL.includes(k.art) && harLevende(k);
 
     const gj = en(k => k.art === 'gjenvinner');
-    const batt = en(k => k.art === 'varmebatteri');
-    const kjol = en(k => k.art === 'kjolebatteri');
-    const vann = {pumpe: en(k => k.art === 'pumpe' && (k.hvor === 'varmebatteri' || /^SB|^LV/.test(k.eier))) || en(k => k.art === 'pumpe'),
-                  ventil: en(k => k.art === 'ventil' && (k.hvor === 'varmebatteri' || !k.hvor)),
-                  retur: en(paaSted('temp', 'batteriretur')), frost: en(k => k.art === 'frost' && k.hvor !== 'gjenvinner')};
-    const harBatt = batt || vann.ventil || vann.pumpe || vann.retur;
+    const spoler = [];
+    const ekte = (art) => en(k => k.art === art) || null;
+    const batt = en(k => k.art === 'varmebatteri'), kjol = en(k => k.art === 'kjolebatteri');
+    // The water side of each coil: pump, valve, return temperature and frost, by what the words say about the coil.
+    const vannFor = (h, forste) => {
+      const mine = (k) => k.hvor === h || (forste && !k.hvor);
+      return {pumpe: en(k => k.art === 'pumpe' && k.hvor === h) || (forste ? en(k => k.art === 'pumpe' && !k.hvor && harLevende(k)) : null),
+              ventil: en(k => k.art === 'ventil' && mine(k)),
+              retur: en(k => k.art === 'temp' && k.sted === 'batteriretur' && mine(k)),
+              frost: en(k => k.art === 'frost' && mine(k))};
+    };
+    const vv = vannFor('varmebatteri', true), vk = vannFor('kjolebatteri', false);
+    const harV = (v) => v && (v.pumpe || v.ventil || v.retur || v.frost);
+    const tomSpole = (art) => ({kode: '', eier: '', art, beskr: '', pkt: {alarm: [], annet: []}});
+    if (batt || harV(vv)) spoler.push({k: batt || tomSpole('varmebatteri'), v: vv, t: 'varme'});
+    if (kjol || harV(vk)) spoler.push({k: kjol || tomSpole('kjolebatteri'), v: vk, t: 'kjol'});
 
-    // ducts: four tinted stretches, the recovery unit between the two
+    // --- the parts of each of the four stretches, left to right, with how much room each needs
+    const sens = (k) => ({k, typ: 'sensor', l: 24, r: 24});
+    const boksIt = (k, typ) => ({k, typ, l: 42, r: 42});
+    const rotIt = (k, retn) => ({k, typ: 'rotor', retn, l: 44, r: 44});
+    const SL = [...ved('inntak', k => k.art === 'spjeld').map(k => boksIt(k, 'spjeld')),
+                ...ved('inntak', k => maalFn(k)).sort(sorter).map(sens),
+                ...ved('inntak', k => k.art === 'filter').map(k => boksIt(k, 'filter'))];
+    const EL = [...ved('avkast', k => k.art === 'spjeld').map(k => boksIt(k, 'spjeld')),
+                ...ved('avkast', k => maalFn(k)).sort(sorter).map(sens),
+                ...ved('avkast', k => k.art === 'filter').map(k => boksIt(k, 'filter')),
+                ...ved('avtrekk', k => k.art === 'vifte').map(k => rotIt(k, 'v'))];
+    const SR = [...ved('etter', k => maalFn(k)).sort(sorter).map(sens),
+                ...ved('etter', k => k.art === 'filter').map(k => boksIt(k, 'filter')),
+                ...ved('tilluft', k => k.art === 'filter').map(k => boksIt(k, 'filter')),
+                ...spoler.map(sp => ({k: sp.k, typ: sp.t === 'varme' ? 'varmebatteri' : 'kjolebatteri', v: sp.v, t: sp.t, l: harV(sp.v) ? 92 : 42, r: harV(sp.v) ? 118 : 42})),
+                ...ved('tilluft', k => k.art === 'vifte').map(k => rotIt(k, 'h')),
+                ...ved('tilluft', k => k.art === 'spjeld').map(k => boksIt(k, 'spjeld')),
+                ...ved('tilluft', k => maalFn(k)).sort(sorter).map(sens)];
+    const ER = [...ved('avtrekk', k => k.art === 'filter').map(k => boksIt(k, 'filter')),
+                ...ved('avtrekk', k => maalFn(k)).sort(sorter).map(sens),
+                ...ved('avtrekk', k => k.art === 'spjeld').map(k => boksIt(k, 'spjeld'))];
+
+    const plasser = (liste, x0) => { let c = x0, n = 0; const ut = liste.map(it => { const x = c + it.l; c = x + it.r + 6; it.x = x; if (it.typ === 'sensor') it.ute = n++ % 2 === 0; return it; }); return {liste: ut, slutt: c}; };
+    const ls = plasser(SL, 150), le = plasser(EL, 150);
+    const xG = Math.max(ls.slutt, le.slutt) + (gj ? 110 : 30);
+    const rs = plasser(SR, xG + (gj ? 70 : 20)), re = plasser(ER, xG + (gj ? 70 : 20));
+    const B = Math.max(1000, rs.slutt + 160, re.slutt + 160);
+    let d = '';
+
+    // ducts
     const kanal = (x1, x2, y, kl) => `<rect class="sk-kanal ${kl}" x="${x1}" y="${y - hK / 2}" width="${x2 - x1}" height="${hK}" rx="3"/>`;
     d += kanal(50, xG, yA, 'avkast') + kanal(xG, B - 40, yA, 'avtrekk') + kanal(50, xG, yT, 'ute') + kanal(xG, B - 40, yT, 'tilluft');
     const pil = (x, y, v) => `<path class="sk-flyt" d="M${x} ${y - 6}l${v ? -9 : 9} 6l${v ? 9 : -9} 6"/>`;
@@ -287,28 +389,32 @@
     d += tekst(58, yT + 4, T('Uteluft', 'Outdoor air'), 'sk-etikett', 'start') + tekst(B - 50, yT + 4, T('Tilluft', 'Supply air'), 'sk-etikett', 'end')
        + tekst(B - 50, yA + 4, T('Avtrekk', 'Extract air'), 'sk-etikett', 'end') + tekst(58, yA + 4, T('Avkast', 'Exhaust air'), 'sk-etikett', 'start');
 
-    // a row of things along a duct, spread over the room they are given
-    const rekke = (liste, x1, x2, tegn) => { const n = liste.length; liste.forEach((k, i) => { d += tegn(k, n === 1 ? (x1 + x2) / 2 : x1 + (x2 - x1) * i / (n - 1)); }); };
-    const fol = (y, opp) => (k, x) => foler(k, x, y + (opp ? -hK / 2 : hK / 2), opp, BOK[k.art] || '?');
-
-    // supply side, left to right
-    rekke(ta(paaSted(['temp', 'fukt'], 'inntak')), 150, 150, fol(yT, false));
-    rekke(ta(paaSted('spjeld', 'inntak')), 225, 225, (k, x) => boks(k, x, yT, hK + 18, 'spjeld'));
-    rekke(ta(k => k.art === 'filter' && ['inntak', 'tilluft', '4'].includes(k.sted)), 310, 310, (k, x) => boks(k, x, yT, hK + 18, 'filter'));
-    rekke(ta(paaSted(['temp', 'fukt'], 'ettergjenvinner')), 500, 500, fol(yT, true));
-    if (harBatt) d += boks(batt || {kode: '', eier: '', art: 'varmebatteri', beskr: '', pkt: {alarm: [], annet: []}}, 580, yT, hK + 18, 'varmebatteri');
-    if (kjol) d += boks(kjol, 650, yT, hK + 18, 'kjolebatteri');
-    rekke(ta(paaSted('vifte', 'tilluft', '4')), 725, 725, (k, x) => rotor(k, x, yT, 'h', 24));
-    rekke(ta(k => ['royk', 'trykk', 'difftrykk', 'mengde', 'temp', 'fukt', 'co2'].includes(k.art) && ['tilluft', '4'].includes(k.sted))
-      .sort((a, b) => (a.art === 'temp') - (b.art === 'temp')), 800, 930, fol(yT, false));
-
-    // extract side, air moving right to left
-    rekke(ta(k => ['temp', 'trykk', 'difftrykk', 'mengde', 'fukt', 'co2', 'royk'].includes(k.art) && ['avtrekk', '5'].includes(k.sted))
-      .sort((a, b) => (b.art === 'temp') - (a.art === 'temp')).reverse(), 800, 930, fol(yA, true));
-    rekke(ta(k => k.art === 'filter' && ['avtrekk', '5'].includes(k.sted)), 600, 600, (k, x) => boks(k, x, yA, hK + 18, 'filter'));
-    rekke(ta(paaSted('vifte', 'avtrekk', '5')), 325, 325, (k, x) => rotor(k, x, yA, 'v', 24));
-    rekke(ta(paaSted('spjeld', 'avkast')), 225, 225, (k, x) => boks(k, x, yA, hK + 18, 'spjeld'));
-    rekke(ta(paaSted(['temp', 'fukt'], 'avkast')), 150, 150, fol(yA, true));
+    // each part at its place. A sensor hangs outside the duct or in the gap, by turns.
+    const tegnVann = (it) => {
+      const v = it.v, x = it.x, xt = x - 6, xr = x + 8, y1 = yT + (hK + 18) / 2, y2 = y1 + 132, kl = it.t;
+      let o = `<line class="sk-ror tur ${kl}" x1="${xt}" y1="${y1}" x2="${xt}" y2="${y2}"/><line class="sk-ror retur ${kl}" x1="${xr}" y1="${y1}" x2="${xr}" y2="${y2}"/>`;
+      if (v.retur) o += gruppe(v.retur, 'foler', `<line class="sk-stilk" x1="${xr}" y1="${y1 + 22}" x2="${xr + 22}" y2="${y1 + 22}"/><circle class="sk-ring" cx="${xr + 31}" cy="${y1 + 22}" r="10"/>
+        ${tekst(xr + 31, y1 + 26, 'T', 'sk-bok')}${tekst(xr + 48, y1 + 18, merke(v.retur), 'sk-kode', 'start')}${tekst(xr + 48, y1 + 34, verdi(v.retur.pkt.pv), 'sk-v', 'start')}`);
+      if (v.pumpe) {
+        const k = v.pumpe, y = y1 + 64, p = k.pkt.paadrag || k.pkt.start || k.pkt.drift;
+        o += gruppe(k, 'rotor', `<circle class="sk-kropp" cx="${xt}" cy="${y}" r="12"/><path class="sk-pil" d="M${xt - 7} ${y + 5}L${xt} ${y - 8}L${xt + 7} ${y + 5}z"/>
+          ${tekst(xt - 20, y - 2, merke(k) === k.eier ? T('Pumpe', 'Pump') : merke(k), 'sk-kode', 'end')}${p ? tekst(xt - 20, y + 14, verdi(p), 'sk-v', 'end') : ''}${haandMerke(k, xt + 16, y + 14)}${varsel(k, xt + 16, y - 8)}`);
+      }
+      if (v.ventil) o += ventil(v.ventil, xr, y1 + 106, true);
+      if (v.frost) o += gruppe(v.frost, 'foler', `<circle class="sk-ring" cx="${xt - 36}" cy="${y1 + 22}" r="10"/>${tekst(xt - 36, y1 + 26, 'F', 'sk-bok')}
+        ${tekst(xt - 52, y1 + 18, T('Frost', 'Frost'), 'sk-kode', 'end')}${tekst(xt - 52, y1 + 34, iAlarm(v.frost) ? T('alarm', 'alarm') : 'ok', 'sk-v', 'end')}${varsel(v.frost, xt - 36, y1 + 4)}`);
+      return o;
+    };
+    const tegnIt = (it, y, forsyning) => {
+      if (it.typ === 'sensor') return foler(it.k, it.x, y, forsyning ? !it.ute : it.ute, BOK[it.k.art] || '?');
+      if (it.typ === 'rotor') return rotor(it.k, it.x, y, it.retn, 24);
+      if (it.typ === 'varmebatteri' || it.typ === 'kjolebatteri') return boks(it.k, it.x, y, hK + 18, it.typ) + (harV(it.v) ? tegnVann(it) : '');
+      return boks(it.k, it.x, y, hK + 18, it.typ);
+    };
+    // the duct edge a sensor's stalk starts on
+    const kant = (it, y) => it.typ === 'sensor' ? y + (it.opp ? -hK / 2 : hK / 2) : y;
+    for (const it of [...ls.liste, ...rs.liste]) d += it.typ === 'sensor' ? foler(it.k, it.x, yT + (it.ute ? hK / 2 : -hK / 2), !it.ute, BOK[it.k.art] || '?') : tegnIt(it, yT, true);
+    for (const it of [...le.liste, ...re.liste]) d += it.typ === 'sensor' ? foler(it.k, it.x, yA + (it.ute ? -hK / 2 : hK / 2), it.ute, BOK[it.k.art] || '?') : tegnIt(it, yA, false);
 
     // heat recovery, across both ducts
     if (gj) {
@@ -320,31 +426,7 @@
         ${gj.pkt.paadrag ? tekst(xG - 34, (yA + yT) / 2 + 2, verdi(gj.pkt.paadrag), 'sk-v', 'end') : ''}
         ${v ? tekst(xG - 34, (yA + yT) / 2 + 18, 'η ' + verdi(v), 'sk-v', 'end') : ''}${haandMerke(gj, xG + 24, y0 + h - 4)}${varsel(gj, xG - 26, y0 + 6)}`);
     }
-
-    // the water side of the heating coil
-    let yBunn = yT + 110;
-    if (vann.ventil || vann.pumpe || vann.retur) {
-      const xt = 573, xr = 587, y1 = yT + (hK + 18) / 2, y2 = y1 + 132;
-      d += `<line class="sk-ror tur" x1="${xt}" y1="${y1}" x2="${xt}" y2="${y2}"/><line class="sk-ror retur" x1="${xr}" y1="${y1}" x2="${xr}" y2="${y2}"/>`;
-      if (vann.retur) d += gruppe(vann.retur, 'foler', `<line class="sk-stilk" x1="${xr}" y1="${y1 + 22}" x2="${xr + 22}" y2="${y1 + 22}"/><circle class="sk-ring" cx="${xr + 31}" cy="${y1 + 22}" r="9"/>
-        ${tekst(xr + 31, y1 + 26, 'T', 'sk-bok')}${tekst(xr + 47, y1 + 18, merke(vann.retur), 'sk-kode', 'start')}${tekst(xr + 47, y1 + 34, verdi(vann.retur.pkt.pv), 'sk-v', 'start')}`);
-      if (vann.pumpe) d += rotor2(vann.pumpe, xt, y1 + 64);
-      if (vann.ventil) d += ventil(vann.ventil, xr, y1 + 106, true);
-      if (vann.frost) d += gruppe(vann.frost, 'foler', `<circle class="sk-ring" cx="${xt - 36}" cy="${y1 + 22}" r="9"/>${tekst(xt - 36, y1 + 25.5, 'F', 'sk-bok')}
-        ${tekst(xt - 50, y1 + 18, T('Frost', 'Frost'), 'sk-kode', 'end')}${tekst(xt - 50, y1 + 34, iAlarm(vann.frost) ? T('alarm', 'alarm') : 'ok', 'sk-v', 'end')}${varsel(vann.frost, xt - 36, y1 + 4)}`);
-      yBunn = y2 + 20;
-    }
-    function rotor2(k, x, y) {
-      const r = 12, p = k.pkt.paadrag || k.pkt.start || k.pkt.drift;
-      return gruppe(k, 'rotor', `<circle class="sk-kropp" cx="${x}" cy="${y}" r="${r}"/><path class="sk-pil" d="M${x - 7} ${y + 5}L${x} ${y - 8}L${x + 7} ${y + 5}z"/>
-        ${tekst(x - 20, y - 2, merke(k) === k.eier ? T('Pumpe', 'Pump') : merke(k), 'sk-kode', 'end')}${p ? tekst(x - 20, y + 14, verdi(p), 'sk-v', 'end') : ''}${haandMerke(k, x + 16, y + 14)}${varsel(k, x + 16, y - 8)}`);
-    }
-
-    // outdoor temperature, and what the dictionaries could not place
-    const ute = ta(paaSted(['temp', 'fukt'], 'ute'));
-    ute.forEach((k, i) => { d += foler(k, 70 + i * 62, 84, true, BOK[k.art]); });
-    if (ute.length) d += `<path class="sk-strek svak" d="M48 84h${ute.length * 62 - 18}"/>` + tekst(48, 100, T('Ute', 'Outdoor'), 'sk-etikett', 'start');
-    return {svg: d, bredde: B, hoyde: yBunn, topp: ute.length ? 0 : 76, rest: K.filter(k => !tatt.has(k))};
+    return {svg: d, bredde: B, hoyde: yT + 215, topp: 36, rest: K.filter(k => !tatt.has(k))};
   }
 
   /* ----------------------------------------------------- heating circuits */
@@ -353,16 +435,17 @@
     const n = (k ? k.beskr : '').replace(/temperaturf[øo]ler|tempgiver|turtemp\.?|temp\.?|trykkgiver|sirkulasjonspumpe|ventilmotor|\btur\b|\bretur\b/gi, '').replace(/\s+/g, ' ').trim();
     return n ? n[0].toUpperCase() + n.slice(1) : '';
   }
-  function tegnKurser(systemer) {
+  function tegnKurser(systemer, type) {
+    const t = type === 'kjoling' ? 'kjol' : 'varme';
     const kb = 300, x0 = 110, yTopp = 96, yTur = 560, yRet = 612, B = x0 + systemer.length * kb + 30;
-    let d = `<line class="sk-ror tur" x1="40" y1="${yTur}" x2="${B - 40}" y2="${yTur}"/><line class="sk-ror retur" x1="40" y1="${yRet}" x2="${B - 40}" y2="${yRet}"/>
+    let d = `<line class="sk-ror tur ${t}" x1="40" y1="${yTur}" x2="${B - 40}" y2="${yTur}"/><line class="sk-ror retur ${t}" x1="40" y1="${yRet}" x2="${B - 40}" y2="${yRet}"/>
       <path class="sk-flyt" d="M34 ${yTur - 6}l9 6l-9 6"/><path class="sk-flyt" d="M43 ${yRet - 6}l-9 6l9 6"/>`;
     const rest = [];
     let ute = null;
     systemer.forEach((s, i) => {
       const xt = x0 + i * kb + 110, xr = xt + 62, tatt = new Set();
       const ta = (f) => { const l = s.komp.filter(k => !tatt.has(k) && f(k)); l.forEach(k => tatt.add(k)); return l; };
-      d += `<line class="sk-ror tur" x1="${xt}" y1="${yTopp + 34}" x2="${xt}" y2="${yTur}"/><line class="sk-ror retur" x1="${xr}" y1="${yTopp + 34}" x2="${xr}" y2="${yRet}"/>
+      d += `<line class="sk-ror tur ${t}" x1="${xt}" y1="${yTopp + 34}" x2="${xt}" y2="${yTur}"/><line class="sk-ror retur ${t}" x1="${xr}" y1="${yTopp + 34}" x2="${xr}" y2="${yRet}"/>
         <path class="sk-flyt" d="M${xt - 6} ${yTopp + 44}l6 -9l6 9"/><path class="sk-flyt" d="M${xr - 6} ${yTopp + 35}l6 9l6 -9"/>
         <circle class="sk-dot" cx="${xt}" cy="${yTur}" r="3"/><circle class="sk-dot" cx="${xr}" cy="${yRet}" r="3"/>`;
       d += tekst(xt + 31, yTopp - 8, s.id || T('Kurs', 'Circuit'), 'sk-tittel') + tekst(xt + 31, yTopp + 10, kursNavn(s).slice(0, 30), 'sk-under');
@@ -397,9 +480,49 @@
     return {svg: d, bredde: B, hoyde: yRet + 36, topp: 40, rest};
   }
 
+  /* ---------------------------------------------------------- sprinkler */
+  /* Shut-off valves and pressure switches of a sprinkler system: not a circuit, so no flow and
+     return, only the main with what sits on it and whether the valves stand open. */
+  function stengt(k) {
+    const ps = Object.values(k.pkt).flat().filter(Boolean);
+    const tekst = [k.beskr, ...ps.map(p => p.description || '')].join(' ').toLowerCase();
+    const p = k.pkt.alarm[0] || k.pkt.drift || k.pkt.start || k.pkt.pv;
+    if (!p) return null;
+    const aktiv = paa(p);
+    if (/åpen|aapen|open/.test(tekst) && !/stengt|closed|lukket/.test(tekst)) return !aktiv;
+    if (/stengt|closed|lukket/.test(tekst)) return aktiv;
+    return null;
+  }
+  function tegnSprinkler(liste) {
+    const B = 1000, rad = 210;
+    let d = '';
+    const rest = [];
+    liste.forEach((s, i) => {
+      const y = 110 + i * rad, yr = y + 40;
+      const K = s.komp.filter(k => harLevende(k) || k.art === 'stengeventil');
+      const deler = [...K.filter(k => k.art === 'stengeventil'), ...K.filter(k => k.art === 'pumpe'), ...K.filter(k => !['stengeventil', 'pumpe'].includes(k.art))];
+      d += tekst(50, y - 44, s.id || T('Sprinkler', 'Sprinkler'), 'sk-tittel', 'start');
+      d += tekst(50, y - 26, T('Brannslokking, ikke en varme- eller kjølekurs', 'Fire protection, not a heating or cooling circuit'), 'sk-under svak', 'start');
+      d += `<line class="sk-ror spr" x1="50" y1="${yr}" x2="${B - 50}" y2="${yr}"/>`;
+      const steg = Math.min(120, (B - 200) / Math.max(1, deler.length));
+      deler.forEach((k, n) => {
+        const x = 110 + n * steg;
+        if (k.art === 'stengeventil') {
+          const st = stengt(k), p = k.pkt.alarm[0] || k.pkt.drift || k.pkt.start || k.pkt.pv;
+          const kl = st === true ? ' stengt' : '';
+          d += gruppe(k, 'stengeventil' + kl, `<path class="sk-kropp" d="M${x - 11} ${yr - 11}L${x + 11} ${yr + 11}L${x + 11} ${yr - 11}L${x - 11} ${yr + 11}z"/>
+            ${tekst(x, yr - 22, merke(k), 'sk-kode')}${tekst(x, yr + 32, st === null ? verdi(p) : st ? T('Stengt', 'Closed') : T('Åpen', 'Open'), 'sk-v')}${varsel(k, x + 14, yr - 20)}`);
+        } else if (k.art === 'pumpe') d += rotor(k, x, yr, 'h', 18);
+        else d += foler(k, x, yr + 0, false, BOK[k.art] || '?');
+      });
+      rest.push(...s.komp.filter(k => !K.includes(k)));
+    });
+    return {svg: d, bredde: B, hoyde: 110 + liste.length * rad, topp: 40, rest};
+  }
+
   /* ------------------------------------------------------------ the pane */
   const SK = {vis: false, valgt: {}, sist: '', systemer: [], ip: ''};
-  const tegnbare = (s) => (s.type === 'ventilasjon' && s.komp.length >= 3) || ((s.type === 'varme' || s.type === 'kjoling') && s.komp.length >= 2);
+  const tegnbare = (s) => (s.type === 'ventilasjon' && s.komp.length >= 3) || (s.type === 'sprinkler' && s.komp.length >= 1) || ((s.type === 'varme' || s.type === 'kjoling') && s.komp.length >= 2);
 
   const wrap = document.createElement('div');
   wrap.id = 'skjemaWrap';
@@ -415,12 +538,16 @@
   if (fb) fb.prepend(bryter);
 
   function faner() {
-    const vent = SK.systemer.filter(s => s.type === 'ventilasjon');
+    const vent = SK.systemer.filter(s => s.type === 'ventilasjon' && tegnbare(s));
     const f = vent.map(s => ({id: 'v:' + s.id, navn: (s.id ? s.id + ' ' : '') + T('Aggregat', 'Air handling'), type: 'aggregat', s}));
     for (const [type, navn] of [['varme', T('Varme', 'Heating')], ['kjoling', T('Kjøling', 'Cooling')]]) {
-      const l = SK.systemer.filter(s => s.type === type);
-      if (l.length) f.push({id: type, navn: `${navn} · ${l.length} ${T(l.length === 1 ? 'kurs' : 'kurser', l.length === 1 ? 'circuit' : 'circuits')}`, type: 'kurser', l});
+      const l = SK.systemer.filter(s => s.type === type && tegnbare(s));
+      if (l.length) f.push({id: type, navn: `${navn} · ${l.length} ${T(l.length === 1 ? 'kurs' : 'kurser', l.length === 1 ? 'circuit' : 'circuits')}`, type: 'kurser', kind: type, l});
     }
+    const spr = SK.systemer.filter(s => s.type === 'sprinkler');
+    if (spr.length) f.push({id: 'sprinkler', navn: `${T('Sprinkler', 'Sprinkler')} · ${spr.length}`, type: 'sprinkler', l: spr});
+    const rom = SK.systemer.flatMap(s => [...s.romData.values()]).filter(r => r.temp || r.co2 || r.varme || r.luft);
+    if (rom.length) f.push({id: 'rom', navn: `${T('Rom', 'Rooms')} · ${rom.length}`, type: 'rom', l: rom});
     return f;
   }
 
@@ -429,12 +556,16 @@
     const sig = ip + '|' + S.points.length;
     if (sig !== SK.sist) {
       SK.sist = sig; SK.ip = ip;
-      SK.systemer = ip ? byggSystemer(S.points).filter(tegnbare) : [];
+      SK.systemer = ip ? byggSystemer(S.points).filter(s => tegnbare(s) || s.romData.size) : [];
     } else {
       // same device, new values: the components hold the point objects, which the poll may have replaced
       const naa = new Map(S.points.map(p => [p.objid, p]));
       for (const s of SK.systemer) for (const k of s.komp) {
         for (const [r, p] of Object.entries(k.pkt)) k.pkt[r] = Array.isArray(p) ? p.map(x => naa.get(x.objid) || x) : (naa.get(p.objid) || p);
+      }
+      for (const s of SK.systemer) for (const r of s.romData.values()) {
+        for (const f of ['temp', 'tempSp', 'co2', 'co2Sp', 'varme', 'luft', 'bevegelse']) if (r[f]) r[f] = naa.get(r[f].objid) || r[f];
+        r.alle = (r.alle || []).map(x => naa.get(x.objid) || x);
       }
     }
     const har = SK.systemer.length > 0;
@@ -458,31 +589,144 @@
     const f = faner();
     if (!f.length) { wrap.innerHTML = ''; return; }
     const valgt = f.find(x => x.id === SK.valgt[SK.ip]) || f[0];
-    const r = valgt.type === 'aggregat' ? tegnAggregat(valgt.s) : tegnKurser(valgt.l);
+    SK.kompVed = new Map();
+    for (const s of SK.systemer) for (const k of s.komp) { const h = hoved(k); if (h) SK.kompVed.set(h.objid, k); }
+    const hode = (stor) => `<div class="sk-hode"><div class="sk-faner" role="tablist">${f.map(x => `<button type="button" role="tab" data-fane="${esc(x.id)}" class="${x === valgt ? 'sel' : ''}" aria-selected="${x === valgt}">${esc(x.navn)}</button>`).join('')}</div>
+        <span class="sk-forkl">${valgt.type === 'kurser' ? `<i class="sk-sw tur ${valgt.kind === 'kjoling' ? 'kjol' : 'varme'}"></i>${T('tur', 'flow')}<i class="sk-sw retur ${valgt.kind === 'kjoling' ? 'kjol' : 'varme'}"></i>${T('retur', 'return')}` : ''}${valgt.type === 'rom' ? '' : `<i class="sk-prikk drift"></i>${T('i drift', 'running')}<i class="sk-prikk haand"></i>${T('i hånd', 'in hand')}<i class="sk-prikk alarm"></i>${T('alarm', 'alarm')}`}
+          <button type="button" class="btn sk-utvid" data-utvid aria-pressed="${stor}" title="${esc(stor ? T('Vis hele enhetslista igjen', 'Show the whole device list again') : T('Gi skjemaet mer av bredden', 'Give the schematic more of the width'))}">${stor ? T('Vis enhetsliste', 'Show device list') : T('Utvid', 'Expand')}</button></span></div>`;
+    if (valgt.type === 'rom') { settInn(hode(document.body.classList.contains('sk-stor')) + romHtml(valgt.l)); return; }
+    SK.kompVed = SK.kompVed || new Map();
+    const r = valgt.type === 'aggregat' ? tegnAggregat(valgt.s) : valgt.type === 'sprinkler' ? tegnSprinkler(valgt.l) : tegnKurser(valgt.l, valgt.kind);
     const rest = r.rest.filter(k => hoved(k) && (k.pkt.pv || k.pkt.paadrag || k.pkt.drift || k.pkt.start || k.pkt.alarm.length)).slice(0, 40);
     const rom = valgt.type === 'aggregat' && valgt.s.rom.size ? `<span class="sk-rom">${valgt.s.rom.size} ${T('rom styres herfra', 'rooms are controlled from here')}</span>` : '';
     const minB = valgt.type === 'kurser' ? Math.max(520, r.bredde * 0.72) : 0;
     const stor = document.body.classList.contains('sk-stor');
-    const html = `<div class="sk-hode"><div class="sk-faner" role="tablist">${f.map(x => `<button type="button" role="tab" data-fane="${esc(x.id)}" class="${x === valgt ? 'sel' : ''}" aria-selected="${x === valgt}">${esc(x.navn)}</button>`).join('')}</div>
-        <span class="sk-forkl"><i class="sk-prikk drift"></i>${T('i drift', 'running')}<i class="sk-prikk haand"></i>${T('i hånd', 'in hand')}<i class="sk-prikk alarm"></i>${T('alarm', 'alarm')}
-          <button type="button" class="btn sk-utvid" data-utvid aria-pressed="${stor}" title="${esc(stor ? T('Vis enhetslista igjen', 'Show the device list again') : T('Gi skjemaet plassen til enhetslista', 'Give the schematic the room of the device list'))}">${stor ? T('Vis enhetsliste', 'Show device list') : T('Utvid', 'Expand')}</button></span></div>
-      <div class="sk-lerret"><svg viewBox="0 ${r.topp || 0} ${r.bredde} ${r.hoyde - (r.topp || 0)}" style="min-width:${Math.round(minB)}px" role="img" aria-label="${esc(valgt.navn)}">${r.svg}</svg></div>
+    const html = `${hode(stor)}
+      <div class="sk-lerret"><svg viewBox="0 ${r.topp || 0} ${r.bredde} ${r.hoyde - (r.topp || 0)}" style="min-width:${Math.round(minB)}px;max-width:${Math.round(r.bredde * 1.35)}px;margin:0 auto" role="img" aria-label="${esc(valgt.navn)}">${r.svg}</svg></div>
       ${rest.length || rom ? `<div class="sk-rest"><span class="sk-rest-t">${T('Også i systemet', 'Also in the system')}</span>${rom}${rest.map(k => {
         const h = hoved(k);
-        return `<button type="button" class="${klasser(k, 'sk-brikke')}" data-o="${esc(h.objid)}" title="${esc(tittel(k))}"><b>${esc(merke(k))}</b>${k.sted && NAVN[k.sted] ? `<i>${esc(tn(NAVN, k.sted))}</i>` : ''}<span>${esc(verdi(h))}</span></button>`;
+        return `<button type="button" class="${klasser(k, 'sk-brikke')}" data-o="${esc(h.objid)}"><b>${esc(merke(k))}</b>${k.sted && NAVN[k.sted] ? `<i>${esc(tn(NAVN, k.sted))}</i>` : ''}<span>${esc(verdi(h))}</span></button>`;
       }).join('')}</div>` : ''}
-      <div class="sk-fot">${T('Tegnet etter navn og beskrivelse på punktene, ikke etter rørføringen i bygget. Klikk en del for å se punktet.', 'Drawn from the names and descriptions of the points, not from the piping in the building. Click a part to see its point.')}</div>`;
-    if (wrap.innerHTML !== html) {
-      const rull = wrap.querySelector('.sk-lerret');
-      const rx = rull ? rull.scrollLeft : 0;
-      wrap.innerHTML = html;
-      const ny = wrap.querySelector('.sk-lerret');
-      if (ny && rx) ny.scrollLeft = rx;
-      merkValgt();
-    }
+      <div class="sk-fot">${T('Tegnet etter navn og beskrivelse på punktene, ikke etter rørføringen i bygget. Klikk en del for å se punktet, høyreklikk for å feste det i overvåkingen.', 'Drawn from the names and descriptions of the points, not from the piping in the building. Click a part to see its point, right-click to pin it to the watch list.')}</div>`;
+    settInn(html);
   }
+  function settInn(html) {
+    if (wrap.innerHTML === html) return;
+    const rull = wrap.querySelector('.sk-lerret');
+    const rx = rull ? rull.scrollLeft : 0, ry = wrap.scrollTop;
+    wrap.innerHTML = html;
+    const ny = wrap.querySelector('.sk-lerret');
+    if (ny && rx) ny.scrollLeft = rx;
+    wrap.scrollTop = ry;
+    merkValgt();
+  }
+
+  /* Rooms: one card each, the ones furthest from their setpoint first. */
+  function romHtml(rom) {
+    const tall = (p) => p && typeof p.value === 'number' ? p.value : null;
+    const avvik = (r) => tall(r.temp) !== null && tall(r.tempSp) !== null ? tall(r.temp) - tall(r.tempSp) : null;
+    const sortert = [...rom].sort((a, b) => Math.abs(avvik(b) ?? -1) - Math.abs(avvik(a) ?? -1) || a.rom.localeCompare(b.rom, 'no', {numeric: true}));
+    const bar = (navn, p) => {
+      const v = tall(p);
+      return v === null ? '' : `<span class="rk-linje"><i>${navn}</i><span class="rk-bar"><b style="width:${Math.max(0, Math.min(100, v)).toFixed(0)}%"></b></span><em>${esc(verdi(p))}</em></span>`;
+    };
+    return `<div class="sk-romgitter">${sortert.map(r => {
+      const a = avvik(r), h = r.temp || r.co2 || r.varme || r.luft;
+      const over = r.co2 && r.co2Sp && tall(r.co2) !== null && tall(r.co2Sp) !== null && tall(r.co2) > tall(r.co2Sp);
+      return `<button type="button" class="sk-romkort${SK.klikket === h.objid ? ' valgt' : ''}" data-rom="${esc(r.rom)}" data-o="${esc(h.objid)}">
+        <span class="rk-topp"><b>${esc(r.rom)}</b><i>${esc(r.sys)}</i></span>
+        <span class="rk-temp">${r.temp ? esc(verdi(r.temp)) : '—'}</span>
+        <span class="rk-sp">${r.tempSp ? `${T('settpunkt', 'setpoint')} ${esc(verdi(r.tempSp))}` : '&nbsp;'}${a !== null && Math.abs(a) >= 0.05 ? `<em>${a > 0 ? '+' : '−'}${Math.abs(a).toFixed(1)}</em>` : ''}</span>
+        ${bar(T('Varme', 'Heating'), r.varme)}${bar(T('Luft', 'Air'), r.luft)}
+        ${r.co2 ? `<span class="rk-co2${over ? ' over' : ''}"><i>CO2</i>${esc(verdi(r.co2))}${r.co2Sp ? ` <small>/ ${esc(verdi(r.co2Sp))}</small>` : ''}</span>` : ''}
+      </button>`;
+    }).join('')}</div>
+    <div class="sk-fot">${T('Rommene er funnet i navnene på punktene (A109, C126). Sortert etter avstand til settpunkt. Klikk et rom for å se temperaturpunktet.', 'The rooms are found in the names of the points (A109, C126). Sorted by distance from the setpoint. Click a room to see its temperature point.')}</div>`;
+  }
+
+
+  /* A room, opened: the reading with its distance from the setpoint on a scale, what the
+     valve and the damper are asked to do, the air quality, and every point the room has. */
+  const romLag = document.createElement('div');
+  romLag.id = 'romOverlay';
+  romLag.className = 'gs-overlay';
+  romLag.setAttribute('role', 'dialog');
+  romLag.setAttribute('aria-modal', 'true');
+  romLag.hidden = true;
+  document.body.append(romLag);
+  function aapneRom(navn) {
+    const r = SK.systemer.flatMap(s => [...s.romData.values()]).find(x => x.rom === navn);
+    if (!r) return;
+    const tall = (p) => p && typeof p.value === 'number' ? p.value : null;
+    const a = tall(r.temp) !== null && tall(r.tempSp) !== null ? tall(r.temp) - tall(r.tempSp) : null;
+    const skala = a === null ? '' : `<div class="rp-skala" aria-hidden="true"><i></i><b style="left:${Math.max(3, Math.min(97, 50 + a / 3 * 50)).toFixed(1)}%"></b><span class="l">−3</span><span class="m">${esc(verdi(r.tempSp))}</span><span class="h">+3</span></div>`;
+    const bar = (tittel, p) => tall(p) === null ? '' : `<div class="rp-linje"><i>${tittel}</i><span class="rk-bar"><b style="width:${Math.max(0, Math.min(100, tall(p))).toFixed(0)}%"></b></span><em>${esc(verdi(p))}</em></div>`;
+    const co2 = r.co2 ? `<div class="rp-linje"><i>CO2</i><span class="rk-bar${r.co2Sp && tall(r.co2) > tall(r.co2Sp) ? ' over' : ''}"><b style="width:${Math.max(2, Math.min(100, tall(r.co2) / (tall(r.co2Sp) || 1000) * 60)).toFixed(0)}%"></b></span><em>${esc(verdi(r.co2))}${r.co2Sp ? ' / ' + esc(verdi(r.co2Sp)) : ''}</em></div>` : '';
+    const rader = (r.alle || []).filter(p => p.type !== 'schedule').slice(0, 60);
+    const festet = r.temp && S.watch.some(w => w.ip === SK.ip && w.objid === r.temp.objid);
+    romLag.innerHTML = `<div class="gs-modal rp-modal"><div class="gs-head"><span class="gd-tittel">${esc(T('Rom ', 'Room ') + r.rom)}</span><span class="rp-sys">${esc(r.sys || '')}</span>
+      <button class="gs-close" style="margin-left:auto"><span class="lbl">${T('Lukk', 'Close')}</span> ✕</button></div>
+      <div class="rp-kropp"><div class="rp-stor"><b>${r.temp ? esc(verdi(r.temp)) : '—'}</b><span>${r.tempSp ? T('settpunkt ', 'setpoint ') + esc(verdi(r.tempSp)) : ''}${a !== null && Math.abs(a) >= 0.05 ? ` <em>${a > 0 ? '+' : '−'}${Math.abs(a).toFixed(1)}</em>` : ''}</span></div>
+        ${skala}${bar(T('Varme', 'Heating'), r.varme)}${bar(T('Luft', 'Air'), r.luft)}${co2}
+        <div class="rp-liste">${rader.map(p => `<button type="button" class="rp-rad" data-o="${esc(p.objid)}"><span>${esc(String(p.description || p.name).replace(/^SD\w{2}\s+/, ''))}</span><small>${esc(p.name)}</small><b>${esc(verdi(p))}</b></button>`).join('')}</div>
+        <div class="op-knapper">${r.temp ? `<button type="button" class="btn" data-rp="fest">${festet ? T('Ta ut av overvåkingen', 'Remove from the watch list') : T('Fest temperaturen', 'Pin the temperature')}</button>` : ''}</div></div></div>`;
+    romLag.hidden = false;
+    romLag._rom = r;
+  }
+  romLag.addEventListener('click', async (e) => {
+    if (e.target === romLag || e.target.closest('.gs-close')) { romLag.hidden = true; return; }
+    const r = romLag._rom;
+    if (e.target.closest('[data-rp="fest"]') && r && r.temp) {
+      const var_ = S.watch.some(w => w.ip === SK.ip && w.objid === r.temp.objid);
+      togglePin(r.temp.objid);
+      toast(var_ ? T('Tatt ut av overvåkingen', 'Removed from the watch list') : T('Festet i overvåkingen', 'Pinned to the watch list'));
+      aapneRom(r.rom);
+      return;
+    }
+    const k = e.target.closest('.rp-rad');
+    if (k) { romLag.hidden = true; SK.klikket = k.dataset.o; try { await selectPoint(k.dataset.o); } catch { /* the inspector says what went wrong */ } }
+  });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !romLag.hidden) { romLag.hidden = true; e.stopPropagation(); } }, true);
+
+  /* A card that follows the pointer: everything the part has, in words. */
+  const kort = document.createElement('div');
+  kort.id = 'skKort';
+  kort.className = 'sk-kort';
+  kort.hidden = true;
+  document.body.append(kort);
+  const ROLLENAVN = {pv: ['Verdi', 'Value'], sp: ['Settpunkt', 'Setpoint'], paadrag: ['Pådrag', 'Signal'], drift: ['Drift', 'Running'], start: ['Start', 'Start'],
+    vender: ['Vender', 'Switch'], manuell: ['Manuell verdi', 'Manual value'], virkningsgrad: ['Virkningsgrad', 'Efficiency']};
+  function visKort(el) {
+    const k = SK.kompVed && SK.kompVed.get(el.dataset.o);
+    if (!k) { kort.hidden = true; return; }
+    const rader = Object.entries(k.pkt).filter(([r, p]) => p && !Array.isArray(p) && ROLLENAVN[r])
+      .map(([r, p]) => `<span class="skk-rad"><i>${tn(ROLLENAVN, r)}</i><b>${esc(verdi(p))}</b></span>`);
+    const al = k.pkt.alarm.map(p => `<span class="skk-rad${p.value === 'active' ? ' alarm' : ''}"><i>${esc(String(p.description || p.name || '').split(' - ').pop().slice(0, 30))}</i><b>${esc(verdi(p))}</b></span>`).slice(0, 4);
+    const w = S.watch.find(x => x.ip === SK.ip && Object.values(k.pkt).flat().some(p => p && p.objid === x.objid));
+    const linje = w && typeof sparkPunkter === 'function' ? sparkPunkter(w.hist) : null;
+    kort.innerHTML = `<b class="skk-t">${esc(k.kode || k.eier || tn(ART, k.art))}</b><span class="skk-u">${esc(k.beskr || tn(ART, k.art))}${k.sted && NAVN[k.sted] ? ' · ' + esc(tn(NAVN, k.sted)) : ''}</span>
+      ${rader.join('')}${al.join('')}
+      ${linje ? `<svg class="skk-spark" viewBox="0 0 62 20" preserveAspectRatio="none"><polyline points="${linje}"/></svg>` : ''}
+      <span class="skk-hint">${w ? T('Festet i overvåkingen', 'Pinned to the watch list') : T('Høyreklikk for å feste', 'Right-click to pin')}</span>`;
+    kort.hidden = false;
+    const r = el.getBoundingClientRect(), b = kort.offsetWidth, h = kort.offsetHeight;
+    kort.style.left = Math.round(r.right + 14 + b > window.innerWidth - 8 ? Math.max(8, r.left - b - 14) : r.right + 14) + 'px';
+    kort.style.top = Math.round(Math.max(8, Math.min(window.innerHeight - h - 8, r.top + r.height / 2 - h / 2))) + 'px';
+  }
+  wrap.addEventListener('mouseover', (e) => { const el = e.target.closest('.sk-k[data-o], .sk-brikke[data-o]'); if (el) visKort(el); else kort.hidden = true; });
+  wrap.addEventListener('mouseleave', () => { kort.hidden = true; });
+  wrap.addEventListener('focusin', (e) => { const el = e.target.closest('.sk-k[data-o]'); if (el) visKort(el); });
+  wrap.addEventListener('focusout', () => { kort.hidden = true; });
+  wrap.addEventListener('contextmenu', (e) => {
+    const el = e.target.closest('[data-o]');
+    if (!el || !el.dataset.o || !S.pointIndex.get(el.dataset.o) || el.closest('[data-rom]')) return;
+    e.preventDefault();
+    const festet = S.watch.some(w => w.ip === SK.ip && w.objid === el.dataset.o);
+    togglePin(el.dataset.o);
+    toast(festet ? T('Tatt ut av overvåkingen', 'Removed from the watch list') : T('Festet i overvåkingen', 'Pinned to the watch list'));
+    kort.hidden = true;
+  });
   function merkValgt() {
-    const o = S.selected || (S.selectedPoint && S.selectedPoint.objid) || SK.klikket;
     wrap.querySelectorAll('.valgt').forEach(e => e.classList.remove('valgt'));
     if (SK.klikket) wrap.querySelectorAll(`[data-o="${CSS.escape(SK.klikket)}"]`).forEach(e => e.classList.add('valgt'));
   }
@@ -498,6 +742,8 @@
     if (el.closest('[data-utvid]')) { savePrefs({skjemaStor: !document.body.classList.contains('sk-stor')}); oppdater(); return; }
     const fane = el.closest('[data-fane]');
     if (fane) { SK.valgt[SK.ip] = fane.dataset.fane; tegn(); return; }
+    const rk = el.closest('[data-rom]');
+    if (rk) { aapneRom(rk.dataset.rom); return; }
     const k = el.closest('[data-o]');
     if (!k || !k.dataset.o) return;
     SK.klikket = k.dataset.o;
@@ -512,10 +758,85 @@
   if (typeof pollTick === 'function') etter('pollTick', () => { if (SK.vis && !wrap.hidden) oppdater(); });
   if (typeof updateValueCells === 'function') etter('updateValueCells', () => { if (SK.vis && !wrap.hidden) oppdater(); });
 
+
+  /* -------------------------------------------- the whole plant at a glance
+     Every air handling unit and every heating circuit NABE has read, on every
+     device, as one card each with the three or four numbers that say how it is
+     doing. A click opens the device with that drawing. */
+  const lag = document.createElement('div');
+  lag.id = 'oversiktOverlay';
+  lag.className = 'gs-overlay';
+  lag.setAttribute('role', 'dialog');
+  lag.setAttribute('aria-modal', 'true');
+  lag.hidden = true;
+  document.body.append(lag);
+  function oversiktKort() {
+    const ut = [];
+    for (const d of S.devices) {
+      const pkt = S.cache[d.address];
+      if (!pkt) continue;
+      for (const s of byggSystemer(pkt)) {
+        if (!tegnbare(s)) continue;
+        const finn = (art, ...steder) => s.komp.find(k => k.art === art && steder.includes(k.sted) && k.pkt.pv);
+        const tall = [];
+        if (s.type === 'ventilasjon') {
+          const til = finn('temp', 'tilluft'), avt = finn('temp', 'avtrekk');
+          if (til) tall.push([T('Tilluft', 'Supply'), verdi(til.pkt.pv), til.pkt.sp ? verdi(til.pkt.sp) : '']);
+          if (avt) tall.push([T('Avtrekk', 'Extract'), verdi(avt.pkt.pv), '']);
+          const vifter = s.komp.filter(k => k.art === 'vifte');
+          if (vifter.length) tall.push([T('Vifter', 'Fans'), `${vifter.filter(iDrift).length} ${T('av', 'of')} ${vifter.length} ${T('i drift', 'running')}`, '']);
+        } else {
+          const tur = finn('temp', 'tur', '4'), ret = finn('temp', 'retur', '5');
+          if (tur) tall.push([T('Tur', 'Flow'), verdi(tur.pkt.pv), tur.pkt.sp ? verdi(tur.pkt.sp) : '']);
+          if (ret) tall.push([T('Retur', 'Return'), verdi(ret.pkt.pv), '']);
+          const pumper = s.komp.filter(k => k.art === 'pumpe');
+          if (pumper.length) tall.push([T('Pumper', 'Pumps'), `${pumper.filter(iDrift).length} ${T('av', 'of')} ${pumper.length} ${T('i drift', 'running')}`, '']);
+        }
+        ut.push({ip: d.address, enhet: d.object_name || d.address, s, tall, navn: s.type === 'ventilasjon' ? T('Aggregat', 'Air handling') : (kursNavn(s) || tn({varme: ['Varme', 'Heating'], kjoling: ['Kjøling', 'Cooling']}, s.type)),
+          alarm: s.komp.filter(iAlarm).length, haand: s.komp.filter(iHaand).length, rom: s.rom.size});
+      }
+    }
+    return ut;
+  }
+  function tegnOversikt() {
+    const kort = oversiktKort();
+    const lest = S.devices.filter(d => S.cache[d.address]).length;
+    const grupper = [['ventilasjon', T('Ventilasjon', 'Ventilation')], ['varme', T('Varme', 'Heating')], ['kjoling', T('Kjøling', 'Cooling')]];
+    const kropp = !kort.length
+      ? `<div class="gs-empty">${T('Fant ingen aggregater eller varmekurser i navnene på punktene som er lest. Åpne en enhet for å lese den.', 'Found no air handling units or heating circuits in the names of the points that have been read. Open a device to read it.')}</div>`
+      : grupper.filter(([t]) => kort.some(k => k.s.type === t)).map(([t, navn]) => `<div class="ov-gruppe"><div class="ov-t">${navn}<small>${kort.filter(k => k.s.type === t).length}</small></div>
+          <div class="ov-gitter">${kort.filter(k => k.s.type === t).map(k => `<button type="button" class="ov-kort${k.alarm ? ' alarm' : ''}" data-ip="${esc(k.ip)}" data-fane="${esc(t === 'ventilasjon' ? 'v:' + k.s.id : t)}">
+            <span class="ov-topp"><b>${esc(k.s.id || k.navn)}</b>${k.alarm ? `<em class="a">▲ ${k.alarm}</em>` : ''}${k.haand ? `<em class="h">${k.haand} ${T('i hånd', 'in hand')}</em>` : ''}</span>
+            <span class="ov-navn">${esc(k.s.id ? k.navn : '')}</span>
+            ${k.tall.map(([n, v, sp]) => `<span class="ov-rad"><i>${esc(n)}</i><b>${esc(v)}</b>${sp ? `<u>${esc(sp)}</u>` : ''}</span>`).join('')}
+            <span class="ov-enhet">${esc(k.enhet)}${k.rom ? ` · ${k.rom} ${T('rom', 'rooms')}` : ''}</span></button>`).join('')}</div></div>`).join('');
+    lag.innerHTML = `<div class="gs-modal ov-modal"><div class="gs-head"><span class="gd-tittel">${T('Anleggsoversikt', 'Plant overview')}</span>
+      <span class="ov-meta">${T(`${kort.length} systemer på ${lest} leste enheter av ${S.devices.length}`, `${kort.length} systems on ${lest} devices read of ${S.devices.length}`)}</span>
+      <button class="gs-close" style="margin-left:auto"><span class="lbl">${T('Lukk', 'Close')}</span> ✕</button></div>
+      <div class="ov-kropp">${kropp}</div></div>`;
+  }
+  lag.addEventListener('click', async (e) => {
+    if (e.target === lag || e.target.closest('.gs-close')) { lag.hidden = true; return; }
+    const k = e.target.closest('.ov-kort');
+    if (!k) return;
+    lag.hidden = true;
+    SK.vis = true; savePrefs({skjemaVis: true});
+    SK.valgt[k.dataset.ip] = k.dataset.fane;
+    if (!S.activeDev || S.activeDev.address !== k.dataset.ip) await selectDevice(k.dataset.ip);
+    else oppdater();
+  });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !lag.hidden) { lag.hidden = true; e.stopPropagation(); } }, true);
+  window.aapneOversikt = function () {
+    if (!S.devices.length) { toast(T('Skann et anlegg først', 'Scan a plant first')); return; }
+    tegnOversikt();
+    lag.hidden = false;
+  };
+  if ($('oversiktBtn')) $('oversiktBtn').onclick = () => { closeMenus(); window.aapneOversikt(); };
+
   window.aapneSkjema = function () {
     if (!S.activeDev) { toast(T('Åpne en enhet først', 'Open a device first')); return; }
     if (!SK.systemer.length) { toast(T('Fant ikke noe aggregat eller noen varmekurs i navnene på denne enheten', 'Found no air handling unit or heating circuit in the names on this device')); return; }
     SK.vis = true; savePrefs({skjemaVis: true}); oppdater();
   };
-  window.nabeSkjema = {tolkNavn, tolkPunkt, byggSystemer, sideAv, tegnAggregat, tegnKurser, tilstand: SK};
+  window.nabeSkjema = {tolkNavn, tolkPunkt, byggSystemer, sideAv, stasjoner, tegnAggregat, tegnKurser, tegnSprinkler, romHtml, oversiktKort, tilstand: SK};
 })();

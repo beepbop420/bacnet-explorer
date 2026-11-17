@@ -5178,8 +5178,8 @@ button.sp-rad:hover{background:var(--hover)}
    red, amber and green stay with alarm, hand and running. Every stretch of
    duct is also named in words, so the colour is never the only way to tell
    supply from extract. */
-:root{--sk-ute:#5b9bd8;--sk-til:#d98a52;--sk-avt:#b59a5a;--sk-avk:#8d93a0;--sk-tur:#d9744a;--sk-ret:#7fa3c7}
-:root[data-theme="light"]{--sk-ute:#2f6fb3;--sk-til:#b8602a;--sk-avt:#8c7430;--sk-avk:#6d7480;--sk-tur:#b8532a;--sk-ret:#4f7ba6}
+:root{--sk-ute:#5b9bd8;--sk-til:#d98a52;--sk-avt:#b59a5a;--sk-avk:#8d93a0;--sk-v-tur:#e0483e;--sk-v-ret:#f3a79f;--sk-k-tur:#3b82d6;--sk-k-ret:#a4cdf5;--sk-spr:#2fb1a6}
+:root[data-theme="light"]{--sk-ute:#2f6fb3;--sk-til:#b8602a;--sk-avt:#8c7430;--sk-avk:#6d7480;--sk-v-tur:#c0362d;--sk-v-ret:#eb918a;--sk-k-tur:#1f63b0;--sk-k-ret:#86b9e8;--sk-spr:#1f8a82}
 .sk-bryter{display:flex;gap:2px;padding:2px;margin-right:8px;border:1px solid var(--line);border-radius:var(--radius);flex:0 0 auto}
 .sk-bryter[hidden]{display:none}
 .sk-bryter button{height:26px;padding:0 12px;border-radius:calc(var(--radius) - 2px);color:var(--fg-3);font:inherit;font-size:12px;cursor:pointer}
@@ -5200,15 +5200,22 @@ button.sp-rad:hover{background:var(--hover)}
 .sk-lerret{flex:0 0 auto;overflow-x:auto;padding:22px 24px;border:1px solid var(--line);border-radius:var(--r-lg);background:var(--panel)}
 .sk-lerret svg{display:block;width:100%;height:auto}
 .sk-utvid{height:26px;padding:0 12px;margin-left:16px;font-size:12px}
-body.sk-stor .pane-devices,body.sk-stor .splitter[data-pane="devices"]{display:none}
+
 .sk-kanal{stroke-width:1.2;fill-opacity:.2}
 .sk-kanal.ute{fill:var(--sk-ute);stroke:var(--sk-ute)}
 .sk-kanal.tilluft{fill:var(--sk-til);stroke:var(--sk-til)}
 .sk-kanal.avtrekk{fill:var(--sk-avt);stroke:var(--sk-avt)}
 .sk-kanal.avkast{fill:var(--sk-avk);stroke:var(--sk-avk)}
 .sk-ror{stroke-width:3;stroke-linecap:round;fill:none}
-.sk-ror.tur{stroke:var(--sk-tur)}
-.sk-ror.retur{stroke:var(--sk-ret)}
+.sk-ror.tur.varme{stroke:var(--sk-v-tur)}
+.sk-ror.retur.varme{stroke:var(--sk-v-ret)}
+.sk-ror.tur.kjol{stroke:var(--sk-k-tur)}
+.sk-ror.retur.kjol{stroke:var(--sk-k-ret)}
+.sk-ror.spr{stroke:var(--sk-spr);stroke-width:4}
+.sk-sw{display:inline-block;width:18px;height:4px;border-radius:2px;margin:0 6px 0 12px}
+.sk-sw.tur.varme{background:var(--sk-v-tur)}.sk-sw.retur.varme{background:var(--sk-v-ret)}
+.sk-sw.tur.kjol{background:var(--sk-k-tur)}.sk-sw.retur.kjol{background:var(--sk-k-ret)}
+.sk-k.stengt .sk-kropp{stroke:var(--warn);fill:color-mix(in srgb,var(--warn) 22%,var(--panel))}
 .sk-flyt{fill:none;stroke:var(--fg-3);stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
 .sk-etikett{font:500 11.5px var(--sans);fill:var(--fg-3);letter-spacing:.05em;text-transform:uppercase}
 .sk-kropp{fill:var(--panel);stroke:var(--fg-2);stroke-width:1.6;stroke-linejoin:round;transition:stroke .2s ease,fill .2s ease}
@@ -5265,3 +5272,103 @@ body.viser-skjema .filterbar > :not(.sk-bryter):not(.spacer):not(#pollBtn):not(#
 .menu-fot .menu-item{width:auto;flex:0 0 auto;color:var(--fg-2)}
 .menu-fot .menu-tung{margin-left:auto;color:var(--fg)}
 @media (max-width:600px){.menu-pop.menu-to:not([hidden]){grid-template-columns:minmax(0,1fr)}}
+/* Rooms as cards. */
+.sk-romgitter{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:14px}
+.sk-romkort{display:flex;flex-direction:column;gap:6px;padding:16px 16px 14px;border:1px solid var(--line);border-radius:var(--r-lg);background:var(--panel);text-align:left;font:inherit;color:var(--fg-2);cursor:pointer;transition:border-color .15s ease}
+.sk-romkort:hover,.sk-romkort:focus-visible{border-color:var(--fg-3)}
+.sk-romkort.valgt{border-color:var(--accent)}
+.rk-topp{display:flex;align-items:baseline;justify-content:space-between;gap:8px}
+.rk-topp b{font:600 13px var(--mono);color:var(--fg)}
+.rk-topp i{font-style:normal;font:400 11px var(--mono);color:var(--fg-3)}
+.rk-temp{font:600 24px var(--sans);color:var(--fg);letter-spacing:-.01em;margin-top:4px}
+.rk-sp{display:flex;align-items:baseline;justify-content:space-between;font-size:12px;color:var(--fg-3);margin-bottom:6px}
+.rk-sp em{font:500 12px var(--mono);font-style:normal;color:var(--fg-2)}
+.rk-linje{display:grid;grid-template-columns:44px minmax(0,1fr) 46px;align-items:center;gap:8px;font-size:11px}
+.rk-linje i{font-style:normal;color:var(--fg-3)}
+.rk-linje em{font:500 11px var(--mono);font-style:normal;text-align:right}
+.rk-bar{height:4px;border-radius:2px;background:var(--line)}
+.rk-bar b{display:block;height:100%;border-radius:2px;background:var(--accent)}
+.rk-co2{display:flex;align-items:baseline;gap:8px;font:500 11px var(--mono);margin-top:2px}
+.rk-co2 i{font:400 11px var(--sans);font-style:normal;color:var(--fg-3);width:44px}
+.rk-co2 small{color:var(--fg-3);font-size:11px}
+.rk-co2.over{color:var(--warn)}
+/* The card that follows the pointer in the schematic. */
+.sk-kort{position:fixed;z-index:9980;display:flex;flex-direction:column;gap:5px;min-width:190px;max-width:280px;padding:14px 16px 12px;border:1px solid var(--line-2);border-radius:var(--r-lg);background:var(--panel);box-shadow:0 12px 32px rgba(0,0,0,.35);pointer-events:none;font-size:12px;color:var(--fg-2)}
+.sk-kort[hidden]{display:none}
+.skk-t{font:600 14px var(--sans);color:var(--fg)}
+.skk-u{font-size:11px;color:var(--fg-3);margin-bottom:6px}
+.skk-rad{display:flex;justify-content:space-between;gap:18px}
+.skk-rad i{font-style:normal;color:var(--fg-3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.skk-rad b{font:500 12px var(--mono);color:var(--fg);white-space:nowrap}
+.skk-rad.alarm b{color:var(--err)}
+.skk-spark{width:100%;height:28px;margin-top:6px}
+.skk-spark polyline{fill:none;stroke:var(--accent);stroke-width:1.4;vector-effect:non-scaling-stroke}
+.skk-hint{margin-top:6px;font-size:10px;color:var(--fg-3)}
+/* The device list folded into a strip (nabe-flater.js). */
+.liste-smal-btn{flex:0 0 auto;width:22px;height:22px;margin-right:6px;border-radius:var(--radius);color:var(--fg-3);font-size:13px;line-height:1;cursor:pointer}
+.liste-smal-btn:hover,.liste-smal-btn:focus-visible{color:var(--fg);background:var(--hover)}
+.dev-smal{display:none}
+body.liste-smal .pane-devices,body.sk-stor .pane-devices{flex:0 0 68px !important;min-width:68px !important;width:68px}
+body.liste-smal .splitter[data-pane=devices],body.liste-smal .scanbox,body.liste-smal #anleggStatus,body.liste-smal #dupWarn,body.liste-smal #ruterInfo,body.liste-smal .pane-head > :not(#listeSmalBtn),body.sk-stor .splitter[data-pane=devices],body.sk-stor .scanbox,body.sk-stor #anleggStatus,body.sk-stor #dupWarn,body.sk-stor #ruterInfo,body.sk-stor .pane-head > :not(#listeSmalBtn){display:none !important}
+body.liste-smal .pane-devices .pane-head,body.sk-stor .pane-devices .pane-head{font-size:0;justify-content:center;padding-left:0;padding-right:0}
+body.liste-smal .pane-devices .liste-smal-btn,body.sk-stor .pane-devices .liste-smal-btn{margin:0;font-size:13px}
+body.liste-smal .vgroup-head > :not(.vgroup-bar),body.sk-stor .vgroup-head > :not(.vgroup-bar){display:none}
+body.liste-smal .vgroup-head,body.sk-stor .vgroup-head{justify-content:center;padding:12px 0 4px}
+body.liste-smal .vgroup-bar,body.sk-stor .vgroup-bar{width:22px !important;height:3px !important;flex:0 0 22px !important}
+body.liste-smal #devList .dev,body.sk-stor #devList .dev{flex-direction:row;align-items:center;justify-content:center;min-height:36px;padding:8px 2px;margin:2px 6px}
+body.liste-smal #devList .dev > .dev-l1,body.liste-smal #devList .dev > .dev-l2,body.sk-stor #devList .dev > .dev-l1,body.sk-stor #devList .dev > .dev-l2{display:none}
+body.liste-smal #devList .dev > .dev-smal,body.sk-stor #devList .dev > .dev-smal{display:block;font:600 12px var(--mono);color:var(--fg-2)}
+body.liste-smal #devList .dev.sel > .dev-smal,body.sk-stor #devList .dev.sel > .dev-smal{color:var(--fg)}
+body.liste-smal #devList .dev.st-bad > .dev-smal,body.sk-stor #devList .dev.st-bad > .dev-smal{color:var(--err)}
+body.liste-smal #devList .dev.st-feil > .dev-smal,body.sk-stor #devList .dev.st-feil > .dev-smal{color:color-mix(in srgb,var(--err) 62%,var(--fg-2))}
+/* The point panel in tabs. */
+.insp-faner{display:flex;gap:2px;margin:6px 12px 4px;padding:2px;border:1px solid var(--line);border-radius:var(--radius)}
+.insp-faner button{flex:1 1 0;height:28px;border-radius:calc(var(--radius) - 2px);color:var(--fg-3);font:inherit;font-size:12px;cursor:pointer}
+.insp-faner button:hover{color:var(--fg)}
+.insp-faner button.sel{background:var(--raised);color:var(--fg)}
+#inspector > .sect.skjult-fane{display:none}
+/* The plant overview. */
+.ov-modal{width:min(1100px,94vw)}
+.ov-meta{margin-left:14px;font-size:12px;color:var(--fg-3)}
+.ov-kropp{padding:18px 22px 24px;overflow:auto;max-height:min(76vh,760px);display:flex;flex-direction:column;gap:26px}
+.ov-t{display:flex;align-items:baseline;gap:8px;font-size:12px;font-weight:600;color:var(--fg-2);margin-bottom:12px}
+.ov-t small{font:500 11px var(--mono);color:var(--fg-3)}
+.ov-gitter{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px}
+.ov-kort{display:flex;flex-direction:column;gap:5px;padding:16px;border:1px solid var(--line);border-radius:var(--r-lg);background:var(--bg);text-align:left;font:inherit;font-size:12px;color:var(--fg-2);cursor:pointer;transition:border-color .15s ease}
+.ov-kort:hover,.ov-kort:focus-visible{border-color:var(--fg-3)}
+.ov-kort.alarm{border-color:color-mix(in srgb,var(--err) 55%,var(--line))}
+.ov-topp{display:flex;align-items:baseline;gap:8px}
+.ov-topp b{font:600 14px var(--mono);color:var(--fg)}
+.ov-topp em{font-style:normal;font-size:11px;margin-left:auto}
+.ov-topp em + em{margin-left:8px}
+.ov-topp em.a{color:var(--err)}
+.ov-topp em.h{color:var(--warn)}
+.ov-navn{font-size:12px;color:var(--fg-3);min-height:16px;margin-bottom:8px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ov-rad{display:flex;align-items:baseline;gap:8px}
+.ov-rad i{font-style:normal;color:var(--fg-3);flex:0 0 62px}
+.ov-rad b{font:500 12px var(--mono);color:var(--fg)}
+.ov-rad u{text-decoration:none;font:500 12px var(--mono);color:var(--accent)}
+.ov-enhet{margin-top:10px;padding-top:10px;border-top:1px solid var(--line);font-size:11px;color:var(--fg-3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* A room opened. */
+.rp-modal{width:min(560px,94vw)}
+.rp-sys{margin-left:12px;font:500 12px var(--mono);color:var(--fg-3)}
+.rp-kropp{padding:20px 24px 22px;display:flex;flex-direction:column;gap:14px;overflow:auto;max-height:min(78vh,720px)}
+.rp-stor{display:flex;align-items:baseline;gap:16px}
+.rp-stor b{font:600 38px var(--sans);letter-spacing:-.02em;color:var(--fg)}
+.rp-stor span{font-size:13px;color:var(--fg-3)}
+.rp-stor em{font:500 13px var(--mono);font-style:normal;color:var(--fg-2)}
+.rp-skala{position:relative;height:6px;margin:6px 8px 20px;border-radius:3px;background:var(--line)}
+.rp-skala i{position:absolute;left:50%;top:-4px;width:2px;height:14px;background:var(--fg-3);transform:translateX(-1px)}
+.rp-skala b{position:absolute;top:-4px;width:14px;height:14px;margin-left:-7px;border-radius:50%;background:var(--accent);border:2px solid var(--panel);transition:left .3s ease}
+.rp-skala span{position:absolute;top:14px;font:400 10px var(--mono);color:var(--fg-3)}
+.rp-skala .l{left:0}.rp-skala .m{left:50%;transform:translateX(-50%)}.rp-skala .h{right:0}
+.rp-linje{display:grid;grid-template-columns:56px minmax(0,1fr) 170px;align-items:center;gap:12px;font-size:12px}
+.rp-linje i{font-style:normal;color:var(--fg-3)}
+.rp-linje em{font:500 12px var(--mono);font-style:normal;text-align:right}
+.rk-bar.over b{background:var(--warn)}
+.rp-liste{display:flex;flex-direction:column;margin-top:6px;border-top:1px solid var(--line);padding-top:8px}
+.rp-rad{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:14px;align-items:baseline;padding:7px 8px;border-radius:6px;text-align:left;font-size:12px;color:var(--fg-2);cursor:pointer}
+.rp-rad:hover,.rp-rad:focus-visible{background:var(--hover)}
+.rp-rad span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rp-rad small{font:400 10px var(--mono);color:var(--fg-3);max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rp-rad b{font:500 12px var(--mono);color:var(--fg);white-space:nowrap}
