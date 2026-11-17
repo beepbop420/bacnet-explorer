@@ -58,13 +58,46 @@ def snarvei(lnk: Path, maal: Path, args: str, mappe: Path, ikon: Path, beskrivel
                    capture_output=True, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
 
 
+def stopp_nabe_i(mappe: Path) -> None:
+    """A NABE that runs from the target folder (an earlier try, or the old version) keeps its files locked:
+    close it first. Only processes whose program lies inside the folder."""
+    ps = ("Get-CimInstance Win32_Process | Where-Object { $_.ExecutablePath -and $_.ExecutablePath -like '"
+          + str(mappe).replace("'", "''") + "\\*' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }")
+    try:
+        subprocess.run(["powershell", "-NoProfile", "-Command", ps], capture_output=True, timeout=30,
+                       creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+    except Exception:
+        pass
+    __import__("time").sleep(0.5)
+
+
+def kopier_fil(f: Path, til: Path) -> None:
+    """Copy one file; a file that is in use is tried again for a few seconds, and one that is already the
+    same size is left (the same version, held by a virus scanner or an open NABE)."""
+    for forsok in range(8):
+        try:
+            shutil.copy2(f, til)
+            return
+        except OSError as e:
+            if getattr(e, "winerror", 0) not in (32, 33, 5) and not isinstance(e, PermissionError):
+                raise
+            if forsok == 7:
+                if til.exists() and til.stat().st_size == f.stat().st_size:
+                    logg(f"{til.name} er i bruk og har samme størrelse, beholdt")
+                    return
+                raise
+            __import__("time").sleep(1.0)
+
+
 def installer(mappe: Path, valg: dict, fremdrift=lambda n, av, tekst: None):
     mappe = Path(mappe)
     filer = [p for p in KILDE.rglob("*") if p.is_file() and p.name not in ("installer.py", "installer.html")]
+    if mappe.exists():
+        stopp_nabe_i(mappe)
     for i, f in enumerate(filer):
         til = mappe / f.relative_to(KILDE)
         til.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(f, til)
+        kopier_fil(f, til)
         if i % 40 == 0 or i == len(filer) - 1:
             fremdrift(i + 1, len(filer), str(f.relative_to(KILDE)))
     shutil.copy2(KILDE / "avinstaller.py", mappe / "avinstaller.py")

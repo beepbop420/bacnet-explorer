@@ -203,6 +203,9 @@ const FAKTA = [
   ['COV betyr at regulatoren sier fra selv. Mindre spørring, mer ro.', 'COV means the controller speaks up itself. Less asking, more peace.'],
 ];
 const NYTT = {
+  '1.88': [
+    ['Installasjonen stopper en NABE som kjører fra målmappa og prøver igjen på filer som er i bruk, i stedet for å feile med «prosessen får ikke tilgang til filen»', 'The installer stops a NABE that runs from the target folder and retries files that are in use, instead of failing with "the process cannot access the file"'],
+  ],
   '1.87': [
     ['Installasjonen åpner seg på maskiner der Windows har merket filene fra zip-fila som hentet fra internett (WebView2 ble nektet lastet). NABE fjerner merket selv før vinduet åpnes', 'The installer now opens on machines where Windows has marked the files from the zip as downloaded from the internet (WebView2 was refused). NABE removes the mark itself before the window opens'],
   ],
