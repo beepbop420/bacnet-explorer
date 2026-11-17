@@ -382,6 +382,10 @@ def parse_map(text: str, base: Optional[int] = None, real_scale: float = 0.1) ->
                      "datatype": "type", "navn": "name", "beskrivelse": "description", "enhet": "unit", "units": "unit", "faktor": "scale"}
             rows = [{alias.get(k, k): v for k, v in r.items() if k} for r in raw_rows]
     rows = [r for r in rows if any(str(v).strip() for v in r.values() if v is not None)]
+    if rows and not any("address" in r for r in rows):
+        cols = ", ".join(sorted({k for r in rows for k in r})[:12])
+        raise MapError(f"no address column found (the columns are: {cols}). NABE reads CSV or JSON with address, function, type, name, "
+                       "scale, unit, description, and Regin EXOL lists. An export from another system has to be turned into one of those first")
     addrs = []
     for r in rows:
         try:

@@ -203,6 +203,9 @@ const FAKTA = [
   ['COV betyr at regulatoren sier fra selv. Mindre spørring, mer ro.', 'COV means the controller speaks up itself. Less asking, more peace.'],
 ];
 const NYTT = {
+  '2.2': [
+    ['Et registerkart i et format NABE ikke kjenner igjen sier nå hvilke kolonner filen har og hva som støttes, i stedet for «bad address»', 'A register map in a format NABE does not recognise now says which columns the file has and what is supported, instead of "bad address"'],
+  ],
   '2.1': [
     ['Modbus leser Regin EXOL-lister (Modbus Type, Signal Name, EXOL Type, Modbus Address): adressene teller fra 1 og trekkes fra 1, reelle verdier (R) skaleres, og begge valgene kan overstyres ved import, med merknader om hva som er antatt. KNX gjetter datapunkttypen fra navn og telegramlengde når ETS-prosjektet ikke har noen, og sier at den er antatt. Klokkeslett og dato i KNX leses', 'Modbus reads Regin EXOL lists (Modbus Type, Signal Name, EXOL Type, Modbus Address): the addresses count from 1 and have 1 taken off, reals (R) are scaled, and both can be overridden at import, with notes on what was assumed. KNX guesses the datapoint type from the name and the length of the telegram when the ETS project has none, and says it is a guess. KNX time and date are read'],
   ],
