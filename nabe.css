@@ -5152,6 +5152,10 @@ tbody tr.fault td.c-act::before{content:'';position:absolute;left:0;top:2px;bott
 .mb-rad .field:first-child{flex:1}
 .mb-port{width:84px}
 .mb-kart{min-width:170px}
+.mb-valg{gap:16px;flex-wrap:wrap}
+.mb-valg label{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--fg-2)}
+.mb-notater{display:flex;flex-direction:column;gap:4px}
+.mb-notater:empty{display:none}
 .sp-panel{position:fixed;right:18px;bottom:40px;z-index:9000;width:min(380px,92vw);max-height:min(520px,80vh);display:flex;flex-direction:column;gap:10px;padding:12px 14px 14px;
   background:var(--raised);border:1px solid var(--line-2);border-radius:var(--r-lg);box-shadow:0 12px 34px rgba(0,0,0,.4)}
 .sp-panel:not(.ved){bottom:auto;top:50px}

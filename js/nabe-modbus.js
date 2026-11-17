@@ -7,7 +7,7 @@
 'use strict';
 
 (function modbus() {
-  let kart = [], tilordning = {}, funnet = [], melding = '', opptatt = false;
+  let kart = [], tilordning = {}, funnet = [], melding = '', opptatt = false, notater = [];
 
   const lag = document.createElement('div');
   lag.id = 'modbusOverlay';
@@ -63,6 +63,11 @@
           <div class="sp-meta">${T('Et registerkart gir registrene navn, type, skalering og enhet. CSV med overskrifter (address, function, type, name, scale, unit, description) eller JSON.', 'A register map gives the registers a name, type, scale and unit. CSV with a header row (address, function, type, name, scale, unit, description) or JSON.')}</div>
           ${kart.length ? `<table class="sp-tab"><tbody>${kart.map(k => `<tr><td>${esc(k.name)}</td><td class="sp-meta">${k.points} ${T('punkter', 'points')}</td>
             <td style="text-align:right"><button type="button" class="btn" data-mb="slett" data-id="${esc(k.id)}">${T('Slett', 'Delete')}</button></td></tr>`).join('')}</tbody></table>` : ''}
+          <div class="mb-rad mb-valg"><label>${T('Adresser teller fra', 'Addresses count from')}
+              <select class="field" id="mbBase"><option value="">${T('Auto', 'Auto')}</option><option value="0">0</option><option value="1">1</option></select></label>
+            <label>${T('Reelle verdier (Regin R)', 'Reals (Regin R)')}
+              <select class="field" id="mbSkala"><option value="0.1">× 0,1</option><option value="1">× 1</option><option value="0.01">× 0,01</option></select></label></div>
+          <div class="sp-meta mb-notater" id="mbNotater">${(notater || []).map(n => `<div>${esc(n)}</div>`).join('')}</div>
           <div class="op-knapper"><button type="button" class="btn" data-mb="mal">${T('Last ned mal', 'Download template')}</button>
             <button type="button" class="btn primary" data-mb="importer">${T('Importer registerkart …', 'Import register map …')}</button></div>
           <input type="file" id="mbFil" accept=".csv,.json,.txt,text/csv,application/json" hidden></div>
@@ -105,8 +110,10 @@
     if (fil.size > 2_000_000) { toast(T('Filen er for stor', 'The file is too large'), true); return; }
     const tekst = await fil.text();
     const navn = fil.name.replace(/\.[^.]+$/, '');
-    const d = await api2('/api/modbus/kart', {navn, tekst});
-    if (d.status !== 'done') { toast(d.error || T('Kunne ikke lese registerkartet', 'Could not read the register map'), true); return; }
+    const base = $('mbBase') ? $('mbBase').value : '';
+    const d = await api2('/api/modbus/kart', {navn, tekst, base: base === '' ? null : parseInt(base, 10), real_skala: parseFloat($('mbSkala') ? $('mbSkala').value : '0.1') || 0.1});
+    if (d.status !== 'done') { notater = []; toast(d.error || T('Kunne ikke lese registerkartet', 'Could not read the register map'), true); await hentKart(); tegn(); return; }
+    notater = d.merknader || [];
     toast(T(`Registerkart «${navn}» importert: ${d.punkter} punkter.`, `Register map "${navn}" imported: ${d.punkter} points.`));
     await hentKart(); tegn();
   }

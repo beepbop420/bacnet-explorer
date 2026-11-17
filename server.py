@@ -235,7 +235,7 @@ def t(nb: str, en: str) -> str:
     return en if SPRAAK_VAR.get() == "en" else nb
 
 
-VERSJON = "2.0"
+VERSJON = "2.1"
 
 state = {"app": None, "local_address": None, "read_only": False, "bbmd": None, "primary": None}
 # The simulator: a scanned site run as devices on 127.0.0.x, in a process of its own.
@@ -5576,6 +5576,8 @@ def modbus_kart():
 class ModbusKartBody(BaseModel):
     navn: str = ""
     tekst: str
+    base: Optional[int] = None          # 0 or 1: how the addresses in the file count. Left out, it is worked out.
+    real_skala: float = 0.1             # Regin EXOL reals (R) are whole numbers in the register, scaled
 
 
 @app.post("/api/modbus/kart")
@@ -5584,11 +5586,12 @@ def modbus_kart_lagre(body: ModbusKartBody):
     if len(body.tekst) > 2_000_000:
         return {"status": "error", "error": t("Registerkartet er for stort", "The register map is too large")}
     try:
-        parsed = nm.parse_map(body.tekst)
+        parsed = nm.parse_map(body.tekst, base=body.base if body.base in (0, 1) else None, real_scale=body.real_skala or 0.1)
     except (nm.MapError, ValueError) as e:
         return {"status": "error", "error": str(e)}
     kid = MODBUS_KART.save_map(body.navn, parsed)
-    return {"status": "done", "id": kid, "punkter": len(parsed["points"])}
+    return {"status": "done", "id": kid, "punkter": len(parsed["points"]), "base": parsed["base"], "merknader": parsed["notes"],
+            "format": parsed["format"]}
 
 
 class ModbusTilordne(BaseModel):
@@ -5706,10 +5709,20 @@ async def knx_scan(body: KnxScanBody):
     return {"status": "started", "job_id": job["id"]}
 
 
+def _knx_dpt(punkt: Dict[str, Any], tel: Optional[Dict[str, Any]]):
+    """The datapoint type of a group address: the one ETS gave it, else a guess from the name and the telegram.
+    Returns (type, guessed)."""
+    dpt = nkx.parse_dpt(punkt.get("dpt"))
+    if dpt[0] or tel is None:
+        return dpt, False
+    g = nkx.guess_dpt(f"{punkt.get('name', '')} {punkt.get('description', '')}", len(tel["raw"]), tel["small"])
+    return g, bool(g[0])
+
+
 def _knx_verdi(punkt: Dict[str, Any], tel: Optional[Dict[str, Any]]) -> Any:
     if tel is None:
         return None
-    return nkx.decode(nkx.parse_dpt(punkt.get("dpt")), tel["raw"], tel["small"])
+    return nkx.decode(_knx_dpt(punkt, tel)[0], tel["raw"], tel["small"])
 
 
 def _knx_punkter(address: str, tun: Optional["nkx.KnxTunnel"]) -> List[Dict[str, Any]]:
@@ -5719,8 +5732,11 @@ def _knx_punkter(address: str, tun: Optional["nkx.KnxTunnel"]) -> List[Dict[str,
     ut = []
     for p in liste:
         tel = tun.values.get(p["ga"]) if tun else None
-        dpt = nkx.parse_dpt(p.get("dpt"))
+        dpt, gjettet = _knx_dpt(p, tel)
         rec = nkx.point_for(p["ga"], p["name"], dpt, p.get("description", ""), _knx_verdi(p, tel))
+        if gjettet:
+            rec["description"] = (p.get("description") or p["name"]) + t(" (type antatt: ", " (type guessed: ") + f"{dpt[0]}.{dpt[1]:03d})"
+            rec["knx"]["dpt_gjettet"] = f"{dpt[0]}.{dpt[1]:03d}"
         if tel is None:
             rec["unread"] = True
         ut.append(rec)

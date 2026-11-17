@@ -119,6 +119,13 @@ def decode(dpt: Tuple[int, int], raw: bytes, small: bool) -> Any:
             if v & 0x8000:
                 mant -= 2048
             return round(0.01 * mant * (1 << ((v >> 11) & 0x0F)), 2)
+        if main == 10 and len(raw) >= 3:                 # time of day
+            return f"{raw[0] & 0x1F:02d}:{raw[1] & 0x3F:02d}:{raw[2] & 0x3F:02d}"
+        if main == 11 and len(raw) >= 3:                 # date
+            y = raw[2] & 0x7F
+            return f"{2000 + y if y < 90 else 1900 + y}-{raw[1] & 0x0F:02d}-{raw[0] & 0x1F:02d}"
+        if main == 19 and len(raw) >= 6:                 # date and time
+            return f"{1900 + raw[0]}-{raw[1] & 0x0F:02d}-{raw[2] & 0x1F:02d} {raw[3] & 0x1F:02d}:{raw[4] & 0x3F:02d}:{raw[5] & 0x3F:02d}"
         if main == 12:
             return struct.unpack("!I", raw[:4])[0]
         if main == 13:
@@ -133,6 +140,32 @@ def decode(dpt: Tuple[int, int], raw: bytes, small: bool) -> Any:
     if len(raw) == 0:
         return None
     return int.from_bytes(raw, "big") if len(raw) <= 4 else raw.hex()
+
+
+# A project with no datapoint types (many have none) leaves the value of a telegram to be worked out. The size of the
+# telegram says what it can be, and the name says what it is: a two byte "Temperatur" is DPT 9.001, a one byte
+# "Varmepådrag" is 5.001. A type found this way is a guess, and is shown as one.
+_HINTS = [
+    (r"co2|ppm", (9, 8)), (r"lux|lysstyrke", (9, 4)), (r"fukt|humid|\brh\b", (9, 7)),
+    (r"temp|\brt\d|settpunkt|setpoint|setp\b", (9, 1)),
+    (r"p[åa]drag|ventil|valve|posisjon|position|dimm|spjeld|damper|%", (5, 1)),
+    (r"effekt|power|\bkw\b", (9, 24)), (r"energi|energy|kwh", (13, 13)),
+    (r"p[åa]/av|av/p[åa]|status|alarm|feil|bryter|switch|drift|\blys\b|on/off|aktiv", (1, 1)),
+]
+_SIZE = {1: 0, 5: 1, 7: 2, 8: 2, 9: 2, 12: 4, 13: 4, 14: 4}
+
+
+def guess_dpt(text: str, length: int, small: bool) -> Tuple[int, int]:
+    """A datapoint type from what a group address is called and how long its telegrams are. (0, 0) when neither says."""
+    if small:
+        return (1, 1)
+    for rx, (main, sub) in _HINTS:
+        if re.search(rx, text or "", re.I):
+            if main == 5 and length == 2:
+                return (9, 7)
+            if _SIZE.get(main) == length:
+                return (main, sub)
+    return (0, 0)
 
 
 # ------------------------------------------------------------------- frames

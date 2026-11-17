@@ -1057,6 +1057,56 @@ def knx():
     sjekk("knx: ingen skriving nådde gatewayen", KXSIM.writes_received == [] and KXSEC.writes_received == [])
 
 
+def modbus_exol():
+    """A Regin EXOL list (what a technician is handed): its own column names, addresses that count from 1, reals that are scaled."""
+    import nabe_modbus as nm
+    liste = ("Modbus Type;Signal Name;EXOL Type;Modbus Address;Default Value;Function;Description\r\n"
+             "Coil;VentSettings.S_Reset;L;1;0;Config;Reset alarms\r\n"
+             "Input Registers;VentActual.A_SupplyTemp;R;5;;Ventilation;Supply air temperature\r\n"
+             "Input Registers;VentActual.A_UnitMode;X;6;;Ventilation;Unit mode\r\n"
+             "Holding Register;VentSettings.S_Setpoint;R;65;21;Ventilation;Supply air setpoint\r\n"
+             "Holding Register;VentSettings.S_Delay;I;66;5;Config;Alarm delay\r\n"
+             "Input Status Registers;AlaData.Ala_Fire_Status;L;2;;Alarms;Fire alarm\r\n")
+    m = nm.parse_map(liste)
+    p = {x["name"]: x for x in m["points"]}
+    sjekk("modbus: Regin EXOL-liste gjenkjennes, og adresser som teller fra 1 trekkes fra 1",
+          m["format"] == "exol" and m["base"] == 1 and p["VentActual.A_SupplyTemp"]["address"] == 4 and p["VentSettings.S_Reset"]["address"] == 0
+          and p["AlaData.Ala_Fire_Status"]["function"] == "discrete" and p["AlaData.Ala_Fire_Status"]["address"] == 1, str(m["notes"]))
+    sjekk("modbus: EXOL-typene gir bit, heltall, indeks og skalert reelt tall",
+          p["VentSettings.S_Reset"]["type"] == "bool" and p["VentSettings.S_Delay"]["scale"] == 1 and p["VentActual.A_UnitMode"]["type"] == "u16"
+          and p["VentActual.A_SupplyTemp"]["scale"] == 0.1 and any("antatt" in n for n in m["notes"]))
+    m0 = nm.parse_map(liste, base=0, real_scale=1)
+    p0 = {x["name"]: x for x in m0["points"]}
+    sjekk("modbus: adressebase og skala kan velges", m0["base"] == 0 and p0["VentActual.A_SupplyTemp"]["address"] == 5
+          and p0["VentActual.A_SupplyTemp"]["scale"] == 1)
+    k = kall("/api/modbus/kart", {"navn": "EXOL", "tekst": liste})
+    sjekk("modbus: importen gjennom API-et sier hvilken base den brukte", k.get("status") == "done" and k.get("base") == 1 and k.get("format") == "exol"
+          and bool(k.get("merknader")), str(k))
+
+
+def knx_gjetting():
+    """A project with no datapoint types: the type is worked out from the name and the size of the telegram, and said to be a guess."""
+    import base64
+    import nabe_knx as nk
+    sjekk("knx: type gjettes ut fra navn og telegramlengde",
+          nk.guess_dpt("Rom 1 Er-temperatur", 2, False) == (9, 1) and nk.guess_dpt("Varmepådrag", 1, False) == (5, 1)
+          and nk.guess_dpt("Lys", 1, True) == (1, 1) and nk.guess_dpt("noe uten navn", 2, False) == (0, 0) and nk.guess_dpt("CO2", 2, False) == (9, 8))
+    sjekk("knx: klokkeslett og dato leses", nk.decode((10, 1), bytes([0x2C, 30, 15]), False) == "12:30:15"
+          and nk.decode((11, 1), bytes([17, 11, 26]), False) == "2026-11-17")
+    j = vent_jobb(kall("/api/knx/scan", {"subnet": "127.0.0.1", "port": KXSIM.port, "timeout": 1.5})["job_id"])
+    adr = j["result"]["devices"][0]["address"]
+    csv = "Group name;Address\r\nRom 101 Temperatur;1/1/1\r\nRom 101 Ventil;2/1/1\r\n"
+    k = kall("/api/knx/lister", {"navn": "Uten type", "innhold": base64.b64encode(csv.encode()).decode(), "filnavn": "u.csv"})
+    kall("/api/knx/tilordne", {"address": adr, "liste": k["id"]})
+    p = vent_jobb(kall("/api/device/points", {"address": adr, "device_instance": 1})["job_id"], 90)
+    pts = {x["name"]: x for x in (p.get("result") or {}).get("points", [])}
+    sjekk("knx: uten datapunkttype i ETS får punktene verdi og enhet, og beskrivelsen sier at typen er antatt",
+          abs((pts.get("Rom 101 Temperatur") or {}).get("value", 0) - 21.0) < 1.2 and pts["Rom 101 Temperatur"]["units"] == "degrees-celsius"
+          and pts["Rom 101 Ventil"]["value"] == 40.0 and "antatt" in pts["Rom 101 Temperatur"]["description"] + pts["Rom 101 Ventil"]["description"]
+          or "guessed" in pts["Rom 101 Temperatur"]["description"], str({n: (x["value"], x["description"]) for n, x in pts.items() if n.startswith("Rom")}))
+    sjekk("knx: ingenting skrevet til bussen", KXSIM.writes_received == [])
+
+
 def kjor_tester():
     s = kall("/api/start", {"local_address": "127.0.0.1/8"})
     sjekk("kobler til", s.get("status") == "done", s.get("local_address", s.get("error", "")))
@@ -1106,6 +1156,8 @@ def kjor_tester():
     trafikklogg()
     modbus()
     knx()
+    modbus_exol()
+    knx_gjetting()
     flere_kort()
     simulator()
     oppdatering()

@@ -325,10 +325,43 @@ def normalise_point(p: Dict[str, Any]) -> Dict[str, Any]:
             "units": UNIT_NAMES.get(unit.lower(), unit if unit else "no-units")}
 
 
-def parse_map(text: str) -> Dict[str, Any]:
+# Regin's EXOL lists (Corrigo, EXO): Modbus Type; Signal Name; EXOL Type; Modbus Address; Default Value; Function; Description.
+_EXOL_FN = {"coil": "coil", "coils": "coil", "holding register": "holding", "holding registers": "holding",
+            "input register": "input", "input registers": "input", "input status register": "discrete",
+            "input status registers": "discrete", "input status": "discrete", "discrete input": "discrete", "discrete inputs": "discrete"}
+
+
+def _exol_rows(reader_rows: List[Dict[str, Any]], real_scale: float) -> List[Dict[str, Any]]:
+    """EXOL type L is a bit, I an integer, R a real (a whole number in the register, scaled), X an index or state."""
+    out = []
+    for r in reader_rows:
+        fn = _EXOL_FN.get(str(r.get("modbus type", "")).strip().lower())
+        if fn is None:
+            continue
+        et = str(r.get("exol type", "")).strip().upper()
+        if fn in ("coil", "discrete") or et == "L":
+            typ, scale = "bool", 1
+        elif et == "R":
+            typ, scale = "s16", real_scale
+        elif et == "X":
+            typ, scale = "u16", 1
+        else:
+            typ, scale = "s16", 1
+        out.append({"function": fn, "address": r.get("modbus address"), "type": typ, "scale": scale,
+                    "name": r.get("signal name"), "description": r.get("description") or r.get("function") or ""})
+    return out
+
+
+def parse_map(text: str, base: Optional[int] = None, real_scale: float = 0.1) -> Dict[str, Any]:
     """A register map from JSON ({"name": ..., "points": [...]}) or from CSV with a header row:
-    address,function,type,name,scale,unit,description (extra columns: order, offset, bit)."""
-    text = text.lstrip("﻿")
+    address,function,type,name,scale,unit,description (extra columns: order, offset, bit), or a Regin EXOL list.
+
+    `base` says whether the addresses in the file count from 0 or from 1 (a list that is documentation usually counts
+    from 1: the wire address is then one less). Left out, an EXOL list that starts at 1 is taken as counting from 1,
+    and every other file as counting from 0. The result says which it used, and what it assumed on the way."""
+    text = text.lstrip("\ufeff")
+    notes: List[str] = []
+    exol = False
     if text.lstrip().startswith("{") or text.lstrip().startswith("["):
         data = json.loads(text)
         rows = data if isinstance(data, list) else data.get("points", [])
@@ -338,14 +371,37 @@ def parse_map(text: str) -> Dict[str, Any]:
         delim = max(",;\t", key=sample.count)
         reader = csv.DictReader(io.StringIO(text), delimiter=delim)
         reader.fieldnames = [str(h).strip().lower() for h in (reader.fieldnames or [])]
-        alias = {"register": "address", "reg": "address", "adresse": "address", "fn": "function", "funksjon": "function",
-                 "datatype": "type", "navn": "name", "beskrivelse": "description", "enhet": "unit", "units": "unit", "faktor": "scale"}
-        rows = [{alias.get(k, k): v for k, v in r.items() if k} for r in reader]
+        raw_rows = [{k: v for k, v in r.items() if k} for r in reader]
         name = ""
+        if {"modbus type", "signal name", "modbus address"} <= set(reader.fieldnames):
+            exol = True
+            rows = _exol_rows(raw_rows, real_scale)
+            notes.append("Regin EXOL-format gjenkjent")
+        else:
+            alias = {"register": "address", "reg": "address", "adresse": "address", "fn": "function", "funksjon": "function",
+                     "datatype": "type", "navn": "name", "beskrivelse": "description", "enhet": "unit", "units": "unit", "faktor": "scale"}
+            rows = [{alias.get(k, k): v for k, v in r.items() if k} for r in raw_rows]
+    rows = [r for r in rows if any(str(v).strip() for v in r.values() if v is not None)]
+    addrs = []
+    for r in rows:
+        try:
+            addrs.append(int(str(r.get("address")).strip(), 0))
+        except (TypeError, ValueError):
+            pass
+    if base is None:
+        base = 1 if exol and addrs and min(addrs) >= 1 else 0
+        if base:
+            notes.append("Adressene teller fra 1 (listen har ingen adresse 0): 1 er trukket fra, så register 1 leses som 0 på ledningen")
+    if exol and any(r["type"] == "s16" and r["scale"] != 1 for r in rows):
+        notes.append(f"Reelle verdier (R) er antatt skalert med {real_scale}. Sjekk mot et punkt du kjenner")
     points, seen = [], set()
     for i, r in enumerate(rows, 1):
-        if not any(str(v).strip() for v in r.values() if v is not None):
-            continue
+        r = dict(r)
+        if base:
+            try:
+                r["address"] = int(str(r.get("address")).strip(), 0) - base
+            except (TypeError, ValueError):
+                pass
         try:
             p = normalise_point(r)
         except MapError as e:
@@ -357,7 +413,7 @@ def parse_map(text: str) -> Dict[str, Any]:
         points.append(p)
     if not points:
         raise MapError("the map has no points")
-    return {"name": name, "points": points}
+    return {"name": name, "points": points, "base": base, "notes": notes, "format": "exol" if exol else "generic"}
 
 
 def decode_value(point: Dict[str, Any], words: List[int]) -> Any:
