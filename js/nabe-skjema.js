@@ -956,7 +956,8 @@
     for (const s of SK.systemer) for (const k of s.komp) { const h = hoved(k); if (h) SK.kompVed.set(h.objid, k); }
     const hode = (stor, ekstra = '') => `<div class="sk-hode"><div class="sk-faner" role="tablist">${f.map(x => `<button type="button" role="tab" data-fane="${esc(x.id)}" class="${x === valgt ? 'sel' : ''}" aria-selected="${x === valgt}">${esc(x.navn)}</button>`).join('')}</div>
         <span class="sk-forkl">${valgt.type === 'kurser' ? `<i class="sk-sw tur ${valgt.kind === 'kjoling' ? 'kjol' : 'varme'}"></i>${T('tur', 'flow')}<i class="sk-sw retur ${valgt.kind === 'kjoling' ? 'kjol' : 'varme'}"></i>${T('retur', 'return')}` : ''}${valgt.type === 'rom' ? '' : `<i class="sk-prikk drift"></i>${T('i drift', 'running')}<i class="sk-prikk haand"></i>${T('i hånd', 'in hand')}<i class="sk-prikk alarm"></i>${T('alarm', 'alarm')}`}
-          ${ekstra}<button type="button" class="btn sk-utvid" data-utvid aria-pressed="${stor}" title="${esc(stor ? T('Vis hele enhetslista igjen', 'Show the whole device list again') : T('Gi skjemaet mer av bredden', 'Give the schematic more of the width'))}">${stor ? T('Vis enhetsliste', 'Show device list') : T('Utvid', 'Expand')}</button></span></div>`;
+          ${ekstra}<button type="button" class="btn sk-underlag" data-underlag title="${esc(T('Lagrer det skjemaet er tegnet fra (navn, beskrivelser og hva hver del ble tolket som) som en fil. Send den hvis noe ser feil ut, så kan det rettes.', 'Saves what the schematic is drawn from (names, descriptions and what each part was taken to be) as a file. Send it if something looks wrong so it can be fixed.'))}">${T('Lagre underlag', 'Save basis')}</button>
+          <button type="button" class="btn sk-utvid" data-utvid aria-pressed="${stor}" title="${esc(stor ? T('Vis hele enhetslista igjen', 'Show the whole device list again') : T('Gi skjemaet mer av bredden', 'Give the schematic more of the width'))}">${stor ? T('Vis enhetsliste', 'Show device list') : T('Utvid', 'Expand')}</button></span></div>`;
     if (valgt.type === 'rom') { settInn(hode(document.body.classList.contains('sk-stor')) + romHtml(valgt.l)); return; }
     SK.kompVed = SK.kompVed || new Map();
     const vValg = valgt.type === 'aggregat' ? (vekslerLagret()[vekslerNokkel(valgt.s)] || '') : '';
@@ -1136,6 +1137,17 @@
     oppdater();
   });
   const velg = async (el) => {
+    if (el.closest('[data-underlag]')) {
+      // Everything the drawing is built from, so a drawing that looks wrong can be reproduced and fixed from the file alone.
+      const pkt = (p) => ({name: p.name, description: p.description || '', type: p.type, units: p.units || p.unit || '', value: p.value});
+      const ut = {versjon: (document.getElementById('versjon') || {}).textContent || '', enhet: SK.ip, systemer: SK.systemer.map(s => ({
+        id: s.id, type: s.type, rom: [...s.rom],
+        komp: s.komp.map(k => ({kode: k.kode, eier: k.eier, art: k.art, sted: k.sted, hvor: k.hvor, beskr: k.beskr,
+          punkter: Object.fromEntries(Object.entries(k.pkt).map(([r, p]) => [r, Array.isArray(p) ? p.map(pkt) : pkt(p)]))}))}))};
+      downloadText(JSON.stringify(ut, null, 1), `skjema-underlag-${String(SK.ip).replace(/[^\w.-]+/g, '_')}.json`, false);
+      toast(T('Underlaget er lagret', 'The basis is saved'));
+      return;
+    }
     if (el.closest('[data-utvid]')) { savePrefs({skjemaStor: !document.body.classList.contains('sk-stor')}); oppdater(); return; }
     const vv = el.closest('[data-veksler]');
     if (vv) {
