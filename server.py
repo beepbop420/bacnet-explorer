@@ -235,7 +235,7 @@ def t(nb: str, en: str) -> str:
     return en if SPRAAK_VAR.get() == "en" else nb
 
 
-VERSJON = "2.2"
+VERSJON = "2.3"
 
 state = {"app": None, "local_address": None, "read_only": False, "bbmd": None, "primary": None}
 # The simulator: a scanned site run as devices on 127.0.0.x, in a process of its own.
@@ -1096,7 +1096,7 @@ async def _app_for(address, via: Optional[str] = None):
     """The BACnet stack for an address, opened when it is needed. None while
     not connected at all. An adapter that cannot be bound (the port is taken on
     it, or it is gone) falls back to the main one, as before."""
-    if str(address).startswith(("mb:", "kx:")):
+    if str(address).startswith(("mb:", "mr:", "ms:", "kx:")):
         raise ModbusUstottet()
     prim = state["app"]
     if prim is None:
@@ -2446,7 +2446,7 @@ async def device_flagg(body: FlaggBody):
 @app.post("/api/device/points")
 async def device_points(body: LoadPointsBody):
     """Start the load as a job; the UI polls /api/job/{id} for progress."""
-    if nm.parse_address(body.address):
+    if nm.parse_any(body.address):
         return _modbus_points_job(body)
     if nkx.parse_address(body.address):
         return _knx_points_job(body)
@@ -2505,9 +2505,9 @@ def job_promote(job_id: str):
 
 @app.post("/api/poll")
 async def poll(body: PollBody):
-    mb_targets = {a: o for a, o in body.targets.items() if a.startswith("mb:")}
+    mb_targets = {a: o for a, o in body.targets.items() if a.startswith(("mb:", "mr:", "ms:"))}
     kx_targets = {a: o for a, o in body.targets.items() if a.startswith("kx:")}
-    targets = {a: o for a, o in body.targets.items() if not a.startswith(("mb:", "kx:"))}
+    targets = {a: o for a, o in body.targets.items() if not a.startswith(("mb:", "mr:", "ms:", "kx:"))}
     out: Dict[str, Dict[str, Any]] = {}
     cov_ok: Dict[str, List[str]] = {}
     if mb_targets:
@@ -2540,7 +2540,7 @@ async def poll(body: PollBody):
 
 @app.post("/api/object/detail")
 async def object_detail(body: DetailBody):
-    if nm.parse_address(body.address):
+    if nm.parse_any(body.address):
         return _modbus_detail(body)
     if nkx.parse_address(body.address):
         return _knx_detail(body)
@@ -5425,11 +5425,11 @@ MODBUS_KART = nm.MapStore(DATA_DIR)
 _MB_KLIENTER: Dict[str, "nm.ModbusClient"] = {}
 
 
-def _mb_klient(host: str, port: int) -> "nm.ModbusClient":
-    key = f"{host}:{port}"
-    k = _MB_KLIENTER.get(key)
+def _mb_klient(p: Dict[str, Any]) -> "nm.ModbusClient":
+    """One client per gateway or serial port, whatever the unit: the bus has one master and answers one request at a time."""
+    k = _MB_KLIENTER.get(p["key"])
     if k is None:
-        k = _MB_KLIENTER[key] = nm.ModbusClient(host, port, 2.5)
+        k = _MB_KLIENTER[p["key"]] = nm.make_client(p)
     return k
 
 
@@ -5438,6 +5438,7 @@ class ModbusScanBody(BaseModel):
     port: int = nm.MODBUS_PORT
     units: Optional[List[int]] = None
     timeout: float = 1.0
+    framing: str = "tcp"            # "tcp" is Modbus TCP, "rtu" is RTU bytes in a TCP socket (a serial gateway that passes them through)
 
 
 @app.post("/api/modbus/scan")
@@ -5465,7 +5466,7 @@ async def modbus_scan(body: ModbusScanBody):
 
             async def one(h: str):
                 async with sem:
-                    devices.extend(await nm.scan_host(h, port, body.units, max(0.3, min(5.0, body.timeout))))
+                    devices.extend(await nm.scan_host(h, port, body.units, max(0.3, min(5.0, body.timeout)), "rtu" if body.framing == "rtu" else "tcp"))
                 job["done"] += 1
                 job["found"] = len(devices)
             await asyncio.gather(*[one(h) for h in open_hosts])
@@ -5483,15 +5484,65 @@ async def modbus_scan(body: ModbusScanBody):
     return {"status": "started", "job_id": job["id"]}
 
 
+@app.get("/api/modbus/serial/porter")
+def modbus_serial_porter():
+    try:
+        import serial  # noqa: F401
+        har = True
+    except ImportError:
+        har = False
+    return {"status": "done", "pyserial": har, "porter": nm.serial_ports()}
+
+
+class ModbusSerialBody(BaseModel):
+    port: str
+    baud: int = 19200
+    parity: str = "N"
+    stopbits: int = 1
+    units: Optional[List[int]] = None
+    timeout: float = 0.6
+
+
+@app.post("/api/modbus/serial/skann")
+async def modbus_serial_skann(body: ModbusSerialBody):
+    """Find the units on a serial Modbus RTU bus, one at a time. Only reads."""
+    if not re.fullmatch(r"[A-Za-z0-9_./:\\-]+", body.port) or body.parity not in ("N", "E", "O") or body.stopbits not in (1, 2):
+        return {"status": "error", "error": t("Ugyldig port eller innstilling", "Invalid port or setting")}
+    baud = body.baud if body.baud in (1200, 2400, 4800, 9600, 19200, 38400, 57600, 115200) else 19200
+    units = [u for u in (body.units or range(1, 33)) if 1 <= u <= 247][:247]
+    job = _new_job("modbus-scan")
+    job["phase"] = f"{body.port} {baud}"
+    job["total"] = len(units)
+
+    async def run():
+        try:
+            devices = await nm.scan_serial(body.port, baud, body.parity, body.stopbits, units, max(0.3, min(3.0, body.timeout)))
+            job["result"] = {"status": "done", "subnet": body.port, "mode": "modbus-rtu", "hosts_scanned": 1, "open_hosts": [body.port],
+                             "count": len(devices), "devices": devices, "note": None}
+            job["status"] = "done"
+        except asyncio.CancelledError:
+            job["status"] = "cancelled"
+            raise
+        except nm.ModbusError as e:
+            job["status"] = "error"
+            job["error"] = str(e)
+        except Exception as e:
+            job["status"] = "error"
+            job["error"] = f"{type(e).__name__}: {e}"
+    job["task"] = asyncio.create_task(run())
+    return {"status": "started", "job_id": job["id"]}
+
+
 def _modbus_points_job(body) -> Dict[str, Any]:
-    host, port, unit = nm.parse_address(body.address)
+    mp = nm.parse_any(body.address)
+    unit = mp["unit"]
     job = _new_job("points")
     job["phase"] = "modbus"
 
     async def run():
         try:
             pts, har_kart = MODBUS_KART.points_for(body.address)
-            client = _mb_klient(host, port)
+            client = _mb_klient(mp)
             ident: Dict[str, Any] = {}
             try:
                 i = await client.device_identification(unit)
@@ -5539,15 +5590,15 @@ async def _modbus_poll(targets: Dict[str, List[str]]) -> Dict[str, Dict[str, Any
     out: Dict[str, Dict[str, Any]] = {}
 
     async def one(address: str, objids: List[str]):
-        parsed = nm.parse_address(address)
+        parsed = nm.parse_any(address)
         if not parsed or not objids:
             return
-        host, port, unit = parsed
+        unit = parsed["unit"]
         pts, _kart = MODBUS_KART.points_for(address)
         want = set(objids)
         sel = [p for p in pts if nm.point_record(p)["objid"] in want]
         try:
-            out[address] = await nm.read_points(_mb_klient(host, port), unit, sel) if sel else {}
+            out[address] = await nm.read_points(_mb_klient(parsed), unit, sel) if sel else {}
         except Exception:
             out[address] = {}
     await asyncio.gather(*[one(a, o) for a, o in targets.items()])
@@ -5566,6 +5617,45 @@ def _modbus_detail(body) -> Dict[str, Any]:
                 props["bit"] = p["bit"]
             return {"status": "done", "objid": body.objid, "properties": props}
     return {"status": "error", "error": t("Fant ikke punktet i registerkartet", "Point not found in the register map")}
+
+
+class ModbusUtforsk(BaseModel):
+    address: str
+    til: int = 1200
+
+
+@app.post("/api/modbus/utforsk")
+async def modbus_utforsk(body: ModbusUtforsk):
+    """Find which addresses of a Modbus device answer, and keep them as a register map the technician can name. Only reads."""
+    p = nm.parse_any(body.address)
+    if not p:
+        return {"status": "error", "error": t("Ikke en Modbus-enhet", "Not a Modbus device")}
+    til = max(50, min(10000, body.til))
+    job = _new_job("modbus-utforsk")
+    job["phase"] = t("leser registre", "reading registers")
+
+    async def run():
+        try:
+            def fremdrift(n, tot):
+                job["done"], job["total"] = n, tot
+            pts = await nm.discover(_mb_klient(p), p["unit"], til, progress=fremdrift)
+            if not pts:
+                job["status"] = "error"
+                job["error"] = t("Ingen registre svarte i dette området.", "No registers answered in this range.")
+                return
+            kid = MODBUS_KART.save_map(f"Utforsket {body.address}", {"points": pts})
+            MODBUS_KART.assign(body.address, kid)
+            job["result"] = {"status": "done", "count": len(pts), "kart": kid,
+                             "per_funksjon": {k: sum(1 for x in pts if x["function"] == k) for k in ("holding", "input", "coil", "discrete")}}
+            job["status"] = "done"
+        except asyncio.CancelledError:
+            job["status"] = "cancelled"
+            raise
+        except Exception as e:
+            job["status"] = "error"
+            job["error"] = f"{type(e).__name__}: {e}"
+    job["task"] = asyncio.create_task(run())
+    return {"status": "started", "job_id": job["id"]}
 
 
 @app.get("/api/modbus/kart")
@@ -5601,7 +5691,7 @@ class ModbusTilordne(BaseModel):
 
 @app.post("/api/modbus/tilordne")
 def modbus_tilordne(body: ModbusTilordne):
-    if not nm.parse_address(body.address):
+    if not nm.parse_any(body.address):
         return {"status": "error", "error": t("Ikke en Modbus-enhet", "Not a Modbus device")}
     if body.kart and MODBUS_KART.load_map(body.kart) is None:
         return {"status": "error", "error": t("Ukjent registerkart", "Unknown register map")}

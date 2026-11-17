@@ -156,6 +156,8 @@
     const t = String(p.type || '');
     if (/second|minute|hour|day|ampere|volt|watt|revolutions|joule/.test(x.enhet)) return false;
     const inn = t === 'analog-input' || t === 'analog-output';
+    // A status register that a controller keeps for each alarm (a number that says normal or active) is a state, not a part.
+    if (x.rolle === 'alarm' && t.startsWith('analog')) return false;
     // A point the programmer never named ("Input (Float)") says nothing about the plant
     if (/^\s*(input|output)\s*\((float|int|bool)/i.test(String(p.description || '') + ' ' + String(p.name || '')) && !String(p.description || '').replace(/^\s*(input|output)\s*\([a-z]+\)\s*/i, '')) return false;
     // Read-only inputs have a narrower list of what is not live: their "RegSet" is a regulator's own setpoint.

@@ -1447,7 +1447,7 @@ function renderDevices() {
   // next one is a card nobody can use. The end of the address is added where names repeat.
   const navnTall = new Map();
   for (const d of S.devices) if (d.object_name) navnTall.set(d.object_name, (navnTall.get(d.object_name) || 0) + 1);
-  const kortAdr = (a) => { const m = /^mb:(\d+\.\d+\.\d+\.\d+):\d+\/(\d+)$/.exec(a), k = /^kx:(\d+\.\d+\.\d+\.\d+):\d+$/.exec(a); return k ? 'KNX .' + k[1].split('.')[3] : m ? 'MB .' + m[1].split('.')[3] + ' #' + m[2] : /^\d+\.\d+\.\d+\.\d+$/.test(a) ? '.' + a.split('.')[3] : String(a); };
+  const kortAdr = (a) => { const r = /^mr:(\d+\.\d+\.\d+\.\d+):\d+\/(\d+)$/.exec(a), sr = /^ms:([A-Za-z0-9_.\/-]+)@\d+-\d[NEO]\d\/(\d+)$/.exec(a); if (r) return 'RTU .' + r[1].split('.')[3] + ' #' + r[2]; if (sr) return sr[1] + ' #' + sr[2]; const m = /^mb:(\d+\.\d+\.\d+\.\d+):\d+\/(\d+)$/.exec(a), k = /^kx:(\d+\.\d+\.\d+\.\d+):\d+$/.exec(a); return k ? 'KNX .' + k[1].split('.')[3] : m ? 'MB .' + m[1].split('.')[3] + ' #' + m[2] : /^\d+\.\d+\.\d+\.\d+$/.test(a) ? '.' + a.split('.')[3] : String(a); };
 
   const gruppert = grupperingsAkse() === 'vendor';
   const kort = (d) => {
@@ -1481,8 +1481,8 @@ function renderDevices() {
         ${devStatus(d)}
       </span>
       <span class="dev-l2">
-        <span class="dev-ip">${esc(d.protocol === 'modbus' || d.protocol === 'knx' ? d.ip + ':' + d.port : d.address)}</span>
-        <span class="dev-id${dup ? ' dup' : ''}"${dup ? ` title="${T('Flere enheter svarer på denne ID-en', 'Several devices answer to this ID')}"` : ''}>${d.protocol === 'modbus' ? 'MB ' + d.unit : d.protocol === 'knx' ? 'KNX' : (d.device_instance ?? '?')}</span>
+        <span class="dev-ip">${esc(d.serial ? d.ip + ' ' + d.port + ' baud' : d.protocol === 'modbus' || d.protocol === 'knx' ? d.ip + ':' + d.port : d.address)}</span>
+        <span class="dev-id${dup ? ' dup' : ''}"${dup ? ` title="${T('Flere enheter svarer på denne ID-en', 'Several devices answer to this ID')}"` : ''}>${d.protocol === 'modbus' ? (d.serial ? 'RTU ' : d.address.startsWith('mr:') ? 'RTU ' : 'MB ') + d.unit : d.protocol === 'knx' ? 'KNX' : (d.device_instance ?? '?')}</span>
         ${gruppert ? '' : `<span class="dev-lev">${esc(v.label)}</span>`}
         ${kortChip(d)}
         ${presenceTag(d)}

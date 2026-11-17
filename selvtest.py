@@ -101,6 +101,7 @@ LOOP = None
 APPS = {}
 MBSIM = None
 KXSIM = None
+MBRTU = None
 KXSEC = None
 
 
@@ -1107,6 +1108,87 @@ def knx_gjetting():
     sjekk("knx: ingenting skrevet til bussen", KXSIM.writes_received == [])
 
 
+def modbus_rtu():
+    """Modbus RTU: the bytes of a serial line in a TCP socket (a serial gateway), and the serial port itself, both read only."""
+    import nabe_modbus as nm
+    sjekk("modbus RTU: CRC-en stemmer med lærebokverdien", nm.crc16(bytes([0x01, 0x03, 0x00, 0x00, 0x00, 0x0A])) == 0xCDC5)
+    j = vent_jobb(kall("/api/modbus/scan", {"subnet": "127.0.0.1", "port": MBRTU.port, "units": [1, 2, 9], "framing": "rtu", "timeout": 1.0})["job_id"])
+    devs = (j.get("result") or {}).get("devices", [])
+    adr = {d["unit"]: d["address"] for d in devs}
+    sjekk("modbus RTU: skann over RTU i TCP finner enhetene, og gatewayens «ingen enhet» er ingen enhet",
+          sorted(adr) == [1, 2] and all(a.startswith("mr:127.0.0.1:") for a in adr.values()), str(adr))
+    sjekk("modbus RTU: enheten identifiserer seg over RTU", any("Room controller" in d["object_name"] and d["detected_via"] == "device_identification" for d in devs),
+          str([(d["object_name"], d["detected_via"]) for d in devs]))
+    csv = "address;function;type;name;scale\n0;holding;s16;Temperatur;0,1\n1;holding;s16;Settpunkt;0,1\n0;coil;bool;Rele1\n"
+    k = kall("/api/modbus/kart", {"navn": "RTU-kart", "tekst": csv})
+    kall("/api/modbus/tilordne", {"address": adr[1], "kart": k["id"]})
+    p = vent_jobb(kall("/api/device/points", {"address": adr[1], "device_instance": 1})["job_id"])
+    pts = {x["name"]: x for x in (p.get("result") or {}).get("points", [])}
+    sjekk("modbus RTU: punktene leses med navn og skalering", abs((pts.get("Temperatur") or {}).get("value", 0) - 21.0) < 1.2 and pts["Rele1"]["value"] == "active",
+          str({n: x["value"] for n, x in pts.items()}))
+    po = kall("/api/poll", {"targets": {adr[1]: [x["objid"] for x in pts.values()]}})
+    sjekk("modbus RTU: live-lesing gir verdier", len(po["values"].get(adr[1], {})) == len(pts), str(po["values"].get(adr[1])))
+
+    async def seriell():
+        url = f"socket://127.0.0.1:{MBRTU.port}"
+        funnet = await nm.scan_serial(url, 19200, "N", 1, [1, 2, 9], 0.8)
+        p = nm.parse_any(funnet[0]["address"]) if funnet else None
+        c = nm.RtuClient("", 0, 2.0, serial_port=url, baud=19200)
+        try:
+            m = nm.parse_map("address;function;type;name;scale\n0;holding;s16;T;0,1\n")
+            v1 = await nm.read_points(c, 1, m["points"])
+            try:
+                await c.read_registers(9, "holding", 0, 1)
+                unntak = None
+            except nm.ModbusException as e:
+                unntak = e.code
+            v2 = await nm.read_points(c, 1, m["points"])
+            try:
+                await c.request(1, bytes([6, 0, 0, 0, 1]))
+                skrev = True
+            except nm.ModbusError:
+                skrev = False
+        finally:
+            await c.close()
+        try:
+            await nm.scan_serial("COM99", 19200, "N", 1, [1], 0.3)
+            ingen = ""
+        except nm.ModbusError as e:
+            ingen = str(e)
+        return funnet, p, v1, v2, unntak, skrev, ingen
+    funnet, p, v1, v2, unntak, skrev, ingen = asyncio.run(seriell())
+    sjekk("modbus RTU: seriell port (her via en socket-URL) finner enhetene og gir adresse ms:", len(funnet) == 2 and p and p["scheme"] == "ms" and p["unit"] == 1,
+          str([d["address"] for d in funnet]))
+    sjekk("modbus RTU: seriell lesing overlever en enhet uten svar", len(v1) == 1 and len(v2) == 1 and unntak == 11, f"{v1} {v2} {unntak}")
+    sjekk("modbus RTU: en port som ikke finnes sies i klartekst, og ingen skriving sendes", "COM99" in ingen and skrev is False and MBRTU.writes_received == [], ingen[:70])
+    sjekk("modbus RTU: serielle adresser kan skilles fra TCP-adresser", [nm.parse_any(a) is not None for a in ("mb:1.2.3.4:502/1", "mr:1.2.3.4:4001/3", "ms:COM3@19200-8N1/5", "xx:1")]
+          == [True, True, True, False])
+    async def utforsk():
+        c = nm.ModbusClient("127.0.0.1", MBSIM.port, 1.0)
+        try:
+            return await nm.discover(c, 1, 300, budget=400)
+        finally:
+            await c.close()
+    funnet2 = asyncio.run(utforsk())
+    per = {}
+    for x in funnet2:
+        per.setdefault(x["function"], set()).add(x["address"])
+    sjekk("modbus: utforsking finner hvilke registre og biter som svarer, og ingenting annet",
+          per == {"holding": {0, 1, 2, 3}, "input": {0, 1}, "coil": {0, 1, 2}, "discrete": {0, 1}} and MBSIM.writes_received == [], str({k: sorted(v) for k, v in per.items()}))
+    # units from the words of an EXOL list
+    liste = ("Modbus Type;Signal Name;EXOL Type;Modbus Address;Default Value;Function;Description\r\n"
+             "Input Registers;VentActual.A_AI_SupplyAirTemp;R;293;;Ventilation;Supply air temperature\r\n"
+             "Input Registers;VentActual.A_SAFAirFlow;R;360;;Ventilation;Counted air flow m3/h supply air\r\n"
+             "Input Registers;VentActual.A_AO_SAF;R;376;;Ventilation;Supply air fan control\r\n"
+             "Input Registers;VentActual.A_AI_SAFPressure;R;312;;Ventilation;Supply air fan pressure\r\n"
+             "Input Registers;VentActual.A_UnitMode;X;429;;Ventilation;0=Stop, 1=Starting up\r\n")
+    pp = {x["name"]: x for x in nm.parse_map(liste)["points"]}
+    sjekk("modbus: enheter leses fra beskrivelsene i en liste uten enhetskolonne",
+          pp["VentActual.A_AI_SupplyAirTemp"]["unit"] == "°C" and pp["VentActual.A_SAFAirFlow"]["unit"] == "m3/h"
+          and pp["VentActual.A_AO_SAF"]["unit"] == "%" and pp["VentActual.A_AI_SAFPressure"]["unit"] == "Pa" and pp["VentActual.A_UnitMode"]["unit"] == "",
+          str({n: x["unit"] for n, x in pp.items()}))
+
+
 def kjor_tester():
     s = kall("/api/start", {"local_address": "127.0.0.1/8"})
     sjekk("kobler til", s.get("status") == "done", s.get("local_address", s.get("error", "")))
@@ -1158,6 +1240,7 @@ def kjor_tester():
     knx()
     modbus_exol()
     knx_gjetting()
+    modbus_rtu()
     flere_kort()
     simulator()
     oppdatering()
@@ -1249,7 +1332,9 @@ async def main():
     MBSIM = mbsim.ModbusSim(mbsim.demo_units(), empty=[9])
     await MBSIM.start('127.0.0.1', 0)
     import nabe_knx_sim as kxsim
-    global KXSIM, KXSEC
+    global KXSIM, KXSEC, MBRTU
+    MBRTU = mbsim.ModbusSim(mbsim.demo_units(), empty=[9], rtu=True)
+    await MBRTU.start('127.0.0.1', 0)
     KXSIM = kxsim.KnxSim(kxsim.demo_groups())
     await KXSIM.start('127.0.0.1', 0)
     KXSEC = kxsim.KnxSim(kxsim.demo_groups(), secure=True)
@@ -1292,6 +1377,7 @@ async def main():
     finally:
         server.terminate()
         await MBSIM.stop()
+        await MBRTU.stop()
         await KXSIM.stop()
         await KXSEC.stop()
         for a in apps:

@@ -46,7 +46,9 @@ No administrator rights needed. Everything else in the zip is tucked away;
 - **Modbus TCP, read only.** Scans for Modbus servers and the units behind them, and reads registers and
   bits. A register map (CSV or JSON) gives the registers names, types, scale and units; without one the
   first registers are shown as they are. The points sit in the same table, watch list, recording, export
-  and schematic as the BACnet ones. The code has no function that writes.
+  and schematic as the BACnet ones. The code has no function that writes. Modbus RTU works on a serial port
+  (pyserial) and as RTU bytes in a TCP socket for serial gateways. Modbus has no object list: *Explore* finds
+  which registers answer, and a register map (CSV, JSON or a Regin EXOL list) gives them names.
 - **KNX, read only.** Finds KNXnet/IP gateways, opens one tunnel and listens to the bus: values arrive as
   they change, and an address nobody has spoken on is asked for once, five a second at most. The group
   addresses and their names come from the ETS project (the .knxproj file or the CSV export). The only

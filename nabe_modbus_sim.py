@@ -14,6 +14,8 @@ import sys
 import time
 from typing import Callable, Dict, List, Optional, Union
 
+from nabe_modbus import crc16
+
 Value = Union[int, Callable[[], int]]
 
 
@@ -34,8 +36,9 @@ class SimUnit:
 
 class ModbusSim:
     def __init__(self, units: Dict[int, SimUnit], empty: Optional[List[int]] = None, silent: Optional[List[int]] = None,
-                 answer_any_unit: bool = False):
+                 answer_any_unit: bool = False, rtu: bool = False):
         self.units = units
+        self.rtu = rtu                         # RTU frames (unit, PDU, CRC) in the TCP stream: a serial gateway that passes bytes through
         self.empty = set(empty or [])          # a gateway's "no device at this unit": exception 0x0B
         self.silent = set(silent or [])        # never answers
         self.answer_any_unit = answer_any_unit
@@ -45,7 +48,7 @@ class ModbusSim:
         self.port = 0
 
     async def start(self, host: str = "127.0.0.1", port: int = 0) -> int:
-        self._server = await asyncio.start_server(self._client, host, port)
+        self._server = await asyncio.start_server(self._client_rtu if self.rtu else self._client, host, port)
         self.port = self._server.sockets[0].getsockname()[1]
         return self.port
 
@@ -67,6 +70,29 @@ class ModbusSim:
                 if out is not None:
                     writer.write(struct.pack("!HHHB", txn, 0, len(out) + 1, unit) + out)
                     await writer.drain()
+        except (asyncio.IncompleteReadError, ConnectionError, OSError):
+            pass
+        finally:
+            writer.close()
+
+    async def _client_rtu(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
+        try:
+            while True:
+                head = await reader.readexactly(2)                  # unit, function
+                unit, fn = head
+                rest = await reader.readexactly({0x11: 2, 0x2B: 5}.get(fn, 6))
+                frame = head + rest
+                if crc16(frame[:-2]) != int.from_bytes(frame[-2:], "little"):
+                    continue                                        # a device stays silent on a bad frame
+                self.requests += 1
+                if unit in self.silent:
+                    continue
+                out = self._answer(unit, frame[1:-2])
+                if out is None:
+                    continue
+                resp = bytes([unit]) + out
+                writer.write(resp + crc16(resp).to_bytes(2, "little"))
+                await writer.drain()
         except (asyncio.IncompleteReadError, ConnectionError, OSError):
             pass
         finally:

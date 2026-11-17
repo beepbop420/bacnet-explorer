@@ -203,6 +203,9 @@ const FAKTA = [
   ['COV betyr at regulatoren sier fra selv. Mindre spørring, mer ro.', 'COV means the controller speaks up itself. Less asking, more peace.'],
 ];
 const NYTT = {
+  '2.3': [
+    ['Modbus RTU: seriell port (RS-485 via USB-adapter) og RTU over TCP for serielle gatewayer som slipper bytene gjennom. Enheter leses fra beskrivelsene i lister uten enhetskolonne. «Utforsk» finner hvilke registre en enhet svarer på og lagrer dem som et registerkart du kan gi navn. Alarmstatusregistre tegnes ikke lenger som følere i skjemaet. Prøvd mot en ekte Regin-regulator over VPN, bare lesing', 'Modbus RTU: serial port (RS-485 through a USB adapter) and RTU over TCP for serial gateways that pass the bytes through. Units are read from the descriptions in lists with no unit column. "Explore" finds which registers a device answers to and keeps them as a register map you can name. Alarm status registers are no longer drawn as sensors in the schematic. Tried against a real Regin controller over VPN, read only'],
+  ],
   '2.2': [
     ['Et registerkart i et format NABE ikke kjenner igjen sier nå hvilke kolonner filen har og hva som støttes, i stedet for «bad address»', 'A register map in a format NABE does not recognise now says which columns the file has and what is supported, instead of "bad address"'],
   ],

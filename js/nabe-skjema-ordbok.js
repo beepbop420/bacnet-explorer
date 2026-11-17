@@ -124,6 +124,8 @@ const SKJEMA_ORDBOK = {
 
   /* The same, from the description, for names with no tail to read. */
   ROLLE: [
+    // The alarm tables of a controller (Regin: AlaData.Ala_SensorErrorOutdoorTemp_Status) are states, not readings.
+    [/\bala\s*data\b|\bala\s+\w+\s+status\b|sensor\s*error|\bmalfunction\b|\bwarning\s+(freq|saf|eaf|fan)|\balarm\s+(freq|saf|eaf|fan)/, 'alarm'],
     [/arbeidende settpunkt|aktuelt? \w*settpunkt|kalkulert settpunkt|calculated setpoint|working setpoint/, 'sp'],
     [/(pressure|humidity|filter|co2|voc|temperature)\s+level|level\b.*(pa|ppm)\b/, 'pv'],
     [/\blevel\b|operation level|output level|input level|regulator level/, 'paadrag'],

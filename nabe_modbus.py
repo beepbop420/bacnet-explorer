@@ -69,6 +69,7 @@ class ModbusClient:
         self._writer: Optional[asyncio.StreamWriter] = None
         self._txn = 0
         self._lock = asyncio.Lock()
+        self.count = 0                         # requests sent, for a budget
 
     async def connect(self) -> None:
         await self.close()
@@ -91,6 +92,7 @@ class ModbusClient:
         """Send one PDU, return the PDU of the answer. Reconnects once when the server dropped the connection."""
         if not pdu or pdu[0] in FORBIDDEN_FUNCTIONS:
             raise ModbusError("this client does not write")
+        self.count += 1
         async with self._lock:
             last: Optional[Exception] = None
             for attempt in (0, 1):
@@ -169,6 +171,138 @@ class ModbusClient:
         return {"server_id": data.hex(), "text": text}
 
 
+def crc16(data: bytes) -> int:
+    """The Modbus CRC-16 (polynomial 0xA001), sent low byte first."""
+    crc = 0xFFFF
+    for b in data:
+        crc ^= b
+        for _ in range(8):
+            crc = (crc >> 1) ^ 0xA001 if crc & 1 else crc >> 1
+    return crc
+
+
+class RtuClient(ModbusClient):
+    """Modbus RTU: the unit, the PDU and a CRC, with no header. Over a TCP socket to a serial gateway that passes
+    the bytes through, or on a serial port (RS-485 on the bus, USB adapter on the PC). One master, one request at a
+    time. Serial needs pyserial, which is loaded when a port is opened and not before."""
+
+    def __init__(self, host: str = "", port: int = MODBUS_PORT, timeout: float = 2.0, serial_port: Optional[str] = None,
+                 baud: int = 19200, parity: str = "N", stopbits: int = 1, bytesize: int = 8):
+        super().__init__(host, port, timeout)
+        self.serial_port, self.baud, self.parity, self.stopbits, self.bytesize = serial_port, int(baud), parity, int(stopbits), int(bytesize)
+        self._ser: Any = None
+
+    async def connect(self) -> None:
+        await self.close()
+        if not self.serial_port:
+            await super().connect()
+            return
+        try:
+            import serial
+        except ImportError as e:
+            raise ModbusError("pyserial is not installed, so NABE cannot open a serial port") from e
+        try:
+            self._ser = await asyncio.to_thread(
+                lambda: serial.serial_for_url(self.serial_port, baudrate=self.baud, bytesize=self.bytesize, parity=self.parity,
+                                              stopbits=self.stopbits, timeout=0.05, write_timeout=1.0))
+        except Exception as e:
+            raise ModbusError(f"serial port {self.serial_port}: {e}") from e
+
+    async def close(self) -> None:
+        ser, self._ser = self._ser, None
+        if ser is not None:
+            try:
+                await asyncio.to_thread(ser.close)
+            except Exception:
+                pass
+        await super().close()
+
+    @property
+    def _open(self) -> bool:
+        return self._ser is not None if self.serial_port else self._writer is not None
+
+    async def _write(self, frame: bytes) -> None:
+        if self.serial_port:
+            await asyncio.sleep(max(0.004, 40.0 / self.baud))          # the silent interval of 3.5 characters between frames
+            await asyncio.to_thread(self._ser.reset_input_buffer)
+            await asyncio.to_thread(self._ser.write, frame)
+        else:
+            self._writer.write(frame)
+            await asyncio.wait_for(self._writer.drain(), self.timeout)
+
+    async def _take(self, n: int, deadline: float) -> bytes:
+        if not self.serial_port:
+            return await self._read_exact(n, deadline)
+        buf = b""
+        while len(buf) < n:
+            if time.monotonic() >= deadline:
+                raise asyncio.TimeoutError()
+            buf += await asyncio.to_thread(self._ser.read, n - len(buf))
+        return buf
+
+    async def _take_idle(self, deadline: float) -> bytes:
+        """What else arrives until the line has been quiet for a moment: an answer whose length cannot be known beforehand."""
+        out = b""
+        gap = 0.06 if self.serial_port else 0.15
+        while len(out) < 250:
+            try:
+                if self.serial_port:
+                    more = await asyncio.to_thread(self._ser.read, 64)
+                    if not more:
+                        break
+                    out += more
+                else:
+                    out += await asyncio.wait_for(self._reader.read(64), gap)
+            except asyncio.TimeoutError:
+                break
+            if time.monotonic() >= deadline:
+                break
+        return out
+
+    async def request(self, unit: int, pdu: bytes) -> bytes:
+        if not pdu or pdu[0] in FORBIDDEN_FUNCTIONS:
+            raise ModbusError("this client does not write")
+        frame = bytes([unit]) + pdu
+        frame += struct.pack("<H", crc16(frame))
+        self.count += 1
+        async with self._lock:
+            for attempt in (0, 1):
+                try:
+                    if not self._open:
+                        await self.connect()
+                    await self._write(frame)
+                    deadline = time.monotonic() + self.timeout
+                    head = await self._take(3, deadline)
+                    fn = head[1]
+                    if fn & 0x80:
+                        rest = await self._take(2, deadline)
+                    elif fn in (1, 2, 3, 4, 0x11):
+                        rest = await self._take(head[2] + 2, deadline)
+                    else:
+                        rest = await self._take_idle(deadline)
+                    full = head + rest
+                    if len(full) < 5 or crc16(full[:-2]) != struct.unpack("<H", full[-2:])[0]:
+                        raise ModbusError("bad CRC in the answer")
+                    if full[0] != unit:
+                        raise ModbusError(f"the answer is from unit {full[0]}, not {unit}")
+                    body = full[1:-2]
+                    break
+                except asyncio.TimeoutError as e:
+                    if not self.serial_port:
+                        await self.close()
+                    raise ModbusError("timeout") from e
+                except (OSError, ConnectionError, ModbusError) as e:
+                    if not self.serial_port:
+                        await self.close()
+                    if attempt or "CRC" in str(e):
+                        raise ModbusError(str(e)) from e
+            else:
+                raise ModbusError("no answer")
+        if body[0] & 0x80:
+            raise ModbusException(body[0] & 0x7F, body[1] if len(body) > 1 else 0)
+        return body
+
+
 def parse_device_identification(body: bytes) -> Dict[str, str]:
     """The objects of a function 43/14 answer, by their standard names."""
     names = {0: "vendor", 1: "product_code", 2: "revision", 3: "vendor_url", 4: "product_name", 5: "model_name", 6: "application"}
@@ -237,11 +371,25 @@ async def probe_unit(client: ModbusClient, unit: int) -> Optional[Dict[str, Any]
         return None
 
 
-async def scan_host(host: str, port: int = MODBUS_PORT, units: Optional[Iterable[int]] = None, timeout: float = 1.0) -> List[Dict[str, Any]]:
+async def scan_host(host: str, port: int = MODBUS_PORT, units: Optional[Iterable[int]] = None, timeout: float = 1.0,
+                    framing: str = "tcp") -> List[Dict[str, Any]]:
     """The units that answer on one host. A device that ignores the unit and answers the same for all of them
-    is reported once, not nine times."""
+    is reported once, not nine times. `framing` is "tcp" (Modbus TCP) or "rtu" (RTU bytes in a TCP socket)."""
+    client = ModbusClient(host, port, timeout) if framing != "rtu" else RtuClient(host, port, timeout)
+    return await _scan_units(client, units, timeout, lambda f: device_record(host, port, f, "mr" if framing == "rtu" else "mb"))
+
+
+async def scan_serial(port: str, baud: int = 19200, parity: str = "N", stopbits: int = 1, units: Optional[Iterable[int]] = None,
+                      timeout: float = 0.6) -> List[Dict[str, Any]]:
+    """The units that answer on a serial bus, one question at a time: a serial bus has one master and a slow line."""
+    client = RtuClient("", 0, timeout, serial_port=port, baud=baud, parity=parity, stopbits=stopbits)
+    await client.connect()                 # a port that cannot be opened is said, not taken for an empty bus
+    await client.close()
+    return await _scan_units(client, units or range(1, 33), timeout, lambda f: serial_record(port, baud, parity, stopbits, f))
+
+
+async def _scan_units(client: ModbusClient, units: Optional[Iterable[int]], timeout: float, make) -> List[Dict[str, Any]]:
     units = [u for u in (units or COMMON_UNITS) if 1 <= int(u) <= 255]
-    client = ModbusClient(host, port, timeout)
     found: List[Dict[str, Any]] = []
     try:
         await client.connect()
@@ -257,24 +405,72 @@ async def scan_host(host: str, port: int = MODBUS_PORT, units: Optional[Iterable
         sig = {(f.get("vendor"), f.get("product_code"), f.get("product_name"), f.get("via")) for f in found}
         if len(sig) == 1:
             found = [{**found[0], "answers_any_unit": True}]
-    return [device_record(host, port, f) for f in found]
+    return [make(f) for f in found]
 
 
-def device_address(host: str, port: int, unit: int) -> str:
-    return f"mb:{host}:{port}/{unit}"
+def device_address(host: str, port: int, unit: int, scheme: str = "mb") -> str:
+    return f"{scheme}:{host}:{port}/{unit}"
+
+
+def serial_address(port: str, baud: int, parity: str, stopbits: int, unit: int) -> str:
+    return f"ms:{port}@{baud}-8{parity}{stopbits}/{unit}"
 
 
 def parse_address(address: str) -> Optional[Tuple[str, int, int]]:
-    """mb:192.168.1.5:502/3 -> ("192.168.1.5", 502, 3), and None for anything else."""
+    """mb:192.168.1.5:502/3 -> ("192.168.1.5", 502, 3), and None for anything else (also for RTU and serial)."""
     m = re.fullmatch(r"mb:([^:/]+):(\d+)/(\d+)", str(address))
     return (m.group(1), int(m.group(2)), int(m.group(3))) if m else None
 
 
-def device_record(host: str, port: int, found: Dict[str, Any]) -> Dict[str, Any]:
+def parse_any(address: str) -> Optional[Dict[str, Any]]:
+    """Any Modbus address: mb:host:port/unit (TCP), mr:host:port/unit (RTU over TCP), ms:COM3@19200-8N1/unit (serial)."""
+    a = str(address)
+    m = re.fullmatch(r"m([br]):([^:/]+):(\d+)/(\d+)", a)
+    if m:
+        scheme = "m" + m.group(1)
+        return {"scheme": scheme, "framing": "tcp" if scheme == "mb" else "rtu", "host": m.group(2), "port": int(m.group(3)),
+                "unit": int(m.group(4)), "key": f"{scheme}:{m.group(2)}:{m.group(3)}"}
+    m = re.fullmatch(r"ms:([A-Za-z0-9_./:\\-]+)@(\d+)-(\d)([NEO])(\d)/(\d+)", a)
+    if m:
+        return {"scheme": "ms", "framing": "rtu", "serial": m.group(1), "baud": int(m.group(2)), "parity": m.group(4),
+                "stopbits": int(m.group(5)), "unit": int(m.group(6)), "key": f"ms:{m.group(1)}@{m.group(2)}-{m.group(3)}{m.group(4)}{m.group(5)}"}
+    return None
+
+
+def make_client(p: Dict[str, Any], timeout: float = 2.5) -> ModbusClient:
+    if p["scheme"] == "mb":
+        return ModbusClient(p["host"], p["port"], timeout)
+    if p["scheme"] == "mr":
+        return RtuClient(p["host"], p["port"], timeout)
+    return RtuClient("", 0, max(timeout, 1.0), serial_port=p["serial"], baud=p["baud"], parity=p["parity"], stopbits=p["stopbits"])
+
+
+def serial_record(port: str, baud: int, parity: str, stopbits: int, found: Dict[str, Any]) -> Dict[str, Any]:
     unit = int(found["unit"])
     name = " ".join(x for x in (found.get("vendor"), found.get("product_name") or found.get("model_name") or found.get("product_code")) if x)
     return {
-        "address": device_address(host, port, unit), "ip": host, "port": port, "unit": unit,
+        "address": serial_address(port, baud, parity, stopbits, unit), "ip": port, "port": baud, "unit": unit,
+        "device_instance": unit, "protocol": "modbus", "object_name": name or f"Modbus {port} #{unit}",
+        "vendor_name": found.get("vendor") or "", "model_name": found.get("product_name") or found.get("model_name") or found.get("product_code") or "",
+        "firmware": found.get("revision") or "", "detected_via": found.get("via"), "answers_any_unit": bool(found.get("answers_any_unit")),
+        "serial": True,
+    }
+
+
+def serial_ports() -> List[Dict[str, str]]:
+    """The serial ports of this PC, or [] when pyserial is not there or no port is."""
+    try:
+        from serial.tools import list_ports
+    except ImportError:
+        return []
+    return [{"port": p.device, "name": p.description or p.device} for p in list_ports.comports()]
+
+
+def device_record(host: str, port: int, found: Dict[str, Any], scheme: str = "mb") -> Dict[str, Any]:
+    unit = int(found["unit"])
+    name = " ".join(x for x in (found.get("vendor"), found.get("product_name") or found.get("model_name") or found.get("product_code")) if x)
+    return {
+        "address": device_address(host, port, unit, scheme), "ip": host, "port": port, "unit": unit,
         "device_instance": unit, "protocol": "modbus", "object_name": name or f"Modbus {host} #{unit}",
         "vendor_name": found.get("vendor") or "", "model_name": found.get("product_name") or found.get("model_name") or found.get("product_code") or "",
         "firmware": found.get("revision") or "", "detected_via": found.get("via"), "answers_any_unit": bool(found.get("answers_any_unit")),
@@ -331,6 +527,26 @@ _EXOL_FN = {"coil": "coil", "coils": "coil", "holding register": "holding", "hol
             "input status registers": "discrete", "input status": "discrete", "discrete input": "discrete", "discrete inputs": "discrete"}
 
 
+def unit_from_text(name: str, description: str, scaled: bool) -> str:
+    """A list with no unit column still says it in the words: "(Pa)", "m3/h", "Sequence A output (%)", "Supply air temperature".
+    Only what the words say; a number with nothing said about it has no unit."""
+    d = f"{description} {name}"
+    m = re.search(r"\((%|Pa|kPa|bar|m3/h|m³/h|l/s|°C|s|min|h|rpm|kW|kWh|A|V|Hz|ppm)\)", d)
+    if m:
+        return m.group(1)
+    if re.search(r"m3/h|m³/h", d):
+        return "m3/h"
+    if re.search(r"(?i)time|delay|period|hysteresis|status|alarm|mode|select|[kx]-constant|offset.*\b(pa|m3)", d):
+        return ""
+    if scaled and re.search(r"(?i)temperature|\btemp\b|frost.*temp", d):
+        return "°C"
+    if re.search(r"(?i)\b(output|speed|control|signal)\b.*\b(fan|saf|eaf|damper|valve|pump|sequence)\b|\b(fan|saf|eaf|damper|valve|pump|sequence)\b.*\b(output|speed|control|signal)\b", d) and scaled:
+        return "%"
+    if scaled and re.search(r"(?i)pressure", d):
+        return "Pa"
+    return ""
+
+
 def _exol_rows(reader_rows: List[Dict[str, Any]], real_scale: float) -> List[Dict[str, Any]]:
     """EXOL type L is a bit, I an integer, R a real (a whole number in the register, scaled), X an index or state."""
     out = []
@@ -347,8 +563,10 @@ def _exol_rows(reader_rows: List[Dict[str, Any]], real_scale: float) -> List[Dic
             typ, scale = "u16", 1
         else:
             typ, scale = "s16", 1
+        desc = r.get("description") or r.get("function") or ""
         out.append({"function": fn, "address": r.get("modbus address"), "type": typ, "scale": scale,
-                    "name": r.get("signal name"), "description": r.get("description") or r.get("function") or ""})
+                    "name": r.get("signal name"), "description": desc,
+                    "unit": "" if typ == "bool" else unit_from_text(str(r.get("signal name") or ""), desc, et == "R")})
     return out
 
 
@@ -540,6 +758,57 @@ async def _read_range(client: ModbusClient, unit: int, kind: str, start: int, co
         return {}
     except ModbusError:
         return {}
+
+
+async def _discover_range(client: ModbusClient, unit: int, kind: str, start: int, count: int) -> Dict[int, Any]:
+    """Like _read_range, but a block that fails is not split all the way down when it is empty: a handful of addresses
+    spread over it are tried, and if none answers the block is taken as empty. An address on its own in an empty area can
+    be missed that way; a map imported from the manufacturer's list is the complete answer."""
+    try:
+        if kind in ("coil", "discrete"):
+            data: List[Any] = await client.read_bits(unit, kind, start, count)
+        else:
+            data = await client.read_registers(unit, kind, start, count)
+        return {start + i: v for i, v in enumerate(data)}
+    except ModbusException as e:
+        if e.code not in (0x02, 0x03):
+            return {}
+    except ModbusError:
+        return {}
+    if count <= 8:
+        return await _read_range(client, unit, kind, start, count)
+    probes = max(4, count // 8)
+    hits: Dict[int, Any] = {}
+    for i in range(probes):
+        a = start + (count - 1) * i // (probes - 1)
+        hits.update(await _read_range(client, unit, kind, a, 1))
+    if not hits:
+        return {}
+    half = count // 2
+    left = await _discover_range(client, unit, kind, start, half)
+    right = await _discover_range(client, unit, kind, start + half, count - half)
+    return {**hits, **left, **right}
+
+
+async def discover(client: ModbusClient, unit: int, upto: int = 1200, kinds: Sequence[str] = ("coil", "discrete", "holding", "input"),
+                   budget: int = 4000, progress: Optional[Callable[[int, int], None]] = None) -> List[Dict[str, Any]]:
+    """Which addresses of a device answer. Modbus has no list of what a device holds and no names: the only thing to find
+    out is which registers can be read, and what they contain. Each kind is read in blocks, and a block with an address the
+    device does not have is split until the readable part is found. Reads only, with a ceiling on how many requests it sends."""
+    start_count = client.count
+    out: List[Dict[str, Any]] = []
+    steps = [(k, a) for k in kinds for a in range(0, upto, 100 if k in ("holding", "input") else 500)]
+    for i, (kind, a) in enumerate(steps):
+        if client.count - start_count > budget:
+            break
+        width = 100 if kind in ("holding", "input") else 500
+        cells = await _discover_range(client, unit, kind, a, min(width, upto - a))
+        tag = {"holding": "HR", "input": "IR", "coil": "CO", "discrete": "DI"}[kind]
+        for addr in sorted(cells):
+            out.append(normalise_point({"function": kind, "address": addr, "name": f"{tag}{addr}"}))
+        if progress:
+            progress(i + 1, len(steps))
+    return out
 
 
 def raw_points(count: int = 50) -> List[Dict[str, Any]]:
