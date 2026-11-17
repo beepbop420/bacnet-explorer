@@ -84,6 +84,12 @@
     if ((art === 'trykk' || art === 'difftrykk') && type.startsWith('binary')) art = iOrd === 'ekspansjon' ? 'ekspansjon' : 'filter';
     if (art === 'frost') rolle = 'alarm';
     if (!art) art = maalt && (!rolle || rolle === 'pv' || rolle === 'sp' || rolle === 'innstilling') ? maalt : iOrd;
+    // The refrigerant circuit of a heat pump or a DX coil is its own thing, not a reading in the duct.
+    if (['temp', 'trykk', 'difftrykk', 'mengde', 'fukt'].includes(art) && !t.kode
+        && /heat\s*pump|heatpump|compressor|\bevap|\bcond\b|condens|suction|discharge|superheat|\bh\/c\b|\bhc\s+in\b|defrost|\bdx\b|outdoor\s*coil|outd\s*coil/.test(ord)) art = 'varmepumpe';
+    // A pressure that says "filter" is the pressure drop across a filter.
+    if ((art === 'trykk' || art === 'difftrykk') && iOrd === 'filter') art = 'filter';
+    // A reading of a part of a coil or a recovery unit that is not itself a coil: keep it a reading.
 
     if (!rolle) {
       rolle = type === 'analog-input' ? 'pv' : type === 'analog-output' ? 'paadrag'
@@ -99,14 +105,21 @@
 
     // Where: the words, then what the number usually means.
     let sted = slaa(O.STED, ord);
-    const hvorOrd = (tekst) => slaa(O.TYPE.filter(x => ['varmebatteri', 'kjolebatteri', 'gjenvinner', 'veksler'].includes(x[1])), tekst)
-      || (/\bheat\w*|prheat|pre\s*heat|varme/.test(tekst) ? 'varmebatteri' : /\bcool\w*|chill|\bcw\b|kj[øo]l/.test(tekst) ? 'kjolebatteri' : null);
-    const hvor = hvorOrd(b) || (t.kode ? null : hvorOrd(ord));
+    const hvorOrd = (tekst) => slaa(O.HVOR, tekst);
+    let hvor = hvorOrd(b) || (t.kode ? null : hvorOrd(ord));
     if (!sted && t.nr) {
       if (art === 'temp' && /^9\d\d?$|^0?01$/.test(t.nr) && !b) sted = 'ute';
       else if (art === 'temp' && /^6\d\d?$/.test(t.nr)) sted = 'rom';
       else if (/^4/.test(t.nr)) sted = '4';
       else if (/^5/.test(t.nr)) sted = '5';
+    }
+    // Names a vendor builds from a prefix (BDInletRelPos, BVHeat1SetPrc) are read from the dictionary.
+    const nv = slaa(O.NAVN, String(p.name || ''));
+    if (nv) {
+      art = nv.art;
+      if (nv.sted) sted = nv.sted;
+      if (nv.hvor) hvor = nv.hvor;
+      rolle = slaa(O.NAVNROLLE, String(p.name || '')) || rolle;
     }
     const spr = /sprink|brannslukk|slokke|slukk|brannvann|fire\s*(suppress|sprink)/.test(ord + ' ' + String(p.name || '').toLowerCase());
     return {p, sys: t.sys, rom: t.rom, kode: t.kode, under: t.under, art: art || '', rolle, sted: sted || '', hvor: hvor || '', beskr, maalt: maalt || '', spr, ord, enhet};
@@ -115,8 +128,11 @@
   /* Is this point something the plant reads or does right now, as opposed to a setting? */
   function levende(p, x) {
     const t = String(p.type || '');
-    if (O.INNSTILLING_ORD.test(x.ord + ' ' + String(p.name || ''))) return false;
-    if (/second|minute|hour|day/.test(x.enhet)) return false;
+    if (/second|minute|hour|day|ampere|volt|watt|revolutions|joule/.test(x.enhet)) return false;
+    const inn = t === 'analog-input' || t === 'analog-output';
+    // Read-only inputs have a narrower list of what is not live: their "RegSet" is a regulator's own setpoint.
+    if (O.NAVN.some(([re]) => re.test(String(p.name || ''))) && inn) return true;
+    if (inn ? O.INNSTILLING_AI.test(x.ord + ' ' + String(p.name || '')) : O.INNSTILLING_ORD.test(x.ord + ' ' + String(p.name || ''))) return false;
     if (t === 'analog-input') return true;
     if (t === 'analog-output') return true;
     if (t === 'analog-value') return x.rolle === 'pv' || x.rolle === 'paadrag';
@@ -202,9 +218,20 @@
           if (maal) { maal.pkt.sp = c.p; if (k.pkt.sp === c.p) delete k.pkt.sp; }
         }
       }
+      // A regulator's setpoint that is read as an input belongs to the reading it regulates: the same kind of
+      // thing at the same place. Without a match it is left out, a setpoint alone is not a part of the plant.
+      const spFoerst = [...alle].sort((a, b) => (b.pkt.sp && b.pkt.sp.value ? 1 : 0) - (a.pkt.sp && a.pkt.sp.value ? 1 : 0));
+      for (const k of spFoerst) {
+        if (!String(k.nokkel).startsWith('p:') || !k.pkt.sp || k.pkt.pv || k.pkt.paadrag) continue;
+        if (!k.sted || !['temp', 'trykk', 'difftrykk', 'mengde', 'fukt', 'co2'].includes(k.art)) continue;
+        const kand = alle.filter(z => z !== k && String(z.nokkel).startsWith('p:') && z.art === k.art && z.sted === k.sted && z.pkt.pv && !z.pkt.sp);
+        const maal = kand.find(z => typeof z.pkt.pv.value === 'number' && z.pkt.pv.value !== 0) || kand[0];
+        if (maal) { maal.pkt.sp = k.pkt.sp; k.sluk = true; }
+      }
       // Where the plant names its parts with codes, a point without one is a setting of the
       // program, not a part of the plant: it has given away its setpoint above and is left out.
-      s.komp = alle.filter(k => k.art !== 'system' && (!kodet || k.kode || k.eier || k.nokkel.startsWith('p:')));
+      s.komp = alle.filter(k => k.art !== 'system' && !k.sluk && (!kodet || k.kode || k.eier || k.nokkel.startsWith('p:'))
+        && !(String(k.nokkel).startsWith('p:') && k.pkt.sp && !k.pkt.pv && !k.pkt.paadrag && !k.pkt.drift && !k.pkt.start && !k.pkt.alarm.length));
       if (s.komp.length || s.rom.size) ut.push(s);
     }
     return ut.sort((a, b) => a.id.localeCompare(b.id, 'no', {numeric: true}));
@@ -237,7 +264,7 @@
   const tn = (tabell, k) => tabell[k] ? T(tabell[k][0], tabell[k][1]) : k;
   // In a drawing the label has a few centimetres: the code when there is one, else a short word.
   const KORT = {temp: ['Temp', 'Temp'], varmebatteri: ['Varme', 'Heating'], kjolebatteri: ['Kjøling', 'Cooling'], difftrykk: ['ΔP', 'ΔP']};
-  const merke = (k) => k.kode || k.eier || (['temp', 'fukt', 'co2'].includes(k.art) && k.sted && NAVN[k.sted] ? tn(NAVN, k.sted) : tn(KORT[k.art] ? KORT : ART, k.art));
+  const merke = (k) => k.merkeTekst || k.kode || k.eier || (['temp', 'fukt', 'co2'].includes(k.art) && k.sted && NAVN[k.sted] ? tn(NAVN, k.sted) : tn(KORT[k.art] ? KORT : ART, k.art));
 
   /* --- reading a component's state from its points --- */
   const paa = (p) => !!p && (p.value === 'active' || p.value === true || p.value === 1 || (typeof p.value === 'number' && p.value > 0.5 && !String(p.type).startsWith('multi')));
@@ -310,7 +337,7 @@
     const inni = type === 'filter' ? `<path class="sk-strek" d="M${x0} ${y0}L${x0 + b} ${y0 + h / 3}L${x0} ${y0 + 2 * h / 3}L${x0 + b} ${y0 + h}"/>`
       : type === 'spjeld' ? `<line class="sk-strek" x1="${x}" y1="${y0 + 7}" x2="${x}" y2="${y0 + h - 7}" transform="rotate(${iDrift(k) ? 0 : 62} ${x} ${y})"/><circle class="sk-dot" cx="${x}" cy="${y}" r="2.4"/>`
       : `<line class="sk-strek" x1="${x - 7}" y1="${y}" x2="${x + 7}" y2="${y}"/>${type === 'varmebatteri' ? `<line class="sk-strek" x1="${x}" y1="${y - 7}" x2="${x}" y2="${y + 7}"/>` : ''}`;
-    const p = k.pkt.paadrag || (type === 'spjeld' ? (k.pkt.start || k.pkt.drift) : null);
+    const p = k.pkt.paadrag || (type === 'filter' ? k.pkt.pv : null) || (type === 'spjeld' ? (k.pkt.start || k.pkt.drift) : null);
     const v = p ? verdi(p) : (k.pkt.alarm.length ? (iAlarm(k) ? T('alarm', 'alarm') : 'ok') : '');
     return gruppe(k, type, `<rect class="sk-kropp" x="${x0}" y="${y0}" width="${b}" height="${h}" rx="5"/>${inni}
       ${tekst(x, y0 - 24, merke(k), 'sk-kode')}${v ? tekst(x, y0 - 8, v, 'sk-v') : ''}${haandMerke(k, x0 + b, y0 + h - 2)}${varsel(k, x0 - 2, y0 + 4)}`);
@@ -384,14 +411,40 @@
         else basis.set(k, 'verdi');
       }
     }
+    // A damper that is read as a position and also as a relay: the position is the one to draw.
+    for (const stas of new Set(K.filter(k => k.art === 'spjeld' && ut.has(k)).map(k => ut.get(k)))) {
+      const her = K.filter(k => k.art === 'spjeld' && ut.get(k) === stas && String(k.nokkel).startsWith('p:'));
+      if (her.some(k => k.pkt.paadrag)) for (const k of her) if (!k.pkt.paadrag) ut.delete(k);
+    }
     // Parts with no word and no number. A damper or filter sits at the start of the air path,
     // unless it says it belongs to a room or to the recovery unit; fans go by number.
-    const vifter = K.filter(k => k.art === 'vifte' && !ut.has(k)).sort((a, b) => tall(a) - tall(b));
+    const vifter = K.filter(k => k.art === 'vifte' && !ut.has(k) && !String(k.nokkel).startsWith('p:')).sort((a, b) => tall(a) - tall(b));
     vifter.forEach((k, i) => sett(k, i === 0 ? 'tilluft' : 'avtrekk', 'tall'));
-    for (const k of K) if (!ut.has(k) && (k.art === 'spjeld' || k.art === 'filter') && !k.sted && k.hvor !== 'gjenvinner') sett(k, 'inntak', 'standard');
+    // Coded dampers and filters with nothing to go by are put at the start. Without a code, one damper
+    // alone is taken for the outdoor air damper; several are not guessed at.
+    const uplassert = K.filter(k => !ut.has(k) && (k.art === 'spjeld' || k.art === 'filter') && !k.sted && k.hvor !== 'gjenvinner');
+    const utenKode = uplassert.filter(k => String(k.nokkel).startsWith('p:'));
+    for (const k of uplassert) if (!String(k.nokkel).startsWith('p:') || (utenKode.length === 1 && k.art === 'spjeld')) sett(k, 'inntak', 'standard');
     // A fan that is read twice (a percentage and a voltage for the same motor): one drawing of it.
     const vifter2 = new Map();
     for (const k of K) if (k.art === 'vifte' && String(k.nokkel).startsWith('p:') && ut.has(k)) { if (!vifter2.has(ut.get(k))) vifter2.set(ut.get(k), k); else if (!vifter2.get(ut.get(k)).pkt.paadrag && k.pkt.paadrag) { ut.delete(vifter2.get(ut.get(k))); vifter2.set(ut.get(k), k); } else ut.delete(k); }
+    for (const k of K) if (k.art === 'filter' && String(k.nokkel).startsWith('p:') && k.pkt.pv && k.pkt.pv.value === 0) ut.delete(k);
+    // The same reading twice (a plant that reports the outdoor temperature under two names): drawn once.
+    const sett2 = new Set();
+    for (const k of K) {
+      if (!String(k.nokkel).startsWith('p:') || !ut.has(k)) continue;
+      const p = k.pkt.pv || k.pkt.paadrag;
+      if (!p) continue;
+      const nok = ut.get(k) + ':' + k.art + ':' + JSON.stringify(p.value);
+      if (sett2.has(nok)) ut.delete(k); else sett2.add(nok);
+    }
+    const stedArt = new Map();
+    for (const k of K) if (String(k.nokkel).startsWith('p:') && ut.has(k) && MAAL.includes(k.art) && k.pkt.pv) {
+      const n = ut.get(k) + ':' + k.art;
+      if (!stedArt.has(n)) stedArt.set(n, []);
+      stedArt.get(n).push(k);
+    }
+    for (const l of stedArt.values()) if (l.length > 1 && l.some(k => k.pkt.pv.value)) for (const k of l) if (!k.pkt.pv.value) ut.delete(k);
     // Two parts that name the same thing at the same station: the one with something to show wins.
     const grp = new Map();
     for (const k of K) if (MAAL.includes(k.art) && ut.has(k)) { const n = ut.get(k) + ':' + k.art; if (!grp.has(n)) grp.set(n, []); grp.get(n).push(k); }
@@ -406,16 +459,28 @@
     const alle = (f) => { const l = K.filter(k => !tatt.has(k) && f(k)); l.forEach(k => tatt.add(k)); return l; };
     const sorter = (a, b) => (ARTRANG[a.art] ?? 9) - (ARTRANG[b.art] ?? 9) || String(a.kode).localeCompare(String(b.kode), 'no', {numeric: true});
     const ved = (stas, f) => alle(k => st.get(k) === stas && f(k));
-    const antallVed = new Map();
-    // A station has room for a handful of sensors. The ones past that are listed under the drawing, not squeezed in.
     // An unnamed temperature input that reads exactly zero is an input with nothing on it.
-    const tom = (k) => k.art === 'temp' && String(k.nokkel).startsWith('p:') && k.pkt.pv && k.pkt.pv.value === 0;
-    const maalFn = (k) => { if (!MAAL.includes(k.art) || !harLevende(k) || tom(k)) return false; const n = (antallVed.get(st.get(k)) || 0) + 1; antallVed.set(st.get(k), n); return n <= 6; };
+    const tom = (k) => String(k.nokkel).startsWith('p:') && k.pkt.pv && (
+      (k.art === 'temp' && (k.pkt.pv.value === 0 || k.pkt.pv.value <= -40 || k.pkt.pv.value >= 200))
+      || (['fukt', 'co2'].includes(k.art) && k.pkt.pv.value === 0));
+    // A station has room for a handful of sensors: the ones with a reading, temperatures first. The rest are
+    // listed under the drawing, not squeezed in.
+    const topp6 = new Set();
+    for (const stas of new Set([...st.values()])) {
+      K.filter(k => st.get(k) === stas && MAAL.includes(k.art) && harLevende(k) && !tom(k))
+        .sort((a, b) => ((b.pkt.pv && b.pkt.pv.value) ? 1 : 0) - ((a.pkt.pv && a.pkt.pv.value) ? 1 : 0) || (ARTRANG[a.art] ?? 9) - (ARTRANG[b.art] ?? 9))
+        .slice(0, 6).forEach(k => topp6.add(k));
+    }
+    const maalFn = (k) => topp6.has(k);
 
-    const gj = en(k => k.art === 'gjenvinner');
+    const gj = en(k => k.art === 'gjenvinner' && (k.pkt.paadrag || k.pkt.virkningsgrad || k.kode)) || en(k => k.art === 'gjenvinner');
+    if (gj) for (const k of K) {
+      if (k === gj || tatt.has(k) || k.art !== 'gjenvinner') continue;
+      let tok = false;
+      for (const rolle of ['virkningsgrad', 'paadrag', 'drift', 'start', 'vender']) if (!gj.pkt[rolle] && k.pkt[rolle]) { gj.pkt[rolle] = k.pkt[rolle]; tok = true; }
+      if (tok) tatt.add(k);
+    }
     const spoler = [];
-    const ekte = (art) => en(k => k.art === art) || null;
-    const batt = en(k => k.art === 'varmebatteri'), kjol = en(k => k.art === 'kjolebatteri');
     // The water side of each coil: pump, valve, return temperature and frost, by what the words say about the coil.
     const vannFor = (h, forste) => {
       const mine = (k) => k.hvor === h || (forste && !k.hvor);
@@ -424,33 +489,43 @@
               retur: en(k => k.art === 'temp' && k.sted === 'batteriretur' && mine(k)),
               frost: en(k => k.art === 'frost' && mine(k))};
     };
-    const vv = vannFor('varmebatteri', true), vk = vannFor('kjolebatteri', false);
     const harV = (v) => v && (v.pumpe || v.ventil || v.retur || v.frost);
-    const tomSpole = (art) => ({kode: '', eier: '', art, beskr: '', pkt: {alarm: [], annet: []}});
-    if (batt || harV(vv)) spoler.push({k: batt || tomSpole('varmebatteri'), v: vv, t: 'varme'});
-    if (kjol || harV(vk)) spoler.push({k: kjol || tomSpole('kjolebatteri'), v: vk, t: 'kjol'});
+    const MERKE = {forvarme: T('Forvarme', 'Preheat'), varmebatteri: T('Varme', 'Heating'), kjolebatteri: T('Kjøling', 'Cooling'), ettervarme: T('Ettervarme', 'Reheat')};
+    // Air passes them in this order: preheater (before the recovery unit), heating, cooling, reheat.
+    for (const [h, art, t, forste] of [['forvarme', 'varmebatteri', 'varme', false], ['varmebatteri', 'varmebatteri', 'varme', true], ['kjolebatteri', 'kjolebatteri', 'kjol', false], ['ettervarme', 'varmebatteri', 'varme', false]]) {
+      const kropp = en(k => k.art === art && (k.hvor === h || (!k.hvor && (forste || art === 'kjolebatteri'))));
+      const v = vannFor(h, forste);
+      // Two coil components that are both drawn with a signal: a second one of the same kind is a spare, not a second coil.
+      if (!kropp && !harV(v)) continue;
+      const k = kropp || {kode: '', eier: '', art, beskr: '', pkt: {alarm: [], annet: []}};
+      if (!k.kode && !k.eier) k.merkeTekst = MERKE[h];
+      spoler.push({k, v, t, h});
+    }
 
     // --- the parts of each of the four stretches, left to right, with how much room each needs
     const sens = (k) => ({k, typ: 'sensor', l: 24, r: 24});
     const boksIt = (k, typ) => ({k, typ, l: 42, r: 42});
     const rotIt = (k, retn) => ({k, typ: 'rotor', retn, l: 44, r: 44});
-    const SL = [...ved('inntak', k => k.art === 'spjeld').map(k => boksIt(k, 'spjeld')),
+    const spoleIt = (sp) => ({k: sp.k, typ: sp.t === 'varme' ? 'varmebatteri' : 'kjolebatteri', v: sp.v, t: sp.t, l: harV(sp.v) ? 92 : 42, r: harV(sp.v) ? 118 : 42});
+    const topp2 = (l) => l.slice(0, 2);
+    const SL = [...topp2(ved('inntak', k => k.art === 'spjeld')).map(k => boksIt(k, 'spjeld')),
                 ...ved('inntak', k => maalFn(k)).sort(sorter).map(sens),
-                ...ved('inntak', k => k.art === 'filter').map(k => boksIt(k, 'filter'))];
-    const EL = [...ved('avkast', k => k.art === 'spjeld').map(k => boksIt(k, 'spjeld')),
+                ...topp2(ved('inntak', k => k.art === 'filter')).map(k => boksIt(k, 'filter')),
+                ...spoler.filter(sp => sp.h === 'forvarme').map(spoleIt)];
+    const EL = [...topp2(ved('avkast', k => k.art === 'spjeld')).map(k => boksIt(k, 'spjeld')),
                 ...ved('avkast', k => maalFn(k)).sort(sorter).map(sens),
-                ...ved('avkast', k => k.art === 'filter').map(k => boksIt(k, 'filter')),
+                ...topp2(ved('avkast', k => k.art === 'filter')).map(k => boksIt(k, 'filter')),
                 ...ved('avtrekk', k => k.art === 'vifte').map(k => rotIt(k, 'v'))];
     const SR = [...ved('etter', k => maalFn(k)).sort(sorter).map(sens),
-                ...ved('etter', k => k.art === 'filter').map(k => boksIt(k, 'filter')),
-                ...ved('tilluft', k => k.art === 'filter').map(k => boksIt(k, 'filter')),
-                ...spoler.map(sp => ({k: sp.k, typ: sp.t === 'varme' ? 'varmebatteri' : 'kjolebatteri', v: sp.v, t: sp.t, l: harV(sp.v) ? 92 : 42, r: harV(sp.v) ? 118 : 42})),
+                ...topp2(ved('etter', k => k.art === 'filter')).map(k => boksIt(k, 'filter')),
+                ...topp2(ved('tilluft', k => k.art === 'filter')).map(k => boksIt(k, 'filter')),
+                ...spoler.filter(sp => sp.h !== 'forvarme').map(spoleIt),
                 ...ved('tilluft', k => k.art === 'vifte').map(k => rotIt(k, 'h')),
-                ...ved('tilluft', k => k.art === 'spjeld').map(k => boksIt(k, 'spjeld')),
+                ...topp2(ved('tilluft', k => k.art === 'spjeld')).map(k => boksIt(k, 'spjeld')),
                 ...ved('tilluft', k => maalFn(k)).sort(sorter).map(sens)];
-    const ER = [...ved('avtrekk', k => k.art === 'filter').map(k => boksIt(k, 'filter')),
+    const ER = [...topp2(ved('avtrekk', k => k.art === 'filter')).map(k => boksIt(k, 'filter')),
                 ...ved('avtrekk', k => maalFn(k)).sort(sorter).map(sens),
-                ...ved('avtrekk', k => k.art === 'spjeld').map(k => boksIt(k, 'spjeld'))];
+                ...topp2(ved('avtrekk', k => k.art === 'spjeld')).map(k => boksIt(k, 'spjeld'))];
 
     const plasser = (liste, x0) => { let c = x0, n = 0; const ut = liste.map(it => { const x = c + it.l; c = x + it.r + 6; it.x = x; if (it.typ === 'sensor') it.ute = n++ % 2 === 0; return it; }); return {liste: ut, slutt: c}; };
     const ls = plasser(SL, 150), le = plasser(EL, 150);
@@ -750,7 +825,7 @@
     const harTall = (k) => { const h = hoved(k); return h && ((typeof h.value === 'number' && Number.isFinite(h.value)) || k.pkt.alarm.length || h.value === 'active'); };
     const rest = r.rest.filter(k => k.art !== 'effekt' && hoved(k) && harTall(k)).slice(0, 18);
     const rom = valgt.type === 'aggregat' && valgt.s.rom.size ? `<span class="sk-rom">${valgt.s.rom.size} ${T('rom styres herfra', 'rooms are controlled from here')}</span>` : '';
-    const minB = valgt.type === 'kurser' ? Math.max(520, r.bredde * 0.72) : 0;
+    const minB = valgt.type === 'kurser' ? Math.max(520, r.bredde * 0.72) : valgt.type === 'aggregat' ? Math.min(r.bredde, 1000) * 0.9 : 0;
     const stor = document.body.classList.contains('sk-stor');
     const html = `${hode(stor)}
       <div class="sk-lerret"><svg viewBox="0 ${r.topp || 0} ${r.bredde} ${r.hoyde - (r.topp || 0)}" style="min-width:${Math.round(minB)}px;max-width:${Math.round(r.bredde * 1.35)}px;margin:0 auto" role="img" aria-label="${esc(valgt.navn)}">${r.svg}</svg></div>
@@ -776,7 +851,8 @@
     return `<details class="sk-tagger" open><summary>${T('Tagger brukt', 'Tags used')} <small>${brukt.length}</small></summary><div class="sk-taggrid">${
       [...grupper].map(([g, l]) => `<div class="sk-tagkol"><div class="sk-tagt">${esc(g)}</div>${l.map(b => {
         const h = hoved(b.k), bs = BAS[b.basis] || BAS.beskrivelse;
-        return `<button type="button" class="sk-tagrad" data-o="${esc(h ? h.objid : '')}"><b>${esc(merke(b.k))}</b><span>${esc(rens(b.k))}</span><em>${h ? esc(verdi(h)) : ''}</em><u class="${esc(b.basis)}" title="${esc(bs[1])}">${bs[0]}</u></button>`;
+        const navn = b.k.kode || b.k.eier || (h && h.name) || merke(b.k);
+        return `<button type="button" class="sk-tagrad" data-o="${esc(h ? h.objid : '')}" title="${esc((h && h.name) || '')}"><b>${esc(navn)}</b><span>${esc(rens(b.k))}</span><em>${h ? esc(verdi(h)) : ''}</em><u class="${esc(b.basis)}" title="${esc(bs[1])}">${bs[0]}</u></button>`;
       }).join('')}</div>`).join('')}</div></details>`;
   }
   function settInn(html) {
