@@ -130,6 +130,8 @@
       else if (/^4/.test(t.nr)) sted = '4';
       else if (/^5/.test(t.nr)) sted = '5';
     }
+    // Air quality in an air handler is measured in the extract air, the room air coming back.
+    if (!sted && art === 'co2' && !t.rom && rolle === 'pv') sted = 'avtrekk';
     // Names a vendor builds from a prefix (BDInletRelPos, BVHeat1SetPrc) are read from the dictionary.
     const nv = slaa(O.NAVN, String(p.name || ''));
     if (nv) {

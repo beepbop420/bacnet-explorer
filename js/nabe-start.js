@@ -203,6 +203,9 @@ const FAKTA = [
   ['COV betyr at regulatoren sier fra selv. Mindre spørring, mer ro.', 'COV means the controller speaks up itself. Less asking, more peace.'],
 ];
 const NYTT = {
+  '1.83': [
+    ['Luftkvalitet (CO2) som ikke sier hvor den måles settes i avtrekksluften, der rommets luft kommer tilbake', 'Air quality (CO2) that does not say where it is measured is put in the extract air, where the air of the rooms comes back'],
+  ],
   '1.82': [
     ['Avtrekksvifta tegnes på avtrekkssiden også når beskrivelsen kaller den «Exhaust fan», elektrisk varmebatteri tegnes som ettervarme, og «External override» og sommer- og vinterverdier holdes utenfor som innstillinger', 'The extract fan is drawn on the extract side also when the description calls it "Exhaust fan", an electric heater is drawn as reheat, and "External override" and summer and winter values are kept out as settings'],
   ],
