@@ -122,6 +122,15 @@ def main():
     sys.path.insert(0, str(HER))
     os.chdir(HER)
     import uvicorn
+    # A folder unpacked from a downloaded zip carries Windows' "from the internet" mark on its files, and .NET then
+    # refuses to load WebView2's DLL. Take the mark off the DLLs before webview asks for them.
+    for dp, _, filer in os.walk(HER / "python" / "Lib" / "site-packages" / "webview"):
+        for f in filer:
+            if f.lower().endswith((".dll", ".exe", ".pyd")):
+                try:
+                    os.remove(os.path.join(dp, f) + ":Zone.Identifier")
+                except OSError:
+                    pass
     import webview
 
     config = uvicorn.Config("server:app", host="127.0.0.1", port=port,

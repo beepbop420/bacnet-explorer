@@ -163,6 +163,17 @@ def vent_paa_prosess(pid: int, maks_sek: int = 300) -> bool:
         k.CloseHandle(h)
 
 
+def fjern_blokkering(rot: Path) -> None:
+    """Remove the Zone.Identifier mark from the program files under rot. Quiet when there is none."""
+    for dp, _, filer in os.walk(rot):
+        for f in filer:
+            if f.lower().endswith((".dll", ".exe", ".pyd", ".py")):
+                try:
+                    os.remove(os.path.join(dp, f) + ":Zone.Identifier")
+                except OSError:
+                    pass
+
+
 def start_nabe(mappe: Path) -> None:
     flagg = subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.CREATE_NO_WINDOW
     subprocess.Popen([str(mappe / "python" / "pythonw.exe"), "-s", "nabe_app.py"], cwd=str(mappe),
@@ -197,6 +208,9 @@ def main():
             start_nabe(mappe)
         return
     try:
+        # Files taken out of a downloaded zip carry Windows' "from the internet" mark, and .NET then refuses to
+        # load WebView2's DLL ("an attempt was made to load an assembly from a network location"). Take it off first.
+        fjern_blokkering(KILDE)
         import webview
         api = Api()
         api.vindu = webview.create_window(

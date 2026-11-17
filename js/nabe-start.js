@@ -203,6 +203,9 @@ const FAKTA = [
   ['COV betyr at regulatoren sier fra selv. Mindre spørring, mer ro.', 'COV means the controller speaks up itself. Less asking, more peace.'],
 ];
 const NYTT = {
+  '1.87': [
+    ['Installasjonen åpner seg på maskiner der Windows har merket filene fra zip-fila som hentet fra internett (WebView2 ble nektet lastet). NABE fjerner merket selv før vinduet åpnes', 'The installer now opens on machines where Windows has marked the files from the zip as downloaded from the internet (WebView2 was refused). NABE removes the mark itself before the window opens'],
+  ],
   '1.86': [
     ['Installasjonen sier fra når vinduet ikke kan åpnes (for eksempel uten Edge WebView2) og tilbyr standardinstallasjon, og «Installer NABE» blir stående med en forklaring hvis zip-fila ikke er pakket ut', 'The installer says so when its window cannot open (for example without Edge WebView2) and offers the default install, and "Installer NABE" stays open with an explanation if the zip has not been unpacked'],
   ],
