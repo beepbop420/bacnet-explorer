@@ -203,6 +203,9 @@ const FAKTA = [
   ['COV betyr at regulatoren sier fra selv. Mindre spørring, mer ro.', 'COV means the controller speaks up itself. Less asking, more peace.'],
 ];
 const NYTT = {
+  '1.91': [
+    ['Installasjonsvinduet er mer levende: figuren blmyker og svever, trinnprikker viser hvor du er, fremdriften har prosent og en strek med lys i, og ferdigsiden knaller litt konfetti. Klikk på NABE og se hva som skjer', 'The installer window is livelier: the figure blinks and floats, step dots show where you are, the progress has a percentage and a bar with light in it, and the done page bursts a little confetti. Click NABE and see what happens'],
+  ],
   '1.90': [
     ['Snarveiene som installasjonen lager får ikonet med indeks, og Windows får beskjed om at de er nye, så skrivebordet og startmenyen ikke viser tomme ikoner', 'The shortcuts the installer makes get the icon with its index, and Windows is told they are new, so the desktop and Start menu do not show blank icons'],
   ],
