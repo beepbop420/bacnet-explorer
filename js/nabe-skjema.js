@@ -70,7 +70,8 @@
   /* ---------------------------------------------------------- one point */
   function tolkPunkt(p) {
     const t = tolkNavn(p.name, p.description);
-    const beskr = String(p.description || '').replace(/^SD\w{2}\s+/, '').replace(/^[+=A-Za-z0-9\/.\-]*?\d{3}\.\d{2,4}[\s-]*[A-Z]{2}\d{2,4}\s*/, '');
+    // "min:-50.0, max:+120.0, error: -32768" is the range of the point, not what it is
+    const beskr = String(p.description || '').replace(/\bmin:\s*[-+]?[\d.]+,?\s*max:\s*[-+]?[\d.]+(,?\s*error:\s*[-+]?[\d.]+)?/gi, '').trim().replace(/^SD\w{2}\s+/, '').replace(/^[+=A-Za-z0-9\/.\-]*?\d{3}\.\d{2,4}[\s-]*[A-Z]{2}\d{2,4}\s*/, '');
     const b = beskr.toLowerCase();
     const ord = (kamel(t.kode ? t.hale : p.name) + ' ' + beskr).toLowerCase();
     const enhet = String(p.units || p.unit || '').toLowerCase();
@@ -144,6 +145,8 @@
     if (inn ? O.INNSTILLING_AI.test(x.ord + ' ' + String(p.name || '')) : O.INNSTILLING_ORD.test(x.ord + ' ' + String(p.name || ''))) return false;
     if (t === 'analog-input') return true;
     if (t === 'analog-output') return true;
+    // A value whose description lists its choices ("0-m3/h, 1-l/s, 3-Pa") is a mode, not a reading
+    if (t === 'analog-value' && /(^|,\s*)\d\s*-\s*[A-Za-z]/.test(String(p.description || ''))) return false;
     if (t === 'analog-value') return x.rolle === 'pv' || x.rolle === 'paadrag';
     // A yes/no point is a part of the plant only where it says something about a filter, a fan, a pump,
     // a damper or smoke. The rest of the alarms of such a device are events, not parts.

@@ -203,6 +203,9 @@ const FAKTA = [
   ['COV betyr at regulatoren sier fra selv. Mindre spørring, mer ro.', 'COV means the controller speaks up itself. Less asking, more peace.'],
 ];
 const NYTT = {
+  '1.78': [
+    ['Komfovent og andre enheter som skriver måleområdet i beskrivelsen («min:-50, max:+120») leses nå som målinger i stedet for innstillinger, så aggregatet tegnes med temperaturer, filter, spjeld og spoler. Valglister («0-m3/h, 1-l/s») holdes utenfor tegningen', 'Komfovent and other devices that write the measuring range in the description ("min:-50, max:+120") are now read as readings instead of settings, so the air handler is drawn with temperatures, filters, dampers and coils. Choice lists ("0-m3/h, 1-l/s") are kept out of the drawing'],
+  ],
   '1.77': [
     ['Skjema leser GOLD- og OJ-Air2-aggregater: kodene i navnene (BDInlet, BVHeat1, BVCool), fire typer spoler (forvarme, varme, kjøling, ettervarme), gjenvinner med virkningsgrad og lesende innganger holdt adskilt fra innstillinger', 'The schematic reads GOLD and OJ-Air2 air handlers: the codes in the names (BDInlet, BVHeat1, BVCool), four kinds of coils (preheat, heating, cooling, reheat), recovery with efficiency and read-only inputs kept apart from settings'],
     ['Hotellrom (OU601.613.-RT601) tegnes som romkort, systemer leses også fra «350 002-RT401» og «350002-RP401», og kjølekurser får navn etter det punktene sier om seg selv', 'Hotel rooms (OU601.613.-RT601) are drawn as room cards, systems are also read from "350 002-RT401" and "350002-RP401", and cooling circuits are named after what their points say about themselves'],
