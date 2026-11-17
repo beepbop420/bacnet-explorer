@@ -203,6 +203,9 @@ const FAKTA = [
   ['COV betyr at regulatoren sier fra selv. Mindre spørring, mer ro.', 'COV means the controller speaks up itself. Less asking, more peace.'],
 ];
 const NYTT = {
+  '1.84': [
+    ['Reguleringsparametre (tid for derivat og integral på styrestrekene) og varmekurver for varmepumper (UtekompVP Y1 til Y4) regnes som innstillinger og tegnes ikke som målinger', 'Control parameters (derivative and integral time of the control loops) and heat pump curves (UtekompVP Y1 to Y4) count as settings and are not drawn as readings'],
+  ],
   '1.83': [
     ['Luftkvalitet (CO2) som ikke sier hvor den måles settes i avtrekksluften, der rommets luft kommer tilbake', 'Air quality (CO2) that does not say where it is measured is put in the extract air, where the air of the rooms comes back'],
   ],
