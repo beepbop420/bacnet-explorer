@@ -28,7 +28,7 @@
   function tolkNavn(navn, beskr) {
     let n = String(navn || '');
     let sys = '', etterSys = 0, m;
-    const reS = /(?<![0-9])(\d{3})[._](\d{3})(?![0-9])|(?<![0-9A-Za-z])(\d{2})[._](\d{2})(?![0-9])/g;
+    const reS = /(?<![0-9A-Za-z])(\d{3})[._](\d{3})(?![0-9])|(?<![0-9A-Za-z])(\d{2})[._](\d{2})(?![0-9])/g;
     while ((m = reS.exec(n))) { sys = m[1] ? m[1] + '.' + m[2] : m[3] + '.' + m[4]; etterSys = m.index + m[0].length; }
     // The way some Beckhoff projects write the system into a variable: s36001 is 360.01, s433_1001 is 433.1001.
     if (!sys && (m = /(?<![A-Za-z0-9])s(\d{3})_(\d{3,4})(?![0-9])/.exec(n) || /(?<![A-Za-z0-9])s(\d{3})(\d{2})(?![0-9])/.exec(n))) {
@@ -61,7 +61,7 @@
   /* ---------------------------------------------------------- one point */
   function tolkPunkt(p) {
     const t = tolkNavn(p.name, p.description);
-    const beskr = String(p.description || '').replace(/^SD\w{2}\s+/, '');
+    const beskr = String(p.description || '').replace(/^SD\w{2}\s+/, '').replace(/^[+=A-Za-z0-9\/.\-]*?\d{3}\.\d{2,4}[\s-]*[A-Z]{2}\d{2,4}\s*/, '');
     const b = beskr.toLowerCase();
     const ord = (kamel(t.kode ? t.hale : p.name) + ' ' + beskr).toLowerCase();
     const enhet = String(p.units || p.unit || '').toLowerCase();
@@ -79,6 +79,9 @@
     const iOrd = slaa(O.TYPE, ord);
     if (art === 'kvalitet') art = iOrd === 'royk' || iOrd === 'co2' ? iOrd : (maalt === 'co2' ? 'co2' : 'royk');
     if ((art === 'trykk' || art === 'difftrykk') && iOrd === 'filter') art = 'filter';
+    if ((art === 'trykk' || art === 'difftrykk') && iOrd === 'ekspansjon') art = 'ekspansjon';
+    // A yes/no pressure input is a pressure switch: on an air handler the filter guard.
+    if ((art === 'trykk' || art === 'difftrykk') && type.startsWith('binary')) art = iOrd === 'ekspansjon' ? 'ekspansjon' : 'filter';
     if (art === 'frost') rolle = 'alarm';
     if (!art) art = maalt && (!rolle || rolle === 'pv' || rolle === 'sp' || rolle === 'innstilling') ? maalt : iOrd;
 
@@ -101,6 +104,7 @@
     const hvor = hvorOrd(b) || (t.kode ? null : hvorOrd(ord));
     if (!sted && t.nr) {
       if (art === 'temp' && /^9\d\d?$|^0?01$/.test(t.nr) && !b) sted = 'ute';
+      else if (art === 'temp' && /^6\d\d?$/.test(t.nr)) sted = 'rom';
       else if (/^4/.test(t.nr)) sted = '4';
       else if (/^5/.test(t.nr)) sted = '5';
     }
@@ -228,7 +232,7 @@
     kjolebatteri: ['Kjølebatteri', 'Cooling coil'], royk: ['Røyk', 'Smoke'], frost: ['Frost', 'Frost'], varmepumpe: ['Varmepumpe', 'Heat pump'],
     elkjel: ['Elkjel', 'Electric boiler'], tank: ['Tank', 'Tank'], veksler: ['Veksler', 'Exchanger'], energimaaler: ['Energimåler', 'Energy meter'],
     bevegelse: ['Bevegelse', 'Motion'], vav: ['VAV', 'VAV'], kjel: ['Kjel', 'Boiler'], varmekabel: ['Varmekabel', 'Heating cable'],
-    stengeventil: ['Stengeventil', 'Shutoff valve'], kompressor: ['Kompressor', 'Compressor'], radiator: ['Radiator', 'Radiator'], omformer: ['Omformer', 'Drive'], fjernvarme: ['Fjernvarme', 'District heating'],
+    stengeventil: ['Stengeventil', 'Shutoff valve'], ekspansjon: ['Ekspansjonskar', 'Expansion vessel'], kompressor: ['Kompressor', 'Compressor'], radiator: ['Radiator', 'Radiator'], omformer: ['Omformer', 'Drive'], fjernvarme: ['Fjernvarme', 'District heating'],
   };
   const tn = (tabell, k) => tabell[k] ? T(tabell[k][0], tabell[k][1]) : k;
   // In a drawing the label has a few centimetres: the code when there is one, else a short word.
@@ -328,26 +332,63 @@
   const harLevende = (k) => !!(k.pkt.pv || k.pkt.paadrag || k.pkt.drift || k.pkt.start || k.pkt.alarm.length || k.pkt.virkningsgrad);
   const ARTRANG = {temp: 0, fukt: 1, trykk: 2, difftrykk: 2, mengde: 3, co2: 4, royk: 5, bevegelse: 6};
 
-  /* Which station of the air path each part belongs to. The words decide first, since
-     that is what the plant says. Where they say nothing the number does: 4x sensors follow
-     the supply air from intake to supply, 5x follow the extract air from room to exhaust. */
+  /* Which station of the air path each part belongs to, and on what grounds. The words of the
+     description come first, since that is what the plant says. Where there are none, the tag
+     number does: 4xx sensors follow the supply air from intake to supply, 5xx follow the extract
+     air from the room to the exhaust, 6xx are the room. And where the number alone leaves
+     several sensors to place (RT50, RT51, RT52), what they read decides, the way a technician
+     would: the exhaust lies between the outdoor and the extract temperature, a sensor far hotter
+     than any air is the water of the coil, the supply is where the setpoint is.
+     The grounds are kept in `basis` for the list of tags under the drawing. */
   function stasjoner(K) {
-    const ut = new Map();
+    const ut = new Map(), basis = new Map();
+    ut.basis = basis;
+    const sett = (k, st, b) => { ut.set(k, st); basis.set(k, b); };
     const tall = (k) => parseInt(String(k.kode || '').replace(/\D/g, ''), 10) || 0;
+    const v1 = (k) => { const p = k.pkt.pv; return p && typeof p.value === 'number' && Number.isFinite(p.value) ? p.value : null; };
     for (const k of K) {
       const s = k.sted;
       const st = s === 'inntak' || s === 'ute' ? 'inntak' : s === 'ettergjenvinner' ? 'etter' : s === 'tilluft' ? 'tilluft' : s === 'avtrekk' ? 'avtrekk' : s === 'avkast' ? 'avkast' : '';
-      if (st) ut.set(k, st);
+      if (st) sett(k, st, 'beskrivelse');
     }
     for (const [siffer, orden] of [['4', ['inntak', 'etter', 'tilluft']], ['5', ['avtrekk', 'avtrekk', 'avkast']]]) {
       const l = K.filter(k => k.sted === siffer && !ut.has(k) && k.art !== 'frost').sort((a, b) => tall(a) - tall(b));
-      l.forEach((k, i) => ut.set(k, l.length === 1 ? (k.art === 'spjeld' ? (siffer === '4' ? 'inntak' : 'avkast') : (siffer === '4' ? 'tilluft' : 'avtrekk'))
-        : i === 0 ? orden[0] : i === l.length - 1 ? orden[2] : orden[1]));
+      l.forEach((k, i) => {
+        k.siffer = siffer;
+        sett(k, l.length === 1 ? (k.art === 'spjeld' ? (siffer === '4' ? 'inntak' : 'avkast') : (siffer === '4' ? 'tilluft' : 'avtrekk'))
+          : i === 0 ? orden[0] : i === l.length - 1 ? orden[2] : orden[1], 'tall');
+      });
     }
-    // Parts with no word and no number: dampers and filters sit at the start of the air path, fans by number.
+    // The values. Reference temperatures come from the sensors the words placed.
+    const snitt = (st) => { const v = K.filter(k => k.art === 'temp' && ut.get(k) === st && basis.get(k) === 'beskrivelse').map(v1).filter(x => x !== null); return v.length ? v.reduce((a, b) => a + b, 0) / v.length : null; };
+    const tInn = snitt('inntak');
+    let tTil = snitt('tilluft');
+    const spK = K.find(k => k.art === 'temp' && ut.get(k) === 'tilluft' && k.pkt.sp && typeof k.pkt.sp.value === 'number');
+    if (tTil === null && spK) tTil = spK.pkt.sp.value;
+    const tAvt = snitt('avtrekk');
+    const luft = [tTil, tAvt, tInn].filter(x => x !== null);
+    const varmest = luft.length ? Math.max(...luft) : null;
+    for (const k of K.filter(k => k.art === 'temp' && basis.get(k) === 'tall')) {
+      const v = v1(k);
+      if (v === null) continue;
+      // far hotter than any air in the unit: it is the water of the coil
+      if (varmest !== null && v > varmest + 7) { k.sted = 'batteriretur'; if (!k.hvor) k.hvor = 'varmebatteri'; ut.delete(k); basis.delete(k); continue; }
+      if (k.siffer === '4' && tInn !== null && tTil !== null) {
+        const ny = Math.abs(v - tInn) <= 1.5 ? 'inntak' : Math.abs(v - tTil) <= 1.5 ? 'tilluft' : 'etter';
+        if (ny !== ut.get(k)) sett(k, ny, 'verdi');
+        else basis.set(k, 'verdi');
+      } else if (k.siffer === '5' && tInn !== null && tAvt !== null) {
+        // the exhaust has given its heat to the supply air: clearly cooler than the extract
+        const ny = Math.abs(v - tAvt) <= 2 ? 'avtrekk' : 'avkast';
+        if (ny !== ut.get(k)) sett(k, ny, 'verdi');
+        else basis.set(k, 'verdi');
+      }
+    }
+    // Parts with no word and no number. A damper or filter sits at the start of the air path,
+    // unless it says it belongs to a room or to the recovery unit; fans go by number.
     const vifter = K.filter(k => k.art === 'vifte' && !ut.has(k)).sort((a, b) => tall(a) - tall(b));
-    vifter.forEach((k, i) => ut.set(k, i === 0 ? 'tilluft' : 'avtrekk'));
-    for (const k of K) if (!ut.has(k) && (k.art === 'spjeld' || k.art === 'filter') && k.hvor !== 'gjenvinner') ut.set(k, 'inntak');
+    vifter.forEach((k, i) => sett(k, i === 0 ? 'tilluft' : 'avtrekk', 'tall'));
+    for (const k of K) if (!ut.has(k) && (k.art === 'spjeld' || k.art === 'filter') && !k.sted && k.hvor !== 'gjenvinner') sett(k, 'inntak', 'standard');
     // A fan that is read twice (a percentage and a voltage for the same motor): one drawing of it.
     const vifter2 = new Map();
     for (const k of K) if (k.art === 'vifte' && String(k.nokkel).startsWith('p:') && ut.has(k)) { if (!vifter2.has(ut.get(k))) vifter2.set(ut.get(k), k); else if (!vifter2.get(ut.get(k)).pkt.paadrag && k.pkt.paadrag) { ut.delete(vifter2.get(ut.get(k))); vifter2.set(ut.get(k), k); } else ut.delete(k); }
@@ -463,29 +504,89 @@
         ${gj.pkt.paadrag ? tekst(xG - 34, (yA + yT) / 2 + 2, verdi(gj.pkt.paadrag), 'sk-v', 'end') : ''}
         ${v ? tekst(xG - 34, (yA + yT) / 2 + 18, 'η ' + verdi(v), 'sk-v', 'end') : ''}${haandMerke(gj, xG + 24, y0 + h - 4)}${varsel(gj, xG - 26, y0 + 6)}`);
     }
-    return {svg: d, bredde: B, hoyde: yT + 215, topp: 36, rest: K.filter(k => !tatt.has(k))};
+    const STAS = {inntak: ['Inntak', 'Intake'], etter: ['Etter gjenvinner', 'After recovery'], tilluft: ['Tilluft', 'Supply'], avtrekk: ['Avtrekk', 'Extract'], avkast: ['Avkast', 'Exhaust']};
+    const brukt = [];
+    const hvorFor = (k) => tn(STAS, st.get(k) || '') || '';
+    for (const it of [...ls.liste, ...le.liste, ...rs.liste, ...re.liste]) brukt.push({k: it.k, hvor: it.typ === 'varmebatteri' || it.typ === 'kjolebatteri' ? T('Batteri', 'Coil') : (STAS[st.get(it.k)] ? hvorFor(it.k) : T('Luftveien', 'Air path')), basis: st.basis.get(it.k) || 'beskrivelse'});
+    if (gj) brukt.push({k: gj, hvor: T('Gjenvinner', 'Recovery'), basis: 'beskrivelse'});
+    for (const sp of spoler) for (const k of [sp.v.pumpe, sp.v.ventil, sp.v.retur, sp.v.frost]) if (k) brukt.push({k, hvor: sp.t === 'varme' ? T('Varmebatteri, vann', 'Heating coil, water') : T('Kjølebatteri, vann', 'Cooling coil, water'), basis: k.sted === 'batteriretur' && k.siffer ? 'verdi' : 'beskrivelse'});
+    return {svg: d, bredde: B, hoyde: yT + 215, topp: 36, rest: K.filter(k => !tatt.has(k)), brukt};
   }
 
   /* ----------------------------------------------------- heating circuits */
+  /* What a plant calls the parts of a heating or cooling system is in the description, after the
+     tag: "320.001-RT402 Tur fra fjernvarme", "Retur til VP veksler", "Trykkgiver ekspansjonskar".
+     Take away the tag, the kind of sensor and the direction, and what is left is what the pipe
+     goes to or comes from. Sensors with the same subject belong to the same part of the plant. */
+  const STOPP = /\b(tur|retur|fra|til|på|paa|ved|av|for|og|temperaturføler|temperaturgiver|tempgiver|temperatur|temp|trykkgiver|trykk|føler|giver|ventilmotor|motor|ventil|sirkulasjonspumpe|pumpe|pumpa|vifte|nr|kurs|krets)\b\.?/gi;
+  const SKRIV = {vp: 'VP', jp: 'JP', sb: 'SB', rt: 'RT', rp: 'RP', vv: 'VV', vvb: 'VVB', fv: 'FV'};
+  const pen = (e) => String(e || '').split(' ').map((o, i) => SKRIV[o] || (i === 0 ? o.charAt(0).toUpperCase() + o.slice(1) : o)).join(' ');
+  const retningAv = (k) => {
+    const b = ' ' + String(k.beskr || '').toLowerCase() + ' ';
+    if (/\bretur\b/.test(b)) return 'retur';
+    if (/\btur\b/.test(b)) return 'tur';
+    return k.sted === 'retur' || k.sted === '5' ? 'retur' : k.sted === 'tur' || k.sted === '4' ? 'tur' : '';
+  };
+  const emneAv = (k) => {
+    const o = String(k.beskr || '').toLowerCase().replace(STOPP, ' ').replace(/[^a-zæøå ]+/g, ' ').replace(/\s+/g, ' ').trim().split(' ').filter(Boolean);
+    while (o.length > 1 && o[o.length - 1].length <= 2 && o[o.length - 1] !== 'vp') o.pop();
+    return o.slice(0, 2).join(' ');
+  };
+  const SYMBOL = [[/ekspansjon|expansion/, 'ekspansjon'], [/\bvp\b|varmepumpe/, 'vp'], [/veksler/, 'veksler'], [/tank|akkumulator|beredder|bereder/, 'tank']];
+  function delkretser(s) {
+    const g = new Map();
+    for (const k of s.komp) {
+      if (!['temp', 'trykk', 'difftrykk', 'ekspansjon'].includes(k.art) || !k.pkt.pv) continue;
+      // room sensors in a circuit are rooms, not a part of the pipe work
+      if (k.sted === 'rom' || /\brom\b/i.test(k.beskr || '')) continue;
+      if (!retningAv(k) && k.art !== 'ekspansjon') continue;
+      const e = emneAv(k);
+      if (!e) continue;
+      if (!g.has(e)) g.set(e, {del: e, komp: []});
+      g.get(e).komp.push(k);
+    }
+    // One subject or none: the system is one circuit, as before. Several: a column each.
+    if (g.size < 2) return [s];
+    const standard = g.has('hovedstokk') ? 'hovedstokk' : [...g.values()].filter(x => x.komp.some(k => retningAv(k))).sort((a, b) => b.komp.length - a.komp.length)[0].del;
+    const tilordnet = new Set([...g.values()].flatMap(x => x.komp));
+    for (const k of s.komp) {
+      if (tilordnet.has(k)) continue;
+      const e = emneAv(k);
+      (g.get(e) || g.get(standard)).komp.push(k);
+    }
+    return [...g.values()].map(x => ({id: s.id, del: x.del, komp: x.komp, rom: s.rom, romData: s.romData, type: s.type,
+      symbol: (SYMBOL.find(([re]) => re.test(x.del)) || [])[1] || ''}));
+  }
+  const GENERISK = /=|utgang|inngang|\bverdi\b|manuell|\bauto\b|\bstart\b|stopp|\bdrift\b|\bfeil|alarm|settpunkt|vender/i;
   function kursNavn(s) {
-    const k = s.komp.find(z => z.art === 'temp' && z.sted === 'tur') || s.komp.find(z => z.beskr);
+    const k = s.komp.find(z => z.art === 'temp' && z.sted === 'tur' && !GENERISK.test(z.beskr || '')) || s.komp.find(z => z.beskr && !GENERISK.test(z.beskr) && z.beskr.length > 7);
     const n = (k ? k.beskr : '').replace(/temperaturf[øo]ler|tempgiver|turtemp\.?|temp\.?|trykkgiver|sirkulasjonspumpe|ventilmotor|\btur\b|\bretur\b/gi, '').replace(/\s+/g, ' ').trim();
     return n ? n[0].toUpperCase() + n.slice(1) : '';
   }
+  /* The symbol of a part of the plant that has no pipe of its own, drawn between the two pipes. */
+  function symbolKurs(sym, cx, y) {
+    if (sym === 'ekspansjon') return `<ellipse class="sk-kropp" cx="${cx}" cy="${y}" rx="22" ry="32"/><path class="sk-strek" d="M${cx - 22} ${y}Q${cx} ${y - 12} ${cx + 22} ${y}"/>`;
+    if (sym === 'vp') return `<rect class="sk-kropp" x="${cx - 24}" y="${y - 20}" width="48" height="40" rx="7"/>${tekst(cx, y + 5, 'VP', 'sk-kode')}`;
+    if (sym === 'veksler') return `<rect class="sk-kropp" x="${cx - 22}" y="${y - 28}" width="44" height="56" rx="6"/><path class="sk-strek" d="M${cx - 14} ${y + 20}L${cx + 14} ${y - 20}"/>`;
+    if (sym === 'tank') return `<rect class="sk-kropp" x="${cx - 20}" y="${y - 32}" width="40" height="64" rx="16"/>`;
+    return '';
+  }
   function tegnKurser(systemer, type) {
     const t = type === 'kjoling' ? 'kjol' : 'varme';
-    const kb = 300, x0 = 110, yTopp = 96, yTur = 560, yRet = 612, B = x0 + systemer.length * kb + 30;
+    const kol = systemer.flatMap(delkretser);
+    const kb = 300, x0 = 110, yTopp = 96, yTur = 560, yRet = 612, B = x0 + kol.length * kb + 30;
     let d = `<line class="sk-ror tur ${t}" x1="40" y1="${yTur}" x2="${B - 40}" y2="${yTur}"/><line class="sk-ror retur ${t}" x1="40" y1="${yRet}" x2="${B - 40}" y2="${yRet}"/>
       <path class="sk-flyt" d="M34 ${yTur - 6}l9 6l-9 6"/><path class="sk-flyt" d="M43 ${yRet - 6}l-9 6l9 6"/>`;
-    const rest = [];
+    const rest = [], brukt = [];
     let ute = null;
-    systemer.forEach((s, i) => {
+    kol.forEach((s, i) => {
       const xt = x0 + i * kb + 110, xr = xt + 62, tatt = new Set();
       const ta = (f) => { const l = s.komp.filter(k => !tatt.has(k) && f(k)); l.forEach(k => tatt.add(k)); return l; };
       d += `<line class="sk-ror tur ${t}" x1="${xt}" y1="${yTopp + 34}" x2="${xt}" y2="${yTur}"/><line class="sk-ror retur ${t}" x1="${xr}" y1="${yTopp + 34}" x2="${xr}" y2="${yRet}"/>
         <path class="sk-flyt" d="M${xt - 6} ${yTopp + 44}l6 -9l6 9"/><path class="sk-flyt" d="M${xr - 6} ${yTopp + 35}l6 9l6 -9"/>
         <circle class="sk-dot" cx="${xt}" cy="${yTur}" r="3"/><circle class="sk-dot" cx="${xr}" cy="${yRet}" r="3"/>`;
-      d += tekst(xt + 31, yTopp - 8, s.id || T('Kurs', 'Circuit'), 'sk-tittel') + tekst(xt + 31, yTopp + 10, kursNavn(s).slice(0, 30), 'sk-under');
+      const t1 = s.del ? pen(s.del) : (s.id || T('Kurs', 'Circuit')), t2 = s.del ? (s.id || '') : kursNavn(s);
+      d += tekst(xt + 31, yTopp - 8, t1.slice(0, 22), 'sk-tittel') + tekst(xt + 31, yTopp + 10, t2.slice(0, 30), 'sk-under');
       const u = ta(k => k.art === 'temp' && k.sted === 'ute');
       if (u[0] && !ute) ute = u[0];
       // sensors: flow side to the left of the flow pipe, return side to the right of the return pipe
@@ -496,8 +597,17 @@
           ${tekst(cx + (venstre ? -15 : 15), y + 12, verdi(k.pkt.pv), 'sk-v', venstre ? 'end' : 'start')}${k.pkt.sp ? tekst(cx + (venstre ? -15 : 15), y + 28, verdi(k.pkt.sp), 'sk-sp', venstre ? 'end' : 'start') : ''}${varsel(k, cx, y - 16)}`);
       });
       const maal = ['temp', 'trykk', 'difftrykk', 'mengde'];
-      side(ta(k => maal.includes(k.art) && k.pkt.pv && ['tur', '4'].includes(k.sted)).slice(0, 4), xt, true, yTopp + 78);
-      side(ta(k => maal.includes(k.art) && k.pkt.pv && ['retur', '5'].includes(k.sted)).slice(0, 4), xr, false, yTopp + 78);
+      // the description says which side; where it does not, the number does
+      const tur = (k) => retningAv(k) === 'tur', ret = (k) => retningAv(k) === 'retur';
+      side(ta(k => maal.includes(k.art) && k.pkt.pv && tur(k)).slice(0, 4), xt, true, yTopp + 78);
+      side(ta(k => maal.includes(k.art) && k.pkt.pv && ret(k)).slice(0, 4), xr, false, yTopp + 78);
+      // a part with no pipe of its own: its symbol between the pipes, its pressures beside it
+      const cx0 = xt + 31;
+      if (s.symbol) d += symbolKurs(s.symbol, cx0, yTopp + 130);
+      const trykk = ta(k => (k.art === 'ekspansjon' || k.art === 'trykk') && k.pkt.pv);
+      trykk.forEach((k, n) => {
+        d += gruppe(k, 'foler', `${tekst(cx0 + 36, yTopp + 112 + n * 30, merke(k), 'sk-kode', 'start')}${tekst(cx0 + 36, yTopp + 128 + n * 30, verdi(k.pkt.pv), 'sk-v', 'start')}`);
+      });
       const pumper = ta(k => k.art === 'pumpe').slice(0, 2);
       pumper.forEach((k, n) => {
         const y = yTur - 118 + n * 60, p = k.pkt.paadrag || k.pkt.start || k.pkt.drift;
@@ -511,10 +621,11 @@
       annet.forEach(k => tell.set(k.art, (tell.get(k.art) || 0) + 1));
       const linje = [...tell].map(([a, n]) => (n > 1 ? n + ' ' : '') + tn(ART, a).toLowerCase()).concat(s.rom.size ? [`${s.rom.size} ${T('rom', 'rooms')}`] : []).join(' · ');
       if (linje) d += tekst(xt + 31, yTopp + 28, linje.slice(0, 34), 'sk-under svak');
+      for (const k of tatt) brukt.push({k, hvor: t1 + (t2 ? ' · ' + t2 : ''), basis: s.del ? 'beskrivelse' : (k.sted === '4' || k.sted === '5' ? 'tall' : 'beskrivelse')});
       rest.push(...s.komp.filter(k => !tatt.has(k)));
     });
     if (ute) d += foler(ute, 62, 118, true, 'T') + tekst(62, 136, T('Ute', 'Outdoor'), 'sk-etikett');
-    return {svg: d, bredde: B, hoyde: yRet + 36, topp: 40, rest};
+    return {svg: d, bredde: B, hoyde: yRet + 36, topp: 40, rest, brukt};
   }
 
   /* ---------------------------------------------------------- sprinkler */
@@ -559,7 +670,9 @@
 
   /* ------------------------------------------------------------ the pane */
   const SK = {vis: false, valgt: {}, sist: '', systemer: [], ip: ''};
-  const tegnbare = (s) => (s.type === 'ventilasjon' && s.komp.length >= 3) || (s.type === 'sprinkler' && s.komp.length >= 1) || ((s.type === 'varme' || s.type === 'kjoling') && s.komp.length >= 2);
+  const tegnbare = (s) => (s.type === 'ventilasjon' && s.komp.length >= 3) || (s.type === 'sprinkler' && s.komp.length >= 1) ||
+    // A circuit with no system number needs a sensor on it. Two valves on their own are not a circuit.
+    ((s.type === 'varme' || s.type === 'kjoling') && s.komp.length >= 2 && (!!s.id || s.komp.some(k => k.art === 'temp')));
 
   const wrap = document.createElement('div');
   wrap.id = 'skjemaWrap';
@@ -641,12 +754,30 @@
     const stor = document.body.classList.contains('sk-stor');
     const html = `${hode(stor)}
       <div class="sk-lerret"><svg viewBox="0 ${r.topp || 0} ${r.bredde} ${r.hoyde - (r.topp || 0)}" style="min-width:${Math.round(minB)}px;max-width:${Math.round(r.bredde * 1.35)}px;margin:0 auto" role="img" aria-label="${esc(valgt.navn)}">${r.svg}</svg></div>
+      ${taggerHtml(r.brukt)}
       ${rest.length || rom ? `<div class="sk-rest"><span class="sk-rest-t">${T('Også i systemet', 'Also in the system')}</span>${rom}${rest.map(k => {
         const h = hoved(k);
         return `<button type="button" class="${klasser(k, 'sk-brikke')}" data-o="${esc(h.objid)}"><b>${esc(merke(k))}</b>${k.sted && NAVN[k.sted] ? `<i>${esc(tn(NAVN, k.sted))}</i>` : ''}<span>${esc(verdi(h))}</span></button>`;
       }).join('')}</div>` : ''}
       <div class="sk-fot">${T('Tegnet etter navn og beskrivelse på punktene, ikke etter rørføringen i bygget. Klikk en del for å se punktet, høyreklikk for å feste det i overvåkingen.', 'Drawn from the names and descriptions of the points, not from the piping in the building. Click a part to see its point, right-click to pin it to the watch list.')}</div>`;
     settInn(html);
+  }
+  /* Every tag the drawing is built from, with what it was taken to mean and on what grounds:
+     the words of the description, the number of the tag, or what the sensor reads. */
+  function taggerHtml(brukt) {
+    if (!brukt || !brukt.length) return '';
+    const BAS = {beskrivelse: [T('ord', 'words'), T('Plassert etter ordene i beskrivelsen', 'Placed by the words of the description')],
+                 tall: ['#', T('Plassert etter nummeret i taggen. Beskrivelsen sa ikke hvor', 'Placed by the number of the tag. The description did not say where')],
+                 verdi: ['≈', T('Plassert etter hva føleren leser, siden ordene og nummeret ikke holdt', 'Placed by what the sensor reads, since neither words nor number were enough')],
+                 standard: ['?', T('Antatt: ingenting i navnet sa hvor', 'Assumed: nothing in the name said where')]};
+    const grupper = new Map();
+    for (const b of brukt) { const g = b.hvor || ''; if (!grupper.has(g)) grupper.set(g, []); grupper.get(g).push(b); }
+    const rens = (k) => String(k.beskr || '').replace(/\s+/g, ' ').slice(0, 46);
+    return `<details class="sk-tagger" open><summary>${T('Tagger brukt', 'Tags used')} <small>${brukt.length}</small></summary><div class="sk-taggrid">${
+      [...grupper].map(([g, l]) => `<div class="sk-tagkol"><div class="sk-tagt">${esc(g)}</div>${l.map(b => {
+        const h = hoved(b.k), bs = BAS[b.basis] || BAS.beskrivelse;
+        return `<button type="button" class="sk-tagrad" data-o="${esc(h ? h.objid : '')}"><b>${esc(merke(b.k))}</b><span>${esc(rens(b.k))}</span><em>${h ? esc(verdi(h)) : ''}</em><u class="${esc(b.basis)}" title="${esc(bs[1])}">${bs[0]}</u></button>`;
+      }).join('')}</div>`).join('')}</div></details>`;
   }
   function settInn(html) {
     if (wrap.innerHTML === html) return;

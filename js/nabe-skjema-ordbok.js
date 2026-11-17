@@ -43,6 +43,7 @@ const SKJEMA_ORDBOK = {
     [/kjølebatteri|kjolebatteri|cooling\s*coil|cool\s*coil|\bcooler\b|\bcoolcv/, 'kjolebatteri'],
     [/tilluftsvifte|avtrekksvifte|vifte|\bsaf\b|\beaf\b|\bfan\b|ventilator|\bmtr\s*fan|\bblower\b/, 'vifte'],
     [/sirkulasjonspumpe|sirk\.?\s*pumpe|pumpe|\bpump/, 'pumpe'],
+    [/ekspansjon|expansion/, 'ekspansjon'],
     [/stengeventil|serviceventil|sperreventil|avstengningsventil|shut-?off|isolation valve|isolasjonsventil/, 'stengeventil'],
     [/ventilmotor|reguleringsventil|varmeventil|ventil(?!asjon)|\bvalve/, 'ventil'],
     [/spjeldmotor|spjeld|\bdamper|\bdamp\b|\bbd\b|\bflap\b/, 'spjeld'],
