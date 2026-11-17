@@ -461,6 +461,8 @@
     // A fan that is read twice (a percentage and a voltage for the same motor): one drawing of it.
     const vifter2 = new Map();
     for (const k of K) if (k.art === 'vifte' && String(k.nokkel).startsWith('p:') && ut.has(k)) { if (!vifter2.has(ut.get(k))) vifter2.set(ut.get(k), k); else if (!vifter2.get(ut.get(k)).pkt.paadrag && k.pkt.paadrag) { ut.delete(vifter2.get(ut.get(k))); vifter2.set(ut.get(k), k); } else ut.delete(k); }
+    // "Exhaust fan" is the extract fan and "outdoor air fan" the supply fan: a fan is never at the duct ends.
+    for (const k of K) if (k.art === 'vifte') { if (ut.get(k) === 'avkast') ut.set(k, 'avtrekk'); else if (ut.get(k) === 'inntak') ut.set(k, 'tilluft'); }
     for (const k of K) if (k.art === 'filter' && String(k.nokkel).startsWith('p:') && k.pkt.pv && k.pkt.pv.value === 0) ut.delete(k);
     // The same reading twice (a plant that reports the outdoor temperature under two names): drawn once.
     const sett2 = new Set();

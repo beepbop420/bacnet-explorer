@@ -203,6 +203,9 @@ const FAKTA = [
   ['COV betyr at regulatoren sier fra selv. Mindre spørring, mer ro.', 'COV means the controller speaks up itself. Less asking, more peace.'],
 ];
 const NYTT = {
+  '1.82': [
+    ['Avtrekksvifta tegnes på avtrekkssiden også når beskrivelsen kaller den «Exhaust fan», elektrisk varmebatteri tegnes som ettervarme, og «External override» og sommer- og vinterverdier holdes utenfor som innstillinger', 'The extract fan is drawn on the extract side also when the description calls it "Exhaust fan", an electric heater is drawn as reheat, and "External override" and summer and winter values are kept out as settings'],
+  ],
   '1.81': [
     ['Romstyringer som står med buss og rom i beskrivelsen («SQ401-02.85 Spjeldposisjon») blir romkort med spjeldpådrag, i stedet for hundrevis av løse målinger i et varmeanlegg. En posisjon er en posisjon uansett hvilken enhet programmereren ga den, og punkter uten navn («Input (Float)») holdes utenfor', 'Room controllers that carry bus and room in the description ("SQ401-02.85 Damper position") become room cards with damper output, instead of hundreds of loose readings in a heating plant. A position is a position whatever unit the programmer gave it, and unnamed points ("Input (Float)") are kept out'],
   ],
