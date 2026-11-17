@@ -32,8 +32,11 @@
     // The room number sits between two dots with the code of the part after it.
     const mr = /(?:O[US](\d{3})\.)?(?<![0-9])(\d{3})\.-(?=[A-Z]{2}\d{2,4})/.exec(n);
     if (mr) { romNavn = mr[2]; sys = mr[1] || ''; etterSys = mr.index + mr[0].length; }
+    // A room module on a bus driver: "Drivers.Modbus_3_1.S563.R_338.points.RT600" is room 338, the part is RT600.
+    const mb = !mr && /(?:^|[._])R_(\d{2,4}[A-Za-z]?)\.(?:points\.)?(?=[A-Z]{2}\d{2,4})/.exec(n);
+    if (mb) { romNavn = mb[1]; etterSys = mb.index + mb[0].length; }
     const reS = /(?<![0-9A-Za-z])(\d{3})[._](\d{3})(?![0-9])|(?<![0-9A-Za-z])(\d{2})[._](\d{2})(?![0-9])/g;
-    if (!mr) while ((m = reS.exec(n))) { sys = m[1] ? m[1] + '.' + m[2] : m[3] + '.' + m[4]; etterSys = m.index + m[0].length; }
+    if (!mr && !mb) while ((m = reS.exec(n))) { sys = m[1] ? m[1] + '.' + m[2] : m[3] + '.' + m[4]; etterSys = m.index + m[0].length; }
     // Other ways a system stands in a tag: "+KG32=350 002-RT401" with a space, or "350002-RP401" as one number.
     // A building and unit code in front of the part (564001-OU601) is not a system.
     if (!sys && !mr && (m = /(?<![0-9])(3\d{2}) (\d{3})(?=-[A-Z]{2}\d)/.exec(n) || /(?<![0-9])(3\d{2})(\d{3})(?=-(?!O[US]\d)[A-Z]{2}\d)/.exec(n))) {
@@ -117,6 +120,8 @@
     if (rolle === 'pv' && type.startsWith('binary')) rolle = art === 'filter' || art === 'royk' ? 'alarm' : 'drift';
     if (rolle === 'pv' && ['vifte', 'ventil', 'spjeld', 'pumpe', 'gjenvinner'].includes(art) && /percent|%/.test(enhet)) rolle = 'paadrag';
     if (rolle === 'pv' && ['vav', 'spjeld', 'ventil', 'vifte'].includes(art) && /posisjon|position|pådrag/.test(b)) rolle = 'paadrag';
+    // A valve or damper that is read in percent with a tail like "_P" is what it is told: its output.
+    if (rolle === 'annet' && t.kode && type.startsWith('analog') && ['vav', 'spjeld', 'ventil', 'vifte', 'radiator'].includes(art) && /percent|%/.test(enhet)) rolle = 'paadrag';
     // A number cannot be a run state or a switch. Without a code to say otherwise it is a setting.
     if (!t.kode && type.startsWith('analog') && ['start', 'drift', 'vender'].includes(rolle)) rolle = 'annet';
 

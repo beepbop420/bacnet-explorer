@@ -203,6 +203,9 @@ const FAKTA = [
   ['COV betyr at regulatoren sier fra selv. Mindre spørring, mer ro.', 'COV means the controller speaks up itself. Less asking, more peace.'],
 ];
 const NYTT = {
+  '1.93': [
+    ['Rommoduler på en bussdriver («Drivers.Modbus_3_1.S563.R_338.points.RT600») leses som rom 338 med temperatur, varme- og luftpådrag, og en ventil eller et spjeld i prosent med «_P» i navnet er pådrag', 'Room modules on a bus driver ("Drivers.Modbus_3_1.S563.R_338.points.RT600") are read as room 338 with temperature, heating and air output, and a valve or damper in percent with "_P" in the name is an output'],
+  ],
   '1.92': [
     ['Rettet en skrivefeil i nyhetsteksten for 1.91', 'Fixed a typo in the news text for 1.91'],
   ],

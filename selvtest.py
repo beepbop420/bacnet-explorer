@@ -330,6 +330,8 @@ def royktest():
               "  return a.sys === '350.002' && a.kode === 'RT401' && b.sys === '601' && b.rom === '613' && c.sys === '350.002' && c.kode === 'RP401' && e.sted === 'tilluft' && e.art === 'temp' && !!d"
               "    && nabeSkjema.tolkPunkt({objid: 'z', name: 'Supply air temperature', description: 'min:-50.0, max:+120.0, error: -32768', type: 'analog-input', value: 16.6, units: 'degrees-celsius'}).rolle === 'pv'"
               "    && nabeSkjema.tolkPunkt({objid: 'w', name: 'Water temperature', description: 'min:-50.0, max:+120.0, error: -32768', type: 'analog-input', value: 13, units: 'degrees-celsius'}).sted === 'batteriretur'"
+              "    && (q => q.rom === '338' && q.kode === 'RT600')(nabeSkjema.tolkNavn('Drivers.Modbus_3_1.S563.R_338.points.RT600'))"
+              "    && nabeSkjema.tolkPunkt({objid: 'r', name: 'Drivers.Modbus_3_1.S563.R_338.points.SB400_P', description: '', type: 'analog-input', value: 40, units: 'percent'}).rolle === 'paadrag'"
               "    && nabeSkjema.tolkPunkt({objid: 'h', name: 'El. Heater level', description: 'El. Heater level', type: 'analog-output', value: 0, units: 'percent'}).hvor === 'ettervarme'"
               "    && nabeSkjema.byggSystemer([{objid: 'o', name: 'OWA_DV_MC2_Percent_Set', description: 'External override activate, Miru 3 fan level', type: 'binary-value', value: 'inactive'}]).every(s => !s.komp.size)"
               "    && (q => q.rom === '02.85' && q.rolle === 'paadrag' && q.art === 'vav')(nabeSkjema.tolkPunkt({objid: 'v', name: 'pMpBus.MP_BUS_1.POS[1]', description: 'SD0T SQ401-02.85 Spjeldposisjon', type: 'analog-value', value: 90, units: 'degrees-celsius'}))"
