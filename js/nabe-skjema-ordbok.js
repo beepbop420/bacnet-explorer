@@ -96,7 +96,7 @@ const SKJEMA_ORDBOK = {
     [/(etter|efter|after)[^|]{0,22}(gjenvinn|gjv|vgv|vvx|veksler|rotor|recovery|exchanger|\bhru\b|wheel)[^|]{0,30}(avtrekk|extract|avkast|exhaust|fortluft)|(avtrekk|extract)[^|]{0,30}(etter|efter|after)[^|]{0,22}(gjenvinn|gjv|vgv|vvx|recovery|exchanger)/, 'avkast'],
     [/(etter|efter|after)\s*(varme)?\s*(gjenvinn|gjv|vgv|vvx|veksler|rotor|recovery|exchanger|\bhru\b|wheel)|etter\s*gj\w*v|ettergjenvinn/, 'ettergjenvinner'],
     [/(after|etter)\s*(the\s*)?(pre\s*-?\s*heat|forvarme)/, 'inntak'],
-    [/retur\s*(varme|kjøle|kjole)?batteri|batteri\s*retur|vannretur|return\s*(water|heating|coil)|frostprotectiontemp|frost\s*protection\s*temp|(heat|hot|cool|chilled)\w*\s*water\s*(batt|temp|coil)|\bwater\s*batt|batt\w*\s*temp|\bcw\s*(inlet|temp|batt)|\bhw\s*(batt|temp)|combi\s*batt|water\s*coil/, 'batteriretur'],
+    [/retur\s*(varme|kjøle|kjole)?batteri|batteri\s*retur|vannretur|return\s*(water|heating|coil)|frostprotectiontemp|frost\s*protection\s*temp|(heat|hot|cool|chilled)\w*\s*water\s*(batt|temp|coil)|\bwater\s*batt|batt\w*\s*temp|\bcw\s*(inlet|temp|batt)|\bhw\s*(batt|temp)|combi\s*batt|water\s*coil|^water\s*temp/, 'batteriretur'],
     [/avkast|fortluft|utkast|avblås|avblas|exhaust|\bexh\b|\bexhst\b/, 'avkast'],
     [/avtrekk|extract|\beaf\b|\bext\b|\bea\b|return\s*air|retur\s*luft|returluft|romluft|room\s*air\s*(return|extract)|\bra\b/, 'avtrekk'],
     [/inntak|uteluft|ute\s*luft|friskluft|frisk\s*luft|fresh\s*air|outdoor\s*air|outside\s*air|intake|\boat\b|\boa\b|\bfresh\b|\boutdoor\b|out\s*door|\bout\s*temp/, 'inntak'],

@@ -203,6 +203,9 @@ const FAKTA = [
   ['COV betyr at regulatoren sier fra selv. Mindre spørring, mer ro.', 'COV means the controller speaks up itself. Less asking, more peace.'],
 ];
 const NYTT = {
+  '1.79': [
+    ['Et filter som både måles som trykk og meldes som «bytt filter» tegnes som ett filter, med trykket. «Water temperature» settes på batteriet som returtemperatur', 'A filter that is both measured as pressure and reported as "change filter" is drawn as one filter, with the pressure. "Water temperature" is put on the coil as its return temperature'],
+  ],
   '1.78': [
     ['Komfovent og andre enheter som skriver måleområdet i beskrivelsen («min:-50, max:+120») leses nå som målinger i stedet for innstillinger, så aggregatet tegnes med temperaturer, filter, spjeld og spoler. Valglister («0-m3/h, 1-l/s») holdes utenfor tegningen', 'Komfovent and other devices that write the measuring range in the description ("min:-50, max:+120") are now read as readings instead of settings, so the air handler is drawn with temperatures, filters, dampers and coils. Choice lists ("0-m3/h, 1-l/s") are kept out of the drawing'],
   ],

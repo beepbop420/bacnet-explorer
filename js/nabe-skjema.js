@@ -521,22 +521,24 @@
     const rotIt = (k, retn) => ({k, typ: 'rotor', retn, l: 44, r: 44});
     const spoleIt = (sp) => ({k: sp.k, typ: sp.t === 'varme' ? 'varmebatteri' : 'kjolebatteri', v: sp.v, t: sp.t, l: harV(sp.v) ? 92 : 42, r: harV(sp.v) ? 118 : 42});
     const topp2 = (l) => l.slice(0, 2);
+    // A filter read as a pressure and also as a change-filter relay is one filter: draw the pressure.
+    const filt = (l) => topp2(l.some(k => k.pkt.pv) ? l.filter(k => k.pkt.pv) : l);
     const SL = [...topp2(ved('inntak', k => k.art === 'spjeld')).map(k => boksIt(k, 'spjeld')),
                 ...ved('inntak', k => maalFn(k)).sort(sorter).map(sens),
-                ...topp2(ved('inntak', k => k.art === 'filter')).map(k => boksIt(k, 'filter')),
+                ...filt(ved('inntak', k => k.art === 'filter')).map(k => boksIt(k, 'filter')),
                 ...spoler.filter(sp => sp.h === 'forvarme').map(spoleIt)];
     const EL = [...topp2(ved('avkast', k => k.art === 'spjeld')).map(k => boksIt(k, 'spjeld')),
                 ...ved('avkast', k => maalFn(k)).sort(sorter).map(sens),
-                ...topp2(ved('avkast', k => k.art === 'filter')).map(k => boksIt(k, 'filter')),
+                ...filt(ved('avkast', k => k.art === 'filter')).map(k => boksIt(k, 'filter')),
                 ...ved('avtrekk', k => k.art === 'vifte').map(k => rotIt(k, 'v'))];
     const SR = [...ved('etter', k => maalFn(k)).sort(sorter).map(sens),
-                ...topp2(ved('etter', k => k.art === 'filter')).map(k => boksIt(k, 'filter')),
-                ...topp2(ved('tilluft', k => k.art === 'filter')).map(k => boksIt(k, 'filter')),
+                ...filt(ved('etter', k => k.art === 'filter')).map(k => boksIt(k, 'filter')),
+                ...filt(ved('tilluft', k => k.art === 'filter')).map(k => boksIt(k, 'filter')),
                 ...spoler.filter(sp => sp.h !== 'forvarme').map(spoleIt),
                 ...ved('tilluft', k => k.art === 'vifte').map(k => rotIt(k, 'h')),
                 ...topp2(ved('tilluft', k => k.art === 'spjeld')).map(k => boksIt(k, 'spjeld')),
                 ...ved('tilluft', k => maalFn(k)).sort(sorter).map(sens)];
-    const ER = [...topp2(ved('avtrekk', k => k.art === 'filter')).map(k => boksIt(k, 'filter')),
+    const ER = [...filt(ved('avtrekk', k => k.art === 'filter')).map(k => boksIt(k, 'filter')),
                 ...ved('avtrekk', k => maalFn(k)).sort(sorter).map(sens),
                 ...topp2(ved('avtrekk', k => k.art === 'spjeld')).map(k => boksIt(k, 'spjeld'))];
 
