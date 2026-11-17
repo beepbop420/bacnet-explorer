@@ -203,6 +203,9 @@ const FAKTA = [
   ['COV betyr at regulatoren sier fra selv. Mindre spørring, mer ro.', 'COV means the controller speaks up itself. Less asking, more peace.'],
 ];
 const NYTT = {
+  '1.80': [
+    ['Anlegg uten systemnummer i taggene som har rør, pumper og ventiler men bare et reléutgang for en nødvifte, tegnes som kjøle- eller varmekurser i stedet for som et tomt aggregat. Punkter på varmekurven (Utekomp Y1 til Y5) regnes som innstillinger', 'Plants with no system number in the tags that have pipes, pumps and valves but only a relay for an emergency fan are drawn as cooling or heating circuits instead of an empty air handler. Points on the heating curve (Utekomp Y1 to Y5) count as settings'],
+  ],
   '1.79': [
     ['Et filter som både måles som trykk og meldes som «bytt filter» tegnes som ett filter, med trykket. «Water temperature» settes på batteriet som returtemperatur', 'A filter that is both measured as pressure and reported as "change filter" is drawn as one filter, with the pressure. "Water temperature" is put on the coil as its return temperature'],
   ],

@@ -216,6 +216,17 @@
       // Sprinkler is its own kind of system, by number (310, 33x) or by what the points say. A shut-off
       // valve (SM) belongs to it and never to a heating or cooling circuit.
       if (!s.type || s.type === 'sd' || s.type === 'el') s.type = harVent ? 'ventilasjon' : harVarme ? 'varme' : '';
+      // A plant with no number in its tags that has pipes and pumps and only a relay or two for a fan (an emergency
+      // fan in the same room) is not an air handler. No live air reading, no air handler: it is circuits.
+      if (s.type === 'ventilasjon' && !s.id) {
+        const alleK = [...s.komp.values()], luftSted = ['inntak', 'tilluft', 'avtrekk', 'avkast', 'etter'];
+        const levendeLuft = alleK.some(k => (k.pkt.pv || k.pkt.paadrag) && (['vifte', 'filter', 'gjenvinner', 'spjeld'].includes(k.art) || (k.art === 'temp' && luftSted.includes(k.sted))));
+        const rorDeler = alleK.filter(k => ['ekspansjon', 'ventil', 'pumpe'].includes(k.art) || (k.sted === 'tur' && (k.pkt.pv || k.pkt.paadrag))).length;
+        if (!levendeLuft && rorDeler >= 3) {
+          const kald = alleK.filter(k => /kj[øo]l|cool|chill|baffel/i.test(k.beskr || '')).length, varm = alleK.filter(k => /varme|heat|fjernvarme|radiator/i.test(k.beskr || '')).length;
+          s.type = kald >= varm ? 'kjoling' : 'varme';
+        }
+      }
       // A setpoint that hangs on the system itself, or on a fan, belongs to the sensor it is the setpoint for.
       const alle = [...s.komp.values()];
       // Relays and other loose codes do not make a plant coded; only real parts (a fan, a sensor, a valve) do.
@@ -608,7 +619,7 @@
      tag: "320.001-RT402 Tur fra fjernvarme", "Retur til VP veksler", "Trykkgiver ekspansjonskar".
      Take away the tag, the kind of sensor and the direction, and what is left is what the pipe
      goes to or comes from. Sensors with the same subject belong to the same part of the plant. */
-  const STOPP = /\b(tur|retur|fra|til|på|paa|ved|av|for|og|temperaturføler|temperaturgiver|tempgiver|temperatur|temp|trykkgiver|trykk|føler|giver|ventilmotor|motor|ventil|sirkulasjonspumpe|pumpe|pumpa|vifte|nr|kurs|krets)\b\.?/gi;
+  const STOPP = /\b(pådrag|sirk|pumper|diff|differansetrykk|ekspansjonstrykk|ventilposisjon|posisjon|plan|tur|retur|fra|til|på|paa|ved|av|for|og|temperaturføler|temperaturgiver|tempgiver|temperatur|temp|trykkgiver|trykk|føler|giver|ventilmotor|motor|ventil|sirkulasjonspumpe|pumpe|pumpa|vifte|nr|kurs|krets)\b\.?/gi;
   const SKRIV = {vp: 'VP', jp: 'JP', sb: 'SB', rt: 'RT', rp: 'RP', vv: 'VV', vvb: 'VVB', fv: 'FV'};
   const pen = (e) => String(e || '').split(' ').map((o, i) => SKRIV[o] || (i === 0 ? o.charAt(0).toUpperCase() + o.slice(1) : o)).join(' ');
   const retningAv = (k) => {
@@ -618,7 +629,7 @@
     return k.sted === 'retur' || k.sted === '5' ? 'retur' : k.sted === 'tur' || k.sted === '4' ? 'tur' : '';
   };
   const emneAv = (k) => {
-    const o = String(k.beskr || '').toLowerCase().replace(STOPP, ' ').replace(/[^a-zæøå ]+/g, ' ').replace(/\s+/g, ' ').trim().split(' ').filter(Boolean);
+    const o = String(k.beskr || '').toLowerCase().replace(/\b(re)?tur(temperatur|trykk|temp)\b/g, ' ').replace(STOPP, ' ').replace(/[^a-zæøå ]+/g, ' ').replace(/\s+/g, ' ').trim().split(' ').filter(Boolean);
     while (o.length > 1 && o[o.length - 1].length <= 2 && o[o.length - 1] !== 'vp') o.pop();
     return o.slice(0, 2).join(' ');
   };
