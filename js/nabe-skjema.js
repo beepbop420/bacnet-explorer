@@ -971,7 +971,8 @@
       return `<button type="button" class="${klasser(k, 'sk-brikke')}" data-o="${esc(h.objid)}" title="${esc(h.name || '')}"><b>${esc(k.kode || k.beskr || merke(k))}</b>${k.sted && NAVN[k.sted] ? `<i>${esc(tn(NAVN, k.sted))}</i>` : ''}<span>${esc(verdi(h))}</span></button>`; };
     const vpHtml = vp.length ? `<div class="sk-rest"><span class="sk-rest-t">${T('Varmepumpe, kuldekrets', 'Heat pump, refrigerant circuit')}</span>${vp.map(brikke).join('')}</div>` : '';
     const rom = valgt.type === 'aggregat' && valgt.s.rom.size ? `<span class="sk-rom">${valgt.s.rom.size} ${valgt.s.rom.size === 1 ? T('rom styres herfra', 'room is controlled from here') : T('rom styres herfra', 'rooms are controlled from here')}</span>` : '';
-    const minB = valgt.type === 'kurser' ? Math.max(520, r.bredde * 0.72) : valgt.type === 'aggregat' ? Math.min(r.bredde, 1000) * 0.66 : 0;
+    // Text must stay readable: the drawing is never scaled below 85 percent, it scrolls sideways instead
+    const minB = valgt.type === 'kurser' ? Math.max(520, r.bredde * 0.85) : valgt.type === 'aggregat' ? r.bredde * 0.85 : 0;
     const stor = document.body.classList.contains('sk-stor');
     const vekslerVelger = r.veksler ? `<span class="sk-veksler" role="group" aria-label="${esc(T('Type varmegjenvinner', 'Type of heat recovery'))}"><span class="sk-vtekst">${T('Veksler', 'Recovery')}</span>${
       VEKSLER.map(([id, n]) => `<button type="button" data-veksler="${id}" class="${r.veksler === id ? 'sel' : ''}" aria-pressed="${r.veksler === id}">${esc(T(n[0], n[1]))}</button>`).join('')}</span>` : '';

@@ -205,6 +205,9 @@ const FAKTA = [
   ['COV betyr at regulatoren sier fra selv. Mindre spørring, mer ro.', 'COV means the controller speaks up itself. Less asking, more peace.'],
 ];
 const NYTT = {
+  '2.10': [
+    ['Systembildene tegnes aldri mindre enn 85 prosent: før ble brede aggregat og kurser så små at teksten var 4 til 6 piksler. Nå ruller de heller sideveis, og teksten er lesbar', 'The schematics are never drawn smaller than 85 percent: before, wide air handlers and circuits became so small that the text was 4 to 6 pixels. Now they scroll sideways instead and the text is readable'],
+  ],
   '2.9': [
     ['Kursene tegnes uten at tekst ligger oppå hverandre: trykkfølere uten side henger på siden med færrest følere, lange navn kortes ned og kursene har litt mer luft. Kontrollert på alle 69 tegninger i testanleggene', 'Circuits are drawn without text lying on top of other text: pressure sensors with no side hang on the side with fewer sensors, long names are shortened and the circuits have a little more air. Checked on all 69 drawings in the test plants'],
   ],
