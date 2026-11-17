@@ -43,6 +43,7 @@ No administrator rights needed. Everything else in the zip is tucked away;
 - **Reads every object** on a device: values, descriptions, state texts,
   units, priority arrays, weekly schedules, trend logs, **active alarms**.
 - **Live values by COV** where the controller allows it, polling otherwise.
+- **One scan for everything.** A scan of a range also looks for Modbus TCP (port 502) and KNXnet/IP gateways (UDP 3671); what answers joins the list next to the BACnet devices. It can be turned off in the settings.
 - **Modbus TCP, read only.** Scans for Modbus servers and the units behind them, and reads registers and
   bits. A register map (CSV or JSON) gives the registers names, types, scale and units; without one the
   first registers are shown as they are. The points sit in the same table, watch list, recording, export

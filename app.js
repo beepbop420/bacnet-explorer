@@ -976,6 +976,10 @@ async function runScan() {
       }
     }));
     await refreshStatus();
+    // The same range is looked through for Modbus and KNX too, unless it was stopped or is a BBMD lookup
+    if (window.skannProtokoller && mode !== 'bbmd' && !LINJE.avbrutt) {
+      try { await window.skannProtokoller(omraader, status); } catch { /* the BACnet result stands */ }
+    }
 
     const secs = ((performance.now() - t0) / 1000).toFixed(0);
     if (omraader.length > 1) {
@@ -10415,6 +10419,9 @@ const ORDBOK = {
   'Søker jevnlig etter enheter som faller inn og ut':
     'Looks regularly for devices that come and go',
   'Forhåndsles enheter': 'Pre-read devices',
+  'Søk også etter Modbus og KNX': 'Also look for Modbus and KNX',
+  'Samme skann finner Modbus TCP (port 502) og KNX-gatewayer (UDP 3671) i området. Bare lesing':
+    'The same scan finds Modbus TCP (port 502) and KNX gateways (UDP 3671) in the range. Read only',
   'Leser de andre enhetene i bakgrunnen etter et skann':
     'Reads the other devices in the background after a scan',
   'Grupper enheter': 'Group devices',

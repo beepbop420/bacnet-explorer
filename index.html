@@ -264,6 +264,9 @@
           <button id="autoSokBtn" class="sett-rad bryter" role="switch">Søk ved oppstart
             <small>Skanner kabelen inn i anlegget, eller anlegget du var på sist, når NABE åpnes</small>
             <span id="autoSokState" class="menu-state"></span></button>
+          <button id="protSokBtn" class="sett-rad bryter" role="switch">Søk også etter Modbus og KNX
+            <small>Samme skann finner Modbus TCP (port 502) og KNX-gatewayer (UDP 3671) i området. Bare lesing</small>
+            <span id="protSokState" class="menu-state"></span></button>
           <button id="kortAutoBtn" class="sett-rad bryter" role="switch">Velg nettverkskort automatisk
             <small>Hver adresse går ut av kortet den rutes gjennom, flere kort samtidig. Av: alt går ut av kortet du velger</small>
             <span id="kortAutoState" class="menu-state"></span></button>
@@ -548,6 +551,7 @@
 <script src="/js/nabe-trafikk.js"></script>
 <script src="/js/nabe-modbus.js"></script>
 <script src="/js/nabe-knx.js"></script>
+<script src="/js/nabe-protokoller.js"></script>
 <script src="/js/nabe-rediger.js"></script>
 <script src="/js/nabe-besok.js"></script>
 <script src="/js/nabe-skjema-ordbok.js"></script>

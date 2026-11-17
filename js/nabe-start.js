@@ -205,6 +205,9 @@ const FAKTA = [
   ['COV betyr at regulatoren sier fra selv. Mindre spørring, mer ro.', 'COV means the controller speaks up itself. Less asking, more peace.'],
 ];
 const NYTT = {
+  '2.8': [
+    ['Ett skann for hele bygget: når du skanner et område, leter NABE nå også etter Modbus TCP (port 502) og KNX-gatewayer (UDP 3671), og det som svarer havner i enhetslista ved siden av BACnet. Kan slås av under Innstillinger. Vinduene Modbus og KNX er der fortsatt for seriell port, andre porter, ETS-lister og registerkart', 'One scan for the whole building: when you scan a range, NABE now also looks for Modbus TCP (port 502) and KNX gateways (UDP 3671), and what answers lands in the device list next to BACnet. Can be turned off under Settings. The Modbus and KNX windows are still there for a serial port, other ports, ETS lists and register maps'],
+  ],
   '2.7': [
     ['Systembildene er gått grundig over: pumper og ventiler som nevner en annen kurs (gulvvarme, barnehage) havner på den kursen i stedet for på hovedstokken, kurstitler uten tagkoder og avkuttede ord, og system 310 (vann og avløp) tegnes ikke lenger som sprinkler uten at et punkt sier sprinkler. Aggregatet tegnes i bredden som er tilgjengelig i stedet for å rulle sidelengs', 'The schematics have been gone over closely: pumps and valves that name another circuit (floor heating, kindergarten) now land on that circuit instead of the main, circuit titles have no tag codes or cut-off words, and system 310 (water and drain) is no longer drawn as sprinkler unless a point says sprinkler. The air handler is drawn to the available width instead of scrolling sideways'],
   ],
