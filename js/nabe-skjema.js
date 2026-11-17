@@ -25,11 +25,19 @@
                  [/cubic|liters?-per|m³\/h|l\/s/, 'mengde'], [/parts-per-million|ppm/, 'co2'], [/relative-humidity|%rh/, 'fukt']];
 
   /* ----------------------------------------------------------- one name */
-  function tolkNavn(navn) {
-    const n = String(navn || '');
+  function tolkNavn(navn, beskr) {
+    let n = String(navn || '');
     let sys = '', etterSys = 0, m;
     const reS = /(?<![0-9])(\d{3})[._](\d{3})(?![0-9])|(?<![0-9A-Za-z])(\d{2})[._](\d{2})(?![0-9])/g;
     while ((m = reS.exec(n))) { sys = m[1] ? m[1] + '.' + m[2] : m[3] + '.' + m[4]; etterSys = m.index + m[0].length; }
+    // The way some Beckhoff projects write the system into a variable: s36001 is 360.01, s433_1001 is 433.1001.
+    if (!sys && (m = /(?<![A-Za-z0-9])s(\d{3})_(\d{3,4})(?![0-9])/.exec(n) || /(?<![A-Za-z0-9])s(\d{3})(\d{2})(?![0-9])/.exec(n))) {
+      sys = m[1] + '.' + m[2]; etterSys = m.index + m[0].length;
+    }
+    // Where the name carries no system, the description often does: "SD2T 433.1001-QE001 ...", "+10-00=332.001-SM401 ...".
+    if (!sys && beskr && (m = /(?<![0-9])(\d{3})\.(\d{3,4}|00X)\b[^A-Za-z0-9]{0,2}([A-Z]{2}\d{2,4})\b/.exec(String(beskr)))) {
+      sys = m[1] + '.' + m[2]; n = n + ' ' + m[3];
+    }
     const reK = /(?<![A-Za-z0-9])([A-Z]{2})(\d{2,4})(?![0-9])/g;
     reK.lastIndex = etterSys;
     let valgt = null;
@@ -52,7 +60,7 @@
 
   /* ---------------------------------------------------------- one point */
   function tolkPunkt(p) {
-    const t = tolkNavn(p.name);
+    const t = tolkNavn(p.name, p.description);
     const beskr = String(p.description || '').replace(/^SD\w{2}\s+/, '');
     const b = beskr.toLowerCase();
     const ord = (kamel(t.kode ? t.hale : p.name) + ' ' + beskr).toLowerCase();
@@ -82,19 +90,36 @@
         : type === 'analog-value' ? 'pv' : 'annet';
     }
     if (rolle === 'pv' && type.startsWith('binary')) rolle = art === 'filter' || art === 'royk' ? 'alarm' : 'drift';
+    if (rolle === 'pv' && ['vifte', 'ventil', 'spjeld', 'pumpe', 'gjenvinner'].includes(art) && /percent|%/.test(enhet)) rolle = 'paadrag';
     // A number cannot be a run state or a switch. Without a code to say otherwise it is a setting.
     if (!t.kode && type.startsWith('analog') && ['start', 'drift', 'vender'].includes(rolle)) rolle = 'annet';
 
     // Where: the words, then what the number usually means.
     let sted = slaa(O.STED, ord);
-    const hvor = slaa(O.TYPE.filter(x => ['varmebatteri', 'kjolebatteri', 'gjenvinner', 'veksler'].includes(x[1])), b);
+    const hvorOrd = (tekst) => slaa(O.TYPE.filter(x => ['varmebatteri', 'kjolebatteri', 'gjenvinner', 'veksler'].includes(x[1])), tekst)
+      || (/\bheat\w*|prheat|pre\s*heat|varme/.test(tekst) ? 'varmebatteri' : /\bcool\w*|chill|\bcw\b|kj[øo]l/.test(tekst) ? 'kjolebatteri' : null);
+    const hvor = hvorOrd(b) || (t.kode ? null : hvorOrd(ord));
     if (!sted && t.nr) {
       if (art === 'temp' && /^9\d\d?$|^0?01$/.test(t.nr) && !b) sted = 'ute';
       else if (/^4/.test(t.nr)) sted = '4';
       else if (/^5/.test(t.nr)) sted = '5';
     }
     const spr = /sprink|brannslukk|slokke|slukk|brannvann|fire\s*(suppress|sprink)/.test(ord + ' ' + String(p.name || '').toLowerCase());
-    return {p, sys: t.sys, rom: t.rom, kode: t.kode, under: t.under, art: art || '', rolle, sted: sted || '', hvor: hvor || '', beskr, maalt: maalt || '', spr};
+    return {p, sys: t.sys, rom: t.rom, kode: t.kode, under: t.under, art: art || '', rolle, sted: sted || '', hvor: hvor || '', beskr, maalt: maalt || '', spr, ord, enhet};
+  }
+
+  /* Is this point something the plant reads or does right now, as opposed to a setting? */
+  function levende(p, x) {
+    const t = String(p.type || '');
+    if (O.INNSTILLING_ORD.test(x.ord + ' ' + String(p.name || ''))) return false;
+    if (/second|minute|hour|day/.test(x.enhet)) return false;
+    if (t === 'analog-input') return true;
+    if (t === 'analog-output') return true;
+    if (t === 'analog-value') return x.rolle === 'pv' || x.rolle === 'paadrag';
+    // A yes/no point is a part of the plant only where it says something about a filter, a fan, a pump,
+    // a damper or smoke. The rest of the alarms of such a device are events, not parts.
+    if (t.startsWith('binary')) return ['filter', 'royk', 'vifte', 'pumpe', 'spjeld'].includes(x.art);
+    return false;
   }
 
   /* ----------------------------------------------- points into systems */
@@ -128,7 +153,11 @@
         continue;
       }
       const maaling = ['temp', 'trykk', 'difftrykk', 'mengde', 'fukt', 'co2'].includes(x.art);
-      const nokkel = x.kode ? x.kode + (x.under ? '/' + x.under : '') : x.art + ':' + (x.sted || (maaling ? x.hvor : '') || '');
+      // A device that names its points in words has hundreds of settings for every reading. Only a point that
+      // is read live is a part of the plant, and each one is a part of its own.
+      const uten = !x.kode && !x.under;
+      if (uten && !levende(p, x)) continue;
+      const nokkel = x.kode ? x.kode + (x.under ? '/' + x.under : '') : uten ? 'p:' + p.objid : x.art + ':' + (x.sted || (maaling ? x.hvor : '') || '');
       if (!s.komp.has(nokkel)) {
         s.komp.set(nokkel, {nokkel, sys: x.sys, kode: x.kode ? (x.under ? '' : x.kode) : '', eier: x.under ? x.kode : '',
           art: x.art, sted: '', hvor: '', beskr: '', pkt: {alarm: [], annet: []}});
@@ -157,7 +186,8 @@
       if (!s.type || s.type === 'sd' || s.type === 'el') s.type = harVent ? 'ventilasjon' : harVarme ? 'varme' : '';
       // A setpoint that hangs on the system itself, or on a fan, belongs to the sensor it is the setpoint for.
       const alle = [...s.komp.values()];
-      const kodet = alle.filter(k => (k.kode || k.eier) && k.art !== 'system').length >= 3;
+      // Relays and other loose codes do not make a plant coded; only real parts (a fan, a sensor, a valve) do.
+      const kodet = alle.filter(k => (k.kode || k.eier) && !['system', 'effekt', 'tank'].includes(k.art)).length >= 3;
       for (const k of alle) {
         const giver = k.art === 'system' || k.art === 'vifte' || (kodet && !k.kode && !k.eier);
         if (!giver) continue;
@@ -170,7 +200,7 @@
       }
       // Where the plant names its parts with codes, a point without one is a setting of the
       // program, not a part of the plant: it has given away its setpoint above and is left out.
-      s.komp = alle.filter(k => k.art !== 'system' && (!kodet || k.kode || k.eier));
+      s.komp = alle.filter(k => k.art !== 'system' && (!kodet || k.kode || k.eier || k.nokkel.startsWith('p:')));
       if (s.komp.length || s.rom.size) ut.push(s);
     }
     return ut.sort((a, b) => a.id.localeCompare(b.id, 'no', {numeric: true}));
@@ -203,7 +233,7 @@
   const tn = (tabell, k) => tabell[k] ? T(tabell[k][0], tabell[k][1]) : k;
   // In a drawing the label has a few centimetres: the code when there is one, else a short word.
   const KORT = {temp: ['Temp', 'Temp'], varmebatteri: ['Varme', 'Heating'], kjolebatteri: ['Kjøling', 'Cooling'], difftrykk: ['ΔP', 'ΔP']};
-  const merke = (k) => k.kode || k.eier || tn(KORT[k.art] ? KORT : ART, k.art);
+  const merke = (k) => k.kode || k.eier || (['temp', 'fukt', 'co2'].includes(k.art) && k.sted && NAVN[k.sted] ? tn(NAVN, k.sted) : tn(KORT[k.art] ? KORT : ART, k.art));
 
   /* --- reading a component's state from its points --- */
   const paa = (p) => !!p && (p.value === 'active' || p.value === true || p.value === 1 || (typeof p.value === 'number' && p.value > 0.5 && !String(p.type).startsWith('multi')));
@@ -318,6 +348,9 @@
     const vifter = K.filter(k => k.art === 'vifte' && !ut.has(k)).sort((a, b) => tall(a) - tall(b));
     vifter.forEach((k, i) => ut.set(k, i === 0 ? 'tilluft' : 'avtrekk'));
     for (const k of K) if (!ut.has(k) && (k.art === 'spjeld' || k.art === 'filter') && k.hvor !== 'gjenvinner') ut.set(k, 'inntak');
+    // A fan that is read twice (a percentage and a voltage for the same motor): one drawing of it.
+    const vifter2 = new Map();
+    for (const k of K) if (k.art === 'vifte' && String(k.nokkel).startsWith('p:') && ut.has(k)) { if (!vifter2.has(ut.get(k))) vifter2.set(ut.get(k), k); else if (!vifter2.get(ut.get(k)).pkt.paadrag && k.pkt.paadrag) { ut.delete(vifter2.get(ut.get(k))); vifter2.set(ut.get(k), k); } else ut.delete(k); }
     // Two parts that name the same thing at the same station: the one with something to show wins.
     const grp = new Map();
     for (const k of K) if (MAAL.includes(k.art) && ut.has(k)) { const n = ut.get(k) + ':' + k.art; if (!grp.has(n)) grp.set(n, []); grp.get(n).push(k); }
@@ -332,7 +365,11 @@
     const alle = (f) => { const l = K.filter(k => !tatt.has(k) && f(k)); l.forEach(k => tatt.add(k)); return l; };
     const sorter = (a, b) => (ARTRANG[a.art] ?? 9) - (ARTRANG[b.art] ?? 9) || String(a.kode).localeCompare(String(b.kode), 'no', {numeric: true});
     const ved = (stas, f) => alle(k => st.get(k) === stas && f(k));
-    const maalFn = (k) => MAAL.includes(k.art) && harLevende(k);
+    const antallVed = new Map();
+    // A station has room for a handful of sensors. The ones past that are listed under the drawing, not squeezed in.
+    // An unnamed temperature input that reads exactly zero is an input with nothing on it.
+    const tom = (k) => k.art === 'temp' && String(k.nokkel).startsWith('p:') && k.pkt.pv && k.pkt.pv.value === 0;
+    const maalFn = (k) => { if (!MAAL.includes(k.art) || !harLevende(k) || tom(k)) return false; const n = (antallVed.get(st.get(k)) || 0) + 1; antallVed.set(st.get(k), n); return n <= 6; };
 
     const gj = en(k => k.art === 'gjenvinner');
     const spoler = [];
@@ -597,7 +634,8 @@
     if (valgt.type === 'rom') { settInn(hode(document.body.classList.contains('sk-stor')) + romHtml(valgt.l)); return; }
     SK.kompVed = SK.kompVed || new Map();
     const r = valgt.type === 'aggregat' ? tegnAggregat(valgt.s) : valgt.type === 'sprinkler' ? tegnSprinkler(valgt.l) : tegnKurser(valgt.l, valgt.kind);
-    const rest = r.rest.filter(k => hoved(k) && (k.pkt.pv || k.pkt.paadrag || k.pkt.drift || k.pkt.start || k.pkt.alarm.length)).slice(0, 40);
+    const harTall = (k) => { const h = hoved(k); return h && ((typeof h.value === 'number' && Number.isFinite(h.value)) || k.pkt.alarm.length || h.value === 'active'); };
+    const rest = r.rest.filter(k => k.art !== 'effekt' && hoved(k) && harTall(k)).slice(0, 18);
     const rom = valgt.type === 'aggregat' && valgt.s.rom.size ? `<span class="sk-rom">${valgt.s.rom.size} ${T('rom styres herfra', 'rooms are controlled from here')}</span>` : '';
     const minB = valgt.type === 'kurser' ? Math.max(520, r.bredde * 0.72) : 0;
     const stor = document.body.classList.contains('sk-stor');

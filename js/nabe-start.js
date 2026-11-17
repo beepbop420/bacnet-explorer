@@ -203,6 +203,10 @@ const FAKTA = [
   ['COV betyr at regulatoren sier fra selv. Mindre spørring, mer ro.', 'COV means the controller speaks up itself. Less asking, more peace.'],
 ];
 const NYTT = {
+  '1.75': [
+    ['Skjema leser nå anlegg som navngir punktene med ord (Corrigo, EXcon, OJ-Air2 og lignende): Sup, Ext, Exh og Outdoor settes på riktig sted i luftveien, og innstillinger, tidsverdier og alarmhendelser holdes utenfor tegningen', 'The schematic now reads plants that name their points in words (Corrigo, EXcon, OJ-Air2 and the like): Sup, Ext, Exh and Outdoor are put at the right place in the air path, and settings, time values and alarm events are kept out of the drawing'],
+    ['System og komponentkode leses også fra navn som s36001.RT401 og fra beskrivelsen («332.001-SM401»), så Beckhoff-enheter med slike navn deles riktig i systemer', 'System and component code are also read from names like s36001.RT401 and from the description ("332.001-SM401"), so Beckhoff devices with such names are split into systems correctly'],
+  ],
   '1.74': [
     ['Skjema: sensorene settes på sin plass i luftveien (inntak, etter gjenvinner, tilluft, avtrekk, avkast) ut fra navn og beskrivelse, og ligger ikke lenger oppå hverandre. Tegningen blir bredere når det trengs', 'Schematic: the sensors are put at their place in the air path (intake, after recovery, supply, extract, exhaust) from the name and description, and no longer sit on top of each other. The drawing grows wider when it needs to'],
     ['Varmekurser er røde (lys rød for retur) og kjølekurser blå (lys blå for retur)', 'Heating circuits are red (light red for return) and cooling circuits blue (light blue for return)'],
