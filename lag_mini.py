@@ -28,8 +28,10 @@ APPFILER = ["server.py", "bacnet_core.py", "app.js", "index.html", "nabe.css", "
 LES_MEG = """NABE Mini - Not Another BACnet Explorer for fjernskrivebordet
 =============================================================
 
-Pakk ut mappa hvor som helst og dobbeltklikk NABE.bat. NABE åpner seg i
+Pakk ut hele zip-fila (høyreklikk, «Pakk ut alle») og dobbeltklikk NABE.bat i
+mappa som kommer fram. Ikke åpne den inne i zip-fila. NABE åpner seg i
 nettleseren på http://127.0.0.1:8092. Lukk det svarte vinduet for å stoppe.
+Hvis vinduet viser en feil, blir det stående så du kan lese den.
 
 Ingen installasjon, ingen administratorrettigheter, ingen internett.
 Maskinen trenger Edge eller Chrome.

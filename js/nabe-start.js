@@ -203,6 +203,9 @@ const FAKTA = [
   ['COV betyr at regulatoren sier fra selv. Mindre spørring, mer ro.', 'COV means the controller speaks up itself. Less asking, more peace.'],
 ];
 const NYTT = {
+  '1.85': [
+    ['NABE.bat i den bærbare utgaven og Mini blir stående med en forklaring hvis den ikke finner Python (åpnet inne i zip-fila) eller stopper med feil, i stedet for at vinduet lukkes av seg selv', 'NABE.bat in the portable edition and Mini stays open with an explanation if it cannot find Python (opened inside the zip) or stops with an error, instead of the window closing by itself'],
+  ],
   '1.84': [
     ['Reguleringsparametre (tid for derivat og integral på styrestrekene) og varmekurver for varmepumper (UtekompVP Y1 til Y4) regnes som innstillinger og tegnes ikke som målinger', 'Control parameters (derivative and integral time of the control loops) and heat pump curves (UtekompVP Y1 to Y4) count as settings and are not drawn as readings'],
   ],

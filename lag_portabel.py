@@ -33,12 +33,32 @@ cd /d "%~dp0"
 title NABE
 set PYTHONPATH=
 set PYTHONHOME=
+if not exist "python\python.exe" (
+  echo.
+  echo   Fant ikke python-mappa ved siden av denne fila.
+  echo   Pakk ut hele zip-fila foerst: hoeyreklikk den og velg Pakk ut alle,
+  echo   og dobbeltklikk NABE.bat i mappa som kommer fram.
+  echo.
+  echo   Could not find the python folder next to this file.
+  echo   Unzip everything first: right-click the zip and choose Extract All.
+  echo.
+  pause
+  exit /b 1
+)
 echo.
 echo   NABE kjoerer paa http://127.0.0.1:8092
 echo   Lukk dette vinduet for aa stoppe.
 echo.
 start "" /b powershell -NoProfile -WindowStyle Hidden -Command "for ($i = 0; $i -lt 100; $i++) { try { Invoke-WebRequest -UseBasicParsing 'http://127.0.0.1:8092/api/status' -TimeoutSec 1 | Out-Null; Start-Process 'http://127.0.0.1:8092'; break } catch { Start-Sleep -Milliseconds 300 } }"
 "python\python.exe" -s -m uvicorn server:app --host 127.0.0.1 --port 8092
+echo.
+echo   NABE stoppet. Meldingen over sier hvorfor.
+echo   Vanlige aarsaker: et annet NABE-vindu bruker allerede porten 8092 (lukk det),
+echo   eller sikkerhetsprogramvaren stoppet python.exe i denne mappa.
+echo   NABE stopped. The message above says why. Usual causes: another NABE window
+echo   already uses port 8092, or security software blocked python.exe in this folder.
+echo.
+pause
 """
 
 APP_START = r"""@echo off
@@ -49,7 +69,7 @@ start "" "python\pythonw.exe" -s nabe_app.py
 LES_MEG = """NABE - Not Another BACnet Explorer, portabel utgave
 ====================================================
 
-Pakk ut mappa hvor som helst og dobbeltklikk NABE.bat for eget vindu,
+Pakk ut hele zip-fila (ikke åpne den inne i zip-fila) og dobbeltklikk NABE.bat for eget vindu,
 eller «NABE i nettleser.bat» hvis du heller vil ha den i nettleseren.
 Ingen installasjon, ingen administratorrettigheter, ingen nett.
 
