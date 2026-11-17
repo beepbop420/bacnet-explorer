@@ -48,14 +48,15 @@
           <div class="sp-meta">${T('Finner KNXnet/IP-gatewayer på UDP 3671 med en beskrivelsesforespørsel. Kobler ikke til noe.', 'Finds KNXnet/IP gateways on UDP 3671 with a description request. Connects to nothing.')}</div>
           <div class="mb-rad"><input class="field" id="kxOmraade" placeholder="10.0.0.0/24" value="${esc(localStorage.getItem('nabe.kxOmraade') || ($('rangeInput') ? $('rangeInput').value.split(/[\\s,;]+/)[0] : ''))}" spellcheck="false">
             <input class="field mb-port" id="kxPort" value="3671" inputmode="numeric" aria-label="Port">
-            <button type="button" class="btn primary" data-kx="skann"${opptatt ? ' disabled' : ''}>${opptatt ? T('Skanner …', 'Scanning …') : T('Skann', 'Scan')}</button></div>
+            <button type="button" class="btn primary" data-kx="skann"${opptatt ? ' disabled' : ''}>${opptatt ? T('Skanner …', 'Scanning …') : T('Skann', 'Scan')}</button>
+            <button type="button" class="btn" data-kx="routing"${opptatt ? ' disabled' : ''} title="${esc(T('Lytter på routing-gruppen 224.0.23.12 uten å ta en tunnel fra noen gateway. Krever at PC-en står på samme nett som en KNX-ruter. Virker ikke over VPN.', 'Listens to the routing group 224.0.23.12 without taking a tunnel from any gateway. Needs the PC to be on the same network as a KNX router. Does not work over VPN.'))}">${T('Lytt på routing', 'Listen to routing')}</button></div>
           <div class="sp-meta" id="kxMelding">${esc(melding)}</div></div>
         <div class="mb-sek"><div class="mb-tittel">${T('Gatewayer', 'Gateways')} <span class="sp-meta">${enheter.length}</span></div>
           ${enheter.length ? `<table class="sp-tab"><thead><tr><th>${T('Gateway', 'Gateway')}</th><th>${T('Adresse', 'Address')}</th><th>${T('ETS-liste', 'ETS list')}</th><th></th></tr></thead><tbody>
             ${enheter.map(d => `<tr><td>${esc(d.object_name || '')}<div class="sp-meta">${esc(d.knx_address || '')}${d.secure ? ' · ' + T('KNX Secure: støttes ikke', 'KNX Secure: not supported') : ''}${!d.tunnelling ? ' · ' + T('ingen tunnel', 'no tunnelling') : ''}</div></td>
               <td class="tr-mono">${esc(d.ip)}:${d.port}</td>
               <td><select class="field mb-kart" data-adr="${esc(d.address)}">${valg(d.address)}</select></td>
-              <td style="white-space:nowrap">${tilordning[d.address] ? `<button type="button" class="btn" data-kx="lesalle" data-adr="${esc(d.address)}"${d.secure || !d.tunnelling ? ' disabled' : ''} title="${esc(T('Spør bussen én gang om hver gruppeadresse som har lesefanen på, fem i sekundet', 'Asks the bus once for each group address with the read flag on, five a second'))}">${T('Les alle lesbare', 'Read all readable')}</button> ` : ''}<button type="button" class="btn" data-kx="monitor" data-adr="${esc(d.address)}"${d.secure || !d.tunnelling ? ' disabled' : ''} title="${esc(T('Viser hvem som sier hva på bussen nå, slik ETS sin gruppemonitor gjør', 'Shows who says what on the bus right now, like the ETS group monitor'))}">${T('Monitor', 'Monitor')}</button>
+              <td style="white-space:nowrap">${tilordning[d.address] ? `<button type="button" class="btn" data-kx="lesalle" data-adr="${esc(d.address)}"${d.secure || !d.tunnelling || d.ruting_bare ? ' disabled' : ''} title="${esc(T('Spør bussen én gang om hver gruppeadresse som har lesefanen på, fem i sekundet', 'Asks the bus once for each group address with the read flag on, five a second'))}">${T('Les alle lesbare', 'Read all readable')}</button> ` : ''}<button type="button" class="btn" data-kx="monitor" data-adr="${esc(d.address)}"${d.secure || !d.tunnelling ? ' disabled' : ''} title="${esc(T('Viser hvem som sier hva på bussen nå, slik ETS sin gruppemonitor gjør', 'Shows who says what on the bus right now, like the ETS group monitor'))}">${T('Monitor', 'Monitor')}</button>
                 <button type="button" class="btn" data-kx="aapne" data-adr="${esc(d.address)}"${d.secure || !d.tunnelling ? ' disabled' : ''}>${T('Åpne', 'Open')}</button></td></tr>`).join('')}</tbody></table>`
             : `<div class="sp-meta">${T('Ingen KNX-gatewayer ennå. Skann over.', 'No KNX gateways yet. Scan above.')}</div>`}</div>
         <div class="mb-sek"><div class="mb-tittel">${T('ETS-lister', 'ETS lists')} <span class="sp-meta">${lister.length}</span></div>
@@ -90,6 +91,19 @@
           : T('Ingen KNX-gatewayer svarte. Gatewayen kan stå på en annen port, eller bak en ruter som ikke slipper UDP gjennom.', 'No KNX gateways answered. The gateway may be on another port, or behind a router that does not pass UDP.'));
         break;
       }
+    } catch (e) { sett(e.message); }
+    opptatt = false; tegn();
+  }
+
+  async function lyttRouting() {
+    opptatt = true; sett(T('Lytter på routing-gruppen …', 'Listening to the routing group …')); tegn();
+    try {
+      const d = await api2('/api/knx/routing', {});
+      if (d.status !== 'done') throw new Error(d.error || T('Kunne ikke lytte', 'Could not listen'));
+      mergeDevices([d.device], '');
+      renderDevices();
+      sett(d.telegrammer ? T(`Hører ${d.telegrammer} telegrammer på routing-gruppen.`, `Hearing ${d.telegrammer} telegrams on the routing group.`)
+        : T('Lytter, men har ikke hørt noe ennå. Er PC-en på samme nett som en KNX-ruter? Over VPN kommer ikke multikast gjennom.', 'Listening, but nothing heard yet. Is the PC on the same network as a KNX router? Multicast does not pass a VPN.'));
     } catch (e) { sett(e.message); }
     opptatt = false; tegn();
   }
@@ -197,6 +211,7 @@
     if (!b || b.disabled) return;
     const k = b.dataset.kx;
     if (k === 'skann') skann();
+    else if (k === 'routing') lyttRouting();
     else if (k === 'importer') $('kxFil').click();
     else if (k === 'lesalle') lesAlle(b.dataset.adr);
     else if (k === 'monitor') aapneMonitor(b.dataset.adr);

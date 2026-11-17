@@ -434,6 +434,88 @@ class KnxTunnel(asyncio.DatagramProtocol):
         return asked
 
 
+# ------------------------------------------------------------------ routing
+ROUTING_GROUP = "224.0.23.12"
+ROUTING_IND = 0x0530
+
+
+def is_multicast(host: str) -> bool:
+    try:
+        return 224 <= int(str(host).split(".")[0]) <= 239
+    except ValueError:
+        return False
+
+
+class KnxRouting(asyncio.DatagramProtocol):
+    """Listens to KNXnet/IP routing on the multicast group (224.0.23.12): every group telegram a router passes on, with no
+    tunnel taken from any gateway. It joins the group and listens. It never sends, so it cannot ask for a value either."""
+
+    def __init__(self, host: str = ROUTING_GROUP, port: int = KNX_PORT, timeout: float = 3.0, iface: str = ""):
+        self.host, self.port, self.timeout, self.iface = host, int(port), float(timeout), iface
+        self.transport: Optional[asyncio.DatagramTransport] = None
+        self.address = "routing"
+        self.values: Dict[int, Dict[str, Any]] = {}
+        self.last_used = time.monotonic()
+        self.connected = False
+        self.telegrams = 0
+        self.log: deque = deque(maxlen=3000)
+        self.seq = 0
+        self.routing = True
+
+    def connection_made(self, transport):
+        self.transport = transport
+
+    def datagram_received(self, data: bytes, addr):
+        if len(data) < 6 or data[0] != 0x06 or struct.unpack("!H", data[2:4])[0] != ROUTING_IND:
+            return
+        t = parse_ldata(data[6:])
+        if not t or t["confirmation"]:
+            return
+        self.seq += 1
+        self.log.append({"n": self.seq, "t": time.time(), "src": t["src"], "dst": t["dst"], "kind": t["kind"], "raw": t["raw"], "small": t["small"]})
+        if t["kind"] in ("write", "response"):
+            self.telegrams += 1
+            self.values[t["dst"]] = {"t": time.time(), "src": t["src"], "kind": t["kind"], "raw": t["raw"], "small": t["small"]}
+
+    def connection_lost(self, exc):
+        self.connected = False
+
+    async def connect(self) -> str:
+        loop = asyncio.get_running_loop()
+        await self.close()
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
+        try:
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            sock.bind(("", self.port))
+            sock.setsockopt(socket.IPPROTO_IP, socket.IP_ADD_MEMBERSHIP, socket.inet_aton(self.host) + socket.inet_aton(self.iface or "0.0.0.0"))
+            sock.setblocking(False)
+        except OSError as e:
+            sock.close()
+            raise KnxError(f"could not listen to the routing group {self.host}: {e}") from e
+        await loop.create_datagram_endpoint(lambda: self, sock=sock)
+        self.connected = True
+        return self.address
+
+    async def close(self) -> None:
+        if self.transport is not None:
+            sock = self.transport.get_extra_info("socket")
+            try:
+                if sock is not None and self.connected:
+                    sock.setsockopt(socket.IPPROTO_IP, socket.IP_DROP_MEMBERSHIP, socket.inet_aton(self.host) + socket.inet_aton(self.iface or "0.0.0.0"))
+            except OSError:
+                pass
+            self.transport.close()
+            self.transport = None
+        self.connected = False
+
+    async def read(self, ga: int) -> bool:
+        raise KnxError("routing only listens: it cannot ask the bus for a value")
+
+    async def read_many(self, gas: Sequence[int], per_second: float = READS_PER_SECOND, wait: float = 2.5,
+                        progress: Optional[Callable[[int, int], None]] = None) -> int:
+        return 0
+
+
 # --------------------------------------------------------------- group lists
 def point_for(ga: int, name: str, dpt: Tuple[int, int], description: str = "", value: Any = None, seen: bool = True) -> Dict[str, Any]:
     """A group address as the flat record the UI consumes, in the shape of a BACnet point."""

@@ -235,7 +235,7 @@ def t(nb: str, en: str) -> str:
     return en if SPRAAK_VAR.get() == "en" else nb
 
 
-VERSJON = "2.4"
+VERSJON = "2.5"
 
 state = {"app": None, "local_address": None, "read_only": False, "bbmd": None, "primary": None}
 # The simulator: a scanned site run as devices on 127.0.0.x, in a process of its own.
@@ -5863,7 +5863,7 @@ async def _knx_tunnel(host: str, port: int) -> "nkx.KnxTunnel":
             return tun
         if tun is not None:
             await tun.close()
-        tun = nkx.KnxTunnel(host, port, 3.0)
+        tun = nkx.KnxRouting(host, port, 3.0, os.environ.get("NABE_KNX_IFACE", "")) if nkx.is_multicast(host) else nkx.KnxTunnel(host, port, 3.0)
         await tun.connect()
         _KNX_ROR[key] = tun
         if not _KNX_OPPRYDDER:
@@ -5997,7 +5997,7 @@ def _knx_points_job(body) -> Dict[str, Any]:
         try:
             tun = await _knx_tunnel(host, port)
             liste = KNX_LISTER.points_for(body.address)
-            job["identity"] = {"model-name": "KNXnet/IP", "description": f"KNX tunnel {tun.address}", "firmware-revision": ""}
+            job["identity"] = {"model-name": "KNXnet/IP", "description": "KNX routing" if getattr(tun, "routing", False) else f"KNX tunnel {tun.address}", "firmware-revision": ""}
             await asyncio.sleep(1.5)                       # the bus is talking: take what it says first
             mangler = _knx_ikke_spurt(f"{host}:{port}", _knx_lesekø(liste, tun.values))[:KNX_MAKS_LESINGER]
             if mangler:
@@ -6112,6 +6112,27 @@ def _knx_detail(body) -> Dict[str, Any]:
     return {"status": "done", "objid": body.objid, "properties": props}
 
 
+class KnxRoutingBody(BaseModel):
+    gruppe: str = nkx.ROUTING_GROUP
+    port: int = nkx.KNX_PORT
+
+
+@app.post("/api/knx/routing")
+async def knx_routing(body: KnxRoutingBody):
+    """Listen to KNX routing on the multicast group: no tunnel is taken from any gateway. Returns the listener as a device."""
+    gruppe = body.gruppe.strip() or nkx.ROUTING_GROUP
+    if not nkx.is_multicast(gruppe):
+        return {"status": "error", "error": t("Routing bruker en multikastadresse (224.0.23.12)", "Routing uses a multicast address (224.0.23.12)")}
+    try:
+        tun = await _knx_tunnel(gruppe, max(1, min(65535, body.port)))
+    except nkx.KnxError as e:
+        return {"status": "error", "error": str(e)}
+    await asyncio.sleep(3.0)
+    dev = nkx.device_record({"ip": gruppe, "port": body.port, "name": "KNX routing", "services": ["Routing"], "routing": True, "tunnelling": True})
+    dev["ruting_bare"] = True
+    return {"status": "done", "device": dev, "telegrammer": tun.telegrams}
+
+
 @app.get("/api/knx/monitor")
 async def knx_monitor(address: str, etter: int = 0):
     """The telegrams heard on the tunnel since number `etter`, with the ETS name and the decoded value: a group monitor."""
@@ -6149,6 +6170,8 @@ async def knx_les_alle(body: KnxLesAlle):
     parsed = nkx.parse_address(body.address)
     if not parsed:
         return {"status": "error", "error": t("Ikke en KNX-gateway", "Not a KNX gateway")}
+    if nkx.is_multicast(parsed[0]):
+        return {"status": "error", "error": t("Routing lytter bare, og kan ikke spørre bussen. Verdiene kommer når noen på bussen sender dem.", "Routing only listens and cannot ask the bus. Values arrive when someone on the bus sends them.")}
     liste = KNX_LISTER.points_for(body.address)
     if not liste:
         return {"status": "error", "error": t("Gatewayen har ingen ETS-liste. Importer en først.", "The gateway has no ETS list. Import one first.")}

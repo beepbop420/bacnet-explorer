@@ -341,6 +341,12 @@ def royktest():
               "    && (q => q.rom === '02.85' && q.rolle === 'paadrag' && q.art === 'vav')(nabeSkjema.tolkPunkt({objid: 'v', name: 'pMpBus.MP_BUS_1.POS[1]', description: 'SD0T SQ401-02.85 Spjeldposisjon', type: 'analog-value', value: 90, units: 'degrees-celsius'}))"
               "    && nabeSkjema.byggSystemer([{objid: 'u', name: 'A_320_012_Utekomp_Y1', description: 'Y1', type: 'analog-value', value: 80, units: 'degrees-celsius'}]).every(s => !s.komp.size)"
               "    && nabeSkjema.byggSystemer([{objid: 'm', name: 'Supply air mode', description: '0-m3/h, 1-l/s, 3-Pa', type: 'analog-value', value: 3, units: 'pascals'}]).every(s => !s.komp.size); })(),"
+              " knxrom: (() => { const P = (n, v, u, t) => ({objid: n, name: n, description: '', type: t || 'analog-value', value: v, units: u || ''});"
+              "  const sys = nabeSkjema.byggSystemer([P('563.9-303-RT601 Er-temperatur SDw', 21.5, 'degrees-celsius'), P('563.9-303-RT601 AKT SP temperatur SDw', 21, 'degrees-celsius'),"
+              "    P('563.9-303-RT601 HtrGn SDw', 40, 'percent'), P('563.9-303-RB601 Er-lux ML', 300, 'lux'), P('563.9-303/304-RT601 Er-temperatur SDw', 20, 'degrees-celsius'),"
+              "    P('563.9-99999-RT601 Er-temperatur SDw', 19, 'degrees-celsius')]);"
+              "  const rom = sys.flatMap(s => [...s.romData.values()]), r = rom.find(x => x.rom === '303');"
+              "  return !!r && r.sys === '563.9' && r.temp.value === 21.5 && r.tempSp.value === 21 && r.varme.value === 40 && r.lux.value === 300 && rom.some(x => x.rom === '303/304') && rom.length === 2; })(),"
               " modbus: typeof aapneModbus === 'function' && !!document.getElementById('modbusBtn'),"
               " bussfilter: typeof alderTekst === 'function' && S.filters.medVerdi === false && !!document.getElementById('fMedVerdi') && /min/.test(alderTekst(Date.now() / 1000 - 300)),"
               " knx: typeof aapneKnx === 'function' && !!document.getElementById('knxBtn'),"
@@ -1260,6 +1266,36 @@ def knx_monitor():
           f"{len(po['values'].get(adr, {}))} verdier, {len(tider)} tider")
 
 
+def knx_routing():
+    """Routing: listening to the multicast group, with no tunnel taken and nothing sent."""
+    import socket
+    import nabe_knx as nk
+    r = nk.KnxRouting()
+    cemi = bytes([0x29, 0x00, 0xBC, 0xE0, 0x11, 0x05, 0x01, 0x02, 0x03, 0x00, 0x80, 0x0C, 0x1A])
+    r.datagram_received(nk.header(nk.ROUTING_IND, cemi), ("127.0.0.1", 3671))
+    r.datagram_received(nk.header(0x0420, cemi), ("127.0.0.1", 3671))
+    sjekk("knx: routing tar imot en gruppetelegram og leser kilde, adresse og verdi, og ignorerer annen trafikk",
+          r.telegrams == 1 and r.values[258]["raw"] == bytes([0x0C, 0x1A]) and r.values[258]["src"] == 0x1105 and r.seq == 1, str(r.values))
+    sjekk("knx: multikastadresser kjennes igjen", nk.is_multicast("224.0.23.12") and not nk.is_multicast("10.0.0.1"))
+    k = kall("/api/knx/routing", {})
+    if k.get("status") != "done":
+        print("   (hopper over multikast: " + str(k.get("error"))[:90] + ")")
+        return
+    adr = k["device"]["address"]
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    s.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_LOOP, 1)
+    s.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, 1)
+    s.sendto(nk.header(nk.ROUTING_IND, cemi), (nk.ROUTING_GROUP, 3671))
+    s.close()
+    time.sleep(0.8)
+    m = kall("/api/knx/monitor?address=" + adr)
+    sjekk("knx: lytter på routing-gruppen og viser telegrammet i monitoren, uten å ta en tunnel",
+          m.get("status") == "done" and any(x["ga"] == "0/1/2" and x["kilde"] == "1.1.5" for x in m.get("rader", [])), str(m)[:200])
+    les = kall("/api/knx/les-alle", {"address": adr})
+    sjekk("knx: routing sier fra at den bare lytter når man ber den lese alle", les.get("status") == "error", str(les))
+    kall("/api/knx/koble-fra", {})
+
+
 def modbus_import():
     """Lists in the shapes a technician has them: a Niagara export, Excel, and addresses written as 40012."""
     import base64
@@ -1397,6 +1433,7 @@ def kjor_tester():
     knx_lesefane()
     modbus_ledig()
     knx_monitor()
+    knx_routing()
     modbus_import()
     redigering()
     flere_kort()

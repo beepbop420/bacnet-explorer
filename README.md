@@ -52,7 +52,10 @@ No administrator rights needed. Everything else in the zip is tucked away;
 - **KNX, read only.** Finds KNXnet/IP gateways, opens one tunnel and listens to the bus: values arrive as
   they change, and an address nobody has spoken on is asked for once, five a second at most. The group
   addresses and their names come from the ETS project (the .knxproj file or the CSV export). The only
-  telegram NABE can send is a read. KNX Secure is not supported and the gateway says so.
+  telegram NABE can send is a read. Names like `563.9-303-RT601` become room cards in the schematic.
+  *Listen to routing* joins the multicast group 224.0.23.12 instead, so no tunnel is taken from any gateway
+  (same network as a KNX router needed, not over VPN; it cannot ask for values). KNX Secure is not
+  supported and the gateway says so.
 - **Writes with care:** confirmation, priority shown, optional automatic
   release, and a write log for handover.
 - **Exports** EDE 2.3, CSV, and a **«Variabel» file** for Niagara NTI

@@ -88,6 +88,17 @@ const SKJEMA_ORDBOK = {
     [/^BVCool/i, {art: 'ventil', hvor: 'kjolebatteri'}],
     [/^BVFlExc/i, {art: 'ventil', hvor: 'gjenvinner'}],
   ],
+  /* The tail of an ETS group name in the pattern "563.9-303-RT601 HtrGn SDw" (the part after the code). */
+  KNXHALE: [
+    [/^er-temperatur/, {art: 'temp', rolle: 'pv'}],
+    [/nattsenk|^natt\b/, {art: 'rompunkt', rolle: 'annet'}],
+    [/^(akt\s+)?sp\s+temperatur/, {art: 'temp', rolle: 'sp'}],
+    [/^(htrgn|htr\s*gn)\b/, {art: 'radiator', rolle: 'paadrag'}],
+    [/^vavgn\b/, {art: 'vav', rolle: 'paadrag'}],
+    [/^er-verdi\s*co/, {art: 'co2', rolle: 'pv'}],
+    [/^er-lux/, {art: 'lux', rolle: 'pv'}],
+    [/^sp\s+lux/, {art: 'lux', rolle: 'sp'}],
+  ],
   NAVNROLLE: [[/RelPos$/i, 'paadrag'], [/(SetPrc|SetPos)$/i, 'manuell']],
 
   /* Where in the plant it sits. Air first, then water. */

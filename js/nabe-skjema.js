@@ -30,6 +30,12 @@
     let sys = '', etterSys = 0, m, romNavn = '';
     // A room unit: "OU601.613.-RT601" is room 613 on unit OU601, and "KJ12_BOS1.325.-RT600" is room 325.
     // The room number sits between two dots with the code of the part after it.
+    // An ETS group name in the Nordomatic pattern: "563.9-303-RT601 HtrGn SDw" is system 563.9, room 303, part RT601.
+    // Two rooms share a name as 303/304, and 99999 means no room.
+    const mk = /^(\d{3}\.\d{1,3})-(\d{3}[A-Za-z]?(?:\/\d{3}[A-Za-z]?)*|\d{5})-([A-Z]{2}\d{3})\s*/.exec(n);
+    if (mk) {
+      return {sys: mk[1], rom: /^\d{5}$/.test(mk[2]) ? '' : mk[2], kode: mk[3], bokstav: mk[3].slice(0, 2), nr: mk[3].slice(2), hale: n.slice(mk[0].length).trim(), under: '', knx: true};
+    }
     const mr = /(?:O[US](\d{3})\.)?(?<![0-9])(\d{3})\.-(?=[A-Z]{2}\d{2,4})/.exec(n);
     if (mr) { romNavn = mr[2]; sys = mr[1] || ''; etterSys = mr.index + mr[0].length; }
     // A room module on a bus driver: "Drivers.Modbus_3_1.S563.R_338.points.RT600" is room 338, the part is RT600.
@@ -79,6 +85,11 @@
   /* ---------------------------------------------------------- one point */
   function tolkPunkt(p) {
     const t = tolkNavn(p.name, p.description);
+    if (t.knx) {
+      // The tail of a KNX name says what the point is; the code in front only says which kind of device it sits on.
+      const k = t.rom ? (slaa(O.KNXHALE, t.hale.toLowerCase()) || {art: 'rompunkt', rolle: 'annet'}) : {art: '', rolle: 'annet'};
+      return {p, sys: t.sys, rom: t.rom, kode: t.kode, under: '', art: k.art, rolle: k.rolle, sted: 'rom', hvor: '', beskr: String(p.description || ''), maalt: '', spr: false, ord: t.hale.toLowerCase(), enhet: String(p.units || p.unit || '').toLowerCase()};
+    }
     // "min:-50.0, max:+120.0, error: -32768" is the range of the point, not what it is
     const beskr = String(p.description || '').replace(/\bmin:\s*[-+]?[\d.]+,?\s*max:\s*[-+]?[\d.]+(,?\s*error:\s*[-+]?[\d.]+)?/gi, '').trim().replace(/^SD\w{2}\s+/, '').replace(/^[+=A-Za-z0-9\/.\-]*?\d{3}\.\d{2,4}[\s-]*[A-Z]{2}\d{2,4}\s*/, '');
     const b = beskr.toLowerCase();
@@ -202,6 +213,8 @@
         else if (x.rolle === 'paadrag' && (x.art === 'ventil' || x.art === 'radiator')) r.varme = r.varme || p;
         else if (x.rolle === 'paadrag' && (x.art === 'spjeld' || x.art === 'vav')) r.luft = r.luft || p;
         else if (x.art === 'bevegelse') r.bevegelse = r.bevegelse || p;
+        else if (x.art === 'lux' && x.rolle === 'pv') r.lux = r.lux || p;
+        else if (x.art === 'lux' && x.rolle === 'sp') r.luxSp = r.luxSp || p;
         continue;
       }
       const maaling = ['temp', 'trykk', 'difftrykk', 'mengde', 'fukt', 'co2'].includes(x.art);
@@ -837,7 +850,7 @@
     }
     const spr = SK.systemer.filter(s => s.type === 'sprinkler');
     if (spr.length) f.push({id: 'sprinkler', navn: `${T('Sprinkler', 'Sprinkler')} · ${spr.length}`, type: 'sprinkler', l: spr});
-    const rom = SK.systemer.flatMap(s => [...s.romData.values()]).filter(r => r.temp || r.co2 || r.varme || r.luft);
+    const rom = SK.systemer.flatMap(s => [...s.romData.values()]).filter(r => r.temp || r.co2 || r.varme || r.luft || r.lux);
     if (rom.length) f.push({id: 'rom', navn: `${T('Rom', 'Rooms')} · ${rom.length}`, type: 'rom', l: rom});
     return f;
   }
@@ -855,7 +868,7 @@
         for (const [r, p] of Object.entries(k.pkt)) k.pkt[r] = Array.isArray(p) ? p.map(x => naa.get(x.objid) || x) : (naa.get(p.objid) || p);
       }
       for (const s of SK.systemer) for (const r of s.romData.values()) {
-        for (const f of ['temp', 'tempSp', 'co2', 'co2Sp', 'varme', 'luft', 'bevegelse']) if (r[f]) r[f] = naa.get(r[f].objid) || r[f];
+        for (const f of ['temp', 'tempSp', 'co2', 'co2Sp', 'varme', 'luft', 'bevegelse', 'lux', 'luxSp']) if (r[f]) r[f] = naa.get(r[f].objid) || r[f];
         r.alle = (r.alle || []).map(x => naa.get(x.objid) || x);
       }
     }
@@ -950,13 +963,14 @@
       return v === null ? '' : `<span class="rk-linje"><i>${navn}</i><span class="rk-bar"><b style="width:${Math.max(0, Math.min(100, v)).toFixed(0)}%"></b></span><em>${esc(verdi(p))}</em></span>`;
     };
     return `<div class="sk-romgitter">${sortert.map(r => {
-      const a = avvik(r), h = r.temp || r.co2 || r.varme || r.luft;
+      const a = avvik(r), h = r.temp || r.co2 || r.varme || r.luft || r.lux;
       const over = r.co2 && r.co2Sp && tall(r.co2) !== null && tall(r.co2Sp) !== null && tall(r.co2) > tall(r.co2Sp);
       return `<button type="button" class="sk-romkort${SK.klikket === h.objid ? ' valgt' : ''}" data-rom="${esc(r.rom)}" data-o="${esc(h.objid)}">
         <span class="rk-topp"><b>${esc(r.rom)}</b><i>${esc(r.sys)}</i></span>
         <span class="rk-temp">${r.temp ? esc(verdi(r.temp)) : '—'}</span>
         <span class="rk-sp">${r.tempSp ? `${T('settpunkt', 'setpoint')} ${esc(verdi(r.tempSp))}` : '&nbsp;'}${a !== null && Math.abs(a) >= 0.05 ? `<em>${a > 0 ? '+' : '−'}${Math.abs(a).toFixed(1)}</em>` : ''}</span>
         ${bar(T('Varme', 'Heating'), r.varme)}${bar(T('Luft', 'Air'), r.luft)}
+        ${r.lux ? `<span class="rk-co2"><i>lux</i>${esc(verdi(r.lux))}${r.luxSp ? ` <small>/ ${esc(verdi(r.luxSp))}</small>` : ''}</span>` : ''}
         ${r.co2 ? `<span class="rk-co2${over ? ' over' : ''}"><i>CO2</i>${esc(verdi(r.co2))}${r.co2Sp ? ` <small>/ ${esc(verdi(r.co2Sp))}</small>` : ''}</span>` : ''}
       </button>`;
     }).join('')}</div>
@@ -981,12 +995,13 @@
     const skala = a === null ? '' : `<div class="rp-skala" aria-hidden="true"><i></i><b style="left:${Math.max(3, Math.min(97, 50 + a / 3 * 50)).toFixed(1)}%"></b><span class="l">−3</span><span class="m">${esc(verdi(r.tempSp))}</span><span class="h">+3</span></div>`;
     const bar = (tittel, p) => tall(p) === null ? '' : `<div class="rp-linje"><i>${tittel}</i><span class="rk-bar"><b style="width:${Math.max(0, Math.min(100, tall(p))).toFixed(0)}%"></b></span><em>${esc(verdi(p))}</em></div>`;
     const co2 = r.co2 ? `<div class="rp-linje"><i>CO2</i><span class="rk-bar${r.co2Sp && tall(r.co2) > tall(r.co2Sp) ? ' over' : ''}"><b style="width:${Math.max(2, Math.min(100, tall(r.co2) / (tall(r.co2Sp) || 1000) * 60)).toFixed(0)}%"></b></span><em>${esc(verdi(r.co2))}${r.co2Sp ? ' / ' + esc(verdi(r.co2Sp)) : ''}</em></div>` : '';
+    const lux = r.lux ? `<div class="rp-linje"><i>lux</i><em>${esc(verdi(r.lux))}${r.luxSp ? ' / ' + esc(verdi(r.luxSp)) : ''}</em></div>` : '';
     const rader = (r.alle || []).filter(p => p.type !== 'schedule').slice(0, 60);
     const festet = r.temp && S.watch.some(w => w.ip === SK.ip && w.objid === r.temp.objid);
     romLag.innerHTML = `<div class="gs-modal rp-modal"><div class="gs-head"><span class="gd-tittel">${esc(T('Rom ', 'Room ') + r.rom)}</span><span class="rp-sys">${esc(r.sys || '')}</span>
       <button class="gs-close" style="margin-left:auto"><span class="lbl">${T('Lukk', 'Close')}</span> ✕</button></div>
       <div class="rp-kropp"><div class="rp-stor"><b>${r.temp ? esc(verdi(r.temp)) : '—'}</b><span>${r.tempSp ? T('settpunkt ', 'setpoint ') + esc(verdi(r.tempSp)) : ''}${a !== null && Math.abs(a) >= 0.05 ? ` <em>${a > 0 ? '+' : '−'}${Math.abs(a).toFixed(1)}</em>` : ''}</span></div>
-        ${skala}${bar(T('Varme', 'Heating'), r.varme)}${bar(T('Luft', 'Air'), r.luft)}${co2}
+        ${skala}${bar(T('Varme', 'Heating'), r.varme)}${bar(T('Luft', 'Air'), r.luft)}${co2}${lux}
         <div class="rp-liste">${rader.map(p => `<button type="button" class="rp-rad" data-o="${esc(p.objid)}"><span>${esc(String(p.description || p.name).replace(/^SD\w{2}\s+/, ''))}</span><small>${esc(p.name)}</small><b>${esc(verdi(p))}</b></button>`).join('')}</div>
         <div class="op-knapper">${r.temp ? `<button type="button" class="btn" data-rp="fest">${festet ? T('Ta ut av overvåkingen', 'Remove from the watch list') : T('Fest temperaturen', 'Pin the temperature')}</button>` : ''}</div></div></div>`;
     romLag.hidden = false;
