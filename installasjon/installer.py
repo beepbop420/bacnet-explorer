@@ -196,17 +196,38 @@ def main():
         if "--start" in sys.argv:
             start_nabe(mappe)
         return
-    import webview
-    api = Api()
-    api.vindu = webview.create_window(
-        "Installer NABE", html=(KILDE / "installer.html").read_text(encoding="utf-8"),
-        js_api=api, width=640, height=600, resizable=False, background_color="#111113")
-    def ikon():
-        sys.path.insert(0, str(KILDE))
-        from nabe_app import sett_ikon
-        sett_ikon("Installer NABE", KILDE / "nabe.ico")
-    api.vindu.events.shown += ikon
-    webview.start(gui="edgechromium", private_mode=True)
+    try:
+        import webview
+        api = Api()
+        api.vindu = webview.create_window(
+            "Installer NABE", html=(KILDE / "installer.html").read_text(encoding="utf-8"),
+            js_api=api, width=640, height=600, resizable=False, background_color="#111113")
+        def ikon():
+            sys.path.insert(0, str(KILDE))
+            from nabe_app import sett_ikon
+            sett_ikon("Installer NABE", KILDE / "nabe.ico")
+        api.vindu.events.shown += ikon
+        webview.start(gui="edgechromium", private_mode=True)
+    except Exception as e:
+        # No window means no way to say what went wrong: pythonw has no console. Log it, say it in a
+        # box that needs nothing from the machine, and offer the default install instead of nothing.
+        logg(f"installasjonsvinduet kunne ikke åpnes: {type(e).__name__}: {e}")
+        import ctypes
+        svar = ctypes.windll.user32.MessageBoxW(
+            0, "Installasjonsvinduet kunne ikke åpnes på denne maskinen (mangler Edge WebView2?).\n\n"
+               f"Installer med standardvalg i {STANDARD_MAPPE}, med snarvei i startmenyen og på skrivebordet?\n"
+               "Vilkårene ligger i filen vilkar.txt ved siden av.\n\n"
+               "The installer window could not open on this machine (is Edge WebView2 missing?).\n"
+               "Install with the default choices instead? Terms are in vilkar.txt next to this file.\n\n"
+               f"({type(e).__name__}: {e})", "NABE", 0x24)        # Yes/No + question mark
+        if svar == 6:
+            try:
+                installer(STANDARD_MAPPE, {"meny": True, "skrivebord": True, "nettleser": False})
+                logg(f"installert {versjon()} i {STANDARD_MAPPE} (uten vindu)")
+                start_nabe(STANDARD_MAPPE)
+            except Exception as e2:
+                logg(f"installasjonen feilet: {type(e2).__name__}: {e2}")
+                ctypes.windll.user32.MessageBoxW(0, f"Installasjonen feilet: {e2}\n\nLogg: %LOCALAPPDATA%\\NABE\\oppdatering.log", "NABE", 0x10)
 
 
 if __name__ == "__main__":

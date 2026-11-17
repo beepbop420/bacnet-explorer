@@ -30,10 +30,24 @@ INST = HER / "installasjon"
 START_INSTALLASJON = r"""@echo off
 chcp 65001 >nul
 if not exist "%~dp0.nabe\python\pythonw.exe" (
-  powershell -NoProfile -WindowStyle Hidden -Command "Add-Type -AssemblyName PresentationFramework; [System.Windows.MessageBox]::Show('Pakk ut zip-fila først: høyreklikk den og velg «Pakk ut alle». Dobbeltklikk så «Installer NABE» i mappa som kommer fram.' + [char]10 + [char]10 + 'Unzip first: right-click the zip and choose «Extract All». Then double-click «Installer NABE» in the folder that appears.', 'NABE')" >nul
-  exit /b
+  echo.
+  echo   Pakk ut zip-fila foerst: hoeyreklikk den og velg "Pakk ut alle".
+  echo   Dobbeltklikk saa "Installer NABE" i mappa som kommer fram.
+  echo.
+  echo   Unzip first: right-click the zip and choose "Extract All".
+  echo   Then double-click "Installer NABE" in the folder that appears.
+  echo.
+  pause
+  exit /b 1
 )
 start "" "%~dp0.nabe\python\pythonw.exe" -s "%~dp0.nabe\installer.py" %*
+if errorlevel 1 (
+  echo.
+  echo   Kunne ikke starte installasjonen. Sikkerhetsprogramvaren kan ha stoppet python i .nabe-mappa.
+  echo   Could not start the installer. Security software may have blocked python in the .nabe folder.
+  echo.
+  pause
+)
 """
 SKJULT = ".nabe"
 # Windows' own unzip keeps the DOS attributes when the zip says it was made

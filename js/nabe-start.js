@@ -203,6 +203,9 @@ const FAKTA = [
   ['COV betyr at regulatoren sier fra selv. Mindre spørring, mer ro.', 'COV means the controller speaks up itself. Less asking, more peace.'],
 ];
 const NYTT = {
+  '1.86': [
+    ['Installasjonen sier fra når vinduet ikke kan åpnes (for eksempel uten Edge WebView2) og tilbyr standardinstallasjon, og «Installer NABE» blir stående med en forklaring hvis zip-fila ikke er pakket ut', 'The installer says so when its window cannot open (for example without Edge WebView2) and offers the default install, and "Installer NABE" stays open with an explanation if the zip has not been unpacked'],
+  ],
   '1.85': [
     ['NABE.bat i den bærbare utgaven og Mini blir stående med en forklaring hvis den ikke finner Python (åpnet inne i zip-fila) eller stopper med feil, i stedet for at vinduet lukkes av seg selv', 'NABE.bat in the portable edition and Mini stays open with an explanation if it cannot find Python (opened inside the zip) or stops with an error, instead of the window closing by itself'],
   ],
