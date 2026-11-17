@@ -39,7 +39,9 @@
     if (!mr && !mb) while ((m = reS.exec(n))) { sys = m[1] ? m[1] + '.' + m[2] : m[3] + '.' + m[4]; etterSys = m.index + m[0].length; }
     // Other ways a system stands in a tag: "+KG32=350 002-RT401" with a space, or "350002-RP401" as one number.
     // A building and unit code in front of the part (564001-OU601) is not a system.
-    if (!sys && !mr && (m = /(?<![0-9])(3\d{2}) (\d{3})(?=-[A-Z]{2}\d)/.exec(n) || /(?<![0-9])(3\d{2})(\d{3})(?=-(?!O[US]\d)[A-Z]{2}\d)/.exec(n))) {
+    // A system with a hyphen between the two numbers: "OU01.1OX01 - 320-002-RT401" is system 320.002.
+    if (!sys && !mr && (m = /(?<![0-9])(3\d{2}) (\d{3})(?=-[A-Z]{2}\d)/.exec(n) || /(?<![0-9])(3\d{2})(\d{3})(?=-(?!O[US]\d)[A-Z]{2}\d)/.exec(n)
+        || /(?<![0-9A-Za-z])(3\d{2})-(\d{3})(?=-[A-Z]{2}\d)/.exec(n))) {
       sys = m[1] + '.' + m[2]; etterSys = m.index + m[0].length;
     }
     // The way some Beckhoff projects write the system into a variable: s36001 is 360.01, s433_1001 is 433.1001.
@@ -637,13 +639,13 @@
      tag: "320.001-RT402 Tur fra fjernvarme", "Retur til VP veksler", "Trykkgiver ekspansjonskar".
      Take away the tag, the kind of sensor and the direction, and what is left is what the pipe
      goes to or comes from. Sensors with the same subject belong to the same part of the plant. */
-  const STOPP = /\b(pådrag|sirk|pumper|diff|differansetrykk|ekspansjonstrykk|ventilposisjon|posisjon|plan|tur|retur|fra|til|på|paa|ved|av|for|og|temperaturføler|temperaturgiver|tempgiver|temperatur|temp|trykkgiver|trykk|føler|giver|ventilmotor|motor|ventil|sirkulasjonspumpe|pumpe|pumpa|vifte|nr|kurs|krets)\b\.?/gi;
+  const STOPP = /\b(miscellaneous|temperature|pressure|flow|return|output|input|float|value|pådrag|sirk|pumper|diff|differansetrykk|ekspansjonstrykk|ventilposisjon|posisjon|plan|tur|retur|fra|til|på|paa|ved|av|for|og|temperaturføler|temperaturgiver|tempgiver|temperatur|temp|trykkgiver|trykk|føler|giver|ventilmotor|motor|ventil|sirkulasjonspumpe|pumpe|pumpa|vifte|nr|kurs|krets)\b\.?/gi;
   const SKRIV = {vp: 'VP', jp: 'JP', sb: 'SB', rt: 'RT', rp: 'RP', vv: 'VV', vvb: 'VVB', fv: 'FV'};
   const pen = (e) => String(e || '').split(' ').map((o, i) => SKRIV[o] || (i === 0 ? o.charAt(0).toUpperCase() + o.slice(1) : o)).join(' ');
   const retningAv = (k) => {
     const b = ' ' + String(k.beskr || '').toLowerCase() + ' ';
-    if (/\bretur\b/.test(b)) return 'retur';
-    if (/\btur\b/.test(b)) return 'tur';
+    if (/\bretur\b|\breturn\b/.test(b)) return 'retur';
+    if (/\btur\b|\bflow temp/.test(b)) return 'tur';
     return k.sted === 'retur' || k.sted === '5' ? 'retur' : k.sted === 'tur' || k.sted === '4' ? 'tur' : '';
   };
   const emneAv = (k) => {
@@ -676,10 +678,11 @@
     return [...g.values()].map(x => ({id: s.id, del: x.del, komp: x.komp, rom: s.rom, romData: s.romData, type: s.type,
       symbol: (SYMBOL.find(([re]) => re.test(x.del)) || [])[1] || ''}));
   }
-  const GENERISK = /=|utgang|inngang|\bverdi\b|manuell|\bauto\b|\bstart\b|stopp|\bdrift\b|\bfeil|alarm|settpunkt|vender|grenseverdi|forvarsel|differanse|\bcs\b|\bh[øo]yt\b|\blavt\b/i;
+  const GENERISK = /=|utgang|inngang|\bverdi\b|manuell|\bauto\b|\bstart\b|stopp|\bdrift\b|\bfeil|alarm|settpunkt|vender|grenseverdi|forvarsel|differanse|\bcs\b|\bh[øo]yt\b|\blavt\b|miscellaneous|\bflow\b|\breturn\b/i;
   const TITTELSTOPP = new Set(['settpunkt', 'grenseverdi', 'alarm', 'temperatur', 'differansetrykk', 'differanse', 'trykk', 'trykkgiver', 'trykkvakt', 'forvarsel', 'regulering',
     'ventil', 'ventilmotor', 'pumpe', 'pådrag', 'paadrag', 'status', 'aktuell', 'aktuelt', 'arbeidende', 'manuell', 'manuelt', 'verdi', 'feilmelding', 'drift', 'start', 'startsignal',
-    'sirkulasjonspumpe', 'temperaturføler', 'føler', 'giver', 'kommunikasjonsfeil', 'vender', 'auto', 'utgang', 'inngang', 'enum', 'høyt', 'lavt', 'høy', 'lav', 'temp', 'varme', 'fjernvarme']);
+    'sirkulasjonspumpe', 'temperaturføler', 'føler', 'giver', 'kommunikasjonsfeil', 'vender', 'auto', 'utgang', 'inngang', 'enum', 'høyt', 'lavt', 'høy', 'lav', 'temp', 'varme', 'fjernvarme',
+    'miscellaneous', 'temperature', 'pressure', 'float', 'output', 'input', 'value', 'return', 'supply', 'setpoint']);
   /* The name that comes up most in what the points of a system say about themselves, with the words that
      describe kinds of points taken away: "tørrkjølekrets" from "Settpunkt tørrkjølekrets" and its alarms. */
   function systemTittel(s) {
@@ -689,12 +692,14 @@
       const ord = new Set(String(p.description).toLowerCase().replace(/^sd\w{2}\s+/, '').split(/[^a-zæøå]+/).filter(o => o.length >= 5 && !TITTELSTOPP.has(o)));
       for (const o of ord) tall.set(o, (tall.get(o) || 0) + (/krets|anlegg|kurs$|maskin|veksler|tank|baffel/.test(o) ? 3 : 1));
     }
-    const best = [...tall].sort((a, b) => b[1] - a[1] || b[0].length - a[0].length)[0];
+    // Only a word that names a part of a plant is a title; the rest ("command", "alarm") is not.
+    const best = [...tall].filter(([o]) => /krets|anlegg|kurs|veksler|tank|baffel|kj[øo]l|varme|gulv|radiator|batteri|aggregat|bereder|kjel|k[øo]lle/.test(o))
+      .sort((a, b) => b[1] - a[1] || b[0].length - a[0].length)[0];
     return best ? best[0].charAt(0).toUpperCase() + best[0].slice(1) : '';
   }
   function kursNavn(s) {
     const k = s.komp.find(z => z.art === 'temp' && z.sted === 'tur' && !GENERISK.test(z.beskr || '')) || s.komp.find(z => z.beskr && !GENERISK.test(z.beskr) && z.beskr.length > 7);
-    const n = (k ? k.beskr : '').replace(/temperaturf[øo]ler|tempgiver|turtemp\.?|temp\.?|trykkgiver|sirkulasjonspumpe|ventilmotor|\btur\b|\bretur\b/gi, '').replace(/\s+/g, ' ').trim();
+    const n = (k ? k.beskr : '').replace(/temperaturf[øo]ler|tempgiver|turtemp\.?|\btemp\b\.?|trykkgiver|sirkulasjonspumpe|ventilmotor|\btur\b|\bretur\b/gi, '').replace(/\s+/g, ' ').trim();
     return n ? n[0].toUpperCase() + n.slice(1) : systemTittel(s);
   }
   /* The symbol of a part of the plant that has no pipe of its own, drawn between the two pipes. */

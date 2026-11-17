@@ -203,6 +203,9 @@ const FAKTA = [
   ['COV betyr at regulatoren sier fra selv. Mindre spørring, mer ro.', 'COV means the controller speaks up itself. Less asking, more peace.'],
 ];
 const NYTT = {
+  '1.95': [
+    ['System skrevet med bindestrek («OU01.1OX01 - 320-002-RT401») leses som 320.002, og varmekurser får egen kolonne per system selv når beskrivelsene er generelle engelske ord som «Miscellaneous Pressure»', 'Systems written with a hyphen ("OU01.1OX01 - 320-002-RT401") are read as 320.002, and heating circuits get a column of their own per system even when the descriptions are general English words like "Miscellaneous Pressure"'],
+  ],
   '1.94': [
     ['Punkter som en travel regulator ikke ga navnet på i første runde blir spurt om en gang til, hver for seg. Uten navn kan ikke skjemaet lese punktet', 'Points whose name a busy controller did not give in the first pass are asked for once more, on their own. Without the name the schematic cannot read the point'],
   ],
