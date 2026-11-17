@@ -203,6 +203,10 @@ const FAKTA = [
   ['COV betyr at regulatoren sier fra selv. Mindre spørring, mer ro.', 'COV means the controller speaks up itself. Less asking, more peace.'],
 ];
 const NYTT = {
+  '1.77': [
+    ['Skjema leser GOLD- og OJ-Air2-aggregater: kodene i navnene (BDInlet, BVHeat1, BVCool), fire typer spoler (forvarme, varme, kjøling, ettervarme), gjenvinner med virkningsgrad og lesende innganger holdt adskilt fra innstillinger', 'The schematic reads GOLD and OJ-Air2 air handlers: the codes in the names (BDInlet, BVHeat1, BVCool), four kinds of coils (preheat, heating, cooling, reheat), recovery with efficiency and read-only inputs kept apart from settings'],
+    ['Hotellrom (OU601.613.-RT601) tegnes som romkort, systemer leses også fra «350 002-RT401» og «350002-RP401», og kjølekurser får navn etter det punktene sier om seg selv', 'Hotel rooms (OU601.613.-RT601) are drawn as room cards, systems are also read from "350 002-RT401" and "350002-RP401", and cooling circuits are named after what their points say about themselves'],
+  ],
   '1.76': [
     ['Skjema viser hvilke tagger tegningen er laget av («Tagger brukt»), med hva hver ble tolket som og på hvilket grunnlag: ordene i beskrivelsen, tallet i taggen eller hva føleren leser', 'The schematic shows which tags the drawing is made of ("Tags used"), with what each was taken to mean and on what grounds: the words of the description, the number of the tag or what the sensor reads'],
     ['Aggregat: sensorer som beskrivelsen ikke plasserer (RT50, RT51, RT52) skilles etter nummer og etter verdi, slik en tekniker ville gjort det. Avkast ligger mellom ute og avtrekk, en føler som er mye varmere enn all luft er vannet i batteriet, og romtemperatur RT601 eller RT60 er et rom', 'Air handler: sensors the description does not place (RT50, RT51, RT52) are told apart by number and by value, the way a technician would. The exhaust lies between outdoor and extract, a sensor much hotter than any air is the water of the coil, and room temperature RT601 or RT60 is a room'],

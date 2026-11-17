@@ -27,9 +27,18 @@
   /* ----------------------------------------------------------- one name */
   function tolkNavn(navn, beskr) {
     let n = String(navn || '');
-    let sys = '', etterSys = 0, m;
+    let sys = '', etterSys = 0, m, romNavn = '';
+    // A room unit: "OU601.613.-RT601" is room 613 on unit OU601, and "KJ12_BOS1.325.-RT600" is room 325.
+    // The room number sits between two dots with the code of the part after it.
+    const mr = /(?:O[US](\d{3})\.)?(?<![0-9])(\d{3})\.-(?=[A-Z]{2}\d{2,4})/.exec(n);
+    if (mr) { romNavn = mr[2]; sys = mr[1] || ''; etterSys = mr.index + mr[0].length; }
     const reS = /(?<![0-9A-Za-z])(\d{3})[._](\d{3})(?![0-9])|(?<![0-9A-Za-z])(\d{2})[._](\d{2})(?![0-9])/g;
-    while ((m = reS.exec(n))) { sys = m[1] ? m[1] + '.' + m[2] : m[3] + '.' + m[4]; etterSys = m.index + m[0].length; }
+    if (!mr) while ((m = reS.exec(n))) { sys = m[1] ? m[1] + '.' + m[2] : m[3] + '.' + m[4]; etterSys = m.index + m[0].length; }
+    // Other ways a system stands in a tag: "+KG32=350 002-RT401" with a space, or "350002-RP401" as one number.
+    // A building and unit code in front of the part (564001-OU601) is not a system.
+    if (!sys && !mr && (m = /(?<![0-9])(3\d{2}) (\d{3})(?=-[A-Z]{2}\d)/.exec(n) || /(?<![0-9])(3\d{2})(\d{3})(?=-(?!O[US]\d)[A-Z]{2}\d)/.exec(n))) {
+      sys = m[1] + '.' + m[2]; etterSys = m.index + m[0].length;
+    }
     // The way some Beckhoff projects write the system into a variable: s36001 is 360.01, s433_1001 is 433.1001.
     if (!sys && (m = /(?<![A-Za-z0-9])s(\d{3})_(\d{3,4})(?![0-9])/.exec(n) || /(?<![A-Za-z0-9])s(\d{3})(\d{2})(?![0-9])/.exec(n))) {
       sys = m[1] + '.' + m[2]; etterSys = m.index + m[0].length;
@@ -49,7 +58,7 @@
     }
     const mellom = n.slice(etterSys, valgt ? valgt.index : n.length);
     // Room codes as they stand in the tag: A109, A219_A, or two rooms that share a zone (A026/A159).
-    const rom = [...new Set(mellom.match(/(?<![A-Za-z0-9])[A-Z]\d{3}(?:_[A-Z](?![A-Za-z0-9]))?(?![0-9])/g) || [])].join('/');
+    const rom = romNavn || [...new Set(mellom.match(/(?<![A-Za-z0-9])[A-Z]\d{3}(?:_[A-Z](?![A-Za-z0-9]))?(?![0-9])/g) || [])].join('/');
     let hale = valgt ? n.slice(valgt.index + valgt[0].length) : (sys ? n.slice(etterSys) : '');
     hale = hale.replace(/^[\s_.\-/]+/, '').trim();
     let under = '';
@@ -224,6 +233,7 @@
       for (const k of spFoerst) {
         if (!String(k.nokkel).startsWith('p:') || !k.pkt.sp || k.pkt.pv || k.pkt.paadrag) continue;
         if (!k.sted || !['temp', 'trykk', 'difftrykk', 'mengde', 'fukt', 'co2'].includes(k.art)) continue;
+        if (k.art === 'temp' && k.pkt.sp.value === 0) { k.sluk = true; continue; }
         const kand = alle.filter(z => z !== k && String(z.nokkel).startsWith('p:') && z.art === k.art && z.sted === k.sted && z.pkt.pv && !z.pkt.sp);
         const maal = kand.find(z => typeof z.pkt.pv.value === 'number' && z.pkt.pv.value !== 0) || kand[0];
         if (maal) { maal.pkt.sp = k.pkt.sp; k.sluk = true; }
@@ -632,11 +642,26 @@
     return [...g.values()].map(x => ({id: s.id, del: x.del, komp: x.komp, rom: s.rom, romData: s.romData, type: s.type,
       symbol: (SYMBOL.find(([re]) => re.test(x.del)) || [])[1] || ''}));
   }
-  const GENERISK = /=|utgang|inngang|\bverdi\b|manuell|\bauto\b|\bstart\b|stopp|\bdrift\b|\bfeil|alarm|settpunkt|vender/i;
+  const GENERISK = /=|utgang|inngang|\bverdi\b|manuell|\bauto\b|\bstart\b|stopp|\bdrift\b|\bfeil|alarm|settpunkt|vender|grenseverdi|forvarsel|differanse|\bcs\b|\bh[øo]yt\b|\blavt\b/i;
+  const TITTELSTOPP = new Set(['settpunkt', 'grenseverdi', 'alarm', 'temperatur', 'differansetrykk', 'differanse', 'trykk', 'trykkgiver', 'trykkvakt', 'forvarsel', 'regulering',
+    'ventil', 'ventilmotor', 'pumpe', 'pådrag', 'paadrag', 'status', 'aktuell', 'aktuelt', 'arbeidende', 'manuell', 'manuelt', 'verdi', 'feilmelding', 'drift', 'start', 'startsignal',
+    'sirkulasjonspumpe', 'temperaturføler', 'føler', 'giver', 'kommunikasjonsfeil', 'vender', 'auto', 'utgang', 'inngang', 'enum', 'høyt', 'lavt', 'høy', 'lav', 'temp', 'varme', 'fjernvarme']);
+  /* The name that comes up most in what the points of a system say about themselves, with the words that
+     describe kinds of points taken away: "tørrkjølekrets" from "Settpunkt tørrkjølekrets" and its alarms. */
+  function systemTittel(s) {
+    const tall = new Map();
+    for (const k of s.komp) for (const p of Object.values(k.pkt).flat()) {
+      if (!p || !p.description) continue;
+      const ord = new Set(String(p.description).toLowerCase().replace(/^sd\w{2}\s+/, '').split(/[^a-zæøå]+/).filter(o => o.length >= 5 && !TITTELSTOPP.has(o)));
+      for (const o of ord) tall.set(o, (tall.get(o) || 0) + (/krets|anlegg|kurs$|maskin|veksler|tank|baffel/.test(o) ? 3 : 1));
+    }
+    const best = [...tall].sort((a, b) => b[1] - a[1] || b[0].length - a[0].length)[0];
+    return best ? best[0].charAt(0).toUpperCase() + best[0].slice(1) : '';
+  }
   function kursNavn(s) {
     const k = s.komp.find(z => z.art === 'temp' && z.sted === 'tur' && !GENERISK.test(z.beskr || '')) || s.komp.find(z => z.beskr && !GENERISK.test(z.beskr) && z.beskr.length > 7);
     const n = (k ? k.beskr : '').replace(/temperaturf[øo]ler|tempgiver|turtemp\.?|temp\.?|trykkgiver|sirkulasjonspumpe|ventilmotor|\btur\b|\bretur\b/gi, '').replace(/\s+/g, ' ').trim();
-    return n ? n[0].toUpperCase() + n.slice(1) : '';
+    return n ? n[0].toUpperCase() + n.slice(1) : systemTittel(s);
   }
   /* The symbol of a part of the plant that has no pipe of its own, drawn between the two pipes. */
   function symbolKurs(sym, cx, y) {

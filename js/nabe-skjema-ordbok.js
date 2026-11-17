@@ -112,9 +112,9 @@ const SKJEMA_ORDBOK = {
   HALE: [
     [/^(virkningsgrad|efficiency|eta)$/, 'virkningsgrad'],
     [/^(pv|mv\d?|verdi|value|ai|kv|tmp|temp)$/, 'pv'],
-    [/^(sp|spk|spakt|aktsp\w*|wsp\d?|sp_?akt|setp|setpoint|sp_?arb)$/, 'sp'],
+    [/^(sp|spk|spakt|aktsp\w*|wsp\d?|sp_?akt|setp|setpoint|sp_?arb|b_dag)$/, 'sp'],
     [/^(sp\w+|.*_sp|.*setpoint.*|.*_hyst|hyst\w*)$/, 'innstilling'],
-    [/^(ao|au|c|gn|y\d?|out|output|paadrag|\w{2}_a[ou]|cv\d?)$/, 'paadrag'],
+    [/^(ao|au|c|gn|y\d?|out|output|paadrag|\w{2}_a[ou]|cv\d?|pos|position|flow)$/, 'paadrag'],
     [/^(man|manuell|manual|\w{2}_manuell|\w+manual)$/, 'manuell'],
     [/^(am|auto|kmd|sw|vender|\w{2}_auto|tw|mode|modus)$/, 'vender'],
     [/^(drift|d|run|running|status|ds|kv_drift|\w{2}_drift)$/, 'drift'],
