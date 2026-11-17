@@ -203,6 +203,9 @@ const FAKTA = [
   ['COV betyr at regulatoren sier fra selv. Mindre spørring, mer ro.', 'COV means the controller speaks up itself. Less asking, more peace.'],
 ];
 const NYTT = {
+  '1.89': [
+    ['Varmepumpas kuldekrets (fordamper, kondensator, sugegass, overheting, høy- og lavtrykk) står i en egen gruppe under aggregatet, med navn og verdi, i stedet for blant det andre', 'The refrigerant circuit of a heat pump (evaporator, condenser, suction gas, superheat, high and low pressure) is in a group of its own under the air handler, with name and value, instead of among the rest'],
+  ],
   '1.88': [
     ['Installasjonen stopper en NABE som kjører fra målmappa og prøver igjen på filer som er i bruk, i stedet for å feile med «prosessen får ikke tilgang til filen»', 'The installer stops a NABE that runs from the target folder and retries files that are in use, instead of failing with "the process cannot access the file"'],
   ],

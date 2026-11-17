@@ -877,13 +877,21 @@
     SK.kompVed = SK.kompVed || new Map();
     const r = valgt.type === 'aggregat' ? tegnAggregat(valgt.s) : valgt.type === 'sprinkler' ? tegnSprinkler(valgt.l) : tegnKurser(valgt.l, valgt.kind);
     const harTall = (k) => { const h = hoved(k); return h && ((typeof h.value === 'number' && Number.isFinite(h.value)) || k.pkt.alarm.length || h.value === 'active'); };
-    const rest = r.rest.filter(k => k.art !== 'effekt' && hoved(k) && harTall(k)).slice(0, 18);
+    const aktuelle = r.rest.filter(k => k.art !== 'effekt' && hoved(k) && harTall(k));
+    // The refrigerant circuit of a heat pump (evaporator, condenser, superheat, compressor) is not in the air path:
+    // it gets a group of its own, with what each point is called, instead of being lost among the rest.
+    const vp = aktuelle.filter(k => k.art === 'varmepumpe').slice(0, 16);
+    const rest = aktuelle.filter(k => k.art !== 'varmepumpe').slice(0, 18);
+    const brikke = (k) => { const h = hoved(k);
+      return `<button type="button" class="${klasser(k, 'sk-brikke')}" data-o="${esc(h.objid)}" title="${esc(h.name || '')}"><b>${esc(k.kode || k.beskr || merke(k))}</b>${k.sted && NAVN[k.sted] ? `<i>${esc(tn(NAVN, k.sted))}</i>` : ''}<span>${esc(verdi(h))}</span></button>`; };
+    const vpHtml = vp.length ? `<div class="sk-rest"><span class="sk-rest-t">${T('Varmepumpe, kuldekrets', 'Heat pump, refrigerant circuit')}</span>${vp.map(brikke).join('')}</div>` : '';
     const rom = valgt.type === 'aggregat' && valgt.s.rom.size ? `<span class="sk-rom">${valgt.s.rom.size} ${T('rom styres herfra', 'rooms are controlled from here')}</span>` : '';
     const minB = valgt.type === 'kurser' ? Math.max(520, r.bredde * 0.72) : valgt.type === 'aggregat' ? Math.min(r.bredde, 1000) * 0.9 : 0;
     const stor = document.body.classList.contains('sk-stor');
     const html = `${hode(stor)}
       <div class="sk-lerret"><svg viewBox="0 ${r.topp || 0} ${r.bredde} ${r.hoyde - (r.topp || 0)}" style="min-width:${Math.round(minB)}px;max-width:${Math.round(r.bredde * 1.35)}px;margin:0 auto" role="img" aria-label="${esc(valgt.navn)}">${r.svg}</svg></div>
       ${taggerHtml(r.brukt)}
+      ${vpHtml}
       ${rest.length || rom ? `<div class="sk-rest"><span class="sk-rest-t">${T('Også i systemet', 'Also in the system')}</span>${rom}${rest.map(k => {
         const h = hoved(k);
         return `<button type="button" class="${klasser(k, 'sk-brikke')}" data-o="${esc(h.objid)}"><b>${esc(merke(k))}</b>${k.sted && NAVN[k.sted] ? `<i>${esc(tn(NAVN, k.sted))}</i>` : ''}<span>${esc(verdi(h))}</span></button>`;
