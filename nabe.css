@@ -5401,3 +5401,6 @@ body.liste-smal #devList .dev.st-feil > .dev-smal,body.sk-stor #devList .dev.st-
 .sk-tagrad em{font:500 12px var(--mono);font-style:normal;color:var(--fg);white-space:nowrap}
 .sk-tagrad u{text-decoration:none;font:500 10px var(--mono);color:var(--fg-3);text-align:center;cursor:help}
 .sk-tagrad u.verdi,.sk-tagrad u.standard{color:var(--warn)}
+
+/* A KNX value not heard for an hour is shown dimmer: it may no longer be true. */
+.c-val.gammel{opacity:.55}

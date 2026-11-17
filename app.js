@@ -35,7 +35,7 @@ const S = {
   selected: null,           // objid
   detail: null,             // properties of selected
   sort: {key: 'objid', dir: 1},
-  filters: {q: '', type: '', flag: '', writable: false, diff: false},
+  filters: {q: '', type: '', flag: '', writable: false, diff: false, medVerdi: false},
   live: false,
   pollTimer: null,
   pollBusy: false,
@@ -2029,6 +2029,9 @@ let VALG_GEN = 0;
 async function selectDevice(ip, opts = {}) {
   const dev = S.devices.find(d => d.address === ip);
   if (!dev) return;
+  // KNX and Modbus have thousands of addresses and values for a few: the empty ones are hidden until asked for.
+  S.filters.medVerdi = dev.protocol === 'knx' || dev.protocol === 'modbus';
+  syncMenuStates();
 
   /* Er en annen enhet allerede i ferd med aa lastes, avbrytes den foerst.
      To lesinger mot samme BACnet-socket kravler begge - koden advarer allerede
@@ -4627,7 +4630,7 @@ function commands() {
   add('Naviger', 'Søk i punkter på denne enheten', () => { closeCmd(); $('q').focus(); }, {hint: '/', when: harPunkter});
 
   add('Filter', 'Vis alle punkter', () => {
-    S.filters = {q: '', type: '', flag: '', writable: false, diff: false};
+    S.filters = {q: '', type: '', flag: '', writable: false, diff: false, medVerdi: false};
   S.sortMer = [];
     $('q').value = ''; $('typeSel').value = ''; renderPoints(); syncMenuStates();
   }, {when: () => harPunkter() && (S.filters.flag || S.filters.writable || S.filters.diff || S.filters.q || S.filters.type)});
@@ -5008,6 +5011,14 @@ function sokTreff(hay, ord) {
    redraw. The answer cannot change within one task, so the second asker gets
    the first one's list. */
 let VIS_MEMO = null;
+/* KNX says nothing when nothing happens, so how long ago a value was heard says whether it is still true. */
+function alderTekst(epoch) {
+  const s = Math.max(0, Math.round(Date.now() / 1000 - epoch));
+  const t = s < 90 ? T(`${s} s`, `${s} s`) : s < 5400 ? T(`${Math.round(s / 60)} min`, `${Math.round(s / 60)} min`)
+    : s < 172800 ? T(`${Math.round(s / 3600)} t`, `${Math.round(s / 3600)} h`) : T(`${Math.round(s / 86400)} d`, `${Math.round(s / 86400)} d`);
+  return T(`Hørt for ${t} siden`, `Heard ${t} ago`);
+}
+
 function visiblePoints() {
   if (VIS_MEMO) return VIS_MEMO;
   VIS_MEMO = beregnSynlige();
@@ -5016,13 +5027,14 @@ function visiblePoints() {
 }
 
 function beregnSynlige() {
-  const {q, type, flag, writable, diff} = S.filters;
+  const {q, type, flag, writable, diff, medVerdi} = S.filters;
   const ord = sokeOrd(q.trim().toLowerCase());
   let out = S.points.filter(p => {
     if (type && p.type !== type) return false;
     if (flag && !hasFlag(p, flag)) return false;
     if (writable && !p.writable) return false;
     if (diff && !isDiff(p)) return false;
+    if (medVerdi && (p.unread || p.value === null || p.value === undefined)) return false;
     if (ord && !sokTreff(hayFor(p), ord)) return false;
     return true;
   });
@@ -5075,10 +5087,11 @@ const COLS = [
    attrs: p => ` title="${esc(p.description || '')}"`,
    cell: p => esc(p.description || '')},
   {k: 'value', label: 'Verdi', menu: 'Verdi', cls: 'c-val', col: 'w-val',
-   extraCls: p => fmtVal(p.value).c + (p.unread ? ' unread' : '')
+   extraCls: p => fmtVal(p.value).c + (p.unread ? ' unread' : '') + (p.sist && Date.now() / 1000 - p.sist > 3600 ? ' gammel' : '')
      + (typeof rarVerdi === 'function' && rarVerdi(p) ? ' rar' : '')
      + (typeof flatVerdi === 'function' && flatVerdi(p) ? ' flat' : ''),
    attrs: p => p.unread ? ` title="${T('Ingen svar fra enheten på dette punktet', 'No answer from the device for this point')}"`
+     : p.sist ? ` title="${esc(alderTekst(p.sist))}"`
      : (typeof flatVerdi === 'function' && flatVerdi(p) ? ` title="${esc(flatTittel(p))}"` : ''),
    cell: p => {
      if (p.unread) return '?';
@@ -5148,7 +5161,7 @@ function tegnFilterChips() {
   });
   const alle = document.getElementById('fchipAlle');
   if (alle) alle.onclick = () => {
-    S.filters = {q: '', type: '', flag: '', writable: false, diff: false};
+    S.filters = {q: '', type: '', flag: '', writable: false, diff: false, medVerdi: false};
   S.sortMer = [];
     const q = document.getElementById('q'); if (q) q.value = '';
     const s2 = document.getElementById('typeSel'); if (s2) s2.value = '';
@@ -6050,7 +6063,7 @@ function renderPoints() {
     wrap.innerHTML = emptyResultView();
     const b = $('emptyClear');
     if (b) b.onclick = () => {
-      S.filters = {q: '', type: '', flag: '', writable: false, diff: false};
+      S.filters = {q: '', type: '', flag: '', writable: false, diff: false, medVerdi: false};
   S.sortMer = [];
       $('q').value = ''; $('typeSel').value = '';
       renderPoints(); syncMenuStates();
@@ -6294,7 +6307,7 @@ function initMenus() {
    nothing on screen to say so. */
 function syncMenuStates() {
   const f = S.filters;
-  [['fWrit', f.writable], ['fDiff', f.diff]].forEach(([id, on]) => {
+  [['fWrit', f.writable], ['fDiff', f.diff], ['fMedVerdi', f.medVerdi]].forEach(([id, on]) => {
     const el = $(id);
     el.classList.toggle('on', !!on);
     el.querySelector('.menu-state').textContent = on ? 'på' : '';
@@ -6307,7 +6320,7 @@ function syncMenuStates() {
     el.classList.toggle('on', on);
     el.querySelector('.menu-state').textContent = on ? 'på' : '';
   });
-  const anyFilter = f.flag || f.writable || f.diff;
+  const anyFilter = f.flag || f.writable || f.diff || f.medVerdi;
   $('filtBtn').classList.toggle('has-active', !!anyFilter);
   $('filtBtn').textContent = anyFilter ? 'Filter •' : 'Filter';
 
@@ -7669,11 +7682,15 @@ async function pollTick() {
       if (S.cacheMeta[ip]) S.cacheMeta[ip].readAt = Date.now();
     }
     const changed = [];
+    let nyttPunkt = false;
     for (const [ip, vals] of Object.entries(d.values || {})) {
       for (const [objid, val] of Object.entries(vals)) {
         if (S.activeDev && ip === S.activeDev.address) {
           const p = S.pointIndex.get(objid);
+          if (p && (p.unread || p.value === null || p.value === undefined) && val !== null && val !== undefined) nyttPunkt = true;
+          if (p && p.unread && val !== null && val !== undefined) { p.unread = false; changed.push(objid); }
           if (p && p.value !== val) { p.value = val; changed.push(objid); }
+          if (p && d.tider && d.tider[ip] && d.tider[ip][objid]) p.sist = d.tider[ip][objid];
           if (objid === S.selected && typeof val === 'number') {
             S.selHist.push(val);
             (S.selHistT = S.selHistT || []).push(Date.now());
@@ -7687,6 +7704,7 @@ async function pollTick() {
         });
       }
     }
+    if (nyttPunkt && S.filters.medVerdi) renderPoints();
     if (changed.length) {
       updateValueCells(changed);
       // Kortet til regulatoren som faktisk leverte noe nytt drar til seg et
@@ -9388,7 +9406,7 @@ document.querySelectorAll('.menu-item[data-flag]').forEach(el => {
     settFlaggfilter(S.filters.flag === f ? '' : f);
   };
 });
-[['fWrit', 'writable'], ['fDiff', 'diff']].forEach(([id, key]) => {
+[['fWrit', 'writable'], ['fDiff', 'diff'], ['fMedVerdi', 'medVerdi']].forEach(([id, key]) => {
   $(id).onclick = () => {
     S.filters[key] = !S.filters[key];
     syncMenuStates();
@@ -10343,6 +10361,7 @@ const ORDBOK = {
   'Kun i alarm': 'Only in alarm',
   'Kun overstyrte': 'Only overridden',
   'Kun skrivbare': 'Only writable',
+  'Bare med verdi': 'Only with a value',
   'kun verdier': 'values only',
   'leverandør': 'vendor',
   'IP-område': 'IP range',

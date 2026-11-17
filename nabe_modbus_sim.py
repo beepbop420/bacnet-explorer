@@ -44,6 +44,7 @@ class ModbusSim:
         self.answer_any_unit = answer_any_unit
         self.writes_received: List[int] = []   # function codes of any write that arrived
         self.requests = 0
+        self.connections = 0                   # clients connected now
         self._server: Optional[asyncio.AbstractServer] = None
         self.port = 0
 
@@ -58,6 +59,7 @@ class ModbusSim:
             await self._server.wait_closed()
 
     async def _client(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
+        self.connections += 1
         try:
             while True:
                 head = await reader.readexactly(7)
@@ -73,6 +75,7 @@ class ModbusSim:
         except (asyncio.IncompleteReadError, ConnectionError, OSError):
             pass
         finally:
+            self.connections -= 1
             writer.close()
 
     async def _client_rtu(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:

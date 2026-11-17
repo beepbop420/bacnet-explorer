@@ -27,6 +27,7 @@ import socket
 import struct
 import time
 import zipfile
+from collections import deque
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 from xml.etree import ElementTree as ET
@@ -302,6 +303,8 @@ class KnxTunnel(asyncio.DatagramProtocol):
         self._heartbeat: Optional[asyncio.Task] = None
         self._lock = asyncio.Lock()
         self.telegrams = 0
+        self.log: deque = deque(maxlen=3000)         # every group telegram heard: for a monitor, newest last
+        self.seq = 0
 
     # --- asyncio plumbing
     def connection_made(self, transport):
@@ -323,6 +326,9 @@ class KnxTunnel(asyncio.DatagramProtocol):
                 return
             self._seq_in = seq
             t = parse_ldata(body[4:])
+            if t and not t["confirmation"]:
+                self.seq += 1
+                self.log.append({"n": self.seq, "t": time.time(), "src": t["src"], "dst": t["dst"], "kind": t["kind"], "raw": t["raw"], "small": t["small"]})
             if t and t["kind"] in ("write", "response"):
                 self.telegrams += 1
                 self.values[t["dst"]] = {"t": time.time(), "src": t["src"], "kind": t["kind"], "raw": t["raw"], "small": t["small"]}

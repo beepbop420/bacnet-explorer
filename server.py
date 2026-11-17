@@ -2515,7 +2515,8 @@ async def poll(body: PollBody):
     if kx_targets:
         out.update(await _knx_poll(kx_targets))
     if not targets:
-        return {"status": "done", "ts": time.time(), "values": out, "cov": 0, "cov_stille": {}, "cov_ok": {}}
+        return {"status": "done", "ts": time.time(), "values": out, "tider": {a: _KNX_TIDER.get(a, {}) for a in out if a.startswith("kx:")},
+                "cov": 0, "cov_stille": {}, "cov_ok": {}}
     bacnet_app = _require_app()
     if bacnet_app is None:
         return {"status": "error", "error": t("Proxy er ikke startet.", "Not connected.")}
@@ -2533,7 +2534,7 @@ async def poll(body: PollBody):
         out[ip].update(fra_cov)
 
     await asyncio.gather(*[one_device(ip, oids) for ip, oids in targets.items() if oids])
-    return {"status": "done", "ts": time.time(), "values": out,
+    return {"status": "done", "ts": time.time(), "values": out, "tider": {a: _KNX_TIDER.get(a, {}) for a in out if a.startswith("kx:")},
             "cov": sum(1 for c in COV.values() if c.get("ok") and c.get("har") and c.get("status") != "stille"),
             "cov_stille": _cov_stille_i(targets), "cov_ok": cov_ok}
 
@@ -5425,12 +5426,54 @@ MODBUS_KART = nm.MapStore(DATA_DIR)
 _MB_KLIENTER: Dict[str, "nm.ModbusClient"] = {}
 
 
+_MB_OPPRYDDER: List["asyncio.Task"] = []
+MB_LEDIG_SEK = float(os.environ.get("NABE_MB_LEDIG") or 300)         # a connection nobody has used for five minutes is closed
+
+
 def _mb_klient(p: Dict[str, Any]) -> "nm.ModbusClient":
-    """One client per gateway or serial port, whatever the unit: the bus has one master and answers one request at a time."""
+    """One client per gateway or serial port, whatever the unit: the bus has one master and answers one request at a time.
+    A gateway has few connections to give and a Niagara station is using one, so a connection that is not used is closed
+    after a few minutes and opened again when it is needed."""
     k = _MB_KLIENTER.get(p["key"])
     if k is None:
         k = _MB_KLIENTER[p["key"]] = nm.make_client(p)
+    k.last_used = time.monotonic()
+    if not _MB_OPPRYDDER:
+        _MB_OPPRYDDER.append(asyncio.create_task(_mb_rydd()))
     return k
+
+
+async def _mb_rydd():
+    while True:
+        await asyncio.sleep(max(1.0, min(30.0, MB_LEDIG_SEK / 3)))
+        for k in list(_MB_KLIENTER.values()):
+            if time.monotonic() - getattr(k, "last_used", 0) > MB_LEDIG_SEK and not k._lock.locked():
+                try:
+                    await k.close()
+                except Exception:
+                    pass
+
+
+async def _mb_lukk_alle() -> int:
+    n = 0
+    for k in list(_MB_KLIENTER.values()):
+        try:
+            await k.close()
+            n += 1
+        except Exception:
+            pass
+    return n
+
+
+@app.on_event("shutdown")
+async def _mb_ved_stopp():
+    await _mb_lukk_alle()
+
+
+@app.post("/api/modbus/koble-fra")
+async def modbus_koble_fra():
+    """Close every Modbus connection NABE holds, so the gateways have them back."""
+    return {"status": "done", "lukket": await _mb_lukk_alle()}
 
 
 class ModbusScanBody(BaseModel):
@@ -5726,6 +5769,7 @@ _KNX_ROR: Dict[str, "nkx.KnxTunnel"] = {}
 _KNX_LAS: Dict[str, asyncio.Lock] = {}
 _KNX_RENNER: Dict[str, "asyncio.Task"] = {}
 _KNX_OPPRYDDER: List["asyncio.Task"] = []
+_KNX_TIDER: Dict[str, Dict[str, float]] = {}      # gateway -> point -> when it was last heard, for the last poll
 _KNX_SPURT: Dict[Any, float] = {}              # (gateway, group address) -> when it was last asked for
 KNX_SPOR_PAUSE = 600.0                          # an address that did not answer is not asked again for ten minutes
 KNX_MAKS_LESINGER = 120                         # reads one load may send; the rest arrives as the bus speaks
@@ -5871,6 +5915,8 @@ def _knx_punkter(address: str, tun: Optional["nkx.KnxTunnel"]) -> List[Dict[str,
         tel = tun.values.get(p["ga"]) if tun else None
         dpt, gjettet = _knx_dpt(p, tel)
         rec = nkx.point_for(p["ga"], p["name"], dpt, p.get("description", ""), _knx_verdi(p, tel))
+        if tel is not None:
+            rec["sist"] = tel["t"]
         if gjettet:
             rec["description"] = (p.get("description") or p["name"]) + t(" (type antatt: ", " (type guessed: ") + f"{dpt[0]}.{dpt[1]:03d})"
             rec["knx"]["dpt_gjettet"] = f"{dpt[0]}.{dpt[1]:03d}"
@@ -5956,6 +6002,16 @@ async def _knx_poll(targets: Dict[str, List[str]]) -> Dict[str, Dict[str, Any]]:
             return
         dpt = {p["ga"]: p for p in KNX_LISTER.points_for(address)}
         vals: Dict[str, Any] = {}
+        tider: Dict[str, float] = {}
+        # Everything the bus has said, not only what is on screen: a point hidden for having no value must be able to
+        # appear when it gets one.
+        for ga, tel in list(tun.values.items())[:6000]:
+            v = _knx_verdi(dpt.get(ga, {"dpt": "", "name": ""}), tel)
+            if v is not None:
+                oid = f"{'binary-value' if nkx.parse_dpt((dpt.get(ga) or {}).get('dpt'))[0] == 1 else 'analog-value'},{ga}"
+                vals[oid] = v
+                tider[oid] = tel["t"]
+        _KNX_TIDER[address] = tider
         mangler: List[int] = []
         for oid in objids:
             try:
@@ -5970,6 +6026,8 @@ async def _knx_poll(targets: Dict[str, List[str]]) -> Dict[str, Dict[str, Any]]:
             v = _knx_verdi(dpt.get(ga, {"dpt": ""}), tel)
             if v is not None:
                 vals[oid] = v
+                tider[oid] = tel["t"]
+        _KNX_TIDER[address] = tider
         out[address] = vals
         key = f"{parsed[0]}:{parsed[1]}"
         mangler = _knx_ikke_spurt(key, mangler)[:40]
@@ -5996,6 +6054,31 @@ def _knx_detail(body) -> Dict[str, Any]:
         props["last-source"] = nkx.ia_text(tel["src"])
         props["raw"] = tel["raw"].hex()
     return {"status": "done", "objid": body.objid, "properties": props}
+
+
+@app.get("/api/knx/monitor")
+async def knx_monitor(address: str, etter: int = 0):
+    """The telegrams heard on the tunnel since number `etter`, with the ETS name and the decoded value: a group monitor."""
+    parsed = nkx.parse_address(address)
+    if not parsed:
+        return {"status": "error", "error": t("Ikke en KNX-gateway", "Not a KNX gateway")}
+    try:
+        tun = await _knx_tunnel(*parsed)
+    except nkx.KnxError as e:
+        return {"status": "error", "error": str(e)}
+    liste = {p["ga"]: p for p in KNX_LISTER.points_for(address)}
+    rader = []
+    for x in list(tun.log):
+        if x["n"] <= etter:
+            continue
+        p = liste.get(x["dst"])
+        tel = {"raw": x["raw"], "small": x["small"]}
+        dpt, gjettet = _knx_dpt(p or {"dpt": "", "name": ""}, tel)
+        v = nkx.decode(dpt, x["raw"], x["small"]) if x["kind"] != "read" else None
+        rader.append({"n": x["n"], "t": x["t"], "kilde": nkx.ia_text(x["src"]), "ga": nkx.ga_text(x["dst"]), "navn": (p or {}).get("name", ""),
+                      "type": x["kind"], "verdi": v, "enhet": nkx.UNITS.get(dpt, ""), "dpt": f"{dpt[0]}.{dpt[1]:03d}" if dpt[0] else "",
+                      "gjettet": gjettet, "raa": x["raw"].hex()})
+    return {"status": "done", "seq": tun.seq, "rader": rader[-400:]}
 
 
 class KnxLesAlle(BaseModel):

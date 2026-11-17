@@ -55,7 +55,8 @@
             ${enheter.map(d => `<tr><td>${esc(d.object_name || '')}<div class="sp-meta">${esc(d.knx_address || '')}${d.secure ? ' · ' + T('KNX Secure: støttes ikke', 'KNX Secure: not supported') : ''}${!d.tunnelling ? ' · ' + T('ingen tunnel', 'no tunnelling') : ''}</div></td>
               <td class="tr-mono">${esc(d.ip)}:${d.port}</td>
               <td><select class="field mb-kart" data-adr="${esc(d.address)}">${valg(d.address)}</select></td>
-              <td style="white-space:nowrap">${tilordning[d.address] ? `<button type="button" class="btn" data-kx="lesalle" data-adr="${esc(d.address)}"${d.secure || !d.tunnelling ? ' disabled' : ''} title="${esc(T('Spør bussen én gang om hver gruppeadresse som har lesefanen på, fem i sekundet', 'Asks the bus once for each group address with the read flag on, five a second'))}">${T('Les alle lesbare', 'Read all readable')}</button> ` : ''}<button type="button" class="btn" data-kx="aapne" data-adr="${esc(d.address)}"${d.secure || !d.tunnelling ? ' disabled' : ''}>${T('Åpne', 'Open')}</button></td></tr>`).join('')}</tbody></table>`
+              <td style="white-space:nowrap">${tilordning[d.address] ? `<button type="button" class="btn" data-kx="lesalle" data-adr="${esc(d.address)}"${d.secure || !d.tunnelling ? ' disabled' : ''} title="${esc(T('Spør bussen én gang om hver gruppeadresse som har lesefanen på, fem i sekundet', 'Asks the bus once for each group address with the read flag on, five a second'))}">${T('Les alle lesbare', 'Read all readable')}</button> ` : ''}<button type="button" class="btn" data-kx="monitor" data-adr="${esc(d.address)}"${d.secure || !d.tunnelling ? ' disabled' : ''} title="${esc(T('Viser hvem som sier hva på bussen nå, slik ETS sin gruppemonitor gjør', 'Shows who says what on the bus right now, like the ETS group monitor'))}">${T('Monitor', 'Monitor')}</button>
+                <button type="button" class="btn" data-kx="aapne" data-adr="${esc(d.address)}"${d.secure || !d.tunnelling ? ' disabled' : ''}>${T('Åpne', 'Open')}</button></td></tr>`).join('')}</tbody></table>`
             : `<div class="sp-meta">${T('Ingen KNX-gatewayer ennå. Skann over.', 'No KNX gateways yet. Scan above.')}</div>`}</div>
         <div class="mb-sek"><div class="mb-tittel">${T('ETS-lister', 'ETS lists')} <span class="sp-meta">${lister.length}</span></div>
           <div class="sp-meta">${T('Gruppeadressene fra ETS gir punktene navn og datapunkttype. Importer prosjektfilen (.knxproj, uten passord) eller CSV-eksporten av gruppeadresser.', 'The group addresses from ETS give the points a name and a datapoint type. Import the project file (.knxproj, no password) or the CSV export of group addresses.')}</div>
@@ -136,6 +137,59 @@
     toast(id ? T('ETS-lista er tilordnet. Punktene leses på nytt.', 'The ETS list is assigned. The points are read again.') : T('Gatewayen viser det som høres på bussen.', 'The gateway shows what is heard on the bus.'));
   }
 
+  /* A group monitor: every telegram the tunnel hears, with the source, the group address and its ETS name, and what it says. */
+  const mon = document.createElement('div');
+  mon.id = 'knxMonOverlay';
+  mon.className = 'gs-overlay';
+  mon.setAttribute('role', 'dialog');
+  mon.setAttribute('aria-modal', 'true');
+  mon.hidden = true;
+  document.body.append(mon);
+  let monAdr = '', monSeq = 0, monRader = [], monPause = false, monTimer = 0, monFilter = '';
+  const monTid = (t) => { const d = new Date(t * 1000); return d.toLocaleTimeString('no', {hour12: false}) + '.' + String(d.getMilliseconds()).padStart(3, '0'); };
+  function monTegn() {
+    const q = monFilter.trim().toLowerCase();
+    const rader = monRader.filter(r => !q || (r.ga + ' ' + r.navn + ' ' + r.kilde).toLowerCase().includes(q));
+    const tb = $('kxMonRader');
+    if (!tb) return;
+    tb.innerHTML = rader.slice(-300).reverse().map(r => `<tr><td class="tr-mono">${esc(monTid(r.t))}</td><td class="tr-mono">${esc(r.kilde)}</td><td class="tr-mono">${esc(r.ga)}</td>
+      <td>${esc(r.navn)}</td><td class="sp-meta">${esc(r.type === 'write' ? T('skriver', 'writes') : r.type === 'response' ? T('svarer', 'answers') : T('spør', 'asks'))}</td>
+      <td class="tr-mono">${r.type === 'read' ? '' : esc(String(r.verdi === null || r.verdi === undefined ? r.raa : r.verdi)) + (r.enhet ? ' ' + esc(r.enhet) : '')}${r.gjettet ? ' <span class="sp-meta">?</span>' : ''}</td></tr>`).join('');
+    $('kxMonAnt').textContent = T(`${rader.length} av ${monRader.length}`, `${rader.length} of ${monRader.length}`);
+    const p = $('kxMonPause'); if (p) p.textContent = monPause ? T('Fortsett', 'Resume') : T('Pause', 'Pause');
+  }
+  async function monHent() {
+    if (mon.hidden) { clearInterval(monTimer); monTimer = 0; return; }
+    if (monPause) return;
+    try {
+      const d = await api2('/api/knx/monitor?address=' + encodeURIComponent(monAdr) + '&etter=' + monSeq);
+      if (d.status === 'error') { $('kxMonMelding').textContent = d.error; return; }
+      $('kxMonMelding').textContent = '';
+      monSeq = d.seq; monRader = monRader.concat(d.rader).slice(-3000);
+      monTegn();
+    } catch { /* the next tick tries again */ }
+  }
+  window.aapneMonitor = (adr) => {
+    monAdr = adr; monSeq = 0; monRader = []; monPause = false; monFilter = '';
+    mon.innerHTML = `<div class="gs-modal sp-modal tr-modal"><div class="gs-head"><span class="gd-tittel">${T('KNX-monitor', 'KNX monitor')}</span>
+      <button class="gs-close" style="margin-left:auto"><span class="lbl">${T('Lukk', 'Close')}</span> ✕</button></div>
+      <div class="sp-kropp"><div class="sp-topp"><span id="kxMonAnt"></span><span class="tr-filter"><input class="field" id="kxMonFilter" placeholder="${T('Filter: adresse, navn eller kilde', 'Filter: address, name or source')}" spellcheck="false"></span></div>
+        <div class="sp-meta" id="kxMonMelding"></div>
+        <div class="sp-rull"><table class="sp-tab"><thead><tr><th>${T('Tid', 'Time')}</th><th>${T('Kilde', 'Source')}</th><th>${T('Adresse', 'Address')}</th><th>${T('Navn', 'Name')}</th><th></th><th>${T('Verdi', 'Value')}</th></tr></thead><tbody id="kxMonRader"></tbody></table></div>
+        <div class="op-knapper"><button type="button" class="btn" id="kxMonPause"></button><button type="button" class="btn" id="kxMonTom">${T('Tøm', 'Clear')}</button></div></div></div>`;
+    mon.hidden = false;
+    monTegn();
+    monHent();
+    clearInterval(monTimer); monTimer = setInterval(monHent, 1500);
+  };
+  mon.addEventListener('click', (e) => {
+    if (e.target === mon || e.target.closest('.gs-close')) { mon.hidden = true; clearInterval(monTimer); monTimer = 0; }
+    else if (e.target.id === 'kxMonPause') { monPause = !monPause; monTegn(); }
+    else if (e.target.id === 'kxMonTom') { monRader = []; monTegn(); }
+  });
+  mon.addEventListener('input', (e) => { if (e.target.id === 'kxMonFilter') { monFilter = e.target.value; monTegn(); } });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !mon.hidden) { mon.hidden = true; e.stopPropagation(); } }, true);
+
   const lukk = () => { lag.hidden = true; };
   lag.addEventListener('click', async (e) => {
     if (e.target === lag || e.target.closest('.gs-close')) { lukk(); return; }
@@ -145,6 +199,7 @@
     if (k === 'skann') skann();
     else if (k === 'importer') $('kxFil').click();
     else if (k === 'lesalle') lesAlle(b.dataset.adr);
+    else if (k === 'monitor') aapneMonitor(b.dataset.adr);
     else if (k === 'aapne') { lukk(); selectDevice(b.dataset.adr); }
     else if (k === 'slett') {
       if (!await nabeBekreft(T('Slette ETS-lista? Gatewayer som bruker den viser det som høres på bussen.', 'Delete the ETS list? Gateways that use it show what is heard on the bus.'), {ok: T('Slett', 'Delete')})) return;

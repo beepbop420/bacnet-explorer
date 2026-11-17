@@ -342,6 +342,7 @@ def royktest():
               "    && nabeSkjema.byggSystemer([{objid: 'u', name: 'A_320_012_Utekomp_Y1', description: 'Y1', type: 'analog-value', value: 80, units: 'degrees-celsius'}]).every(s => !s.komp.size)"
               "    && nabeSkjema.byggSystemer([{objid: 'm', name: 'Supply air mode', description: '0-m3/h, 1-l/s, 3-Pa', type: 'analog-value', value: 3, units: 'pascals'}]).every(s => !s.komp.size); })(),"
               " modbus: typeof aapneModbus === 'function' && !!document.getElementById('modbusBtn'),"
+              " bussfilter: typeof alderTekst === 'function' && S.filters.medVerdi === false && !!document.getElementById('fMedVerdi') && /min/.test(alderTekst(Date.now() / 1000 - 300)),"
               " knx: typeof aapneKnx === 'function' && !!document.getElementById('knxBtn'),"
               " flater: typeof aapneOversikt === 'function' &&!!document.getElementById('listeSmalBtn') && !!document.getElementById('oversiktBtn') && (() => {"
               "  const P = (o, n, d, t, v, u) => ({objid: o, name: n, description: d, type: t, value: v, units: u || ''});"
@@ -1219,6 +1220,46 @@ def knx_lesefane():
     sjekk("knx: volumstrøm (14.077) får enhet", nk.point_for(1, "q", (14, 77), value=1.0)["units"] == "cubic-meters-per-second")
 
 
+def modbus_ledig():
+    """A Modbus connection that nobody uses is closed (a gateway has few to give), and opened again when it is needed."""
+    j = vent_jobb(kall("/api/modbus/scan", {"subnet": "127.0.0.1", "port": MBSIM.port, "units": [1], "timeout": 1.0})["job_id"])
+    adr = j["result"]["devices"][0]["address"]
+    kall("/api/modbus/tilordne", {"address": adr, "kart": "Romregulator"})
+    obj = ["analog-value,0"]
+    kall("/api/poll", {"targets": {adr: obj}})
+    aapen1 = MBSIM.connections
+    tid = time.time()
+    while MBSIM.connections and time.time() - tid < 20:
+        time.sleep(0.5)
+    sjekk("modbus: en ledig forbindelse lukkes etter en stund", aapen1 >= 1 and MBSIM.connections == 0, f"åpen {aapen1}, lukket etter {time.time() - tid:.1f} s")
+    po = kall("/api/poll", {"targets": {adr: obj}})
+    sjekk("modbus: forbindelsen åpnes igjen når den trengs", bool(po["values"].get(adr)) and MBSIM.connections >= 1, str(po["values"].get(adr)))
+    kall("/api/modbus/koble-fra", {})
+    time.sleep(0.5)
+    sjekk("modbus: «koble fra» lukker alt", MBSIM.connections == 0)
+
+
+def knx_monitor():
+    """The group monitor, the times of the values and everything the bus has said in a poll."""
+    import nabe_knx as nk
+    j = vent_jobb(kall("/api/knx/scan", {"subnet": "127.0.0.1", "port": KXSIM.port, "timeout": 1.5})["job_id"])
+    adr = j["result"]["devices"][0]["address"]
+    kall("/api/knx/tilordne", {"address": adr, "liste": "Rom_101"})
+    kall("/api/poll", {"targets": {adr: ["analog-value,%d" % nk.parse_ga("1/1/1")]}})
+    time.sleep(2.0)
+    m1 = kall("/api/knx/monitor?address=" + adr)
+    rader = m1.get("rader", [])
+    sjekk("knx: monitoren viser telegrammene med kilde, adresse, ETS-navn og verdi",
+          m1.get("status") == "done" and any(r["ga"] == "1/1/1" and r["navn"] == "Rom 101 Temperatur" and r["kilde"] == "1.1.1" and isinstance(r["verdi"], float) for r in rader), str(rader[:2]))
+    m2 = kall(f"/api/knx/monitor?address={adr}&etter={m1['seq']}")
+    sjekk("knx: monitoren gir bare det som er nytt siden sist", all(r["n"] > m1["seq"] for r in m2.get("rader", [])) and m2["seq"] >= m1["seq"])
+    po = kall("/api/poll", {"targets": {adr: ["analog-value,%d" % nk.parse_ga("1/1/1")]}})
+    tider = po.get("tider", {}).get(adr, {})
+    sjekk("knx: live-lesing sier når hver verdi ble hørt, og gir alt bussen har sagt, ikke bare det som vises",
+          len(po["values"].get(adr, {})) >= 3 and "analog-value,%d" % nk.parse_ga("1/1/1") in tider and time.time() - tider["analog-value,%d" % nk.parse_ga("1/1/1")] < 5,
+          f"{len(po['values'].get(adr, {}))} verdier, {len(tider)} tider")
+
+
 def kjor_tester():
     s = kall("/api/start", {"local_address": "127.0.0.1/8"})
     sjekk("kobler til", s.get("status") == "done", s.get("local_address", s.get("error", "")))
@@ -1272,6 +1313,8 @@ def kjor_tester():
     knx_gjetting()
     modbus_rtu()
     knx_lesefane()
+    modbus_ledig()
+    knx_monitor()
     flere_kort()
     simulator()
     oppdatering()
@@ -1393,7 +1436,7 @@ async def main():
     import tempfile
     data = tempfile.mkdtemp(prefix="nabe-selvtest-")
     env = dict(os.environ, NABE_ALLOWED_ORIGINS=BASE, NABE_DATA=data,
-               NABE_COV_LIFETIME="6", NABE_COV_PAA_NYTT="3", NABE_TILLAT_LOOPBACK="1", NABE_VAKT_SEK="1")
+               NABE_MB_LEDIG="4", NABE_COV_LIFETIME="6", NABE_COV_PAA_NYTT="3", NABE_TILLAT_LOOPBACK="1", NABE_VAKT_SEK="1")
     server = subprocess.Popen([sys.executable, "-m", "uvicorn", "server:app", "--host", "127.0.0.1",
                                "--port", str(PORT), "--log-level", "warning"], cwd=HER, env=env)
     try:
