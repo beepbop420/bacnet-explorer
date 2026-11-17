@@ -233,7 +233,7 @@ def t(nb: str, en: str) -> str:
     return en if SPRAAK_VAR.get() == "en" else nb
 
 
-VERSJON = "1.93"
+VERSJON = "1.94"
 
 state = {"app": None, "local_address": None, "read_only": False, "bbmd": None, "primary": None}
 # The simulator: a scanned site run as devices on 127.0.0.x, in a process of its own.
@@ -2236,6 +2236,19 @@ async def _load_points(job, bacnet_app, body: "LoadPointsBody"):
 
     await bc.read_objects_bulk(bacnet_app, addr, wanted, progress=on_progress,
                                out=raw, gate=gate)
+    # A busy controller sometimes drops the name of a few objects in the first pass. A point without its name
+    # is a point the schematic cannot read, so those are asked for once more, on their own.
+    uten_navn = [o for o in wanted if not (raw.get(o) or {}).get("object-name")]
+    if uten_navn:
+        job["phase"] = "navn"
+        try:
+            raw2: Dict[str, Any] = {}
+            await bc.read_objects_bulk(bacnet_app, addr, uten_navn, out=raw2, gate=gate)
+            for oid, vals in raw2.items():
+                if vals.get("object-name"):
+                    raw.setdefault(oid, {}).update(vals)
+        except COMM_ERRORS:
+            pass
     points = [bc.shape_point(o, raw.get(o, {})) for o in wanted]
 
     def _points_result(partial: bool) -> Dict[str, Any]:
