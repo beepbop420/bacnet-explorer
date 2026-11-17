@@ -205,6 +205,9 @@ const FAKTA = [
   ['COV betyr at regulatoren sier fra selv. Mindre spørring, mer ro.', 'COV means the controller speaks up itself. Less asking, more peace.'],
 ];
 const NYTT = {
+  '2.9': [
+    ['Kursene tegnes uten at tekst ligger oppå hverandre: trykkfølere uten side henger på siden med færrest følere, lange navn kortes ned og kursene har litt mer luft. Kontrollert på alle 69 tegninger i testanleggene', 'Circuits are drawn without text lying on top of other text: pressure sensors with no side hang on the side with fewer sensors, long names are shortened and the circuits have a little more air. Checked on all 69 drawings in the test plants'],
+  ],
   '2.8': [
     ['Ett skann for hele bygget: når du skanner et område, leter NABE nå også etter Modbus TCP (port 502) og KNX-gatewayer (UDP 3671), og det som svarer havner i enhetslista ved siden av BACnet. Kan slås av under Innstillinger. Vinduene Modbus og KNX er der fortsatt for seriell port, andre porter, ETS-lister og registerkart', 'One scan for the whole building: when you scan a range, NABE now also looks for Modbus TCP (port 502) and KNX gateways (UDP 3671), and what answers lands in the device list next to BACnet. Can be turned off under Settings. The Modbus and KNX windows are still there for a serial port, other ports, ETS lists and register maps'],
   ],

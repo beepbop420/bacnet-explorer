@@ -378,7 +378,7 @@
       ${tekst(x, cy + 4, bokstav, 'sk-bok')}${tekst(x, ty, merke(k), 'sk-kode')}
       ${linjer[0] ? tekst(x, ty + 16, linjer[0], 'sk-v') : ''}${linjer[1] ? tekst(x, ty + 32, linjer[1], 'sk-sp') : ''}${varsel(k, x + 16, cy)}`);
   }
-  const BOK = {temp: 'T', trykk: 'P', difftrykk: 'ΔP', mengde: 'Q', fukt: 'φ', co2: 'C', royk: 'R', frost: 'F', bevegelse: 'B'};
+  const BOK = {temp: 'T', trykk: 'P', ekspansjon: 'P', difftrykk: 'ΔP', mengde: 'Q', fukt: 'φ', co2: 'C', royk: 'R', frost: 'F', bevegelse: 'B'};
 
   /* A fan or a pump: a circle with the direction of flow in it. */
   function rotor(k, x, y, retning, r) {
@@ -773,7 +773,7 @@
   function tegnKurser(systemer, type) {
     const t = type === 'kjoling' ? 'kjol' : 'varme';
     const kol = systemer.flatMap(delkretser);
-    const kb = 300, x0 = 110, yTopp = 96, yTur = 560, yRet = 612, B = x0 + kol.length * kb + 30;
+    const kb = 316, x0 = 110, yTopp = 96, yTur = 560, yRet = 612, B = x0 + kol.length * kb + 30;
     let d = `<line class="sk-ror tur ${t}" x1="40" y1="${yTur}" x2="${B - 40}" y2="${yTur}"/><line class="sk-ror retur ${t}" x1="40" y1="${yRet}" x2="${B - 40}" y2="${yRet}"/>
       <path class="sk-flyt" d="M34 ${yTur - 6}l9 6l-9 6"/><path class="sk-flyt" d="M43 ${yRet - 6}l-9 6l9 6"/>`;
     const rest = [], brukt = [];
@@ -792,14 +792,20 @@
       const side = (liste, x, venstre, y0) => liste.forEach((k, n) => {
         const y = y0 + n * 56, cx = x + (venstre ? -31 : 31);
         d += gruppe(k, 'foler', `<line class="sk-stilk" x1="${x}" y1="${y}" x2="${cx + (venstre ? 9 : -9)}" y2="${y}"/><circle class="sk-ring" cx="${cx}" cy="${y}" r="9"/>
-          ${tekst(cx, y + 4, BOK[k.art] || '?', 'sk-bok')}${tekst(cx + (venstre ? -15 : 15), y - 4, merke(k), 'sk-kode', venstre ? 'end' : 'start')}
+          ${tekst(cx, y + 4, BOK[k.art] || '?', 'sk-bok')}${tekst(cx + (venstre ? -15 : 15), y - 4, ((m) => m.length > 10 ? m.slice(0, 9) + '…' : m)(String(merke(k))), 'sk-kode', venstre ? 'end' : 'start')}
           ${tekst(cx + (venstre ? -15 : 15), y + 12, verdi(k.pkt.pv), 'sk-v', venstre ? 'end' : 'start')}${k.pkt.sp ? tekst(cx + (venstre ? -15 : 15), y + 28, verdi(k.pkt.sp), 'sk-sp', venstre ? 'end' : 'start') : ''}${varsel(k, cx, y - 16)}`);
       });
       const maal = ['temp', 'trykk', 'difftrykk', 'mengde'];
       // the description says which side; where it does not, the number does
       const tur = (k) => retningAv(k) === 'tur', ret = (k) => retningAv(k) === 'retur';
-      side(ta(k => maal.includes(k.art) && k.pkt.pv && tur(k) && !INNST_KURS.test(k.beskr || '')).slice(0, 4), xt, true, yTopp + 78);
-      side(ta(k => maal.includes(k.art) && k.pkt.pv && ret(k) && !INNST_KURS.test(k.beskr || '')).slice(0, 4), xr, false, yTopp + 78);
+      const sL = ta(k => maal.includes(k.art) && k.pkt.pv && tur(k) && !INNST_KURS.test(k.beskr || '')).slice(0, 4);
+      const sR = ta(k => maal.includes(k.art) && k.pkt.pv && ret(k) && !INNST_KURS.test(k.beskr || '')).slice(0, 4);
+      // A pressure that names no side hangs on the side that has fewer sensors, never in the gap between the pipes
+      // where the labels of both sides would run into it. With a vessel or a heat pump symbol it stays beside the symbol.
+      const ensidig = s.symbol ? [] : ta(k => (k.art === 'ekspansjon' || k.art === 'trykk') && k.pkt.pv && !INNST_KURS.test(k.beskr || ''));
+      ensidig.forEach(k => (sL.length <= sR.length ? sL : sR).push(k));
+      side(sL.slice(0, 5), xt, true, yTopp + 78);
+      side(sR.slice(0, 5), xr, false, yTopp + 78);
       // a part with no pipe of its own: its symbol between the pipes, its pressures beside it
       const cx0 = xt + 31;
       if (s.symbol) d += symbolKurs(s.symbol, cx0, yTopp + 130);
