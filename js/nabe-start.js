@@ -205,6 +205,9 @@ const FAKTA = [
   ['COV betyr at regulatoren sier fra selv. Mindre spørring, mer ro.', 'COV means the controller speaks up itself. Less asking, more peace.'],
 ];
 const NYTT = {
+  '2.18': [
+    ['Meldingen om at en ny versjon finnes kom ikke når den dukket opp mens NABE var åpen, bare en liten knapp nederst. Nå kommer en melding og NABO sier fra, og NABE ser etter ny versjon hvert femte minutt og når vinduet blir aktivt igjen', 'The message that a new version exists did not appear when it turned up while NABE was open, only a small button at the bottom. Now a message shows and NABO says so, and NABE looks for a new version every five minutes and when the window becomes active again'],
+  ],
   '2.17': [
     ['Modbus og KNX skannes samtidig med BACnet i stedet for etterpå, og Modbus-skannet er mye raskere: enheter som ikke svarer på andre enhets-ID-er venter ikke lenger på hver av dem. Versjonen står nederst til høyre i statuslinja', 'Modbus and KNX are scanned at the same time as BACnet instead of afterwards, and the Modbus scan is much faster: devices that do not answer other unit IDs no longer make it wait for each one. The version is shown at the bottom right of the status bar'],
     ['Modbus-enheter heter bare IP-en, ligger i en egen Modbus-gruppe som KNX, og toppen viser enhets-ID (ikke «instans»), modell, versjon, MAC-adresse og svartid der det finnes. Adressen åpner IP-en i nettleseren, ikke en intern lenke', 'Modbus devices are simply named by their IP, sit in their own Modbus group like KNX, and the header shows the unit ID (not "instance"), model, version, MAC address and response time where known. The address opens the IP in the browser, not an internal link'],

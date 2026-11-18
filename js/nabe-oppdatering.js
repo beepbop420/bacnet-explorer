@@ -32,6 +32,7 @@
 
   let meldt = null;      // the version the technician has already been told about
   let sist = 0;          // when GitHub was last asked about
+  let forsteSjekk = false;   // has the first look, a little after start, been made?
 
   // Which version this is: in the status bar, always, and a click opens the update window
   const vers = document.createElement('button');
@@ -54,14 +55,20 @@
       chip.title = T('En ny versjon av NABE er klar. Klikk for å oppdatere', 'A new version of NABE is ready. Click to update');
       // Said once, when it turns up while NABE is open: no restart is needed to find out
       if (meldt !== d.ny) {
-        const forste = meldt === null && !chip.dataset.sett;
+        // Said when it turns up while NABE is open. Found by the very first look, a few seconds after start, it is only
+        // shown on the button: nothing new has happened then, the technician has just opened NABE.
+        const vedStart = !forsteSjekk;
         meldt = d.ny;
-        chip.dataset.sett = '1';
         chip.classList.add('puls');
-        setTimeout(() => chip.classList.remove('puls'), 6000);
-        if (!forste) toast(T(`NABE ${d.ny} er ute. Trykk på «Oppdatering» nederst for å hente den`, `NABE ${d.ny} is out. Press "Update" at the bottom to get it`));
+        setTimeout(() => chip.classList.remove('puls'), 9000);
+        if (vedStart === false) {
+          const tekst = T(`NABE ${d.ny} er ute. Trykk på «Oppdatering» nederst til høyre for å hente den`, `NABE ${d.ny} is out. Press "Update" at the bottom right to get it`);
+          toast(tekst);
+          if (typeof nabeSier === 'function') nabeSier(T(`Det finnes en ny versjon, ${d.ny}. Knappen nederst til høyre henter den.`, `There is a new version, ${d.ny}. The button at the bottom right gets it.`));
+        }
       }
     }
+    forsteSjekk = true;
     return d;
   }
 
@@ -223,8 +230,10 @@
   // Looked at once, a little after start, when the rest has settled. Then every ten minutes while NABE is open,
   // and when the window comes back after a while, so a new version never waits for a restart to be found.
   setTimeout(hent, 9000);
-  setInterval(() => { if (lag.hidden && !document.hidden) hent(); }, 600000);
+  setInterval(() => { if (lag.hidden) hent(); }, 300000);
+  window.sjekkOppdatering = hent;
   document.addEventListener('visibilitychange', () => {
-    if (!document.hidden && lag.hidden && Date.now() - sist > 300000) hent();
+    if (!document.hidden && lag.hidden && Date.now() - sist > 120000) hent();
   });
+  window.addEventListener('focus', () => { if (lag.hidden && Date.now() - sist > 120000) hent(); });
 })();

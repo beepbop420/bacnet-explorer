@@ -235,7 +235,7 @@ def t(nb: str, en: str) -> str:
     return en if SPRAAK_VAR.get() == "en" else nb
 
 
-VERSJON = "2.17"
+VERSJON = "2.18"
 
 state = {"app": None, "local_address": None, "read_only": False, "bbmd": None, "primary": None}
 # The simulator: a scanned site run as devices on 127.0.0.x, in a process of its own.
@@ -2951,12 +2951,12 @@ _OPPD_GAAR = ("laster", "sjekker", "pakker ut", "starter", "klar")
 
 @app.get("/api/oppdatering")
 async def oppdatering():
-    """The newest release, checked at most every nine minutes, and what an
+    """The newest release, checked at most every five minutes, and what an
     update in progress is doing. Without internet the answer is "nothing known"."""
     if MINI:
         return {"status": "done", "her": VERSJON, "ny": None, "notater": "", "signert": False,
                 "kanOppdatere": False, "jobb": dict(OPPD), "mini": True}
-    if time.time() - OPPD_INFO["t"] > 540:
+    if time.time() - OPPD_INFO["t"] > 300:
         OPPD_INFO["t"] = time.time()
         try:
             OPPD_INFO["info"] = await asyncio.get_event_loop().run_in_executor(None, _opp.siste_utgivelse)
