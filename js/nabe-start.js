@@ -205,6 +205,9 @@ const FAKTA = [
   ['COV betyr at regulatoren sier fra selv. Mindre spørring, mer ro.', 'COV means the controller speaks up itself. Less asking, more peace.'],
 ];
 const NYTT = {
+  '2.13': [
+    ['Plusknappen ved siden av BACnet, Modbus og KNX samler det et skann ikke finner: Modbus-enhet med IP og port, Modbus på seriell port, KNX-gateway, KNX-routing, og import av ETS-liste og registerkart. Feil fra routing vises nå også når vinduet er lukket', 'The plus button next to BACnet, Modbus and KNX gathers what a scan does not find: a Modbus device by IP and port, Modbus on a serial port, a KNX gateway, KNX routing, and import of an ETS list and a register map. Routing errors now show even when the window is closed'],
+  ],
   '2.12': [
     ['Modbus og KNX er ikke lenger gjemt: tre knapper under skannfeltet (BACnet, Modbus, KNX) sier hva et skann leter etter, enhetslista har filter per protokoll med antall, og en KNX-gateway uten ETS-liste eller en Modbus-enhet med rå registre har Importer, Registerkart og Utforsk rett på raden. Bryteren i innstillinger er borte', 'Modbus and KNX are no longer hidden: three switches under the scan field (BACnet, Modbus, KNX) say what a scan looks for, the device list has a filter per protocol with counts, and a KNX gateway with no ETS list or a Modbus device with raw registers has Import, Register map and Explore right on its row. The switch in settings is gone'],
   ],

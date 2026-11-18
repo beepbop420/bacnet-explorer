@@ -31,8 +31,46 @@
     el.innerHTML = PROT.map(([id, navn]) => `<button type="button" data-val="${id}" role="switch" aria-checked="${paa(id)}" class="${paa(id) ? 'on' : ''}"
       title="${esc(id === 'bacnet' ? T('Leter etter BACnet-enheter', 'Looks for BACnet devices')
         : id === 'modbus' ? T('Leter etter Modbus TCP på port 502. Bare lesing', 'Looks for Modbus TCP on port 502. Read only')
-        : T('Leter etter KNX-gatewayer på UDP 3671. Kobler ikke til noe', 'Looks for KNX gateways on UDP 3671. Connects to nothing'))}"><i></i>${navn}</button>`).join('');
+        : T('Leter etter KNX-gatewayer på UDP 3671. Kobler ikke til noe', 'Looks for KNX gateways on UDP 3671. Connects to nothing'))}"><i></i>${navn}</button>`).join('')
+      + `<span class="menu prot-leggtil"><button type="button" id="protPlus" class="prot-plus" aria-haspopup="menu" aria-expanded="false" aria-label="${esc(T('Legg til', 'Add'))}" title="${esc(T('Legg til det et skann ikke finner: seriell port, en bestemt IP, routing og filer', 'Add what a scan does not find: a serial port, a given IP, routing and files'))}">+</button>
+        <div class="menu-pop menu-right" id="protMeny" role="menu" hidden>
+          <button type="button" class="menu-item" role="menuitem" data-add="mb-ip">${T('Modbus-enhet (IP og port)', 'Modbus device (IP and port)')}</button>
+          <button type="button" class="menu-item" role="menuitem" data-add="mb-ser">${T('Modbus på seriell port', 'Modbus on a serial port')}</button>
+          <button type="button" class="menu-item" role="menuitem" data-add="kx-ip">${T('KNX-gateway (IP)', 'KNX gateway (IP)')}</button>
+          <button type="button" class="menu-item" role="menuitem" data-add="kx-routing">${T('Lytt på KNX-routing', 'Listen to KNX routing')}</button>
+          <div class="menu-sep"></div>
+          <button type="button" class="menu-item" role="menuitem" data-add="kx-ets">${T('Importer ETS-liste …', 'Import ETS list …')}</button>
+          <button type="button" class="menu-item" role="menuitem" data-add="mb-kart">${T('Importer registerkart …', 'Import register map …')}</button>
+        </div></span>`;
   }
+  function lukkMeny() {
+    const m = $('protMeny'), b = $('protPlus');
+    if (m) m.hidden = true;
+    if (b) b.setAttribute('aria-expanded', 'false');
+  }
+  document.addEventListener('click', (e) => {
+    const plus = e.target.closest('#protPlus');
+    const valg = e.target.closest('#protMeny [data-add]');
+    if (plus) {
+      const m = $('protMeny');
+      m.hidden = !m.hidden;
+      plus.setAttribute('aria-expanded', String(!m.hidden));
+      return;
+    }
+    if (valg) {
+      lukkMeny();
+      const a = valg.dataset.add;
+      if (a === 'mb-ip') window.nabeMbHjelp.aapneSom('tcp');
+      else if (a === 'mb-ser') window.nabeMbHjelp.aapneSom('ser');
+      else if (a === 'kx-ip') window.aapneKnx();
+      else if (a === 'kx-routing') window.nabeKnxHjelp.routing();
+      else if (a === 'kx-ets') window.nabeKnxHjelp.importFil();
+      else if (a === 'mb-kart') window.nabeMbHjelp.importFil();
+      return;
+    }
+    lukkMeny();
+  });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') lukkMeny(); });
   document.addEventListener('click', (e) => {
     const b = e.target.closest('#protVal [data-val]');
     if (!b) return;

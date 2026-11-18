@@ -108,7 +108,7 @@
       renderDevices();
       sett(d.telegrammer ? T(`Hører ${d.telegrammer} telegrammer på routing-gruppen.`, `Hearing ${d.telegrammer} telegrams on the routing group.`)
         : T('Lytter, men har ikke hørt noe ennå. Er PC-en på samme nett som en KNX-ruter? Over VPN kommer ikke multikast gjennom.', 'Listening, but nothing heard yet. Is the PC on the same network as a KNX router? Multicast does not pass a VPN.'));
-    } catch (e) { sett(e.message); }
+    } catch (e) { sett(e.message); toast(e.message, true); }
     opptatt = false; tegn();
   }
 
@@ -265,7 +265,14 @@
     };
     i.click();
   }
-  window.nabeKnxHjelp = {klar: () => klar, harListe: (adr) => !!tilordning[adr], importer: velgFilFor};
+  // From the Add menu: listen to routing, or pick an ETS file without any gateway in mind
+  function importFil() {
+    const i = document.createElement('input');
+    i.type = 'file'; i.accept = '.knxproj,.csv,.txt,.zip';
+    i.onchange = () => importer(i.files[0]);
+    i.click();
+  }
+  window.nabeKnxHjelp = {klar: () => klar, harListe: (adr) => !!tilordning[adr], importer: velgFilFor, routing: lyttRouting, importFil};
   hentLister().then(() => { klar = true; if (window.renderDevices) renderDevices(); });
 
   window.aapneKnx = async () => {

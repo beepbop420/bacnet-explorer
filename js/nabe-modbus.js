@@ -263,7 +263,19 @@
     delete S.cache[adr];
     if (S.activeDev && S.activeDev.address === adr) selectDevice(adr, {force: true});
   }
-  window.nabeMbHjelp = {klar: () => klar, harKart: (adr) => !!tilordning[adr], importer: velgFilFor, utforsk: utforskFra};
+  // From the Add menu: the window set to a TCP or a serial scan, and a map picked without any device in mind
+  async function aapneSom(t) {
+    await window.aapneModbus();
+    transport = t; tegn();
+    const f = $(t === 'ser' ? 'mbCom' : 'mbOmraade'); if (f) f.focus();
+  }
+  function importFil() {
+    const i = document.createElement('input');
+    i.type = 'file'; i.accept = '.csv,.xlsx,.json,.txt';
+    i.onchange = () => importer(i.files[0]);
+    i.click();
+  }
+  window.nabeMbHjelp = {klar: () => klar, harKart: (adr) => !!tilordning[adr], importer: velgFilFor, utforsk: utforskFra, aapneSom, importFil};
   hentKart().then(() => { klar = true; if (window.renderDevices) renderDevices(); });
 
   window.aapneModbus = async () => {
