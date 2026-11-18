@@ -35,7 +35,9 @@
       const d = await api2('/api/knx/lister');
       if (d.status === 'done') { lister = d.lister; tilordning = d.tilordning; }
     } catch { /* the next open tries again */ }
+    if (klar && window.renderDevices) renderDevices();
   }
+  let klar = false;
 
   function tegn() {
     const enheter = gatewayer();
@@ -155,6 +157,7 @@
       : T(`ETS-lista «${navn}» importert: ${d.punkter} gruppeadresser.`, `ETS list "${navn}" imported: ${d.punkter} group addresses.`));
     await hentLister(); tegn();
     if (d.endringer && window.nabeListeEndringer) sett(window.nabeListeEndringer(d.endringer).join('\n'));
+    return d;
   }
 
   async function tilordne(adr, id) {
@@ -247,6 +250,23 @@
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape' && !lag.hidden) { lukk(); e.stopPropagation(); }
   }, true);
+
+  /* From the device list: pick an ETS file for this gateway, and the gateway uses it at once. */
+  function velgFilFor(adr) {
+    const i = document.createElement('input');
+    i.type = 'file'; i.accept = '.knxproj,.csv,.txt,.zip';
+    i.onchange = async () => {
+      const d = await importer(i.files[0]);
+      if (!d || d.status !== 'done') return;
+      await api2('/api/knx/tilordne', {address: adr, liste: d.id});
+      await hentLister();
+      delete S.cache[adr];
+      if (S.activeDev && S.activeDev.address === adr) selectDevice(adr, {force: true});
+    };
+    i.click();
+  }
+  window.nabeKnxHjelp = {klar: () => klar, harListe: (adr) => !!tilordning[adr], importer: velgFilFor};
+  hentLister().then(() => { klar = true; if (window.renderDevices) renderDevices(); });
 
   window.aapneKnx = async () => {
     await hentLister();

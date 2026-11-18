@@ -970,11 +970,14 @@ async function runScan() {
       return true;
     };
 
-    await Promise.all([...grupper.entries()].map(async ([kort, liste]) => {
-      for (const [n, subnet] of liste) {
-        if (!await skannOmraade(n, subnet, kort)) break;
-      }
-    }));
+    // BACnet is one of three things a scan looks for; with it switched off only Modbus and KNX are looked for
+    if (loadPrefs().protBacnet !== false || !window.skannProtokoller) {
+      await Promise.all([...grupper.entries()].map(async ([kort, liste]) => {
+        for (const [n, subnet] of liste) {
+          if (!await skannOmraade(n, subnet, kort)) break;
+        }
+      }));
+    }
     await refreshStatus();
     // The same range is looked through for Modbus and KNX too, unless it was stopped or is a BBMD lookup
     if (window.skannProtokoller && mode !== 'bbmd' && !LINJE.avbrutt) {
@@ -1428,6 +1431,8 @@ function renderDevices() {
   $('devCount').textContent = S.devices.length;
   if ($('devRescan')) $('devRescan').hidden = !S.devices.length;
   renderSiteWarnings();
+  if (window.nabeProtFilterTegn) window.nabeProtFilterTegn();
+  const synlig = S.devices.filter(d => !window.nabeProtOK || window.nabeProtOK(d));
   const el = $('devList');
   if (!S.devices.length && S.tomtSkann) {
     // Forklaringa paa et tomt skann tegnes HER, ikke skrives inn en gang
@@ -1495,19 +1500,19 @@ function renderDevices() {
             ? `<em class="dev-pkt">${S.cache[d.address].length} pkt</em>`
             : `<em class="dev-pkt" title="${esc(T('Enheten svarte, men har ingen objekter med verdi. Slå på «alle objekttyper» under Filter for å se det den har.', 'The device answered, but has no objects with a value. Turn on "all object types" under Filter to see what it has.'))}">${T('ingen punkter', 'no points')}</em>`) : ''}
       </span>
-    </button>`;
+    </button>${window.nabeProtHint ? window.nabeProtHint(d) : ''}`;
   };
 
   const akse = grupperingsAkse();
   if (akse === 'none') {
-    el.innerHTML = S.devices.map(kort).join('');
+    el.innerHTML = synlig.map(kort).join('');
   } else {
     // Grouped by maker, because on a mixed site that is genuinely how you
     // think about the plant: the Beckhoffs behave one way, the WAGOs another.
     // Sections are ordered by size so the dominant system comes first, and a
     // section carrying a fault sorts above an equally large healthy one.
     const grupper = new Map();
-    for (const d of S.devices) {
+    for (const d of synlig) {
       // Grouping by range answers "which part of the plant"; by vendor it
       // answers "which system". Both are things you actually ask.
       const v = akse === 'range'
@@ -10419,9 +10424,8 @@ const ORDBOK = {
   'Søker jevnlig etter enheter som faller inn og ut':
     'Looks regularly for devices that come and go',
   'Forhåndsles enheter': 'Pre-read devices',
-  'Søk også etter Modbus og KNX': 'Also look for Modbus and KNX',
-  'Samme skann finner Modbus TCP (port 502) og KNX-gatewayer (UDP 3671) i området. Bare lesing':
-    'The same scan finds Modbus TCP (port 502) and KNX gateways (UDP 3671) in the range. Read only',
+  'Hva skannet leter etter': 'What the scan looks for',
+  'Vis protokoll': 'Show protocol',
   'Leser de andre enhetene i bakgrunnen etter et skann':
     'Reads the other devices in the background after a scan',
   'Grupper enheter': 'Group devices',

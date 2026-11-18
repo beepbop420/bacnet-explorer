@@ -264,9 +264,6 @@
           <button id="autoSokBtn" class="sett-rad bryter" role="switch">Søk ved oppstart
             <small>Skanner kabelen inn i anlegget, eller anlegget du var på sist, når NABE åpnes</small>
             <span id="autoSokState" class="menu-state"></span></button>
-          <button id="protSokBtn" class="sett-rad bryter" role="switch">Søk også etter Modbus og KNX
-            <small>Samme skann finner Modbus TCP (port 502) og KNX-gatewayer (UDP 3671) i området. Bare lesing</small>
-            <span id="protSokState" class="menu-state"></span></button>
           <button id="kortAutoBtn" class="sett-rad bryter" role="switch">Velg nettverkskort automatisk
             <small>Hver adresse går ut av kortet den rutes gjennom, flere kort samtidig. Av: alt går ut av kortet du velger</small>
             <span id="kortAutoState" class="menu-state"></span></button>
@@ -396,6 +393,7 @@
         <option value="broadcast">Who-Is</option>
       </select>
       <button id="scanBtn" class="btn primary" disabled>Skann</button>
+      <div id="protVal" class="prot-val" role="group" aria-label="Hva skannet leter etter"></div>
       <div id="omrForslag" class="omr-forslag" hidden></div>
       <div class="skann-linje" aria-hidden="true"></div>
     </div>
@@ -404,6 +402,7 @@
         <input id="devSok" class="dev-sok" type="search" placeholder="Finn enhet" autocomplete="off" spellcheck="false"
                title="Navn, IP eller instans. Enter åpner den første." hidden></div>
       <div id="dupWarn" class="dup-warn" hidden></div>
+      <div id="protFilter" class="prot-filter" role="group" aria-label="Vis protokoll" hidden></div>
       <div id="devList" tabindex="-1" class="pane-body">
         <div class="empty">
           <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 10h.01M10 10h.01"/></svg>

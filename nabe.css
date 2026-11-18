@@ -5421,3 +5421,19 @@ body.liste-smal #devList .dev.st-feil > .dev-smal,body.sk-stor #devList .dev.st-
 .rd-knapp{margin-left:auto;height:26px;padding:0 10px;font-size:12px}
 #kxMelding{white-space:pre-line}
 .mb-modal .sp-tab{display:block;max-width:100%;overflow-x:auto}
+
+/* BACnet, Modbus and KNX in plain view: what a scan looks for, the filter over the list, the action on a row */
+.prot-val{display:flex;flex-basis:100%;gap:6px;margin-top:6px}
+.prot-val button{display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 10px;border:1px solid var(--line);border-radius:var(--r-pill);background:transparent;color:var(--fg-3);font:inherit;font-size:11.5px;cursor:pointer;transition:border-color .15s,color .15s}
+.prot-val button i{width:7px;height:7px;border-radius:50%;border:1px solid var(--fg-3);transition:background .15s,border-color .15s}
+.prot-val button:hover{border-color:var(--fg-3);color:var(--fg)}
+.prot-val button.on{color:var(--fg);border-color:var(--line-2)}
+.prot-val button.on i{background:var(--accent,#6aa7ff);border-color:var(--accent,#6aa7ff)}
+.prot-filter{display:flex;gap:6px;padding:6px 10px 2px}
+.prot-filter button{display:inline-flex;gap:6px;align-items:center;height:24px;padding:0 10px;border:1px solid var(--line);border-radius:var(--r-pill);background:transparent;color:var(--fg-2);font:inherit;font-size:11.5px;cursor:pointer;transition:border-color .15s,color .15s}
+.prot-filter button em{font-style:normal;color:var(--fg-3);font-size:11px}
+.prot-filter button:hover{border-color:var(--fg-3);color:var(--fg)}
+.prot-filter button.sel{background:var(--raised);border-color:var(--line-2);color:var(--fg);font-weight:500}
+.dev-hint{display:flex;flex-wrap:wrap;align-items:center;gap:4px 10px;margin:-2px 8px 8px 14px;font-size:11px;color:var(--fg-3)}
+.dev-hint button{border:0;background:transparent;padding:0;font:inherit;font-size:11px;font-weight:500;color:var(--accent,#6aa7ff);cursor:pointer}
+.dev-hint button:hover{text-decoration:underline}

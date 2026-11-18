@@ -43,7 +43,9 @@
       const d = await api2('/api/modbus/kart');
       if (d.status === 'done') { kart = d.kart; tilordning = d.tilordning; }
     } catch { /* the next open tries again */ }
+    if (klar && window.renderDevices) renderDevices();
   }
+  let klar = false;
 
   const hjelp = () => transport === 'ser'
     ? T('Spør hver enhets-ID på bussen, én om gangen. Seriell buss har én master og går sakte, så hold området lite. Bare lesing.', 'Asks each unit ID on the bus, one at a time. A serial bus has one master and is slow, so keep the range small. Read only.')
@@ -173,6 +175,7 @@
     toast(d.endringer ? T(`Registerkart «${navn}» oppdatert: ${d.punkter} punkter.`, `Register map "${navn}" updated: ${d.punkter} points.`)
       : T(`Registerkart «${navn}» importert: ${d.punkter} punkter.`, `Register map "${navn}" imported: ${d.punkter} points.`));
     await hentKart(); tegn();
+    return d;
   }
 
   /* What a re-imported list changed: a summary line, then a few examples of each kind. Shared with the KNX window. */
@@ -238,6 +241,30 @@
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape' && !lag.hidden) { lukk(); e.stopPropagation(); }
   }, true);
+
+  /* From the device list: pick a register map for this device, or explore what it answers. */
+  function velgFilFor(adr) {
+    const i = document.createElement('input');
+    i.type = 'file'; i.accept = '.csv,.xlsx,.json,.txt';
+    i.onchange = async () => {
+      const dev = S.devices.find(x => x.address === adr) || {};
+      const d = await importer(i.files[0]);
+      if (!d || d.status !== 'done') return;
+      await api2('/api/modbus/tilordne', {address: adr, kart: d.id, vendor: dev.vendor_name || '', model: dev.model_name || ''});
+      await hentKart();
+      delete S.cache[adr];
+      if (S.activeDev && S.activeDev.address === adr) selectDevice(adr, {force: true});
+    };
+    i.click();
+  }
+  async function utforskFra(adr) {
+    await utforsk(adr);
+    await hentKart();
+    delete S.cache[adr];
+    if (S.activeDev && S.activeDev.address === adr) selectDevice(adr, {force: true});
+  }
+  window.nabeMbHjelp = {klar: () => klar, harKart: (adr) => !!tilordning[adr], importer: velgFilFor, utforsk: utforskFra};
+  hentKart().then(() => { klar = true; if (window.renderDevices) renderDevices(); });
 
   window.aapneModbus = async () => {
     await hentKart();

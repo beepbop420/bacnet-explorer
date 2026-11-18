@@ -354,7 +354,7 @@ def royktest():
               "  const svg = nabeSkjema.tegnKurser(sys.filter(x => x.type === 'varme'), 'varme').svg;"
               "  return /RT401/.test(svg) && !/RT405/.test(svg) && !/SB501/.test(svg) && /SB502/.test(svg) && !/JP402/.test(svg); })(),"
               " veksler: (() => { const a = nabeSkjema.tegnAggregat; return typeof a === 'function'; })(),"
-              " protokoller: typeof skannProtokoller === 'function' && !!document.getElementById('protSokBtn'),"
+              " protokoller: typeof skannProtokoller === 'function' && !!document.getElementById('protVal'),"
               " modbus: typeof aapneModbus === 'function' && !!document.getElementById('modbusBtn'),"
               " bussfilter: typeof alderTekst === 'function' && S.filters.medVerdi === false && !!document.getElementById('fMedVerdi') && /min/.test(alderTekst(Date.now() / 1000 - 300)),"
               " knx: typeof aapneKnx === 'function' && !!document.getElementById('knxBtn'),"

@@ -205,6 +205,9 @@ const FAKTA = [
   ['COV betyr at regulatoren sier fra selv. Mindre spørring, mer ro.', 'COV means the controller speaks up itself. Less asking, more peace.'],
 ];
 const NYTT = {
+  '2.12': [
+    ['Modbus og KNX er ikke lenger gjemt: tre knapper under skannfeltet (BACnet, Modbus, KNX) sier hva et skann leter etter, enhetslista har filter per protokoll med antall, og en KNX-gateway uten ETS-liste eller en Modbus-enhet med rå registre har Importer, Registerkart og Utforsk rett på raden. Bryteren i innstillinger er borte', 'Modbus and KNX are no longer hidden: three switches under the scan field (BACnet, Modbus, KNX) say what a scan looks for, the device list has a filter per protocol with counts, and a KNX gateway with no ETS list or a Modbus device with raw registers has Import, Register map and Explore right on its row. The switch in settings is gone'],
+  ],
   '2.11': [
     ['Skjemaet har en knapp «Lagre underlag» som lagrer alt tegningen er laget av (navn, beskrivelser og hva hver del ble tolket som) i en fil. Ser en tegning feil ut, sender du filen, så kan den rettes uten at noen må være på anlegget', 'The schematic has a "Save basis" button that saves everything the drawing is made from (names, descriptions and what each part was taken to be) to a file. If a drawing looks wrong you send the file, and it can be fixed without anyone being at the plant'],
   ],
