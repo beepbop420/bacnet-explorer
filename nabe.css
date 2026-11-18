@@ -5194,8 +5194,8 @@ button.sp-rad:hover{background:var(--hover)}
    red, amber and green stay with alarm, hand and running. Every stretch of
    duct is also named in words, so the colour is never the only way to tell
    supply from extract. */
-:root{--prot-bacnet:#56b4e9;--prot-modbus:#e69f00;--prot-knx:#cc79a7;--sk-ute:#7fb7e7;--sk-til:#eda479;--sk-avt:#9541c4;--sk-avk:#778389;--sk-v-tur:#e0483e;--sk-v-ret:#f3a79f;--sk-k-tur:#3b82d6;--sk-k-ret:#a4cdf5;--sk-spr:#2fb1a6}
-:root[data-theme="light"]{--prot-bacnet:#0072b2;--prot-modbus:#b86e00;--prot-knx:#9a3d75;--sk-ute:#2064d7;--sk-til:#b45e2c;--sk-avt:#6f2179;--sk-avk:#57595b;--sk-v-tur:#c0362d;--sk-v-ret:#eb918a;--sk-k-tur:#1f63b0;--sk-k-ret:#86b9e8;--sk-spr:#1f8a82}
+:root{--prot-bacnet:#6ab7f0;--prot-modbus:#e8a317;--prot-knx:#009e73;--sk-ute:#7fb7e7;--sk-til:#eda479;--sk-avt:#9541c4;--sk-avk:#778389;--sk-v-tur:#e0483e;--sk-v-ret:#f3a79f;--sk-k-tur:#3b82d6;--sk-k-ret:#a4cdf5;--sk-spr:#2fb1a6}
+:root[data-theme="light"]{--prot-bacnet:#0072b2;--prot-modbus:#b86e00;--prot-knx:#00875f;--sk-ute:#2064d7;--sk-til:#b45e2c;--sk-avt:#6f2179;--sk-avk:#57595b;--sk-v-tur:#c0362d;--sk-v-ret:#eb918a;--sk-k-tur:#1f63b0;--sk-k-ret:#86b9e8;--sk-spr:#1f8a82}
 .sk-bryter{display:flex;gap:2px;padding:2px;margin-right:8px;border:1px solid var(--line);border-radius:var(--radius);flex:0 0 auto}
 .sk-bryter[hidden]{display:none}
 .sk-bryter button{height:26px;padding:0 12px;border-radius:calc(var(--radius) - 2px);color:var(--fg-3);font:inherit;font-size:12px;cursor:pointer}
@@ -5441,7 +5441,7 @@ body.liste-smal #devList .dev.st-feil > .dev-smal,body.sk-stor #devList .dev.st-
 .prot-plus{height:24px;width:28px;padding:0;font-size:14px;line-height:1;border:1px dashed var(--line-2);border-radius:var(--r-pill);background:transparent;color:var(--fg-2);font:inherit;font-size:11.5px;cursor:pointer;transition:border-color .15s,color .15s}
 .prot-plus:hover,.prot-plus[aria-expanded="true"]{border-color:var(--fg-3);color:var(--fg)}
 
-/* Each protocol has its own colour, chosen to stay apart for red-green and blue-yellow colour blindness too (Okabe and Ito) */
+/* Each protocol has its own colour, chosen to stay apart for red-green and blue-yellow colour blindness too (Okabe and Ito); KNX is green, as its own logo is */
 .dev .dev-ip::before{content:'';display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:6px;vertical-align:1px;background:var(--prot-bacnet)}
 .dev.p-modbus .dev-ip::before{background:var(--prot-modbus)}
 .dev.p-knx .dev-ip::before{background:var(--prot-knx)}

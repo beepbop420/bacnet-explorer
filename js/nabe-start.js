@@ -205,6 +205,9 @@ const FAKTA = [
   ['COV betyr at regulatoren sier fra selv. Mindre spørring, mer ro.', 'COV means the controller speaks up itself. Less asking, more peace.'],
 ];
 const NYTT = {
+  '2.15': [
+    ['KNX har fått sin grønne farge, slik logoen er. BACnet er blå og Modbus oransje. Grønnen er den blågrønne i en palett for fargeblinde, så den skilles fra de to andre også ved rød-grønn fargeblindhet', 'KNX now has its green, like its logo. BACnet is blue and Modbus orange. The green is the bluish green of a palette for colour blindness, so it stays apart from the other two for red-green colour blindness too'],
+  ],
   '2.14': [
     ['BACnet, Modbus og KNX har hver sin farge (blå, oransje og rødlilla) på knappene under skannfeltet, i filteret og som en prikk på hver enhet. Fargene er valgt så de skiller seg også ved rød-grønn og blå-gul fargeblindhet. Kanalene i aggregatet (uteluft, tilluft, avtrekk, avkast) hadde farger som var umulige å skille for fargeblinde, og er byttet ut', 'BACnet, Modbus and KNX each have their own colour (blue, orange and reddish purple) on the buttons under the scan field, in the filter and as a dot on each device. The colours are chosen to stay apart for red-green and blue-yellow colour blindness too. The ducts in the air handler (outdoor, supply, extract, exhaust) had colours that colour-blind people could not tell apart, and have been replaced'],
   ],
