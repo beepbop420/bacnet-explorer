@@ -138,24 +138,50 @@
     opptatt = false; tegn();
   }
 
+  /* Finding the registers. Modbus has no list of what a device holds, so the only way is to try the addresses and keep
+     those that answer. It takes a while on a slow line, so it is shown where it happens, on the device's own row, with a
+     count and a way to stop it, and when it is done the device opens with what was found. */
+  const utf = {};          // address -> {done, total, id}
+
   async function utforsk(adr) {
-    sett(T('Leser registre …', 'Reading registers …'));
+    if (utf[adr]) return;
+    utf[adr] = {done: 0, total: 0, id: null};
+    sett(T('Finner registre …', 'Finding registers …'));
+    if (window.renderDevices) renderDevices();
     try {
       const start = await api2('/api/modbus/utforsk', {address: adr});
-      if (start.status !== 'started') throw new Error(start.error || T('Utforsking feilet', 'Exploring failed'));
+      if (start.status !== 'started') throw new Error(start.error || T('Fikk ikke startet letingen', 'Could not start the search'));
+      utf[adr].id = start.job_id;
       for (;;) {
-        await new Promise(r => setTimeout(r, 400));
+        await new Promise(r => setTimeout(r, 450));
+        if (!utf[adr]) return;                                  // stopped from the row
         const j = await api2('/api/job/' + start.job_id);
-        if (j.status === 'running') { sett(`${j.phase || ''} ${j.done || 0}/${j.total || 0}`.trim()); continue; }
-        if (j.status === 'error') throw new Error(j.error || T('Utforsking feilet', 'Exploring failed'));
+        if (j.status === 'running') {
+          utf[adr].done = j.done || 0; utf[adr].total = j.total || 0;
+          const el = document.querySelector(`.dev-hint[data-adr="${CSS.escape(adr)}"] .utf-tall`);
+          if (el) el.textContent = utf[adr].total ? T(`${utf[adr].done} av ${utf[adr].total}`, `${utf[adr].done} of ${utf[adr].total}`) : '';
+          continue;
+        }
+        if (j.status === 'error') throw new Error(j.error || T('Fant ingen registre', 'Found no registers'));
         const r = j.result || {};
-        sett(T(`Fant ${r.count} registre som svarer. De ligger som et registerkart du kan gi navn.`, `Found ${r.count} registers that answer. They are kept as a register map you can name.`));
+        const deler = Object.entries(r.per_funksjon || {}).filter(([, n]) => n).map(([k, n]) => `${n} ${({holding: T('holding', 'holding'), input: T('input', 'input'), coil: T('coil', 'coil'), discrete: T('discrete', 'discrete')})[k] || k}`);
+        toast(T(`Fant ${r.count} registre${deler.length ? ' (' + deler.join(', ') + ')' : ''}. Gi dem navn i tabellen, eller importer et registerkart`, `Found ${r.count} registers${deler.length ? ' (' + deler.join(', ') + ')' : ''}. Name them in the table, or import a register map`));
+        sett(T(`Fant ${r.count} registre som svarer.`, `Found ${r.count} registers that answer.`));
         delete S.cache[adr];
-        await hentKart(); tegn();
-        if (S.activeDev && S.activeDev.address === adr) selectDevice(adr, {force: true});
         break;
       }
-    } catch (e) { sett(e.message); }
+    } catch (e) { sett(e.message); toast(e.message, true); }
+    delete utf[adr];
+    await hentKart(); tegn();
+    if (window.renderDevices) renderDevices();
+    if (S.devices.some(d => d.address === adr) && (!S.activeDev || S.activeDev.address !== adr || S.cache[adr] === undefined)) selectDevice(adr, {force: true});
+  }
+  async function avbrytUtforsk(adr) {
+    const u = utf[adr];
+    if (!u) return;
+    delete utf[adr];
+    if (u.id) { try { await api2('/api/job/' + u.id + '/cancel', {}); } catch { /* it ends by itself */ } }
+    if (window.renderDevices) renderDevices();
   }
 
   let oppdaterNavn = '';     // set when a file is picked to replace a map that is already there
@@ -257,12 +283,6 @@
     };
     i.click();
   }
-  async function utforskFra(adr) {
-    await utforsk(adr);
-    await hentKart();
-    delete S.cache[adr];
-    if (S.activeDev && S.activeDev.address === adr) selectDevice(adr, {force: true});
-  }
   // From the Add menu: the window set to a TCP or a serial scan, and a map picked without any device in mind
   async function aapneSom(t) {
     await window.aapneModbus();
@@ -275,7 +295,7 @@
     i.onchange = () => importer(i.files[0]);
     i.click();
   }
-  window.nabeMbHjelp = {klar: () => klar, harKart: (adr) => !!tilordning[adr], importer: velgFilFor, utforsk: utforskFra, aapneSom, importFil};
+  window.nabeMbHjelp = {klar: () => klar, harKart: (adr) => !!tilordning[adr], importer: velgFilFor, utforsk, avbryt: avbrytUtforsk, utforskStatus: (adr) => utf[adr] || null, aapneSom, importFil};
   hentKart().then(() => { klar = true; if (window.renderDevices) renderDevices(); });
 
   window.aapneModbus = async () => {

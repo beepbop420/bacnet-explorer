@@ -33,9 +33,20 @@
   let meldt = null;      // the version the technician has already been told about
   let sist = 0;          // when GitHub was last asked about
 
+  // Which version this is: in the status bar, always, and a click opens the update window
+  const vers = document.createElement('button');
+  vers.type = 'button';
+  vers.id = 'sbVersjon';
+  vers.className = 'sb-item sb-vers';
+  vers.title = T('Versjonen du kjører. Klikk for å se om det finnes en nyere', 'The version you are running. Click to see if there is a newer one');
+  vers.onclick = () => window.aapneOppdatering();
+  document.querySelector('.statusbar')?.append(vers);
+  fetch('/api/status', {cache: 'no-store'}).then(r => r.json()).then(x => { if (x && x.versjon) vers.textContent = 'NABE ' + x.versjon; }).catch(() => {});
+
   async function hent() {
     try { d = await (await fetch('/api/oppdatering', {cache: 'no-store'})).json(); } catch { d = null; }
     sist = Date.now();
+    if (d && d.her) vers.textContent = 'NABE ' + d.her;
     const klar = !!(d && d.ny && d.kanOppdatere && d.signert);
     chip.hidden = !klar;
     if (klar) {

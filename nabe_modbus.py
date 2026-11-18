@@ -20,6 +20,7 @@ import asyncio
 import csv
 import io
 import json
+import os
 import re
 import struct
 import time
@@ -323,7 +324,7 @@ def parse_device_identification(body: bytes) -> Dict[str, str]:
 
 
 # ----------------------------------------------------------------- scanning
-async def tcp_sweep(hosts: Sequence[str], port: int = MODBUS_PORT, timeout: float = 0.8, concurrency: int = 64) -> List[str]:
+async def tcp_sweep(hosts: Sequence[str], port: int = MODBUS_PORT, timeout: float = 0.8, concurrency: int = 256) -> List[str]:
     """The hosts with something listening on the port."""
     sem = asyncio.Semaphore(concurrency)
     open_: List[str] = []
@@ -343,34 +344,43 @@ async def tcp_sweep(hosts: Sequence[str], port: int = MODBUS_PORT, timeout: floa
 async def probe_unit(client: ModbusClient, unit: int) -> Optional[Dict[str, Any]]:
     """Is there a device at this unit, and who is it? Each step happens only if the unit is there: behind a
     gateway every request to an empty unit is a timeout on the serial bus."""
+    return (await probe_unit2(client, unit))[0]
+
+
+async def probe_unit2(client: ModbusClient, unit: int, quick: bool = False):
+    """(what answered or None, whether it was silence). `quick` is for the units after the first: a device that
+    ignores a unit it is not does so by saying nothing, and every silence costs a timeout, so a quick probe asks
+    once with a short wait instead of three times with a long one."""
+    stille = False
     try:
         ident = await client.device_identification(unit)
         if ident:
-            return {"via": "device_identification", **ident}
-        return {"via": "device_identification"}
+            return {"via": "device_identification", **ident}, False
+        return {"via": "device_identification"}, False
     except ModbusException as e:
         if e.code in GATEWAY_NO_DEVICE:
-            return None
+            return None, False
         # Function 43 is optional; a device that refuses it with another exception is still a device.
     except ModbusError:
-        pass
-    try:
-        sid = await client.server_id(unit)
-        return {"via": "report_server_id", "product_name": sid.get("text") or ""}
-    except ModbusException as e:
-        if e.code in GATEWAY_NO_DEVICE:
-            return None
-    except ModbusError:
-        pass
+        stille = True
+    if not quick:
+        try:
+            sid = await client.server_id(unit)
+            return {"via": "report_server_id", "product_name": sid.get("text") or ""}, False
+        except ModbusException as e:
+            if e.code in GATEWAY_NO_DEVICE:
+                return None, False
+        except ModbusError:
+            pass
     try:
         await client.read_registers(unit, "holding", 0, 1)
-        return {"via": "holding_read"}
+        return {"via": "holding_read"}, False
     except ModbusException as e:
         if e.code in GATEWAY_NO_DEVICE:
-            return None
-        return {"via": "exception_response"}     # a device that says "no such register" is alive
+            return None, False
+        return {"via": "exception_response"}, False     # a device that says "no such register" is alive
     except ModbusError:
-        return None
+        return None, stille or True
 
 
 async def scan_host(host: str, port: int = MODBUS_PORT, units: Optional[Iterable[int]] = None, timeout: float = 1.0,
@@ -393,15 +403,30 @@ async def scan_serial(port: str, baud: int = 19200, parity: str = "N", stopbits:
 async def _scan_units(client: ModbusClient, units: Optional[Iterable[int]], timeout: float, make) -> List[Dict[str, Any]]:
     units = [u for u in (units or COMMON_UNITS) if 1 <= int(u) <= 255]
     found: List[Dict[str, Any]] = []
+    stille = 0
+    voksent_tid = client.timeout
     try:
         await client.connect()
-        for u in units:
-            info = await probe_unit(client, u)
+        for i, u in enumerate(units):
+            t0 = time.monotonic()
+            if i:
+                client.timeout = min(voksent_tid, 0.5)      # the first unit gets the full wait, the rest a short one
+            info, var_stille = await probe_unit2(client, u, quick=bool(i))
             if info is not None:
-                found.append({"unit": u, **info})
+                found.append({"unit": u, "rtt_ms": round((time.monotonic() - t0) * 1000), **info})
+                stille = 0
+            elif var_stille:
+                stille += 1
+            else:
+                stille = 0
+            # Two silences in a row after something answered (a device that ignores the units it is not), or three
+            # with nothing found: nobody else is home, and the rest of the list would only be more waiting.
+            if (found and stille >= 2) or (not found and stille >= 3):
+                break
     except ModbusError:
         pass
     finally:
+        client.timeout = voksent_tid
         await client.close()
     if len(units) >= 3 and len(found) == len(units):
         sig = {(f.get("vendor"), f.get("product_code"), f.get("product_name"), f.get("via")) for f in found}
@@ -473,7 +498,8 @@ def device_record(host: str, port: int, found: Dict[str, Any], scheme: str = "mb
     name = " ".join(x for x in (found.get("vendor"), found.get("product_name") or found.get("model_name") or found.get("product_code")) if x)
     return {
         "address": device_address(host, port, unit, scheme), "ip": host, "port": port, "unit": unit,
-        "device_instance": unit, "protocol": "modbus", "object_name": name or f"Modbus {host} #{unit}",
+        "device_instance": unit, "protocol": "modbus", "object_name": name or (host if unit == 1 else f"{host} #{unit}"),
+        "rtt_ms": found.get("rtt_ms"), "vendor_url": found.get("vendor_url") or "",
         "vendor_name": found.get("vendor") or "", "model_name": found.get("product_name") or found.get("model_name") or found.get("product_code") or "",
         "firmware": found.get("revision") or "", "detected_via": found.get("via"), "answers_any_unit": bool(found.get("answers_any_unit")),
     }
@@ -1148,3 +1174,28 @@ class MapStore:
         out = (m["points"], True) if m and m["points"] else (raw_points(), False)
         cache[address] = (key, out[0], out[1])
         return out
+
+
+# ---------------------------------------------------------------- who is it
+_OUI = {"00:01:05": "Beckhoff", "00:30:DE": "WAGO", "00:90:E8": "Moxa", "00:A0:45": "Phoenix Contact", "00:0E:8C": "Siemens",
+        "00:1B:1B": "Siemens", "00:80:F4": "Schneider Electric", "00:0C:C6": "Ka-Ro", "00:50:C2": "IEEE registered", "00:1D:9C": "Rockwell"}
+
+
+def mac_for(host: str) -> Dict[str, str]:
+    """The MAC address of a host the PC has talked to on its own network, read from the neighbour table. A host behind a
+    router (over a VPN, say) has none: the router answers for it. Returns {} then."""
+    import subprocess
+    try:
+        if os.name == "nt":
+            ut = subprocess.run(["arp", "-a", host], capture_output=True, text=True, timeout=3, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0)).stdout
+        else:
+            ut = subprocess.run(["ip", "neigh", "show", host], capture_output=True, text=True, timeout=3).stdout
+    except (OSError, subprocess.SubprocessError):
+        return {}
+    m = re.search(r"\b((?:[0-9a-fA-F]{2}[-:]){5}[0-9a-fA-F]{2})\b", ut)
+    if not m:
+        return {}
+    mac = m.group(1).replace("-", ":").upper()
+    if mac in ("FF:FF:FF:FF:FF:FF", "00:00:00:00:00:00"):
+        return {}
+    return {"mac": mac, "mac_vendor": _OUI.get(mac[:8], "")}

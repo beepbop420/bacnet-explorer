@@ -2,8 +2,8 @@
 
    Three things sit in plain view instead of in a settings page:
 
-   1. Under the scan field, three switches say what a scan looks for: BACnet, Modbus (port 502), KNX (UDP 3671).
-      All on by default, so a building is scanned once. At least one stays on.
+   1. Beside the Scan button, a small arrow opens what the scan looks for (BACnet, Modbus on port 502, KNX on UDP 3671)
+      and what can be added by hand. All three are on by default, so a building is scanned once; at least one stays on.
    2. Above the device list, a filter shows everything or one protocol, with the count of each. It appears when the
       list holds more than one.
    3. On a device row that lacks something, the action stands on the row: a KNX gateway with no ETS list says so and
@@ -24,39 +24,72 @@
   const protAv = (d) => d.protocol === 'modbus' ? 'modbus' : d.protocol === 'knx' ? 'knx' : 'bacnet';
   let stopp = false;
 
-  /* ------------------------------------------------ 1. what a scan looks for */
-  function tegnVal() {
-    const el = $('protVal');
-    if (!el) return;
-    el.innerHTML = PROT.map(([id, navn]) => `<button type="button" data-val="${id}" role="switch" aria-checked="${paa(id)}" class="${paa(id) ? 'on' : ''}"
-      title="${esc(id === 'bacnet' ? T('Leter etter BACnet-enheter', 'Looks for BACnet devices')
-        : id === 'modbus' ? T('Leter etter Modbus TCP på port 502. Bare lesing', 'Looks for Modbus TCP on port 502. Read only')
-        : T('Leter etter KNX-gatewayer på UDP 3671. Kobler ikke til noe', 'Looks for KNX gateways on UDP 3671. Connects to nothing'))}"><i></i>${navn}</button>`).join('')
-      + `<span class="menu prot-leggtil"><button type="button" id="protPlus" class="prot-plus" aria-haspopup="menu" aria-expanded="false" aria-label="${esc(T('Legg til', 'Add'))}" title="${esc(T('Legg til det et skann ikke finner: seriell port, en bestemt IP, routing og filer', 'Add what a scan does not find: a serial port, a given IP, routing and files'))}">+</button>
-        <div class="menu-pop menu-right" id="protMeny" role="menu" hidden>
-          <button type="button" class="menu-item" role="menuitem" data-add="mb-ip">${T('Modbus-enhet (IP og port)', 'Modbus device (IP and port)')}</button>
-          <button type="button" class="menu-item" role="menuitem" data-add="mb-ser">${T('Modbus på seriell port', 'Modbus on a serial port')}</button>
-          <button type="button" class="menu-item" role="menuitem" data-add="kx-ip">${T('KNX-gateway (IP)', 'KNX gateway (IP)')}</button>
-          <button type="button" class="menu-item" role="menuitem" data-add="kx-routing">${T('Lytt på KNX-routing', 'Listen to KNX routing')}</button>
-          <div class="menu-sep"></div>
-          <button type="button" class="menu-item" role="menuitem" data-add="kx-ets">${T('Importer ETS-liste …', 'Import ETS list …')}</button>
-          <button type="button" class="menu-item" role="menuitem" data-add="mb-kart">${T('Importer registerkart …', 'Import register map …')}</button>
-        </div></span>`;
+  /* ------------------------------------------------ 1. what a scan looks for, beside the Scan button */
+  const BESKR = {
+    bacnet: [T('BACnet', 'BACnet'), T('Enheter som svarer på Who-Is', 'Devices that answer Who-Is')],
+    modbus: [T('Modbus', 'Modbus'), T('Modbus TCP på port 502, bare lesing', 'Modbus TCP on port 502, read only')],
+    knx: [T('KNX', 'KNX'), T('KNX-gatewayer på UDP 3671, kobler ikke til', 'KNX gateways on UDP 3671, connects to nothing')],
+  };
+  let pop = null, caret = null;
+
+  function byggMeny() {
+    const boks = document.querySelector('.scanbox');
+    if (!boks || caret) return;
+    boks.classList.add('scanbox-pos');
+    caret = document.createElement('button');
+    caret.type = 'button'; caret.id = 'scanMeny'; caret.className = 'btn scan-caret';
+    caret.setAttribute('aria-haspopup', 'menu'); caret.setAttribute('aria-expanded', 'false');
+    caret.setAttribute('aria-label', T('Hva skannet leter etter, og legg til manuelt', 'What the scan looks for, and add by hand'));
+    caret.innerHTML = '<svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true"><path d="M2.5 4.5 6 8l3.5-3.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+    $('scanBtn').after(caret);
+    pop = document.createElement('div');
+    pop.id = 'scanPop'; pop.className = 'menu-pop scan-pop'; pop.setAttribute('role', 'menu'); pop.hidden = true;
+    boks.append(pop);
+    tegnMeny();
+  }
+
+  function tegnMeny() {
+    if (!pop) return;
+    pop.innerHTML = `<div class="scan-pop-t">${T('Skann etter', 'Scan for')}</div>
+      ${PROT.map(([id]) => `<button type="button" class="menu-item scan-val${paa(id) ? ' on' : ''}" role="menuitemcheckbox" aria-checked="${paa(id)}" data-val="${id}">
+        <i class="prot-prikk p-${id}"></i><span class="scan-val-t"><b>${esc(BESKR[id][0])}</b><small>${esc(BESKR[id][1])}</small></span><span class="scan-val-av">${paa(id) ? T('på', 'on') : T('av', 'off')}</span></button>`).join('')}
+      <div class="menu-sep"></div>
+      <div class="scan-pop-t">${T('Legg til selv', 'Add by hand')}</div>
+      <button type="button" class="menu-item" role="menuitem" data-add="mb-ip">${T('Modbus-enhet (IP og port)', 'Modbus device (IP and port)')}</button>
+      <button type="button" class="menu-item" role="menuitem" data-add="mb-ser">${T('Modbus på seriell port', 'Modbus on a serial port')}</button>
+      <button type="button" class="menu-item" role="menuitem" data-add="kx-ip">${T('KNX-gateway (IP)', 'KNX gateway (IP)')}</button>
+      <button type="button" class="menu-item" role="menuitem" data-add="kx-routing">${T('Lytt på KNX-routing', 'Listen to KNX routing')}</button>
+      <div class="menu-sep"></div>
+      <button type="button" class="menu-item" role="menuitem" data-add="kx-ets">${T('Importer ETS-liste …', 'Import ETS list …')}</button>
+      <button type="button" class="menu-item" role="menuitem" data-add="mb-kart">${T('Importer registerkart …', 'Import register map …')}</button>`;
+    // A small dot on the button says that something is switched off, so a scan that leaves one out is never a surprise
+    if (caret) {
+      const av = PROT.filter(([p]) => !paa(p)).map(([p]) => BESKR[p][0]);
+      caret.classList.toggle('delvis', av.length > 0);
+      caret.title = av.length ? T('Skannet hopper over ' + av.join(' og '), 'The scan skips ' + av.join(' and ')) : T('Skannet leter etter BACnet, Modbus og KNX', 'The scan looks for BACnet, Modbus and KNX');
+    }
   }
   function lukkMeny() {
-    const m = $('protMeny'), b = $('protPlus');
-    if (m) m.hidden = true;
-    if (b) b.setAttribute('aria-expanded', 'false');
+    if (pop) pop.hidden = true;
+    if (caret) caret.setAttribute('aria-expanded', 'false');
   }
   document.addEventListener('click', (e) => {
-    const plus = e.target.closest('#protPlus');
-    const valg = e.target.closest('#protMeny [data-add]');
-    if (plus) {
-      const m = $('protMeny');
-      m.hidden = !m.hidden;
-      plus.setAttribute('aria-expanded', String(!m.hidden));
+    if (e.target.closest('#scanMeny')) {
+      pop.hidden = !pop.hidden;
+      caret.setAttribute('aria-expanded', String(!pop.hidden));
       return;
     }
+    const val = e.target.closest('#scanPop [data-val]');
+    if (val) {
+      // A switch keeps the menu open: more than one is often changed in a go
+      const id = val.dataset.val;
+      const naa = PROT.filter(([p]) => paa(p)).map(([p]) => p);
+      if (paa(id) && naa.length === 1) { toast(T('Minst én må stå på', 'At least one has to stay on'), true); return; }
+      savePrefs({protSok: true, ['prot' + id[0].toUpperCase() + id.slice(1)]: !paa(id)});
+      tegnMeny();
+      return;
+    }
+    const valg = e.target.closest('#scanPop [data-add]');
     if (valg) {
       lukkMeny();
       const a = valg.dataset.add;
@@ -68,19 +101,9 @@
       else if (a === 'mb-kart') window.nabeMbHjelp.importFil();
       return;
     }
-    lukkMeny();
+    if (pop && !e.target.closest('#scanPop')) lukkMeny();
   });
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape') lukkMeny(); });
-  document.addEventListener('click', (e) => {
-    const b = e.target.closest('#protVal [data-val]');
-    if (!b) return;
-    const id = b.dataset.val;
-    const naa = PROT.filter(([p]) => paa(p)).map(([p]) => p);
-    if (paa(id) && naa.length === 1) { toast(T('Minst én må stå på', 'At least one has to stay on'), true); return; }
-    // The old single switch is gone: leaving it as it was would switch Modbus and KNX off for good
-    savePrefs({protSok: true, ['prot' + id[0].toUpperCase() + id.slice(1)]: !paa(id)});
-    tegnVal();
-  });
 
   /* One range for one protocol: start the job, follow it, return the devices it found. */
   async function ett(sti, kropp, omr) {
@@ -155,10 +178,18 @@
       return `<div class="dev-hint"><span>${T('Ingen ETS-liste, så punktene mangler navn.', 'No ETS list, so the points have no names.')}</span>
         <button type="button" data-prot="kx-import" data-adr="${esc(d.address)}">${T('Importer', 'Import')}</button></div>`;
     }
-    if (d.protocol === 'modbus' && window.nabeMbHjelp && window.nabeMbHjelp.klar() && !window.nabeMbHjelp.harKart(d.address)) {
-      return `<div class="dev-hint"><span>${T('Viser rå registre.', 'Showing raw registers.')}</span>
-        <button type="button" data-prot="mb-kart" data-adr="${esc(d.address)}">${T('Registerkart', 'Register map')}</button>
-        <button type="button" data-prot="mb-utforsk" data-adr="${esc(d.address)}">${T('Utforsk', 'Explore')}</button></div>`;
+    if (d.protocol === 'modbus' && window.nabeMbHjelp && window.nabeMbHjelp.klar()) {
+      const u = window.nabeMbHjelp.utforskStatus(d.address);
+      if (u) {
+        return `<div class="dev-hint" data-adr="${esc(d.address)}"><span class="spin-lite"></span><span>${T('Finner registre', 'Finding registers')}</span>
+          <span class="utf-tall">${u.total ? T(`${u.done} av ${u.total}`, `${u.done} of ${u.total}`) : ''}</span>
+          <button type="button" data-prot="mb-avbryt" data-adr="${esc(d.address)}">${T('Stopp', 'Stop')}</button></div>`;
+      }
+      if (!window.nabeMbHjelp.harKart(d.address)) {
+        return `<div class="dev-hint" data-adr="${esc(d.address)}"><span>${T('Ukjente registre.', 'Unknown registers.')}</span>
+          <button type="button" data-prot="mb-utforsk" data-adr="${esc(d.address)}" title="${esc(T('Prøver adressene i enheten og beholder de som svarer, så du får punkter å se på og gi navn. Bare lesing', 'Tries the addresses in the device and keeps those that answer, so you get points to look at and name. Read only'))}">${T('Finn registre', 'Find registers')}</button>
+          <button type="button" data-prot="mb-kart" data-adr="${esc(d.address)}" title="${esc(T('Har du en liste med registernavn? Importer den, så får punktene navn', 'Have a list of register names? Import it and the points get names'))}">${T('Registerkart', 'Register map')}</button></div>`;
+      }
     }
     return '';
   };
@@ -170,7 +201,8 @@
     if (b.dataset.prot === 'kx-import') window.nabeKnxHjelp.importer(adr);
     else if (b.dataset.prot === 'mb-kart') window.nabeMbHjelp.importer(adr);
     else if (b.dataset.prot === 'mb-utforsk') window.nabeMbHjelp.utforsk(adr);
+    else if (b.dataset.prot === 'mb-avbryt') window.nabeMbHjelp.avbryt(adr);
   }, true);
 
-  tegnVal();
+  byggMeny();
 })();

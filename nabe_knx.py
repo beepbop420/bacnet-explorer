@@ -772,5 +772,5 @@ def device_record(d: Dict[str, Any]) -> Dict[str, Any]:
     name = d.get("name") or f"KNX {d['ip']}"
     return {"address": device_address(d["ip"], d["port"]), "ip": d["ip"], "port": d["port"], "device_instance": 1, "protocol": "knx",
             "object_name": name, "vendor_name": "KNX", "model_name": ", ".join(d.get("services", [])), "firmware": "",
-            "knx_address": d.get("knx_address", ""), "serial": d.get("serial", ""), "tunnelling": d.get("tunnelling", False),
+            "knx_address": d.get("knx_address", ""), "serial": d.get("serial", ""), "mac": d.get("mac", ""), "tunnelling": d.get("tunnelling", False),
             "routing": d.get("routing", False), "secure": d.get("secure", False)}

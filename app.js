@@ -909,6 +909,8 @@ async function runScan() {
   }
   S.scanRanges = omraader.slice();
   renderDevices();
+  // Modbus and KNX are looked for at the same time as BACnet, not after it: a building is scanned once, in one go
+  const protLopp = (window.skannProtokoller && mode !== 'bbmd') ? window.skannProtokoller(omraader, null).catch(() => null) : null;
 
   document.body.classList.add('skanner');
   skannPing();
@@ -980,9 +982,7 @@ async function runScan() {
     }
     await refreshStatus();
     // The same range is looked through for Modbus and KNX too, unless it was stopped or is a BBMD lookup
-    if (window.skannProtokoller && mode !== 'bbmd' && !LINJE.avbrutt) {
-      try { await window.skannProtokoller(omraader, status); } catch { /* the BACnet result stands */ }
-    }
+    if (protLopp) { try { await protLopp; } catch { /* the BACnet result stands */ } }
 
     const secs = ((performance.now() - t0) / 1000).toFixed(0);
     if (omraader.length > 1) {
@@ -1416,6 +1416,30 @@ function flereKortIBruk() {
 }
 
 /* The same, in the heading of the open device: which adapter its points are read through. */
+/* The group of a device: Modbus and KNX each have their own, with their own colour, the way a maker is the group of a
+   BACnet device. Nothing in a Modbus register says who made the controller, so "unknown maker" is not a group worth having. */
+function gruppeFor(d) {
+  if (d.protocol === 'modbus') return {label: 'Modbus', color: 'var(--prot-modbus)'};
+  if (d.protocol === 'knx') return {label: 'KNX', color: 'var(--prot-knx)'};
+  return vendorOf(d.vendor_name, d.vendor_id);
+}
+const webAdr = (d) => (d.protocol === 'modbus' || d.protocol === 'knx') && d.ip ? d.ip : d.address;
+
+/* What the header says about a Modbus or a KNX device in place of the BACnet instance, which they do not have. */
+function protFelt(d) {
+  const f = (navn, verdi, tittel) => verdi === undefined || verdi === null || verdi === '' ? '' : `<span class="tf"${tittel ? ` title="${esc(tittel)}"` : ''}><small>${navn}</small><span class="ctx-id">${esc(verdi)}</span></span>`;
+  if (d.protocol === 'modbus') {
+    return f(T('Enhets-ID', 'Unit ID'), d.unit, T('Modbus-adressen til enheten, 1 til 247. Ikke en BACnet-instans', 'The Modbus address of the device, 1 to 247. Not a BACnet instance'))
+      + f(T('Modell', 'Model'), d.model_name) + f(T('Versjon', 'Version'), d.firmware)
+      + f('MAC', d.mac ? d.mac + (d.mac_vendor ? ' · ' + d.mac_vendor : '') : '', T('Hentes bare for enheter på samme nett som PC-en', 'Only available for devices on the same network as the PC'))
+      + f(T('Svartid', 'Response'), d.rtt_ms ? d.rtt_ms + ' ms' : '');
+  }
+  if (d.protocol === 'knx') {
+    return f(T('KNX-adresse', 'KNX address'), d.knx_address) + f('MAC', d.mac) + f(T('Serienr.', 'Serial'), d.serial);
+  }
+  return `<span class="tf"><small>${T('Instans', 'Instance')}</small><span class="ctx-id">${d.device_instance ?? '?'}</span></span>`;
+}
+
 function kortFelt(d) {
   if (String(d.address).startsWith('127.')) return `<span class="tf"><small>${T('Via', 'Via')}</small><b class="sim-merke">${T('Simulator', 'Simulator')}</b></span>`;
   if (!flereKortIBruk()) return '';
@@ -1461,7 +1485,7 @@ function renderDevices() {
   const gruppert = grupperingsAkse() === 'vendor';
   const kort = (d) => {
     const sel = S.activeDev && S.activeDev.address === d.address ? ' sel' : '';
-    const v = vendorOf(d.vendor_name, d.vendor_id);
+    const v = gruppeFor(d);
     const dup = d.protocol !== 'modbus' && d.protocol !== 'knx' && dupIds.has(String(d.device_instance));
     const st = devState(d.address);
     const ny = d._ny ? ' ny' : '';
@@ -1490,7 +1514,7 @@ function renderDevices() {
         ${devStatus(d)}
       </span>
       <span class="dev-l2">
-        <span class="dev-ip">${esc(d.serial === true ? d.ip + ' ' + d.port + ' baud' : d.protocol === 'modbus' || d.protocol === 'knx' ? d.ip + ':' + d.port : d.address)}</span>
+        <span class="dev-ip">${esc(d.serial === true ? d.ip + ' ' + d.port + ' baud' : d.protocol === 'modbus' || d.protocol === 'knx' ? (d.object_name === d.ip ? T('port ', 'port ') + d.port : d.ip + ':' + d.port) : d.address)}</span>
         <span class="dev-id${dup ? ' dup' : ''}"${dup ? ` title="${T('Flere enheter svarer på denne ID-en', 'Several devices answer to this ID')}"` : ''}>${d.protocol === 'modbus' ? (d.serial === true ? 'RTU ' : d.address.startsWith('mr:') ? 'RTU ' : 'MB ') + d.unit : d.protocol === 'knx' ? 'KNX' : (d.device_instance ?? '?')}</span>
         ${gruppert ? '' : `<span class="dev-lev">${esc(v.label)}</span>`}
         ${kortChip(d)}
@@ -1517,7 +1541,7 @@ function renderDevices() {
       // answers "which system". Both are things you actually ask.
       const v = akse === 'range'
         ? {label: d._range || 'Ukjent område', color: VENDOR_GREY}
-        : vendorOf(d.vendor_name, d.vendor_id);
+        : gruppeFor(d);
       if (!grupper.has(v.label)) grupper.set(v.label, {v, enheter: []});
       grupper.get(v.label).enheter.push(d);
     }
@@ -2491,7 +2515,7 @@ function renderCtx() {
     el.innerHTML = '<span class="ctx-empty">Ingen enhet valgt</span>';
     return;
   }
-  const v = vendorOf(d.vendor_name, d.vendor_id);
+  const v = gruppeFor(d);
   const flagg = flagCounts(S.points);
   const writable = S.points.filter(p => p.writable).length;
   if (typeof huskBesok === 'function') huskBesok();
@@ -2501,8 +2525,8 @@ function renderCtx() {
       <span class="ctx-name">${esc(d.object_name || String(d.device_instance ?? '?'))}</span>
       <span class="ctx-under">
         <span class="tf"><small>${T('Leverandør', 'Vendor')}</small><span class="vendor" style="--vc:${v.color};flex:0 0 auto"><i></i><span>${esc(v.label)}</span></span></span>
-        <span class="tf"><small>${T('Instans', 'Instance')}</small><span class="ctx-id">${d.device_instance ?? '?'}</span></span>
-        <span class="tf"><small>${T('Adresse', 'Address')}</small><button type="button" class="ctx-ip ctx-web" data-web="${esc(d.address)}" title="${esc(T('Åpne webgrensesnittet til regulatoren', 'Open the controller’s web interface'))}">${esc(d.address)}<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M5 2H2.5v7.5H10V7M7 2h3v3M10 2 5.6 6.4"/></svg></button></span>
+        ${protFelt(d)}
+        <span class="tf"><small>${T('Adresse', 'Address')}</small><button type="button" class="ctx-ip ctx-web" data-web="${esc(webAdr(d))}" title="${esc(T('Åpne webgrensesnittet til regulatoren', 'Open the controller’s web interface'))}">${esc(webAdr(d))}<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M5 2H2.5v7.5H10V7M7 2h3v3M10 2 5.6 6.4"/></svg></button></span>
         ${kortFelt(d)}
         <span class="tf"><small>${T('Punkter', 'Points')}</small><b>${S.points.length}</b></span>
         ${writable ? `<span class="tf"><small>${T('Skrivbare', 'Writable')}</small><b>${writable}</b></span>` : ''}
@@ -6750,7 +6774,7 @@ function renderDeviceSummary() {
   if (!d) return '<div class="empty" style="padding:20px 16px">Velg et punkt</div>';
   // Filled after the markup is in place: alarms come from the device itself.
   setTimeout(() => { if (typeof fyllAlarmer === 'function') { fyllAlarmer(); tellPunkter(); } }, 0);
-  const v = vendorOf(d.vendor_name, d.vendor_id);
+  const v = gruppeFor(d);
   const flagg = flagCounts(S.points);
   const counts = S.typeCounts || {};
   const cards = Object.keys(counts).sort().map(t => {

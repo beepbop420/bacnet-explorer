@@ -354,7 +354,7 @@ def royktest():
               "  const svg = nabeSkjema.tegnKurser(sys.filter(x => x.type === 'varme'), 'varme').svg;"
               "  return /RT401/.test(svg) && !/RT405/.test(svg) && !/SB501/.test(svg) && /SB502/.test(svg) && !/JP402/.test(svg); })(),"
               " veksler: (() => { const a = nabeSkjema.tegnAggregat; return typeof a === 'function'; })(),"
-              " protokoller: typeof skannProtokoller === 'function' && !!document.getElementById('protVal'),"
+              " protokoller: typeof skannProtokoller === 'function' && !!document.getElementById('scanMeny'),"
               " modbus: typeof aapneModbus === 'function' && !!document.getElementById('modbusBtn'),"
               " bussfilter: typeof alderTekst === 'function' && S.filters.medVerdi === false && !!document.getElementById('fMedVerdi') && /min/.test(alderTekst(Date.now() / 1000 - 300)),"
               " knx: typeof aapneKnx === 'function' && !!document.getElementById('knxBtn'),"
@@ -1301,6 +1301,18 @@ def ny_liste():
     sjekk("liste: det egne navnet ligger i den nye lista", navn.get("analog-value,%d" % nk.parse_ga("7/1/2")) == "Min lampe" and navn.get("analog-value,%d" % nk.parse_ga("7/1/1")) == "Temp ny", str(navn)[:200])
 
 
+def protokoll_info():
+    """A Modbus device with no name from the device is named by its IP, and the background reading of KNX reports its progress."""
+    import nabe_modbus as nm
+    d = nm.device_record("10.0.0.5", 502, {"unit": 1})
+    d2 = nm.device_record("10.0.0.5", 502, {"unit": 3})
+    sjekk("modbus: en enhet uten navn fra enheten heter bare IP-en, og enhets-ID står for seg",
+          d["object_name"] == "10.0.0.5" and d["unit"] == 1 and d2["object_name"] == "10.0.0.5 #3", d["object_name"])
+    sjekk("modbus: MAC-adressen hentes bare for maskiner på eget nett, ellers er svaret tomt", nm.mac_for("127.0.0.1") == {} and isinstance(nm.mac_for("192.0.2.1"), dict))
+    r = kall("/api/knx/lesestatus?address=kx:127.0.0.1:9")
+    sjekk("knx: lesingen i bakgrunnen melder fra om hvor langt den har kommet", r.get("status") == "done" and r.get("kjorer") is False and "spurt" in r, str(r))
+
+
 def knx_routing():
     """Routing: listening to the multicast group, with no tunnel taken and nothing sent."""
     import socket
@@ -1469,6 +1481,7 @@ def kjor_tester():
     modbus_ledig()
     knx_monitor()
     knx_routing()
+    protokoll_info()
     ny_liste()
     modbus_import()
     redigering()

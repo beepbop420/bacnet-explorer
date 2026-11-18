@@ -5472,3 +5472,33 @@ body.liste-smal #devList .dev.st-feil > .dev-smal,body.sk-stor #devList .dev.st-
 .prot-filter button[data-filter=bacnet] i{background:var(--prot-bacnet)}
 .prot-filter button[data-filter=modbus] i{background:var(--prot-modbus)}
 .prot-filter button[data-filter=knx] i{background:var(--prot-knx)}
+
+/* The arrow beside Scan: what the scan looks for, and what can be added by hand */
+.scanbox-pos{position:relative}
+.scan-caret{padding:0 7px;height:var(--h-control,30px);margin-left:-4px;border-top-left-radius:0;border-bottom-left-radius:0;position:relative}
+#scanBtn+.scan-caret{margin-left:-6px}
+.scan-caret.delvis::after{content:'';position:absolute;top:3px;right:3px;width:6px;height:6px;border-radius:50%;background:var(--warn)}
+.scan-pop{right:0;left:auto;top:calc(100% + 4px);width:268px;padding:6px}
+.scan-pop-t{padding:4px 9px 2px;font-size:11px;color:var(--fg-3)}
+.scan-val{gap:10px}
+.scan-val-t{display:flex;flex-direction:column;flex:1;min-width:0}
+.scan-val-t small{font-size:11px;color:var(--fg-3);white-space:normal}
+.scan-val-av{font-size:11px;color:var(--fg-3)}
+.scan-val.on .scan-val-av{color:var(--fg)}
+.prot-prikk{width:8px;height:8px;border-radius:50%;flex:none;border:1px solid var(--fg-3);background:transparent}
+.scan-val.on .prot-prikk.p-bacnet{background:var(--prot-bacnet);border-color:var(--prot-bacnet)}
+.scan-val.on .prot-prikk.p-modbus{background:var(--prot-modbus);border-color:var(--prot-modbus)}
+.scan-val.on .prot-prikk.p-knx{background:var(--prot-knx);border-color:var(--prot-knx)}
+.prot-filter{flex-wrap:wrap}
+
+.spin-lite{width:10px;height:10px;border-radius:50%;border:1.5px solid var(--line-2);border-top-color:var(--accent);animation:oppdSnurr .8s linear infinite;flex:none}
+.dev-hint .utf-tall{font:10.5px var(--mono);color:var(--fg-3)}
+@keyframes oppdSnurr{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.spin-lite{animation:none}}
+
+.sb-vers{color:var(--fg-3);font-size:11px;background:transparent;border:0;cursor:pointer}
+.sb-vers:hover{color:var(--fg)}
+.scanbox.skann-ny{grid-template-columns:minmax(0,1fr) auto auto}
+.skann-ny #scanBtn{border-top-right-radius:0;border-bottom-right-radius:0}
+.skann-ny .scan-caret{grid-column:3;grid-row:1;width:26px;height:32px;margin-left:-6px;padding:0;display:inline-flex;align-items:center;justify-content:center;border-radius:0 var(--radius) var(--radius) 0;border-left:1px solid color-mix(in srgb,var(--on-accent,#fff) 30%,transparent)}
+.skann-ny .scan-pop{grid-column:auto}

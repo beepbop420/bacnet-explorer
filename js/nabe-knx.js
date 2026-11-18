@@ -275,6 +275,40 @@
   window.nabeKnxHjelp = {klar: () => klar, harListe: (adr) => !!tilordning[adr], importer: velgFilFor, routing: lyttRouting, importFil};
   hentLister().then(() => { klar = true; if (window.renderDevices) renderDevices(); });
 
+  /* KNX is event driven, so listening costs the bus nothing. Opening a gateway turns live on, so the values that arrive
+     show up by themselves, and the asking that goes on in the background (five addresses a second) is followed on the
+     status line, so it is clear that something is happening and how far it has come. */
+  let folgTimer = 0;
+  function folgLesing(adr) {
+    clearInterval(folgTimer);
+    let runder = 0;
+    folgTimer = setInterval(async () => {
+      if (!S.activeDev || S.activeDev.address !== adr) { clearInterval(folgTimer); return; }
+      let j = null;
+      try { j = await api2('/api/knx/lesestatus?address=' + encodeURIComponent(adr)); } catch { /* the next round tries again */ }
+      if (!j || j.status !== 'done') return;
+      if (j.kjorer) {
+        if (typeof status === 'function') status(T(`KNX: spør bussen, ${j.spurt} av ${j.total} adresser · ${j.verdier} har svart`, `KNX: asking the bus, ${j.spurt} of ${j.total} addresses · ${j.verdier} have answered`));
+      } else {
+        if (runder > 0 && typeof status === 'function') status(T(`KNX: ferdig med å spørre · ${j.verdier} adresser har en verdi`, `KNX: done asking · ${j.verdier} addresses have a value`));
+        clearInterval(folgTimer);
+      }
+      runder++;
+    }, 3000);
+  }
+  const _velgGw = window.selectDevice;
+  if (typeof _velgGw === 'function') {
+    window.selectDevice = async function (adr) {
+      const r = await _velgGw.apply(this, arguments);
+      const d = S.devices.find(x => x.address === adr);
+      if (d && d.protocol === 'knx' && !d.ruting_bare) {
+        if (!S.live && typeof startPolling === 'function') startPolling();
+        folgLesing(adr);
+      }
+      return r;
+    };
+  }
+
   window.aapneKnx = async () => {
     await hentLister();
     tegn();
