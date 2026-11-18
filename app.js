@@ -1484,7 +1484,7 @@ function renderDevices() {
       : (BORTE_FOER.has(d.address) ? ' tilbake' : '');
     if (erBorte) BORTE_NAA.add(d.address);
     const lest = S.cache[d.address] ? ' lest' : '';
-    return `<button class="dev${sel}${ny}${laster}${borte}${lest}${st ? ' st-' + st : ''}" data-ip="${esc(d.address)}" style="--vc:${v.color}${frem}">
+    return `<button class="dev p-${d.protocol === 'modbus' ? 'modbus' : d.protocol === 'knx' ? 'knx' : 'bacnet'}${sel}${ny}${laster}${borte}${lest}${st ? ' st-' + st : ''}" data-ip="${esc(d.address)}" style="--vc:${v.color}${frem}">
       <span class="dev-l1">
         <span class="dev-name">${esc(d.object_name || '—')}${navnTall.get(d.object_name) > 1 ? `<span class="dev-suff" title="${esc(T('Flere enheter heter det samme. Adressen skiller dem.', 'Several devices share this name. The address tells them apart.'))}">${esc(kortAdr(d.address))}</span>` : ''}</span>
         ${devStatus(d)}

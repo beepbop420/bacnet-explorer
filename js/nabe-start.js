@@ -205,6 +205,9 @@ const FAKTA = [
   ['COV betyr at regulatoren sier fra selv. Mindre spørring, mer ro.', 'COV means the controller speaks up itself. Less asking, more peace.'],
 ];
 const NYTT = {
+  '2.14': [
+    ['BACnet, Modbus og KNX har hver sin farge (blå, oransje og rødlilla) på knappene under skannfeltet, i filteret og som en prikk på hver enhet. Fargene er valgt så de skiller seg også ved rød-grønn og blå-gul fargeblindhet. Kanalene i aggregatet (uteluft, tilluft, avtrekk, avkast) hadde farger som var umulige å skille for fargeblinde, og er byttet ut', 'BACnet, Modbus and KNX each have their own colour (blue, orange and reddish purple) on the buttons under the scan field, in the filter and as a dot on each device. The colours are chosen to stay apart for red-green and blue-yellow colour blindness too. The ducts in the air handler (outdoor, supply, extract, exhaust) had colours that colour-blind people could not tell apart, and have been replaced'],
+  ],
   '2.13': [
     ['Plusknappen ved siden av BACnet, Modbus og KNX samler det et skann ikke finner: Modbus-enhet med IP og port, Modbus på seriell port, KNX-gateway, KNX-routing, og import av ETS-liste og registerkart. Feil fra routing vises nå også når vinduet er lukket', 'The plus button next to BACnet, Modbus and KNX gathers what a scan does not find: a Modbus device by IP and port, Modbus on a serial port, a KNX gateway, KNX routing, and import of an ETS list and a register map. Routing errors now show even when the window is closed'],
   ],

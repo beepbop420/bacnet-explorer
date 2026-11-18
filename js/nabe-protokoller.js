@@ -140,7 +140,7 @@
     if (!flere) return;
     if (filter !== 'alle' && !tall[filter]) filter = 'alle';
     el.innerHTML = [['alle', T('Alle', 'All'), S.devices.length], ...PROT.filter(([p]) => tall[p]).map(([p, n]) => [p, n, tall[p]])]
-      .map(([id, navn, n]) => `<button type="button" data-filter="${id}" class="${filter === id ? 'sel' : ''}" aria-pressed="${filter === id}">${esc(navn)} <em>${n}</em></button>`).join('');
+      .map(([id, navn, n]) => `<button type="button" data-filter="${id}" class="${filter === id ? 'sel' : ''}" aria-pressed="${filter === id}">${id === 'alle' ? '' : '<i></i>'}${esc(navn)} <em>${n}</em></button>`).join('');
   };
   document.addEventListener('click', (e) => {
     const b = e.target.closest('#protFilter [data-filter]');
