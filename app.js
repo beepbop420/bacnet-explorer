@@ -1419,23 +1419,28 @@ function flereKortIBruk() {
 /* The group of a device: Modbus and KNX each have their own, with their own colour, the way a maker is the group of a
    BACnet device. Nothing in a Modbus register says who made the controller, so "unknown maker" is not a group worth having. */
 function gruppeFor(d) {
-  if (d.protocol === 'modbus') return {label: 'Modbus', color: 'var(--prot-modbus)'};
-  if (d.protocol === 'knx') return {label: 'KNX', color: 'var(--prot-knx)'};
-  return vendorOf(d.vendor_name, d.vendor_id);
+  if (d.protocol === 'modbus') { const lev = d.vendor_name || d.web_vendor; return {label: lev ? 'Modbus · ' + lev : 'Modbus', color: 'var(--prot-modbus)', prot: 'modbus'}; }
+  if (d.protocol === 'knx') return {label: 'KNX', color: 'var(--prot-knx)', prot: 'knx'};
+  return Object.assign({}, vendorOf(d.vendor_name, d.vendor_id), {prot: 'bacnet'});
 }
+const PROT_RANG = {bacnet: 0, modbus: 1, knx: 2};
+const PROT_NAVN = {bacnet: 'BACnet', modbus: 'Modbus', knx: 'KNX'};
 const webAdr = (d) => (d.protocol === 'modbus' || d.protocol === 'knx') && d.ip ? d.ip : d.address;
 
 /* What the header says about a Modbus or a KNX device in place of the BACnet instance, which they do not have. */
 function protFelt(d) {
+  const liste = d.protocol === 'knx' ? (window.nabeKnxHjelp && window.nabeKnxHjelp.listeNavn(d.address)) : d.protocol === 'modbus' ? (window.nabeMbHjelp && window.nabeMbHjelp.kartNavn(d.address)) : '';
+  const fil = (d.protocol === 'knx' || d.protocol === 'modbus') ? `<span class="tf"><small>${d.protocol === 'knx' ? T('ETS-liste', 'ETS list') : T('Registerkart', 'Register map')}</small><button type="button" class="ctx-ip ctx-liste" data-liste="${d.protocol}" data-adr="${esc(d.address)}" title="${esc(liste ? T('Åpne lista i vinduet: bytt, oppdater, last ned', 'Open the list in the window: change, update, download') : T('Ingen liste ennå. Åpne vinduet for å importere en', 'No list yet. Open the window to import one'))}">${liste ? esc(liste) : T('ingen', 'none')}</button></span>` : '';
   const f = (navn, verdi, tittel) => verdi === undefined || verdi === null || verdi === '' ? '' : `<span class="tf"${tittel ? ` title="${esc(tittel)}"` : ''}><small>${navn}</small><span class="ctx-id">${esc(verdi)}</span></span>`;
   if (d.protocol === 'modbus') {
-    return f(T('Enhets-ID', 'Unit ID'), d.unit, T('Modbus-adressen til enheten, 1 til 247. Ikke en BACnet-instans', 'The Modbus address of the device, 1 to 247. Not a BACnet instance'))
+    return fil + f(T('Enhets-ID', 'Unit ID'), d.unit, T('Modbus-adressen til enheten, 1 til 247. Ikke en BACnet-instans', 'The Modbus address of the device, 1 to 247. Not a BACnet instance'))
       + f(T('Modell', 'Model'), d.model_name) + f(T('Versjon', 'Version'), d.firmware)
       + f('MAC', d.mac ? d.mac + (d.mac_vendor ? ' · ' + d.mac_vendor : '') : '', T('Hentes bare for enheter på samme nett som PC-en', 'Only available for devices on the same network as the PC'))
-      + f(T('Svartid', 'Response'), d.rtt_ms ? d.rtt_ms + ' ms' : '');
+      + f(T('Svartid', 'Response'), d.rtt_ms ? d.rtt_ms + ' ms' : '')
+      + f(T('Nettside', 'Web page'), d.web && (d.web.tittel || d.web.realm || d.web.leverandor) ? (d.web.tittel || d.web.realm || d.web.leverandor) + (d.web.innlogging ? ' · ' + T('innlogging', 'login') : '') : '', T('Det enhetens egen nettside sier om seg selv, lest uten innlogging', 'What the own web page of the device says about itself, read without logging in'));
   }
   if (d.protocol === 'knx') {
-    return f(T('KNX-adresse', 'KNX address'), d.knx_address) + f('MAC', d.mac) + f(T('Serienr.', 'Serial'), d.serial);
+    return fil + f(T('KNX-adresse', 'KNX address'), d.knx_address) + f('MAC', d.mac) + f(T('Serienr.', 'Serial'), d.serial);
   }
   return `<span class="tf"><small>${T('Instans', 'Instance')}</small><span class="ctx-id">${d.device_instance ?? '?'}</span></span>`;
 }
@@ -1542,8 +1547,10 @@ function renderDevices() {
       const v = akse === 'range'
         ? {label: d._range || 'Ukjent område', color: VENDOR_GREY}
         : gruppeFor(d);
-      if (!grupper.has(v.label)) grupper.set(v.label, {v, enheter: []});
-      grupper.get(v.label).enheter.push(d);
+      // A maker is a group within its bus: a BACnet and a Modbus device from the same maker are two groups
+      const gk = (v.prot || 'bacnet') + '|' + v.label;
+      if (!grupper.has(gk)) grupper.set(gk, {v, enheter: [], prot: v.prot || 'bacnet'});
+      grupper.get(gk).enheter.push(d);
     }
     const verst = (g) => g.enheter.reduce((n, d) =>
       Math.max(n, devState(d.address) === 'bad' ? 2 : devState(d.address) === 'warn' ? 1 : 0), 0);
@@ -1558,7 +1565,7 @@ function renderDevices() {
     let rekke = [...grupper.values()]
       .sort(akse === 'range'
         ? (a, b) => plassNett(a) - plassNett(b) || NORSK.compare(a.v.label, b.v.label)
-        : (a, b) => verst(b) - verst(a) || b.enheter.length - a.enheter.length
+        : (a, b) => (PROT_RANG[a.prot] ?? 0) - (PROT_RANG[b.prot] ?? 0) || verst(b) - verst(a) || b.enheter.length - a.enheter.length
                     || NORSK.compare(a.v.label, b.v.label));
     if (el.matches(':hover') && S._grpRekke) {
       const plass = (g) => { const i = S._grpRekke.indexOf(g.v.label); return i < 0 ? 1e6 : i; };
@@ -1567,15 +1574,21 @@ function renderDevices() {
         el.addEventListener('mouseleave', () => { el._ventOrden = false; renderDevices(); }, {once: true}); }
     }
     S._grpRekke = rekke.map(g => g.v.label);
+    const flereProt = new Set(rekke.map(g => g.prot)).size > 1;
     el.innerHTML = rekke
-      .map(g => {
+      .map((g, gi) => {
+        // First by bus: BACnet, then Modbus, then KNX, each with its makers. With only one bus in the list there is no heading.
+        const skille = (akse !== 'range' && flereProt && (gi === 0 || rekke[gi - 1].prot !== g.prot))
+          ? `<div class="prot-skille p-${g.prot}"><i></i><span>${PROT_NAVN[g.prot]}</span><em>${rekke.filter(x => x.prot === g.prot).reduce((n, x) => n + x.enheter.length, 0)}</em></div>` : '';
         const av = skjulte.has(g.v.label);
         const feil = g.enheter.filter(d => devState(d.address) === 'bad').length;
         const adv = g.enheter.filter(d => devState(d.address) === 'warn').length;
-        return `<div class="vgroup${av ? ' av' : ''}" style="--vc:${g.v.color}">
+        // Under a heading of its own bus, a group that is only the name of that bus (Modbus, KNX) has nothing more to say
+        const likt = flereProt && akse !== 'range' && g.prot !== 'bacnet' && g.v.label === PROT_NAVN[g.prot];
+        return `${skille}<div class="vgroup${av && !likt ? ' av' : ''}${likt ? ' uten-hode' : ''}" style="--vc:${g.v.color}">
           <button class="vgroup-head" data-vendor="${esc(g.v.label)}">
             <span class="vgroup-bar"></span>
-            <span class="vgroup-name${akse === 'range' ? ' nett' : ''}">${esc(akse === 'range' ? nettNavn(g.v.label) || g.v.label : g.v.label)}</span>
+            <span class="vgroup-name${akse === 'range' ? ' nett' : ''}">${esc(akse === 'range' ? nettNavn(g.v.label) || g.v.label : (flereProt && g.prot !== 'bacnet' ? g.v.label.replace(/^Modbus · /, '') : g.v.label))}</span>
             ${akse === 'range' ? `<span class="vgroup-edit" role="button" tabindex="0" data-navngi="${esc(g.v.label)}" title="${esc(T('Gi anlegget et navn', 'Name this site'))}" aria-label="${esc(T('Gi anlegget et navn', 'Name this site'))}">${IKON_BLYANT}</span>` : ''}
             ${akse === 'range' ? nettMeta(g) : ''}
             ${feil ? `<em class="dev-flag bad" title="${feil} enheter med feil">${feil}</em>` : ''}
@@ -2541,6 +2554,7 @@ function renderCtx() {
 `;
 
   el.querySelectorAll('[data-klokke]').forEach(b => b.onclick = () => stillKlokka(b.dataset.klokke));
+  el.querySelectorAll('[data-liste]').forEach(b => b.onclick = () => (b.dataset.liste === 'knx' ? window.aapneKnx() : window.aapneModbus()));
   // The address opens the controller's own web page, in the PC's browser.
   el.querySelectorAll('[data-web]').forEach(b => b.onclick = async () => {
     b.classList.add('venter');
@@ -5110,9 +5124,19 @@ function isDiff(p) {
 /* Both the header and the body are generated from this list, so the order can
    be changed without the two drifting apart. `menu` is only what the column
    picker calls it, the table's own headings are left exactly as they were. */
+/* A Modbus register the way a technician writes it: HR 40012, IR 30001, CO 1, DI 10001. The number is the Modicon one, which is
+   what register lists and Niagara use; the address in the device is one lower. */
+function modbusCelle(p) {
+  const f = p.modbus.function, a = p.modbus.address;
+  const [kort, grunn, navn] = {holding: ['HR', 40001, 'holding-register'], input: ['IR', 30001, 'input-register'], coil: ['CO', 1, 'coil'], discrete: ['DI', 10001, 'discrete input']}[f] || [f, 0, f];
+  return `<span class="type-tag ${TYPE_CLASS[p.type] || ''}" title="${esc(`${navn} ${a}`)}">${kort}</span><span class="inst" title="${esc(T(`Adresse ${a} i enheten`, `Address ${a} in the device`))}">${grunn + a}</span>`;
+}
+
 const COLS = [
   {k: 'objid', label: 'Objekt', menu: 'Objekt', cls: 'c-obj', col: 'w-obj',
-   cell: p => `<span class="type-tag ${TYPE_CLASS[p.type] || ''}">${shortType(p.type)}</span><span class="inst">${p.instance}</span>`},
+   cell: p => p.knx ? `<span class="type-tag ${TYPE_CLASS[p.type] || ''}" title="${esc(T('Gruppeadresse', 'Group address'))}">GA</span><span class="inst">${esc(p.knx.ga)}</span>`
+     : p.modbus ? modbusCelle(p)
+     : `<span class="type-tag ${TYPE_CLASS[p.type] || ''}">${shortType(p.type)}</span><span class="inst">${p.instance}</span>`},
   {k: 'name', label: 'Tag', menu: 'Tag', cls: 'c-name', col: '',
    attrs: p => ` title="${esc(p.name || '')}"`,
    cell: p => esc(shortName(p) || '—') + flaggTag(p)},
@@ -7706,7 +7730,7 @@ async function pollTick() {
   if (!Object.keys(targets).length) return;
   S.pollBusy = true;
   try {
-    const d = await api('/api/poll', {targets});
+    const d = await api('/api/poll', {targets, cov: $('covModus') ? $('covModus').value !== 'poll' : true});
     if (d.status !== 'done') return;
     // A poll rewrites the values, so the cache timestamp advances with it -
     // otherwise the table would keep claiming the numbers were minutes old
@@ -9448,6 +9472,7 @@ document.querySelectorAll('.menu-item[data-flag]').forEach(el => {
 });
 $('pollBtn').onclick = () => S.live ? stopPolling() : startPolling();
 $('pollInt').onchange = () => { if (S.live) startPolling(); };
+if ($('covModus')) $('covModus').onchange = () => { savePrefs({covModus: $('covModus').value}); if (S.live) startPolling(); toast($('covModus').value === 'poll' ? T('Live leser alt med intervallet', 'Live reads everything at the interval') : T('Live bruker COV der enheten kan, og leser resten med intervallet', 'Live uses COV where the device can, and reads the rest at the interval')); };
 $('snapBtn').onclick = takeSnapshot;
 $('csvBtn').onclick = exportCSV;
 $('watchClear').onclick = () => { S.watch = []; renderWatch(); renderPoints(); };
@@ -9883,6 +9908,7 @@ document.addEventListener('keydown', e => {
   if (p.mode && !(p.mode === 'unicast_sweep' && !p.modeV2)) $('modeSel').value = p.mode;
   if (!p.modeV2) savePrefs({modeV2: true, mode: $('modeSel').value});
   if (p.pollInt) $('pollInt').value = p.pollInt;
+  if (p.covModus && $('covModus')) $('covModus').value = p.covModus;
   if (p.dense) document.body.classList.add('dense');
 })();
 $('rangeInput').addEventListener('change', e => {
@@ -10815,6 +10841,8 @@ const ORDBOK = {
   'Tilbakestill alt': 'Restore defaults',
   'Filtrer ur…': 'Filter schedules…',
   'Intervall': 'Interval',
+  'Hvordan live leser fra BACnet-enheter. Auto: enheten sier fra selv når en verdi endrer seg (COV), og de som ikke kan det leses med intervallet. Poll: alt leses med intervallet.':
+    'How live reads from BACnet devices. COV: the device reports a change itself, and those that cannot are read at the interval. Poll: everything is read at the interval.',
   'Sammendrag': 'Summary',
   'Objekttyper': 'Object types',
   'Egenskaper': 'Properties',

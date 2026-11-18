@@ -295,7 +295,22 @@
     i.onchange = () => importer(i.files[0]);
     i.click();
   }
-  window.nabeMbHjelp = {klar: () => klar, harKart: (adr) => !!tilordning[adr], importer: velgFilFor, utforsk, avbryt: avbrytUtforsk, utforskStatus: (adr) => utf[adr] || null, aapneSom, importFil};
+  const kartNavn = (adr) => { const k = kart.find(x => x.id === tilordning[adr]); return k ? k.name : ''; };
+  // Maps already stored whose name fits the maker or the model the device or its web page gave
+  const forslag = (d) => {
+    const v = String(d.vendor_name || d.web_vendor || '').toLowerCase().split(/[ ·]/)[0], m = String(d.model_name || '').toLowerCase();
+    return kart.filter(k => { const n = k.name.toLowerCase(); return (v.length >= 3 && n.includes(v)) || (m.length >= 4 && n.includes(m)); }).slice(0, 2);
+  };
+  async function bruk(adr, id) {
+    const dev = S.devices.find(x => x.address === adr) || {};
+    await api2('/api/modbus/tilordne', {address: adr, kart: id, vendor: dev.vendor_name || dev.web_vendor || '', model: dev.model_name || ''});
+    await hentKart();
+    delete S.cache[adr];
+    if (S.activeDev && S.activeDev.address === adr) selectDevice(adr, {force: true});
+    if (window.renderDevices) renderDevices();
+    toast(T('Registerkartet er koblet til enheten', 'The register map is linked to the device'));
+  }
+  window.nabeMbHjelp = {forslag, bruk, kartNavn, klar: () => klar, harKart: (adr) => !!tilordning[adr], importer: velgFilFor, utforsk, avbryt: avbrytUtforsk, utforskStatus: (adr) => utf[adr] || null, aapneSom, importFil};
   hentKart().then(() => { klar = true; if (window.renderDevices) renderDevices(); });
 
   window.aapneModbus = async () => {

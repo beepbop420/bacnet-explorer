@@ -235,7 +235,7 @@ def t(nb: str, en: str) -> str:
     return en if SPRAAK_VAR.get() == "en" else nb
 
 
-VERSJON = "2.18"
+VERSJON = "2.19"
 
 state = {"app": None, "local_address": None, "read_only": False, "bbmd": None, "primary": None}
 # The simulator: a scanned site run as devices on 127.0.0.x, in a process of its own.
@@ -1890,6 +1890,7 @@ class LoadPointsBody(BaseModel):
 class PollBody(BaseModel):
     # {"10.42.12.10": ["analog-input,10000", ...], ...}
     targets: Dict[str, List[str]]
+    cov: bool = True                  # false: every value is asked for, none is left to the device to report by itself
 
 
 class DetailBody(BaseModel):
@@ -2524,7 +2525,16 @@ async def poll(body: PollBody):
     async def one_device(ip: str, objids: List[str]):
         addr = device_address(ip)
         enhet_app = await _app_for(ip) or bacnet_app
-        fra_cov, les = _cov_del(enhet_app, ip, objids)
+        if body.cov:
+            fra_cov, les = _cov_del(enhet_app, ip, objids)
+        else:
+            # Polling only: anything the device was already watched for is let go, and every value is asked for
+            for k, c in list(COV.items()):
+                if k[0] == ip:
+                    if c.get("task"):
+                        c["task"].cancel()
+                    COV.pop(k, None)
+            fra_cov, les = {}, list(objids)
         if fra_cov:
             cov_ok[ip] = list(fra_cov)
         try:
@@ -5685,6 +5695,76 @@ def _modbus_detail(body) -> Dict[str, Any]:
     return {"status": "error", "error": t("Fant ikke punktet i registerkartet", "Point not found in the register map")}
 
 
+# ------------------------------------------------------------------ who made it, from its own web page
+_WEB_LEVERANDOR = [
+    ("Regin", r"\bregin\b|exo\s?(?:flex|designer|dom)|corrigo"), ("Beckhoff", r"beckhoff|twincat"), ("WAGO", r"\bwago\b"),
+    ("Siemens", r"siemens|simatic|desigo|climatix"), ("Schneider Electric", r"schneider|ecostruxure|modicon|andover|satchwell"),
+    ("Honeywell", r"honeywell|spyder|\bxl\s?\d{2,}"), ("Johnson Controls", r"johnson controls|metasys"), ("Distech", r"distech|eclypse"),
+    ("Tridium Niagara", r"niagara|tridium|\bjace\b"), ("Carel", r"\bcarel\b"), ("Saia", r"\bsaia\b"), ("Kieback&Peter", r"kieback"),
+    ("Moxa", r"\bmoxa\b"), ("ABB", r"\babb\b"), ("Eaton", r"\beaton\b"), ("Danfoss", r"danfoss"), ("Grundfos", r"grundfos"),
+    ("Hitachi", r"hitachi"), ("Daikin", r"daikin"), ("Mitsubishi", r"mitsubishi"), ("Trend", r"trend control"),
+]
+
+
+async def _web_avtrykk(ip: str) -> Dict[str, Any]:
+    """The front page of a device on port 80 or 443, read once: the title, the Server header, the name a login asks for (a page
+    that wants a password still says that much), and from those who made it. Nothing is sent but the request for the page, and
+    no password is tried."""
+    import ssl
+    ut: Dict[str, Any] = {}
+    for port in (443, 80):
+        try:
+            ctx = None
+            if port == 443:
+                ctx = ssl.create_default_context()
+                ctx.check_hostname = False
+                ctx.verify_mode = ssl.CERT_NONE
+            r, w = await asyncio.wait_for(asyncio.open_connection(ip, port, ssl=ctx), timeout=2.0)
+            w.write(f"GET / HTTP/1.0\r\nHost: {ip}\r\nUser-Agent: NABE\r\nAccept: text/html\r\nConnection: close\r\n\r\n".encode())
+            await w.drain()
+            data = await asyncio.wait_for(r.read(40000), timeout=2.5)
+            w.close()
+        except Exception:
+            continue
+        head, _, body = data.partition(b"\r\n\r\n")
+        tekst = head.decode("latin-1", "replace")
+        status = (tekst.split("\r\n", 1)[0].split(" ", 2) + ["", ""])[1]
+        hode = {l.split(":", 1)[0].strip().lower(): l.split(":", 1)[1].strip() for l in tekst.split("\r\n")[1:] if ":" in l}
+        html = body.decode("utf-8", "replace")
+        m = re.search(r"<title[^>]*>(.*?)</title>", html, re.I | re.S)
+        titel = re.sub(r"\s+", " ", m.group(1)).strip()[:120] if m else ""
+        realm = (re.search(r'realm="?([^",]+)', hode.get("www-authenticate", ""), re.I) or [None, ""])[1]
+        samlet = " ".join([titel, hode.get("server", ""), realm, html[:6000]]).lower()
+        lev = next((navn for navn, rx in _WEB_LEVERANDOR if re.search(rx, samlet)), "")
+        ut = {"port": port, "status": status, "tittel": titel, "server": hode.get("server", ""), "realm": realm, "leverandor": lev,
+              "innlogging": status in ("401", "403")}
+        if titel or lev or realm:
+            break
+    return ut
+
+
+class WebAvtrykkBody(BaseModel):
+    adresser: List[str]
+
+
+@app.post("/api/web-avtrykk")
+async def web_avtrykk(body: WebAvtrykkBody):
+    """Who made each device, from its web page, for a list of IP addresses (at most 80). Reads the front page and nothing else."""
+    ips = []
+    for a in body.adresser[:80]:
+        try:
+            ipaddress.IPv4Address(a)
+            ips.append(a)
+        except ValueError:
+            pass
+    sem = asyncio.Semaphore(12)
+
+    async def en(ip: str):
+        async with sem:
+            return ip, await _web_avtrykk(ip)
+    return {"status": "done", "avtrykk": dict(await asyncio.gather(*[en(i) for i in sorted(set(ips))]))}
+
+
 class ModbusUtforsk(BaseModel):
     address: str
     til: int = 1200
@@ -5853,15 +5933,28 @@ _KNX_TIDER: Dict[str, Dict[str, float]] = {}      # gateway -> point -> when it 
 _KNX_SPURT: Dict[Any, float] = {}              # (gateway, group address) -> when it was last asked for
 KNX_SPOR_PAUSE = 600.0                          # an address that did not answer is not asked again for ten minutes
 KNX_MAKS_LESINGER = 120                         # reads one load may send before it answers; the rest goes on in the background
-KNX_MAKS_BAKGRUNN = 4000                        # addresses the background reader asks for after a load, five a second
+KNX_MAKS_BAKGRUNN = 4000                        # addresses the background reader asks for after a load
+KNX_TEMPO = 8.0                                 # questions a second by default; the bus can bear more, and the pace follows its load
 _KNX_BAK: Dict[str, Dict[str, Any]] = {}        # gateway -> {kjorer, spurt, total, task}
 
 
-def _knx_lesekø(liste: List[Dict[str, Any]], values: Dict[int, Any]) -> List[int]:
-    """The addresses to ask for: those whose object has the read flag on first, those nothing is known about after them,
-    and never those whose objects have it off. An address that has already been heard is not asked."""
-    uten = [p for p in liste if p["ga"] not in values]
-    return [p["ga"] for p in uten if p.get("leser") is True] + [p["ga"] for p in uten if p.get("leser") is None]
+KNX_FERSK = 900.0                               # a value heard in the last quarter hour is not asked for again
+
+
+def _knx_lesekø(liste: List[Dict[str, Any]], values: Dict[int, Any], linje: str = "") -> List[int]:
+    """The addresses to ask for, most useful first. Never those whose objects have the read flag off, and not those heard
+    lately. Among the rest the ones with an object on the gateway's own line come first (that is where the answer comes
+    from), then those the project does not place on any line, then those that live only on other lines and have to be
+    reached through the couplers. Within each, an object with the read flag on comes before one that says nothing."""
+    na = time.time()
+    uten = [p for p in liste if p["ga"] not in values or na - values[p["ga"]]["t"] > KNX_FERSK]
+
+    def rang(p: Dict[str, Any]) -> int:
+        l = p.get("linjer")
+        sted = 0 if (linje and l and linje in l) else 1 if not l or not linje else 2
+        return sted * 2 + (0 if p.get("leser") is True else 1)
+    ute = [p for p in uten if p.get("leser") is not False]
+    return [p["ga"] for p in sorted(ute, key=rang)]
 
 
 def _knx_ikke_spurt(key: str, gas: List[int]) -> List[int]:
@@ -5891,6 +5984,9 @@ async def _knx_tunnel(host: str, port: int) -> "nkx.KnxTunnel":
             await tun.close()
         tun = nkx.KnxRouting(host, port, 3.0, os.environ.get("NABE_KNX_IFACE", "")) if nkx.is_multicast(host) else nkx.KnxTunnel(host, port, 3.0)
         await tun.connect()
+        # What this gateway heard last time is there at once, with its age; what is old is asked for again
+        for ga, tel in KNX_LISTER.last_verdier(key).items():
+            tun.values.setdefault(ga, tel)
         _KNX_ROR[key] = tun
         if not _KNX_OPPRYDDER:
             _KNX_OPPRYDDER.append(asyncio.create_task(_knx_rydd()))
@@ -5902,6 +5998,10 @@ async def _knx_rydd():
     while True:
         await asyncio.sleep(60)
         for key, tun in list(_KNX_ROR.items()):
+            try:
+                KNX_LISTER.lagre_verdier(key, dict(tun.values))
+            except Exception:
+                pass
             if time.monotonic() - tun.last_used > 300:
                 _KNX_ROR.pop(key, None)
                 await tun.close()
@@ -5911,11 +6011,17 @@ async def _knx_bakgrunn(key: str, tun: "nkx.KnxTunnel", gas: List[int]) -> None:
     """Ask the bus for each address once, five a second, without holding anything up: what answers lands in the values the
     tunnel keeps. One lost acknowledgement does not stop the run, it moves on to the next address."""
     st = _KNX_BAK[key]
-    st.update(kjorer=True, total=len(gas), spurt=0, feil=0)
+    st.update(kjorer=True, total=len(gas), spurt=0, feil=0, svar=0)
+    loop = asyncio.get_running_loop()
+    grunn = 1.0 / float(st.get("tempo") or KNX_TEMPO)        # seconds between two questions, as chosen
+    pause = grunn
+    neste = loop.time()
+    seq0, t0 = tun.seq, loop.time()
     try:
-        for ga in gas:
+        for i, ga in enumerate(gas):
             if not tun.connected:
                 break
+            grunn = 1.0 / float(st.get("tempo") or KNX_TEMPO)
             try:
                 await tun.read(ga)
             except nkx.KnxError:
@@ -5923,9 +6029,26 @@ async def _knx_bakgrunn(key: str, tun: "nkx.KnxTunnel", gas: List[int]) -> None:
                 if st["feil"] > 25:          # the gateway has stopped answering: no point in asking on
                     break
                 await asyncio.sleep(0.8)
+                neste = loop.time()
                 continue
             st["spurt"] += 1
-            await asyncio.sleep(1.0 / nkx.READS_PER_SECOND)
+            # The questions go out at a steady pace whatever the time an acknowledgement takes (a slow line used to make the
+            # pace slower still), and the pace follows how busy the bus is: when much is being said, ask less.
+            if i and i % 20 == 0:
+                rate = (tun.seq - seq0) / max(1.0, loop.time() - t0)
+                if rate > 25:
+                    pause = min(0.6, pause * 1.5)
+                elif rate < 10 and pause > grunn:
+                    pause = max(grunn, pause / 1.25)
+                else:
+                    pause = max(grunn, pause) if rate > 15 else grunn
+                seq0, t0 = tun.seq, loop.time()
+            neste += pause
+            ventetid = neste - loop.time()
+            if ventetid > 0:
+                await asyncio.sleep(ventetid)
+            else:
+                neste = loop.time()
     except asyncio.CancelledError:
         raise
     finally:
@@ -5939,13 +6062,35 @@ async def knx_lesestatus(address: str):
     st = _KNX_BAK.get(f"{parsed[0]}:{parsed[1]}") if parsed else None
     tun = _KNX_ROR.get(f"{parsed[0]}:{parsed[1]}") if parsed else None
     return {"status": "done", "kjorer": bool(st and st.get("kjorer")), "spurt": (st or {}).get("spurt", 0), "total": (st or {}).get("total", 0),
-            "verdier": len(tun.values) if tun else 0}
+            "verdier": len(tun.values) if tun else 0, "tempo": float((st or {}).get("tempo") or KNX_TEMPO),
+            "linje": tun.linje() if tun and hasattr(tun, "linje") else ""}
+
+
+class KnxTempo(BaseModel):
+    address: str
+    per_sekund: float = KNX_TEMPO
+
+
+@app.post("/api/knx/tempo")
+async def knx_tempo(body: KnxTempo):
+    """How many questions a second the background reading may ask. Between 2 and 16: the bus is slow, and the pace also slows by itself
+    when the bus gets busy."""
+    parsed = nkx.parse_address(body.address)
+    if not parsed:
+        return {"status": "error", "error": t("Ikke en KNX-gateway", "Not a KNX gateway")}
+    _KNX_BAK.setdefault(f"{parsed[0]}:{parsed[1]}", {})["tempo"] = max(2.0, min(16.0, body.per_sekund))
+    return {"status": "done", "tempo": max(2.0, min(16.0, body.per_sekund))}
 
 
 async def _knx_lukk_alle() -> int:
     for st in _KNX_BAK.values():
         if st.get("task") and not st["task"].done():
             st["task"].cancel()
+    for key, tun in list(_KNX_ROR.items()):
+        try:
+            KNX_LISTER.lagre_verdier(key, dict(tun.values))
+        except Exception:
+            pass
     n = 0
     for key, tun in list(_KNX_ROR.items()):
         _KNX_ROR.pop(key, None)
@@ -6082,7 +6227,7 @@ def _knx_points_job(body) -> Dict[str, Any]:
             job["identity"] = {"model-name": "KNXnet/IP", "description": "KNX routing" if getattr(tun, "routing", False) else f"KNX tunnel {tun.address}", "firmware-revision": ""}
             await asyncio.sleep(1.5)                       # the bus is talking: take what it says first
             nokkel = f"{host}:{port}"
-            mangler = _knx_ikke_spurt(nokkel, _knx_lesekø(liste, tun.values))[:KNX_MAKS_BAKGRUNN]
+            mangler = _knx_ikke_spurt(nokkel, _knx_lesekø(liste, tun.values, tun.linje() if hasattr(tun, "linje") else ""))[:KNX_MAKS_BAKGRUNN]
             if mangler and not getattr(tun, "routing", False):
                 # The page does not wait for the asking: it goes on in the background, and the values appear as they answer
                 _knx_noter(nokkel, mangler)

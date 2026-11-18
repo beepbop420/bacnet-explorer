@@ -1301,6 +1301,26 @@ def ny_liste():
     sjekk("liste: det egne navnet ligger i den nye lista", navn.get("analog-value,%d" % nk.parse_ga("7/1/2")) == "Min lampe" and navn.get("analog-value,%d" % nk.parse_ga("7/1/1")) == "Temp ny", str(navn)[:200])
 
 
+def knx_linjer():
+    """The ETS project says which line each group address lives on, so a gateway asks its own line first."""
+    import io
+    import zipfile
+    import nabe_knx as nk
+    xml = ('<KNX><Project><Installations><Installation><GroupAddresses><GroupRanges><GroupRange>'
+           '<GroupAddress Id="P-1_GA-1" Address="2305" Name="Temp"/><GroupAddress Id="P-1_GA-2" Address="2306" Name="Lys"/>'
+           '</GroupRange></GroupRanges></GroupAddresses><Topology><Area Address="1"><Line Address="2"><DeviceInstance Address="5"><ComObjectInstanceRefs>'
+           '<ComObjectInstanceRef RefId="a" Links="GA-1" ReadFlag="Enabled"/></ComObjectInstanceRefs></DeviceInstance></Line>'
+           '<Line Address="3"><DeviceInstance Address="6"><ComObjectInstanceRefs><ComObjectInstanceRef RefId="b" Links="GA-2" ReadFlag="Enabled"/>'
+           '</ComObjectInstanceRefs></DeviceInstance></Line></Area></Topology></Installation></Installations></Project></KNX>')
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as z:
+        z.writestr("P-0001/0.xml", xml)
+    pts = {p["ga"]: p for p in nk.parse_group_list(buf.getvalue(), "t.knxproj")["points"]}
+    sjekk("knx: prosjektet sier hvilken linje hver gruppeadresse hører til", pts[2305].get("linjer") == ["1.2"] and pts[2306].get("linjer") == ["1.3"], str(pts))
+    t = kall("/api/knx/tempo", {"address": "kx:127.0.0.1:9", "per_sekund": 99})
+    sjekk("knx: lesetempoet kan velges og holdes innenfor det bussen tåler", t.get("status") == "done" and t.get("tempo") == 16.0, str(t))
+
+
 def protokoll_info():
     """A Modbus device with no name from the device is named by its IP, and the background reading of KNX reports its progress."""
     import nabe_modbus as nm
@@ -1482,6 +1502,7 @@ def kjor_tester():
     knx_monitor()
     knx_routing()
     protokoll_info()
+    knx_linjer()
     ny_liste()
     modbus_import()
     redigering()

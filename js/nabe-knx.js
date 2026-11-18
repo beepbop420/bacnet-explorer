@@ -272,7 +272,8 @@
     i.onchange = () => importer(i.files[0]);
     i.click();
   }
-  window.nabeKnxHjelp = {klar: () => klar, harListe: (adr) => !!tilordning[adr], importer: velgFilFor, routing: lyttRouting, importFil};
+  const listeNavn = (adr) => { const l = lister.find(x => x.id === tilordning[adr]); return l ? l.name : ''; };
+  window.nabeKnxHjelp = {lesAlle, monitor: (adr) => aapneMonitor(adr), listeNavn, klar: () => klar, harListe: (adr) => !!tilordning[adr], importer: velgFilFor, routing: lyttRouting, importFil};
   hentLister().then(() => { klar = true; if (window.renderDevices) renderDevices(); });
 
   /* KNX is event driven, so listening costs the bus nothing. Opening a gateway turns live on, so the values that arrive
@@ -288,7 +289,8 @@
       try { j = await api2('/api/knx/lesestatus?address=' + encodeURIComponent(adr)); } catch { /* the next round tries again */ }
       if (!j || j.status !== 'done') return;
       if (j.kjorer) {
-        if (typeof status === 'function') status(T(`KNX: spør bussen, ${j.spurt} av ${j.total} adresser · ${j.verdier} har svart`, `KNX: asking the bus, ${j.spurt} of ${j.total} addresses · ${j.verdier} have answered`));
+        const del = j.linje ? T(`linje ${j.linje}, `, `line ${j.linje}, `) : '';
+        if (typeof status === 'function') status(T(`KNX: spør bussen, ${j.spurt} av ${j.total} adresser (${del}${j.tempo} i sekundet) · ${j.verdier} har svart`, `KNX: asking the bus, ${j.spurt} of ${j.total} addresses (${del}${j.tempo} a second) · ${j.verdier} have answered`));
       } else {
         if (runder > 0 && typeof status === 'function') status(T(`KNX: ferdig med å spørre · ${j.verdier} adresser har en verdi`, `KNX: done asking · ${j.verdier} addresses have a value`));
         clearInterval(folgTimer);

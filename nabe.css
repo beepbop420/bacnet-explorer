@@ -5502,3 +5502,19 @@ body.liste-smal #devList .dev.st-feil > .dev-smal,body.sk-stor #devList .dev.st-
 .skann-ny #scanBtn{border-top-right-radius:0;border-bottom-right-radius:0}
 .skann-ny .scan-caret{grid-column:3;grid-row:1;width:26px;height:32px;margin-left:-6px;padding:0;display:inline-flex;align-items:center;justify-content:center;border-radius:0 var(--radius) var(--radius) 0;border-left:1px solid color-mix(in srgb,var(--on-accent,#fff) 30%,transparent)}
 .skann-ny .scan-pop{grid-column:auto}
+
+/* A heading in the device list for each bus: BACnet, Modbus, KNX */
+.prot-skille{display:flex;align-items:center;gap:8px;padding:10px 12px 2px;font-size:11px;letter-spacing:.02em;color:var(--fg-3)}
+.prot-skille i{width:8px;height:8px;border-radius:50%;background:var(--prot-bacnet)}
+.prot-skille.p-modbus i{background:var(--prot-modbus)}
+.prot-skille.p-knx i{background:var(--prot-knx)}
+.prot-skille span{color:var(--fg-2);font-weight:500}
+.prot-skille em{font-style:normal;margin-left:auto}
+.ctx-liste{max-width:210px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+.ctx-meny{position:fixed;z-index:200;min-width:220px;padding:4px}
+
+body[data-aktiv-prot=modbus] #covModus,body[data-aktiv-prot=knx] #covModus{display:none}
+
+.vgroup.uten-hode>.vgroup-head{display:none}
+.vgroup.uten-hode>.vgroup-body{grid-template-rows:1fr}

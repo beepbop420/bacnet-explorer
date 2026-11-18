@@ -448,6 +448,9 @@
           <option value="1000">1s</option><option value="2000" selected>2s</option>
           <option value="5000">5s</option><option value="10000">10s</option>
         </select>
+        <select id="covModus" class="field" title="Hvordan live leser fra BACnet-enheter. Auto: enheten sier fra selv når en verdi endrer seg (COV), og de som ikke kan det leses med intervallet. Poll: alt leses med intervallet.">
+          <option value="auto" selected>COV</option><option value="poll">Poll</option>
+        </select>
 
         <div class="menu">
           <button id="expBtn" class="btn" disabled>Eksport</button>

@@ -142,8 +142,27 @@
       if (nKx) deler.push(T(`${nKx} KNX-gateway${nKx === 1 ? '' : 'er'}`, `${nKx} KNX gateway${nKx === 1 ? '' : 's'}`));
       toast(T('Fant også ', 'Also found ') + deler.join(T(' og ', ' and ')));
     }
+    avtrykk();
     return {modbus: nMb, knx: nKx};
   };
+
+  /* Who made a Modbus device that does not say: its own web page often does (the title, the Server header, the name a login
+     asks for). Read once, quietly, after the scan; a page that wants a password is left alone. */
+  async function avtrykk() {
+    const ips = [...new Set(S.devices.filter(d => d.protocol === 'modbus' && !d.web && !d.serial).map(d => d.ip))];
+    if (!ips.length) return;
+    try {
+      const r = await api2('/api/web-avtrykk', {adresser: ips});
+      if (r.status !== 'done') return;
+      for (const d of S.devices) {
+        const w = d.protocol === 'modbus' ? r.avtrykk[d.ip] : null;
+        if (w === undefined || w === null) continue;
+        d.web = w || {};
+        if (w && w.leverandor) d.web_vendor = w.leverandor;
+      }
+      renderDevices();
+    } catch { /* the web page is a bonus, not a need */ }
+  }
 
   // Stopping the scan stops the wait for these two as well
   const gammel = window.cancelScan;
@@ -186,7 +205,10 @@
           <button type="button" data-prot="mb-avbryt" data-adr="${esc(d.address)}">${T('Stopp', 'Stop')}</button></div>`;
       }
       if (!window.nabeMbHjelp.harKart(d.address)) {
-        return `<div class="dev-hint" data-adr="${esc(d.address)}"><span>${T('Ukjente registre.', 'Unknown registers.')}</span>
+        const lev = d.vendor_name || d.web_vendor;
+        const kart = window.nabeMbHjelp.forslag(d);
+        const forslag = kart.length ? kart.map(k => `<button type="button" data-prot="mb-bruk" data-adr="${esc(d.address)}" data-kart="${esc(k.id)}" title="${esc(T('Det lagrede kartet passer navnet på leverandøren eller modellen', 'The stored map fits the name of the maker or the model'))}">${T('Bruk', 'Use')} «${esc(k.name)}»</button>`).join('') : '';
+        return `<div class="dev-hint" data-adr="${esc(d.address)}"><span>${lev ? T('Ser ut som ', 'Looks like ') + esc(lev) + '. ' : ''}${T('Ukjente registre.', 'Unknown registers.')}</span>${forslag}
           <button type="button" data-prot="mb-utforsk" data-adr="${esc(d.address)}" title="${esc(T('Prøver adressene i enheten og beholder de som svarer, så du får punkter å se på og gi navn. Bare lesing', 'Tries the addresses in the device and keeps those that answer, so you get points to look at and name. Read only'))}">${T('Finn registre', 'Find registers')}</button>
           <button type="button" data-prot="mb-kart" data-adr="${esc(d.address)}" title="${esc(T('Har du en liste med registernavn? Importer den, så får punktene navn', 'Have a list of register names? Import it and the points get names'))}">${T('Registerkart', 'Register map')}</button></div>`;
       }
@@ -202,7 +224,86 @@
     else if (b.dataset.prot === 'mb-kart') window.nabeMbHjelp.importer(adr);
     else if (b.dataset.prot === 'mb-utforsk') window.nabeMbHjelp.utforsk(adr);
     else if (b.dataset.prot === 'mb-avbryt') window.nabeMbHjelp.avbryt(adr);
+    else if (b.dataset.prot === 'mb-bruk') window.nabeMbHjelp.bruk(adr, b.dataset.kart);
   }, true);
 
+  /* ------------------------------------------------ 4. right-click on a device */
+  let ctx = null;
+  function lukkCtx() { if (ctx) { ctx.remove(); ctx = null; } }
+  async function kopier(tekst) {
+    try { await navigator.clipboard.writeText(tekst); toast(T('Kopiert', 'Copied')); } catch { toast(tekst); }
+  }
+  async function aapneWeb(d) {
+    const r = await api('/api/webside', {address: d.protocol === 'modbus' || d.protocol === 'knx' ? d.ip : d.address});
+    if (r.status === 'done') toast(T(`Åpner ${r.url}`, `Opening ${r.url}`)); else toast(r.error || T('Fant ingen webside', 'Found no web page'), true);
+  }
+  function ctxRader(d) {
+    const rad = (t, fn, ekstra) => ({t, fn, ...(ekstra || {})});
+    const felles = [
+      rad(T('Åpne', 'Open'), () => selectDevice(d.address)),
+      rad(T('Les på nytt', 'Read again'), () => { delete S.cache[d.address]; selectDevice(d.address, {force: true}); }),
+    ];
+    let egne = [];
+    if (d.protocol === 'modbus') {
+      const m = window.nabeMbHjelp;
+      egne = [rad(T('Finn registre', 'Find registers'), () => m.utforsk(d.address)), rad(T('Velg registerkart …', 'Pick register map …'), () => m.importer(d.address))];
+    } else if (d.protocol === 'knx') {
+      const k = window.nabeKnxHjelp;
+      egne = [rad(T('Importer ETS-liste …', 'Import ETS list …'), () => k.importer(d.address)), rad(T('Les alle lesbare …', 'Read all readable …'), () => k.lesAlle(d.address)),
+        rad(T('Telegrammonitor', 'Telegram monitor'), () => k.monitor(d.address))];
+      const tempo = [[4, T('Forsiktig, 4 i sekundet', 'Careful, 4 a second')], [8, T('Vanlig, 8 i sekundet', 'Normal, 8 a second')], [12, T('Raskt, 12 i sekundet', 'Fast, 12 a second')]];
+      egne.push({sep: true}, {head: T('Lesetempo', 'Reading pace')}, ...tempo.map(([n, t]) => rad(t, async () => { await api('/api/knx/tempo', {address: d.address, per_sekund: n}); toast(T(`Lesetempo ${n} i sekundet. Farten følger også hvor travelt bussen er`, `Pace ${n} a second. It also follows how busy the bus is`)); })));
+    }
+    const slutt = [
+      {sep: true},
+      rad(T('Kopier adresse', 'Copy address'), () => kopier(d.protocol === 'modbus' || d.protocol === 'knx' ? d.ip : d.address)),
+      rad(T('Åpne i nettleser', 'Open in browser'), () => aapneWeb(d)),
+      rad(T('Fjern fra lista', 'Remove from the list'), () => {
+        S.devices = S.devices.filter(x => x.address !== d.address);
+        if (S.activeDev && S.activeDev.address === d.address) S.activeDev = null;
+        renderDevices();
+      }),
+    ];
+    return [...felles, ...(egne.length ? [{sep: true}, ...egne] : []), ...slutt];
+  }
+  document.addEventListener('contextmenu', (e) => {
+    const knapp = e.target.closest('#devList .dev[data-ip]');
+    if (!knapp) { lukkCtx(); return; }
+    const d = S.devices.find(x => x.address === knapp.dataset.ip);
+    if (!d) return;
+    e.preventDefault();
+    lukkCtx();
+    const rader = ctxRader(d);
+    ctx = document.createElement('div');
+    ctx.className = 'menu-pop ctx-meny';
+    ctx.setAttribute('role', 'menu');
+    ctx.innerHTML = rader.map((r, i) => r.sep ? '<div class="menu-sep"></div>' : r.head ? `<div class="scan-pop-t">${esc(r.head)}</div>` : `<button type="button" class="menu-item" role="menuitem" data-i="${i}">${esc(r.t)}</button>`).join('');
+    document.body.append(ctx);
+    const b = ctx.getBoundingClientRect();
+    ctx.style.left = Math.max(6, Math.min(e.clientX, innerWidth - b.width - 8)) + 'px';
+    ctx.style.top = Math.max(6, Math.min(e.clientY, innerHeight - b.height - 8)) + 'px';
+    ctx.addEventListener('click', (ev) => {
+      const k = ev.target.closest('[data-i]');
+      if (!k) return;
+      const r = rader[+k.dataset.i];
+      lukkCtx();
+      try { r.fn(); } catch (err) { toast(String(err.message || err), true); }
+    });
+  });
+  document.addEventListener('click', (e) => { if (ctx && !e.target.closest('.ctx-meny')) lukkCtx(); });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') lukkCtx(); });
+  window.addEventListener('blur', lukkCtx);
+  document.addEventListener('scroll', lukkCtx, true);
+
+  // COV is a BACnet thing: the choice is only there while a BACnet device is open
+  const _velgBoks = window.selectDevice;
+  if (typeof _velgBoks === 'function') {
+    window.selectDevice = async function (adr) {
+      const r = await _velgBoks.apply(this, arguments);
+      const d = S.devices.find(x => x.address === adr);
+      document.body.dataset.aktivProt = d ? protAv(d) : '';
+      return r;
+    };
+  }
   byggMeny();
 })();

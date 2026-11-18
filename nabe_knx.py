@@ -346,6 +346,11 @@ class KnxTunnel(asyncio.DatagramProtocol):
         if self.transport is not None:
             self.transport.sendto(data, (self.host, self.port))
 
+    def linje(self) -> str:
+        """The line this tunnel sits on, "area.line", from the individual address the gateway gave it ("1.1.250" is line 1.1)."""
+        d = (self.address or "").split(".")
+        return f"{d[0]}.{d[1]}" if len(d) == 3 else ""
+
     # --- life cycle
     async def connect(self) -> str:
         loop = asyncio.get_running_loop()
@@ -601,6 +606,20 @@ def _from_knxproj(data: bytes) -> Dict[str, Any]:
                 by_suffix[(el.get("Id") or "").rsplit("_", 1)[-1]] = int(el.get("Address"))
         leser: Dict[int, Optional[bool]] = {}
         refdpt: Dict[int, str] = {}
+        # Which line each device sits on: a gateway hears and reaches its own line first, and a group address with no object
+        # on that line is only reached through the couplers, if the filter table lets it through
+        linje_av: Dict[int, str] = {}                       # id of a communication object reference -> "area.line"
+        linjer: Dict[int, set] = {}
+        for omr in root.iter():
+            if omr.tag.split("}")[-1] != "Area":
+                continue
+            for lin in omr:
+                if lin.tag.split("}")[-1] != "Line":
+                    continue
+                navn = f"{omr.get('Address') or '?'}.{lin.get('Address') or '?'}"
+                for ref in lin.iter():
+                    if ref.tag.split("}")[-1] == "ComObjectInstanceRef":
+                        linje_av[id(ref)] = navn
         for el in root.iter():
             if el.tag.split("}")[-1] != "ComObjectInstanceRef" or not el.get("Links"):
                 continue
@@ -609,6 +628,8 @@ def _from_knxproj(data: bytes) -> Dict[str, Any]:
                 ga = by_suffix.get(link)
                 if ga is None:
                     continue
+                if id(el) in linje_av:
+                    linjer.setdefault(ga, set()).add(linje_av[id(el)])
                 if flag == "Enabled":
                     leser[ga] = True
                 elif flag == "Disabled" and leser.get(ga) is None:
@@ -630,6 +651,8 @@ def _from_knxproj(data: bytes) -> Dict[str, Any]:
                  "description": el.get("Description") or ""}
             if ga in leser:
                 p["leser"] = leser[ga]
+            if ga in linjer:
+                p["linjer"] = sorted(linjer[ga])
             points.append(p)
     if not points:
         raise KnxError("the project has no group addresses")
@@ -752,6 +775,21 @@ class GroupStore:
         (self.lists / f"{lid}.json").write_text(json.dumps({"name": d["name"], "points": sorted(pts, key=lambda x: x["ga"])}, ensure_ascii=False), encoding="utf-8")
         self.assign(address, lid)
         return lid, sum(1 for v in self.assignments().values() if v == lid)
+
+    # --- what a gateway has heard, kept so that opening it again shows the last values at once and asks again only for what is old
+    def lagre_verdier(self, noekkel: str, values: Dict[int, Dict[str, Any]]) -> None:
+        if not values:
+            return
+        self.folder.mkdir(parents=True, exist_ok=True)
+        ut = {str(ga): {"t": v["t"], "src": v["src"], "kind": v["kind"], "raw": v["raw"].hex(), "small": v["small"]} for ga, v in values.items()}
+        (self.folder / f"verdier-{re.sub(r'[^A-Za-z0-9_.-]+', '_', noekkel)}.json").write_text(json.dumps(ut), encoding="utf-8")
+
+    def last_verdier(self, noekkel: str) -> Dict[int, Dict[str, Any]]:
+        try:
+            d = json.loads((self.folder / f"verdier-{re.sub(r'[^A-Za-z0-9_.-]+', '_', noekkel)}.json").read_text(encoding="utf-8"))
+            return {int(ga): {"t": v["t"], "src": v["src"], "kind": v["kind"], "raw": bytes.fromhex(v["raw"]), "small": bool(v["small"])} for ga, v in d.items()}
+        except (OSError, ValueError, KeyError):
+            return {}
 
     def points_for(self, address: str) -> List[Dict[str, Any]]:
         lid = self.assignments().get(address)
