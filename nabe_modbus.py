@@ -1032,7 +1032,8 @@ class MapStore:
     def save_map(self, name: str, parsed: Dict[str, Any]) -> str:
         self._ensure()
         slug = re.sub(r"[^A-Za-z0-9_.-]+", "_", name.strip() or parsed.get("name") or "kart").strip("_") or "kart"
-        (self.maps / f"{slug}.json").write_text(json.dumps({"name": name or slug, "points": parsed["points"]}, ensure_ascii=False, indent=1), encoding="utf-8")
+        (self.maps / f"{slug}.json").write_text(json.dumps({"name": name or slug, "points": parsed["points"],
+                                                            **({"meta": parsed["meta"]} if parsed.get("meta") else {})}, ensure_ascii=False, indent=1), encoding="utf-8")
         return slug
 
     # --- what the technician changed by hand, kept apart from the map so a new export does not wipe it
@@ -1073,6 +1074,20 @@ class MapStore:
         self.save_map(name, {**parsed, "points": pts})
         return slug, diff
 
+    def info(self, map_id: str) -> Optional[Dict[str, Any]]:
+        """What there is to say about a stored register map: where it is, what it came from, what is in it and who uses it."""
+        slug = re.sub(r"[^A-Za-z0-9_.-]+", "_", map_id)
+        f = self.maps / f"{slug}.json"
+        try:
+            d = json.loads(f.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return None
+        pts = d.get("points", [])
+        a = self.assignments()
+        return {"id": map_id, "navn": d.get("name") or map_id, "punkter": len(pts), "meta": d.get("meta") or {}, "sti": str(f), "stoerrelse": f.stat().st_size,
+                "per_funksjon": {k: sum(1 for p in pts if p.get("function") == k) for k in ("holding", "input", "coil", "discrete")},
+                "brukes_av": [k for k, v in a.items() if v == map_id]}
+
     def list_maps(self) -> List[Dict[str, Any]]:
         if not self.maps.exists():
             return []
@@ -1089,7 +1104,7 @@ class MapStore:
         f = self.maps / f"{re.sub(r'[^A-Za-z0-9_.-]+', '_', map_id)}.json"
         try:
             d = json.loads(f.read_text(encoding="utf-8"))
-            return {"name": d.get("name") or map_id, "points": [normalise_point(p) for p in d.get("points", [])]}
+            return {"name": d.get("name") or map_id, "points": [normalise_point(p) for p in d.get("points", [])], "meta": d.get("meta") or {}}
         except (OSError, ValueError, MapError):
             return None
 
@@ -1136,7 +1151,7 @@ class MapStore:
         self._noter_egen(re.sub(r"[^A-Za-z0-9_.-]+", "_", mid), objid, allowed)
         self._ensure()
         (self.maps / f"{re.sub(r'[^A-Za-z0-9_.-]+', '_', mid)}.json").write_text(
-            json.dumps({"name": m["name"], "points": m["points"]}, ensure_ascii=False, indent=1), encoding="utf-8")
+            json.dumps({"name": m["name"], "points": m["points"], **({"meta": m["meta"]} if m.get("meta") else {})}, ensure_ascii=False, indent=1), encoding="utf-8")
         self.assign(address, mid)
         return mid, sum(1 for v in self.assignments().values() if v == mid)
 

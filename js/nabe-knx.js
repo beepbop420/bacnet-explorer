@@ -41,7 +41,8 @@
 
   function tegn() {
     const enheter = gatewayer();
-    const valg = (adr) => `<option value="">${T('Ingen (hørt på bussen)', 'None (heard on the bus)')}</option>`
+    const heleNavn = (lister.find(k => k.id === tilordning['*']) || {}).name;
+    const valg = (adr) => `<option value="">${adr !== '*' && heleNavn ? esc(T('Hele anlegget: ' + heleNavn, 'Whole plant: ' + heleNavn)) : T('Ingen (hørt på bussen)', 'None (heard on the bus)')}</option>`
       + lister.map(k => `<option value="${esc(k.id)}"${tilordning[adr] === k.id ? ' selected' : ''}>${esc(k.name)} (${k.points})</option>`).join('');
     lag.innerHTML = `<div class="gs-modal sp-modal mb-modal"><div class="gs-head"><span class="gd-tittel">KNX</span>
       <button class="gs-close" style="margin-left:auto"><span class="lbl">${T('Lukk', 'Close')}</span> ✕</button></div>
@@ -62,6 +63,7 @@
                 <button type="button" class="btn" data-kx="aapne" data-adr="${esc(d.address)}"${d.secure || !d.tunnelling ? ' disabled' : ''}>${T('Åpne', 'Open')}</button></td></tr>`).join('')}</tbody></table>`
             : `<div class="sp-meta">${T('Ingen KNX-gatewayer ennå. Skann over.', 'No KNX gateways yet. Scan above.')}</div>`}</div>
         <div class="mb-sek"><div class="mb-tittel">${T('ETS-lister', 'ETS lists')} <span class="sp-meta">${lister.length}</span></div>
+          ${lister.length ? `<div class="mb-rad"><label class="sp-meta" for="kxHele" style="flex:none">${T('Brukes av alle gatewayer', 'Used by every gateway')}</label><select class="field mb-kart" id="kxHele" data-adr="*" title="${esc(T('Én ETS-fil dekker hele anlegget. Gatewayene bruker denne, med mindre en av dem er gitt en egen i lista over', 'One ETS file covers the whole plant. The gateways use this one, unless one of them has been given its own in the table above'))}">${valg('*')}</select></div>` : ''}
           <div class="sp-meta">${T('Gruppeadressene fra ETS gir punktene navn og datapunkttype. Importer prosjektfilen (.knxproj, uten passord) eller CSV-eksporten av gruppeadresser.', 'The group addresses from ETS give the points a name and a datapoint type. Import the project file (.knxproj, no password) or the CSV export of group addresses.')}</div>
           ${lister.length ? `<table class="sp-tab"><tbody>${lister.map(k => `<tr><td>${esc(k.name)}</td><td class="sp-meta">${k.points} ${T('gruppeadresser', 'group addresses')}</td>
             <td class="mb-knapper"><button type="button" class="btn" data-kx="last" data-id="${esc(k.id)}" title="${esc(T('Last ned lista som CSV, med endringene du har gjort i appen', 'Download the list as CSV, with the changes you made in the app'))}">${T('Last ned', 'Download')}</button>
@@ -164,8 +166,9 @@
     const d = await api2('/api/knx/tilordne', {address: adr, liste: id || null});
     if (d.status !== 'done') { toast(d.error || T('Fikk ikke tilordnet', 'Could not assign'), true); return; }
     tilordning[adr] = id || undefined;
-    delete S.cache[adr];
-    if (S.activeDev && S.activeDev.address === adr) selectDevice(adr, {force: true});
+    if (adr === '*') for (const k of S.devices) { if (k.protocol === 'knx') delete S.cache[k.address]; }
+    else delete S.cache[adr];
+    if (S.activeDev && (adr === '*' ? S.activeDev.protocol === 'knx' : S.activeDev.address === adr)) selectDevice(S.activeDev.address, {force: true});
     toast(id ? T('ETS-lista er tilordnet. Punktene leses på nytt.', 'The ETS list is assigned. The points are read again.') : T('Gatewayen viser det som høres på bussen.', 'The gateway shows what is heard on the bus.'));
   }
 
@@ -258,10 +261,11 @@
     i.onchange = async () => {
       const d = await importer(i.files[0]);
       if (!d || d.status !== 'done') return;
-      await api2('/api/knx/tilordne', {address: adr, liste: d.id});
+      // One ETS project covers the whole plant, so the file goes to every gateway, and the one that was open reads again at once
+      await api2('/api/knx/tilordne', {address: '*', liste: d.id});
       await hentLister();
-      delete S.cache[adr];
-      if (S.activeDev && S.activeDev.address === adr) selectDevice(adr, {force: true});
+      for (const k of S.devices) if (k.protocol === 'knx') delete S.cache[k.address];
+      if (S.activeDev && S.activeDev.protocol === 'knx') selectDevice(S.activeDev.address, {force: true});
     };
     i.click();
   }
@@ -272,8 +276,9 @@
     i.onchange = () => importer(i.files[0]);
     i.click();
   }
-  const listeNavn = (adr) => { const l = lister.find(x => x.id === tilordning[adr]); return l ? l.name : ''; };
-  window.nabeKnxHjelp = {lesAlle, monitor: (adr) => aapneMonitor(adr), listeNavn, klar: () => klar, harListe: (adr) => !!tilordning[adr], importer: velgFilFor, routing: lyttRouting, importFil};
+  const listeId = (adr) => tilordning[adr] || tilordning['*'] || '';
+  const listeNavn = (adr) => { const l = lister.find(x => x.id === listeId(adr)); return l ? l.name : ''; };
+  window.nabeKnxHjelp = {lastNed, lesAlle, monitor: (adr) => aapneMonitor(adr), listeNavn, klar: () => klar, listeId, harListe: (adr) => !!listeId(adr), importer: velgFilFor, routing: lyttRouting, importFil};
   hentLister().then(() => { klar = true; if (window.renderDevices) renderDevices(); });
 
   /* KNX is event driven, so listening costs the bus nothing. Opening a gateway turns live on, so the values that arrive
@@ -289,8 +294,8 @@
       try { j = await api2('/api/knx/lesestatus?address=' + encodeURIComponent(adr)); } catch { /* the next round tries again */ }
       if (!j || j.status !== 'done') return;
       if (j.kjorer) {
-        const del = j.linje ? T(`linje ${j.linje}, `, `line ${j.linje}, `) : '';
-        if (typeof status === 'function') status(T(`KNX: spør bussen, ${j.spurt} av ${j.total} adresser (${del}${j.tempo} i sekundet) · ${j.verdier} har svart`, `KNX: asking the bus, ${j.spurt} of ${j.total} addresses (${del}${j.tempo} a second) · ${j.verdier} have answered`));
+        const del = (j.linje ? T(`linje ${j.linje}, `, `line ${j.linje}, `) : '') + (j.rate ? T(`${String(j.rate).replace('.', ',')} i sekundet`, `${j.rate} a second`) : '') + (j.tunneler > 1 ? T(', 2 tunneler', ', 2 tunnels') : '') + (j.bremset ? T(', bremset av trafikk', ', slowed by traffic') : '');
+        if (typeof status === 'function') status(T(`KNX: spør bussen, ${j.spurt} av ${j.total} adresser (${del}) · ${j.verdier} har svart`, `KNX: asking the bus, ${j.spurt} of ${j.total} addresses (${del}) · ${j.verdier} have answered`));
       } else {
         if (runder > 0 && typeof status === 'function') status(T(`KNX: ferdig med å spørre · ${j.verdier} adresser har en verdi`, `KNX: done asking · ${j.verdier} addresses have a value`));
         clearInterval(folgTimer);

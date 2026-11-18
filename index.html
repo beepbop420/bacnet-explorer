@@ -443,7 +443,8 @@
         <div class="spacer"></div>
 
         <button id="reloadBtn" class="btn btn-icon" disabled title="Les punktene fra enheten på nytt">⟳</button>
-        <button id="pollBtn" class="btn" disabled title="Start/stopp live-oppdatering (L)">Live av</button>
+<div class="live-grp">
+                <button id="pollBtn" class="btn" disabled title="Start/stopp live-oppdatering (L)">Live av</button>
         <select id="pollInt" class="field" title="Intervall">
           <option value="1000">1s</option><option value="2000" selected>2s</option>
           <option value="5000">5s</option><option value="10000">10s</option>
@@ -451,6 +452,7 @@
         <select id="covModus" class="field" title="Hvordan live leser fra BACnet-enheter. Auto: enheten sier fra selv når en verdi endrer seg (COV), og de som ikke kan det leses med intervallet. Poll: alt leses med intervallet.">
           <option value="auto" selected>COV</option><option value="poll">Poll</option>
         </select>
+        </div>
 
         <div class="menu">
           <button id="expBtn" class="btn" disabled>Eksport</button>

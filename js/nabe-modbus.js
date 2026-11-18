@@ -310,7 +310,7 @@
     if (window.renderDevices) renderDevices();
     toast(T('Registerkartet er koblet til enheten', 'The register map is linked to the device'));
   }
-  window.nabeMbHjelp = {forslag, bruk, kartNavn, klar: () => klar, harKart: (adr) => !!tilordning[adr], importer: velgFilFor, utforsk, avbryt: avbrytUtforsk, utforskStatus: (adr) => utf[adr] || null, aapneSom, importFil};
+  window.nabeMbHjelp = {kartId: (adr) => tilordning[adr] || '', lastNed, forslag, bruk, kartNavn, klar: () => klar, harKart: (adr) => !!tilordning[adr], importer: velgFilFor, utforsk, avbryt: avbrytUtforsk, utforskStatus: (adr) => utf[adr] || null, aapneSom, importFil};
   hentKart().then(() => { klar = true; if (window.renderDevices) renderDevices(); });
 
   window.aapneModbus = async () => {

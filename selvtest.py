@@ -355,6 +355,14 @@ def royktest():
               "  return /RT401/.test(svg) && !/RT405/.test(svg) && !/SB501/.test(svg) && /SB502/.test(svg) && !/JP402/.test(svg); })(),"
               " veksler: (() => { const a = nabeSkjema.tegnAggregat; return typeof a === 'function'; })(),"
               " protokoller: typeof skannProtokoller === 'function' && !!document.getElementById('scanMeny'),"
+              " klassifisering: (() => { const a = gruppeFor({address: '1.1.1.1', object_name: 'ECY-S1000', vendor_name: '', vendor_id: 0}).label,"
+              "   b = gruppeFor({address: '1.1.1.2', object_name: '564001-OU001', vendor_name: 'Tridium', vendor_id: 36, web_vendor: 'WAGO'}).label,"
+              "   c = gruppeFor({address: '1.1.1.3', object_name: 'Beckhoff_0', vendor_name: 'Beckhoff Automation', vendor_id: 15}).label;"
+              "  return a === 'Distech' && b === 'WAGO' && c === 'Beckhoff'; })(),"
+              " knxrom2: (() => { const P = (n, v, t) => ({objid: n, name: n, description: '', type: t || 'analog-value', value: v, units: '', knx: {ga: 'x'}});"
+              "  const s = nabeSkjema.byggSystemer([P('01-212 VAV status % Tilluft', 40), P('01-212 lys bevegelse SD', 'active', 'binary-value'), P('Ukjent navn uten rom', 1), P('Vifte 1 status', 1)]);"
+              "  const r = s.flatMap(x => [...x.romData.values()]).find(x => x.rom === '212');"
+              "  return !!r && !!r.luft && !!r.bevegelse && s.every(x => x.komp.length === 0 && x.type !== 'ventilasjon'); })(),"
               " modbus: typeof aapneModbus === 'function' && !!document.getElementById('modbusBtn'),"
               " bussfilter: typeof alderTekst === 'function' && S.filters.medVerdi === false && !!document.getElementById('fMedVerdi') && /min/.test(alderTekst(Date.now() / 1000 - 300)),"
               " knx: typeof aapneKnx === 'function' && !!document.getElementById('knxBtn'),"
@@ -1282,6 +1290,9 @@ def ny_liste():
     csv1 = b"Group name;Address\r\nTemp;7/1/1\r\nLys;7/1/2\r\nGammel;7/1/3\r\n"
     csv2 = b"Group name;Address\r\nTemp ny;7/1/1\r\nLys;7/1/2\r\nNy;7/1/4\r\n"
     k1 = kall("/api/knx/lister", {"navn": "Ny liste test", "innhold": base64.b64encode(csv1).decode(), "filnavn": "a.csv"})
+    inf = kall("/api/knx/lister/info?id=" + k1["id"])
+    sjekk("liste: detaljene sier hvilken fil lista kom fra, hvor den ligger og hvem som bruker den",
+          inf.get("status") == "done" and inf["meta"].get("filnavn") == "a.csv" and inf["punkter"] == 3 and inf["sti"].endswith(".json") and "*" in kall("/api/knx/lister")["tilordning"], str(inf)[:200])
     sjekk("liste: første import har ingen sammenligning", k1.get("status") == "done" and k1.get("endringer") is None, str(k1))
     jk = vent_jobb(kall("/api/knx/scan", {"subnet": "127.0.0.1", "port": KXSIM.port, "timeout": 1.5})["job_id"])
     adr = jk["result"]["devices"][0]["address"]

@@ -1418,10 +1418,42 @@ function flereKortIBruk() {
 /* The same, in the heading of the open device: which adapter its points are read through. */
 /* The group of a device: Modbus and KNX each have their own, with their own colour, the way a maker is the group of a
    BACnet device. Nothing in a Modbus register says who made the controller, so "unknown maker" is not a group worth having. */
+/* Who made a device is worked out from every sign there is, strongest first, and the reason is kept so it can be shown:
+     1. what the technician has said (a right-click, remembered)
+     2. what the device says itself (BACnet vendor name and id), unless that is blank or only the platform (Niagara)
+     3. what its own web page says (read after the scan), then its MAC address
+     4. the name it has (ECY is Distech, Corrigo is Regin, GOLD is Swegon, Energy Valve is Belimo ...)
+   A device that is in the wrong group can be moved by hand, and stays where it was put. */
+const NAVN_LEVERANDOR = [
+  [/^ecy[-_ ]|^eclypse|distech/i, 'Distech'], [/corrigo|^exo(?:flex|dom)|^regin\b/i, 'Regin'], [/^gold[_ ]|swegon|^wise[_ ]/i, 'Swegon'],
+  [/^beckhoff|^cx\d{4}|^cp\d{4}|twincat/i, 'Beckhoff'], [/energy\s*valve|belimo|^nrg/i, 'Belimo'], [/^oj[-_ ]?air|^oj[-_ ]?(?:dcc|dvs)/i, 'OJ Electronics'],
+  [/^30r[ab]/i, 'Carrier'], [/^pol\d{3}|climatix|desigo|^pxc|simatic/i, 'Siemens'], [/^na[ei]\d|^nie\d|^metasys|^ncm?\b/i, 'Johnson C.'],
+  [/komfovent|^c\d?\s?-?\d{2,3}\b.*komfovent/i, 'Komfovent'], [/^excon|exhausto/i, 'Exhausto'], [/^wago|^pfc\d|750-\d/i, 'WAGO'],
+  [/fieldserver|^fs[-_]|^fs_/i, 'FieldServer'], [/^jace|^niagara|^fcb\./i, 'Tridium'], [/^saia|^pcd\d/i, 'Saia-Burgess'],
+  [/^moxa/i, 'Moxa'], [/^abb[-_ ]/i, 'ABB'], [/^danfoss|^ecl\d/i, 'Danfoss'], [/^grundfos|^cu\s?\d{3}/i, 'Grundfos'],
+];
+const LEV_GENERISK = /^(ukjent|unknown|bacnet|)$|bacnet\s*stack|unknown/i;
+const LEV_PLATTFORM = new Set(['Tridium', 'Embedded Sys.']);       // the software on the box, not who made the box
+function levOverstyrt(d) { try { return (loadPrefs().levOverstyr || {})[d.address] || ''; } catch { return ''; } }
+function levKandidater(d) {
+  const ut = [];
+  const legg = (label, grunn) => { if (label && !ut.some(x => x.label === label)) ut.push({label, grunn}); };
+  if (d.web_vendor) legg(d.web_vendor, T('nettsiden sier det', 'its web page says so'));
+  if (d.mac_vendor) legg(d.mac_vendor, T('MAC-adressen er fra dem', 'its MAC address is theirs'));
+  const navn = [d.object_name, d.model_name, d.description].filter(Boolean).join(' ');
+  for (const [re, label] of NAVN_LEVERANDOR) if (re.test(d.object_name || '') || re.test(navn)) { legg(label, T('navnet ligner', 'the name looks like it')); break; }
+  return ut;
+}
 function gruppeFor(d) {
   if (d.protocol === 'modbus') { const lev = d.vendor_name || d.web_vendor; return {label: lev ? 'Modbus · ' + lev : 'Modbus', color: 'var(--prot-modbus)', prot: 'modbus'}; }
   if (d.protocol === 'knx') return {label: 'KNX', color: 'var(--prot-knx)', prot: 'knx'};
-  return Object.assign({}, vendorOf(d.vendor_name, d.vendor_id), {prot: 'bacnet'});
+  const over = levOverstyrt(d);
+  if (over) return {label: over, color: VENDOR_COLOR[over] || VENDOR_GREY, prot: 'bacnet', grunn: T('valgt av deg', 'chosen by you')};
+  const v = vendorOf(d.vendor_name, d.vendor_id);
+  if (!(LEV_GENERISK.test(v.label) || LEV_PLATTFORM.has(v.label))) return Object.assign({}, v, {prot: 'bacnet'});
+  const k = levKandidater(d)[0];
+  if (k) { const nv = vendorOf(k.label, null); return {label: nv.label, color: nv.color, prot: 'bacnet', grunn: k.grunn + (v.label && !LEV_GENERISK.test(v.label) ? ' · ' + T('BACnet sier ', 'BACnet says ') + v.label : '')}; }
+  return Object.assign({}, v, {prot: 'bacnet'});
 }
 const PROT_RANG = {bacnet: 0, modbus: 1, knx: 2};
 const PROT_NAVN = {bacnet: 'BACnet', modbus: 'Modbus', knx: 'KNX'};
@@ -1442,7 +1474,9 @@ function protFelt(d) {
   if (d.protocol === 'knx') {
     return fil + f(T('KNX-adresse', 'KNX address'), d.knx_address) + f('MAC', d.mac) + f(T('Serienr.', 'Serial'), d.serial);
   }
-  return `<span class="tf"><small>${T('Instans', 'Instance')}</small><span class="ctx-id">${d.device_instance ?? '?'}</span></span>`;
+  return `<span class="tf"><small>${T('Instans', 'Instance')}</small><span class="ctx-id">${d.device_instance ?? '?'}</span></span>`
+    + f(T('Nettside', 'Web page'), d.web && (d.web.tittel || d.web.realm || d.web.leverandor) ? (d.web.tittel || d.web.realm || d.web.leverandor) + (d.web.innlogging ? ' · ' + T('innlogging', 'login') : '') : '')
+    + f('MAC', d.mac ? d.mac + (d.mac_vendor ? ' · ' + d.mac_vendor : '') : '');
 }
 
 function kortFelt(d) {
@@ -1579,7 +1613,9 @@ function renderDevices() {
       .map((g, gi) => {
         // First by bus: BACnet, then Modbus, then KNX, each with its makers. With only one bus in the list there is no heading.
         const skille = (akse !== 'range' && flereProt && (gi === 0 || rekke[gi - 1].prot !== g.prot))
-          ? `<div class="prot-skille p-${g.prot}"><i></i><span>${PROT_NAVN[g.prot]}</span><em>${rekke.filter(x => x.prot === g.prot).reduce((n, x) => n + x.enheter.length, 0)}</em></div>` : '';
+          ? `<button type="button" class="prot-skille p-${g.prot}" data-vendor="prot:${g.prot}" aria-expanded="${!skjulte.has('prot:' + g.prot)}" title="${esc(T('Lukk eller åpne alle ' + PROT_NAVN[g.prot] + '-gruppene', 'Close or open all the ' + PROT_NAVN[g.prot] + ' groups'))}"><i></i><span>${PROT_NAVN[g.prot]}</span><em>${rekke.filter(x => x.prot === g.prot).reduce((n, x) => n + x.enheter.length, 0)}</em><b class="prot-chev">⌃</b></button>` : '';
+        // A bus that has been closed shows only its heading
+        if (flereProt && akse !== 'range' && skjulte.has('prot:' + g.prot)) return skille;
         const av = skjulte.has(g.v.label);
         const feil = g.enheter.filter(d => devState(d.address) === 'bad').length;
         const adv = g.enheter.filter(d => devState(d.address) === 'warn').length;
@@ -1588,7 +1624,7 @@ function renderDevices() {
         return `${skille}<div class="vgroup${av && !likt ? ' av' : ''}${likt ? ' uten-hode' : ''}" style="--vc:${g.v.color}">
           <button class="vgroup-head" data-vendor="${esc(g.v.label)}">
             <span class="vgroup-bar"></span>
-            <span class="vgroup-name${akse === 'range' ? ' nett' : ''}">${esc(akse === 'range' ? nettNavn(g.v.label) || g.v.label : (flereProt && g.prot !== 'bacnet' ? g.v.label.replace(/^Modbus · /, '') : g.v.label))}</span>
+            <span class="vgroup-name${akse === 'range' ? ' nett' : ''}"${g.v.grunn ? ` title="${esc(T('Gruppert slik fordi ', 'Grouped like this because ') + g.v.grunn)}"` : ''}>${esc(akse === 'range' ? nettNavn(g.v.label) || g.v.label : (flereProt && g.prot !== 'bacnet' ? g.v.label.replace(/^Modbus · /, '') : g.v.label))}</span>
             ${akse === 'range' ? `<span class="vgroup-edit" role="button" tabindex="0" data-navngi="${esc(g.v.label)}" title="${esc(T('Gi anlegget et navn', 'Name this site'))}" aria-label="${esc(T('Gi anlegget et navn', 'Name this site'))}">${IKON_BLYANT}</span>` : ''}
             ${akse === 'range' ? nettMeta(g) : ''}
             ${feil ? `<em class="dev-flag bad" title="${feil} enheter med feil">${feil}</em>` : ''}
@@ -1701,16 +1737,28 @@ function navngiNett(label, head) {
    line, not another heading you have to open. A small one is not: four
    cards need no sections, and their colour already says the maker. */
 function nettInnhold(g, kort) {
+  // Inside one network: first by bus (BACnet, Modbus, KNX), then by maker, and every sub-group can be closed
   const per = new Map();
   for (const d of g.enheter) {
-    const v = vendorOf(d.vendor_name, d.vendor_id);
-    if (!per.has(v.label)) per.set(v.label, {v, enheter: []});
-    per.get(v.label).enheter.push(d);
+    const v = gruppeFor(d);
+    const k = (v.prot || 'bacnet') + '|' + v.label;
+    if (!per.has(k)) per.set(k, {v, enheter: [], prot: v.prot || 'bacnet'});
+    per.get(k).enheter.push(d);
   }
-  if (g.enheter.length < 8 || per.size < 2) return g.enheter.map(kort).join('');
-  return [...per.values()].sort((a, b) => b.enheter.length - a.enheter.length || NORSK.compare(a.v.label, b.v.label))
-    .map(u => `<div class="vsub" style="--vc:${u.v.color}"><span class="vsub-navn">${esc(u.v.label)}</span><span class="vsub-n">${u.enheter.length}</span></div>`
-      + u.enheter.map(kort).join('')).join('');
+  const flereProt = new Set([...per.values()].map(u => u.prot)).size > 1;
+  if (g.enheter.length < 8 && !flereProt) return g.enheter.map(kort).join('');
+  if (per.size < 2 && !flereProt) return g.enheter.map(kort).join('');
+  const skjulte = new Set(loadPrefs().vendorCollapsed || []);
+  return [...per.values()]
+    .sort((a, b) => (PROT_RANG[a.prot] ?? 0) - (PROT_RANG[b.prot] ?? 0) || b.enheter.length - a.enheter.length || NORSK.compare(a.v.label, b.v.label))
+    .map(u => {
+      const nokkel = 'sub:' + g.v.label + '|' + u.prot + '|' + u.v.label;
+      const av = skjulte.has(nokkel);
+      const navn = flereProt && u.prot !== 'bacnet' && u.v.label === PROT_NAVN[u.prot] ? PROT_NAVN[u.prot] : u.v.label.replace(/^Modbus · /, '');
+      return `<button type="button" class="vsub vsub-knapp${av ? ' av' : ''}" style="--vc:${u.v.color}" data-vendor="${esc(nokkel)}" aria-expanded="${!av}"${u.v.grunn ? ` title="${esc(T('Gruppert slik fordi ', 'Grouped like this because ') + u.v.grunn)}"` : ''}>`
+        + `${flereProt ? `<i class="vsub-prikk p-${u.prot}"></i>` : ''}<span class="vsub-navn">${esc(navn)}</span><span class="vsub-n">${u.enheter.length}</span><b class="prot-chev">⌃</b></button>`
+        + (av ? '' : u.enheter.map(kort).join(''));
+    }).join('');
 }
 
 /* -------------------------------------------------------------- load points */
@@ -2554,7 +2602,7 @@ function renderCtx() {
 `;
 
   el.querySelectorAll('[data-klokke]').forEach(b => b.onclick = () => stillKlokka(b.dataset.klokke));
-  el.querySelectorAll('[data-liste]').forEach(b => b.onclick = () => (b.dataset.liste === 'knx' ? window.aapneKnx() : window.aapneModbus()));
+  el.querySelectorAll('[data-liste]').forEach(b => b.onclick = () => (window.nabeListeInfo ? window.nabeListeInfo(b.dataset.liste, b.dataset.adr) : (b.dataset.liste === 'knx' ? window.aapneKnx() : window.aapneModbus())));
   // The address opens the controller's own web page, in the PC's browser.
   el.querySelectorAll('[data-web]').forEach(b => b.onclick = async () => {
     b.classList.add('venter');

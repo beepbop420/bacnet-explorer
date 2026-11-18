@@ -149,19 +149,26 @@
   /* Who made a Modbus device that does not say: its own web page often does (the title, the Server header, the name a login
      asks for). Read once, quietly, after the scan; a page that wants a password is left alone. */
   async function avtrykk() {
-    const ips = [...new Set(S.devices.filter(d => d.protocol === 'modbus' && !d.web && !d.serial).map(d => d.ip))];
-    if (!ips.length) return;
-    try {
-      const r = await api2('/api/web-avtrykk', {adresser: ips});
-      if (r.status !== 'done') return;
-      for (const d of S.devices) {
-        const w = d.protocol === 'modbus' ? r.avtrykk[d.ip] : null;
-        if (w === undefined || w === null) continue;
-        d.web = w || {};
-        if (w && w.leverandor) d.web_vendor = w.leverandor;
-      }
-      renderDevices();
-    } catch { /* the web page is a bonus, not a need */ }
+    // Only where it helps: a Modbus device (nothing in its registers says who made it) and a BACnet device whose own
+    // answer is blank or only names the platform. A device that already says who made it is not bothered.
+    const generisk = (d) => { const v = vendorOf(d.vendor_name, d.vendor_id).label; return LEV_GENERISK.test(v) || LEV_PLATTFORM.has(v); };
+    const ipAv = (d) => d.protocol === 'modbus' ? d.ip : String(d.address).split(':')[0];
+    const sak = S.devices.filter(d => !d.web && d.protocol !== 'knx' && !d.serial && /^\d+\.\d+\.\d+\.\d+$/.test(ipAv(d)) && (d.protocol === 'modbus' || generisk(d)));
+    const ips = [...new Set(sak.map(ipAv))];
+    for (let i = 0; i < ips.length; i += 60) {
+      try {
+        const r = await api2('/api/web-avtrykk', {adresser: ips.slice(i, i + 60)});
+        if (r.status !== 'done') continue;
+        for (const d of sak) {
+          const w = r.avtrykk[ipAv(d)];
+          if (w === undefined) continue;
+          d.web = w || {};
+          if (w && w.leverandor) d.web_vendor = w.leverandor;
+          if (w && w.mac) { d.mac = d.mac || w.mac; if (w.mac_vendor) d.mac_vendor = w.mac_vendor; }
+        }
+        renderDevices();
+      } catch { /* the web page is a bonus, not a need */ }
+    }
   }
 
   // Stopping the scan stops the wait for these two as well
@@ -237,6 +244,14 @@
     const r = await api('/api/webside', {address: d.protocol === 'modbus' || d.protocol === 'knx' ? d.ip : d.address});
     if (r.status === 'done') toast(T(`Åpner ${r.url}`, `Opening ${r.url}`)); else toast(r.error || T('Fant ingen webside', 'Found no web page'), true);
   }
+  function settLev(d, label) {
+    const alle = Object.assign({}, loadPrefs().levOverstyr || {});
+    if (label) alle[d.address] = label; else delete alle[d.address];
+    savePrefs({levOverstyr: alle});
+    renderDevices();
+    toast(label ? T(`${d.object_name || d.address} ligger nå under ${label}`, `${d.object_name || d.address} is now under ${label}`) : T('Tilbake til automatisk gruppering', 'Back to automatic grouping'));
+  }
+  let ctxStatus = null;
   function ctxRader(d) {
     const rad = (t, fn, ekstra) => ({t, fn, ...(ekstra || {})});
     const felles = [
@@ -251,8 +266,24 @@
       const k = window.nabeKnxHjelp;
       egne = [rad(T('Importer ETS-liste …', 'Import ETS list …'), () => k.importer(d.address)), rad(T('Les alle lesbare …', 'Read all readable …'), () => k.lesAlle(d.address)),
         rad(T('Telegrammonitor', 'Telegram monitor'), () => k.monitor(d.address))];
-      const tempo = [[4, T('Forsiktig, 4 i sekundet', 'Careful, 4 a second')], [8, T('Vanlig, 8 i sekundet', 'Normal, 8 a second')], [12, T('Raskt, 12 i sekundet', 'Fast, 12 a second')]];
-      egne.push({sep: true}, {head: T('Lesetempo', 'Reading pace')}, ...tempo.map(([n, t]) => rad(t, async () => { await api('/api/knx/tempo', {address: d.address, per_sekund: n}); toast(T(`Lesetempo ${n} i sekundet. Farten følger også hvor travelt bussen er`, `Pace ${n} a second. It also follows how busy the bus is`)); })));
+      const tempo = [[5, T('Forsiktig', 'Careful')], [10, T('Vanlig', 'Normal')], [16, T('Raskt', 'Fast')]];
+      const st = ctxStatus || {};
+      const naa = Number(st.tempo) || 10;
+      egne.push({sep: true}, {head: st.kjorer
+        ? T(`Leser nå: ${st.spurt} av ${st.total}, ${String(st.rate || 0).replace('.', ',')} i sekundet${st.tunneler > 1 ? ', 2 tunneler' : ''}${st.bremset ? ', bremset av trafikk' : ''}`, `Reading now: ${st.spurt} of ${st.total}, ${st.rate || 0} a second${st.tunneler > 1 ? ', 2 tunnels' : ''}${st.bremset ? ', slowed by traffic' : ''}`)
+        : T(`Leser ikke nå. ${st.verdier || 0} adresser har en verdi`, `Not reading now. ${st.verdier || 0} addresses have a value`)});
+      egne.push(...tempo.map(([n, t]) => rad((naa === n ? '✓ ' : '') + t + T(`, ${n} i sekundet`, `, ${n} a second`), async () => { await api('/api/knx/tempo', {address: d.address, per_sekund: n}); toast(T(`Lesetempo: ${t.toLowerCase()}, ${n} i sekundet. Farten bremses også av seg selv når bussen er travel`, `Pace: ${t.toLowerCase()}, ${n} a second. It also slows by itself when the bus is busy`)); })));
+    }
+    // Who made it: the guesses, each one a click away, and the way back to automatic. What is chosen is remembered.
+    const lev = [];
+    if (d.protocol !== 'knx' && d.protocol !== 'modbus') {
+      const over = levOverstyrt(d), naa = gruppeFor(d).label;
+      const kand = levKandidater(d).filter(k => k.label !== naa);
+      if (kand.length || over) {
+        lev.push({sep: true}, {head: T('Leverandør', 'Maker')});
+        for (const k of kand) lev.push(rad(T('Grupper som ', 'Group as ') + k.label + ' · ' + k.grunn, () => settLev(d, k.label)));
+        if (over) lev.push(rad(T('Tilbake til automatisk', 'Back to automatic'), () => settLev(d, '')));
+      }
     }
     const slutt = [
       {sep: true},
@@ -264,7 +295,7 @@
         renderDevices();
       }),
     ];
-    return [...felles, ...(egne.length ? [{sep: true}, ...egne] : []), ...slutt];
+    return [...felles, ...(egne.length ? [{sep: true}, ...egne] : []), ...lev, ...slutt];
   }
   document.addEventListener('contextmenu', (e) => {
     const knapp = e.target.closest('#devList .dev[data-ip]');
@@ -273,6 +304,14 @@
     if (!d) return;
     e.preventDefault();
     lukkCtx();
+    const x = e.clientX, y = e.clientY;
+    if (d.protocol === 'knx') {
+      // The menu says which mode the reading is in, so it is asked before the menu is drawn
+      api2('/api/knx/lesestatus?address=' + encodeURIComponent(d.address)).then(s => { ctxStatus = s; visCtx(d, x, y); }).catch(() => { ctxStatus = null; visCtx(d, x, y); });
+    } else visCtx(d, x, y);
+  });
+  function visCtx(d, xPos, yPos) {
+    lukkCtx();
     const rader = ctxRader(d);
     ctx = document.createElement('div');
     ctx.className = 'menu-pop ctx-meny';
@@ -280,8 +319,8 @@
     ctx.innerHTML = rader.map((r, i) => r.sep ? '<div class="menu-sep"></div>' : r.head ? `<div class="scan-pop-t">${esc(r.head)}</div>` : `<button type="button" class="menu-item" role="menuitem" data-i="${i}">${esc(r.t)}</button>`).join('');
     document.body.append(ctx);
     const b = ctx.getBoundingClientRect();
-    ctx.style.left = Math.max(6, Math.min(e.clientX, innerWidth - b.width - 8)) + 'px';
-    ctx.style.top = Math.max(6, Math.min(e.clientY, innerHeight - b.height - 8)) + 'px';
+    ctx.style.left = Math.max(6, Math.min(xPos, innerWidth - b.width - 8)) + 'px';
+    ctx.style.top = Math.max(6, Math.min(yPos, innerHeight - b.height - 8)) + 'px';
     ctx.addEventListener('click', (ev) => {
       const k = ev.target.closest('[data-i]');
       if (!k) return;
@@ -289,7 +328,7 @@
       lukkCtx();
       try { r.fn(); } catch (err) { toast(String(err.message || err), true); }
     });
-  });
+  }
   document.addEventListener('click', (e) => { if (ctx && !e.target.closest('.ctx-meny')) lukkCtx(); });
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape') lukkCtx(); });
   window.addEventListener('blur', lukkCtx);
@@ -305,5 +344,59 @@
       return r;
     };
   }
+  /* ------------------------------------------------ 5. the list or map a device works from */
+  const dato = (t) => t ? new Date(t * 1000).toLocaleString(SPRAAK === 'en' ? 'en-GB' : 'nb-NO', {dateStyle: 'medium', timeStyle: 'short'}) : '';
+  const stor = (n) => n > 1048576 ? (n / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(n / 1024)) + ' kB';
+  const infoLag = document.createElement('div');
+  infoLag.id = 'listeInfo'; infoLag.className = 'gs-overlay'; infoLag.setAttribute('role', 'dialog'); infoLag.setAttribute('aria-modal', 'true'); infoLag.hidden = true;
+  document.body.append(infoLag);
+
+  window.nabeListeInfo = async function (prot, adr) {
+    const knx = prot === 'knx';
+    const id = knx ? window.nabeKnxHjelp.listeId(adr) : window.nabeMbHjelp.kartId(adr);
+    if (!id) { (knx ? window.aapneKnx : window.aapneModbus)(); return; }
+    const i = await api2((knx ? '/api/knx/lister/info?id=' : '/api/modbus/kart/info?id=') + encodeURIComponent(id));
+    if (i.status !== 'done') { toast(i.error || T('Fant ikke lista', 'Could not find the list'), true); return; }
+    const rad = (navn, verdi) => verdi === '' || verdi === undefined || verdi === null ? '' : `<tr><td>${navn}</td><td>${verdi}</td></tr>`;
+    const m = i.meta || {};
+    const brukere = (i.brukes_av || []).map(a => a === '*' ? T('alle gatewayer', 'every gateway') : esc(String(a).replace(/^(kx|mb):/, ''))).join(', ');
+    infoLag.innerHTML = `<div class="gs-modal op-modal op-bred"><div class="gs-head"><span class="gd-tittel">${knx ? T('ETS-liste', 'ETS list') : T('Registerkart', 'Register map')}</span>
+      <button class="gs-close" style="margin-left:auto"><span class="lbl">${T('Lukk', 'Close')}</span> ✕</button></div>
+      <div class="op-kropp">
+        <div><div class="sim-h">${esc(i.navn)}</div><div class="sp-meta">${knx ? T('Én ETS-fil dekker hele anlegget', 'One ETS file covers the whole plant') : T('Kartet brukes av enheten du åpnet', 'The map is used by the device you opened')}</div></div>
+        <table class="liste-tab"><tbody>
+          ${rad(T('Opprinnelig fil', 'Original file'), esc(m.filnavn || ''))}
+          ${rad(T('Importert', 'Imported'), dato(m.importert))}
+          ${rad(T('Punkter', 'Points'), i.punkter + (knx ? ` · ${i.lesbare} ${T('kan leses', 'can be read')} · ${i.med_dpt} ${T('med datapunkttype', 'with a datapoint type')}` : ''))}
+          ${knx ? rad(T('Linjer i prosjektet', 'Lines in the project'), i.antall_linjer ? `${i.antall_linjer} (${Object.entries(i.linjer).map(([l, n]) => `${l}: ${n}`).join(', ')}${i.antall_linjer > 8 ? ' …' : ''})` : T('ingen. Importer .knxproj-fila på nytt for å få dem, så spør hver gateway sin egen linje først', 'none. Import the .knxproj file again to get them, so each gateway asks its own line first')) : ''}
+          ${!knx ? rad(T('Per type', 'By kind'), Object.entries(i.per_funksjon || {}).filter(([, n]) => n).map(([k, n]) => `${n} ${k}`).join(', ')) : ''}
+          ${rad(T('Brukes av', 'Used by'), brukere)}
+          ${rad(T('Lagret som', 'Stored as'), `<code class="liste-sti">${esc(i.sti)}</code> · ${stor(i.stoerrelse)}`)}
+        </tbody></table>
+        <div class="op-knapper">
+          <button type="button" class="btn" data-li="mappe">${T('Vis i mappen', 'Show in folder')}</button>
+          <button type="button" class="btn" data-li="last">${T('Last ned CSV', 'Download CSV')}</button>
+          <button type="button" class="btn primary" data-li="vindu">${T('Bytt eller oppdater …', 'Change or update …')}</button>
+        </div></div></div>`;
+    infoLag.dataset.type = prot; infoLag.dataset.id = id;
+    infoLag.hidden = false;
+  };
+  infoLag.addEventListener('click', async (e) => {
+    if (e.target === infoLag || e.target.closest('.gs-close')) { infoLag.hidden = true; return; }
+    const b = e.target.closest('[data-li]');
+    if (!b) return;
+    const knx = infoLag.dataset.type === 'knx';
+    if (b.dataset.li === 'mappe') {
+      const r = await api2('/api/apne-mappe', {type: infoLag.dataset.type, id: infoLag.dataset.id});
+      if (r.status !== 'done') toast(r.error || T('Kunne ikke åpne mappen', 'Could not open the folder'), true);
+    } else if (b.dataset.li === 'last') {
+      if (knx) window.nabeKnxHjelp.lastNed(infoLag.dataset.id); else window.nabeMbHjelp.lastNed(infoLag.dataset.id);
+    } else if (b.dataset.li === 'vindu') {
+      infoLag.hidden = true;
+      (knx ? window.aapneKnx : window.aapneModbus)();
+    }
+  });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !infoLag.hidden) { infoLag.hidden = true; e.stopPropagation(); } }, true);
+
   byggMeny();
 })();

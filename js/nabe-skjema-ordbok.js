@@ -97,6 +97,11 @@ const SKJEMA_ORDBOK = {
     [/^vavgn\b/, {art: 'vav', rolle: 'paadrag'}],
     [/^er-verdi\s*co/, {art: 'co2', rolle: 'pv'}],
     [/^er-lux/, {art: 'lux', rolle: 'pv'}],
+    // the other naming: building-room-what, e.g. "lys bevegelse SD", "VAV målt luftmengde m3/s Tilluft", "CO2 pådrag"
+    [/bevegelse(?!.*(lavt|høyt))/, {art: 'bevegelse', rolle: 'pv'}],
+    [/^lys.*(status|dim)/, {art: 'lys', rolle: 'pv'}],
+    [/vav.*luftmengde\s*%|vav\s+status\s*%|co2\s+p[åa]drag/, {art: 'vav', rolle: 'paadrag'}],
+    [/vav.*luftmengde.*m3\/s/, {art: 'mengde', rolle: 'pv'}],
     [/^sp\s+lux/, {art: 'lux', rolle: 'sp'}],
   ],
   NAVNROLLE: [[/RelPos$/i, 'paadrag'], [/(SetPrc|SetPos)$/i, 'manuell']],

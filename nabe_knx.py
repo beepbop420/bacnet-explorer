@@ -670,7 +670,8 @@ class GroupStore:
     def save(self, name: str, parsed: Dict[str, Any]) -> str:
         self.lists.mkdir(parents=True, exist_ok=True)
         slug = re.sub(r"[^A-Za-z0-9_.-]+", "_", (name or parsed.get("name") or "ets").strip()).strip("_") or "ets"
-        (self.lists / f"{slug}.json").write_text(json.dumps({"name": name or parsed.get("name") or slug, "points": parsed["points"]},
+        (self.lists / f"{slug}.json").write_text(json.dumps({"name": name or parsed.get("name") or slug, "points": parsed["points"],
+                                                            **({"meta": parsed["meta"]} if parsed.get("meta") else {})},
                                                            ensure_ascii=False), encoding="utf-8")
         return slug
 
@@ -753,7 +754,7 @@ class GroupStore:
     def edit_point(self, address: str, ga: int, changes: Dict[str, Any]) -> Tuple[str, int]:
         """Change the name, description or datapoint type of one group address in the ETS list a gateway uses, or add it when the list
         does not have it (an address heard on the bus). A gateway with no list gets one of its own. Returns the list and how many gateways use it."""
-        lid = self.assignments().get(address)
+        lid = self.lid_for(address)
         d = self.load(lid) if lid else None
         if d is None:
             d = {"name": f"Egen {address}", "points": []}
@@ -772,8 +773,10 @@ class GroupStore:
             p["dpt"] = f"{t[0]}.{t[1]:03d}" if t[0] else ""
         self._noter_egen(lid, ga, {k: p[k] for k in ("name", "description", "dpt") if k in changes})
         self.lists.mkdir(parents=True, exist_ok=True)
-        (self.lists / f"{lid}.json").write_text(json.dumps({"name": d["name"], "points": sorted(pts, key=lambda x: x["ga"])}, ensure_ascii=False), encoding="utf-8")
-        self.assign(address, lid)
+        (self.lists / f"{lid}.json").write_text(json.dumps({"name": d["name"], "points": sorted(pts, key=lambda x: x["ga"]),
+                                                            **({"meta": d["meta"]} if d.get("meta") else {})}, ensure_ascii=False), encoding="utf-8")
+        if self.lid_for(address) != lid:
+            self.assign(address, lid)
         return lid, sum(1 for v in self.assignments().values() if v == lid)
 
     # --- what a gateway has heard, kept so that opening it again shows the last values at once and asks again only for what is old
@@ -791,10 +794,33 @@ class GroupStore:
         except (OSError, ValueError, KeyError):
             return {}
 
+    def lid_for(self, address: str) -> Optional[str]:
+        """The list a gateway uses: its own if it has been given one, otherwise the one for the whole plant ("*")."""
+        a = self.assignments()
+        return a.get(address) or a.get("*")
+
     def points_for(self, address: str) -> List[Dict[str, Any]]:
-        lid = self.assignments().get(address)
+        lid = self.lid_for(address)
         d = self.load(lid) if lid else None
         return list(d["points"]) if d else []
+
+    def info(self, list_id: str) -> Optional[Dict[str, Any]]:
+        """What there is to say about a stored list: where it is, what it came from, what is in it and who uses it."""
+        d = self.load(list_id)
+        if d is None:
+            return None
+        pts = d.get("points", [])
+        slug = re.sub(r"[^A-Za-z0-9_.-]+", "_", list_id)
+        f = self.lists / f"{slug}.json"
+        linjer: Dict[str, int] = {}
+        for p in pts:
+            for l in p.get("linjer", []):
+                linjer[l] = linjer.get(l, 0) + 1
+        a = self.assignments()
+        return {"id": list_id, "navn": d.get("name") or list_id, "punkter": len(pts), "lesbare": sum(1 for p in pts if p.get("leser") is True),
+                "med_dpt": sum(1 for p in pts if p.get("dpt")), "linjer": dict(sorted(linjer.items(), key=lambda x: -x[1])[:8]), "antall_linjer": len(linjer),
+                "meta": d.get("meta") or {}, "sti": str(f), "stoerrelse": f.stat().st_size if f.exists() else 0,
+                "brukes_av": [k for k, v in a.items() if v == list_id]}
 
 
 def device_address(host: str, port: int) -> str:

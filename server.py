@@ -235,7 +235,7 @@ def t(nb: str, en: str) -> str:
     return en if SPRAAK_VAR.get() == "en" else nb
 
 
-VERSJON = "2.19"
+VERSJON = "2.20"
 
 state = {"app": None, "local_address": None, "read_only": False, "bbmd": None, "primary": None}
 # The simulator: a scanned site run as devices on 127.0.0.x, in a process of its own.
@@ -5759,9 +5759,13 @@ async def web_avtrykk(body: WebAvtrykkBody):
             pass
     sem = asyncio.Semaphore(12)
 
+    loop = asyncio.get_running_loop()
+
     async def en(ip: str):
         async with sem:
-            return ip, await _web_avtrykk(ip)
+            w = await _web_avtrykk(ip)
+            m = await loop.run_in_executor(None, nm.mac_for, ip)          # only for a machine on the PC's own network
+            return ip, {**w, **m}
     return {"status": "done", "avtrykk": dict(await asyncio.gather(*[en(i) for i in sorted(set(ips))]))}
 
 
@@ -5848,6 +5852,7 @@ def modbus_kart_lagre(body: ModbusKartBody):
         parsed = nm.parse_map_bytes(data, body.filnavn, base=body.base if body.base in (0, 1) else None, real_scale=body.real_skala or 0.1)
     except (nm.MapError, ValueError) as e:
         return {"status": "error", "error": str(e)}
+    parsed["meta"] = {"filnavn": body.filnavn, "importert": time.time(), "bytes": len(data)}
     kid, diff = MODBUS_KART.save_merge(body.navn, parsed)
     return {"status": "done", "id": kid, "punkter": len(parsed["points"]), "base": parsed["base"], "merknader": parsed["notes"],
             "format": parsed["format"], "endringer": _diff_kort(diff)}
@@ -5934,7 +5939,7 @@ _KNX_SPURT: Dict[Any, float] = {}              # (gateway, group address) -> whe
 KNX_SPOR_PAUSE = 600.0                          # an address that did not answer is not asked again for ten minutes
 KNX_MAKS_LESINGER = 120                         # reads one load may send before it answers; the rest goes on in the background
 KNX_MAKS_BAKGRUNN = 4000                        # addresses the background reader asks for after a load
-KNX_TEMPO = 8.0                                 # questions a second by default; the bus can bear more, and the pace follows its load
+KNX_TEMPO = 10.0                                # questions a second by default; the bus can bear more, and the pace follows its load
 _KNX_BAK: Dict[str, Dict[str, Any]] = {}        # gateway -> {kjorer, spurt, total, task}
 
 
@@ -6008,51 +6013,93 @@ async def _knx_rydd():
 
 
 async def _knx_bakgrunn(key: str, tun: "nkx.KnxTunnel", gas: List[int]) -> None:
-    """Ask the bus for each address once, five a second, without holding anything up: what answers lands in the values the
-    tunnel keeps. One lost acknowledgement does not stop the run, it moves on to the next address."""
+    """Ask the bus for each address once, without holding anything up: what answers lands in the values the tunnel keeps.
+
+    One tunnel can only have one question out at a time, so on a slow line (a VPN) the acknowledgements, not the bus, set the
+    pace. When the asking is clearly slower than what was set, a second tunnel is opened if the gateway has one to give, and the two
+    share one pace, so the line carries twice as much and the bus no more than chosen. The pace also follows the bus: when much is
+    being said on it, the asking slows down by itself. One lost acknowledgement does not stop the run."""
     st = _KNX_BAK[key]
-    st.update(kjorer=True, total=len(gas), spurt=0, feil=0, svar=0)
+    st.update(kjorer=True, total=len(gas), spurt=0, feil=0, tunneler=1, rate=0.0, bremset=False)
     loop = asyncio.get_running_loop()
-    grunn = 1.0 / float(st.get("tempo") or KNX_TEMPO)        # seconds between two questions, as chosen
-    pause = grunn
-    neste = loop.time()
-    seq0, t0 = tun.seq, loop.time()
-    try:
-        for i, ga in enumerate(gas):
-            if not tun.connected:
-                break
-            grunn = 1.0 / float(st.get("tempo") or KNX_TEMPO)
+    kø: asyncio.Queue = asyncio.Queue()
+    for ga in gas:
+        kø.put_nowait(ga)
+    sty = {"pause": 1.0 / float(st.get("tempo") or KNX_TEMPO), "neste": loop.time(), "seq0": tun.seq, "t0": loop.time(), "n": 0, "start": loop.time()}
+    ekstra: List["nkx.KnxTunnel"] = []
+
+    async def plass() -> None:
+        grunn = 1.0 / float(st.get("tempo") or KNX_TEMPO)
+        sty["n"] += 1
+        if sty["n"] % 20 == 0:
+            busrate = (tun.seq - sty["seq0"]) / max(1.0, loop.time() - sty["t0"])
+            if busrate > 25:
+                sty["pause"] = min(0.6, sty["pause"] * 1.5)
+            elif busrate < 10 and sty["pause"] > grunn:
+                sty["pause"] = max(grunn, sty["pause"] / 1.25)
+            elif busrate <= 15:
+                sty["pause"] = grunn
+            sty["seq0"], sty["t0"] = tun.seq, loop.time()
+            st["bremset"] = sty["pause"] > grunn * 1.05
+            st["rate"] = round(st["spurt"] / max(1.0, loop.time() - sty["start"]), 1)
+        mitt = max(sty["neste"], loop.time() - 0.3)
+        sty["neste"] = mitt + sty["pause"]
+        if mitt > loop.time():
+            await asyncio.sleep(mitt - loop.time())
+
+    async def arbeider(tn: "nkx.KnxTunnel") -> None:
+        while True:
             try:
-                await tun.read(ga)
+                ga = kø.get_nowait()
+            except asyncio.QueueEmpty:
+                return
+            if not tn.connected:
+                return
+            await plass()
+            try:
+                await tn.read(ga)
             except nkx.KnxError:
                 st["feil"] += 1
                 if st["feil"] > 25:          # the gateway has stopped answering: no point in asking on
-                    break
+                    while not kø.empty():
+                        kø.get_nowait()
+                    return
                 await asyncio.sleep(0.8)
-                neste = loop.time()
                 continue
             st["spurt"] += 1
-            # The questions go out at a steady pace whatever the time an acknowledgement takes (a slow line used to make the
-            # pace slower still), and the pace follows how busy the bus is: when much is being said, ask less.
-            if i and i % 20 == 0:
-                rate = (tun.seq - seq0) / max(1.0, loop.time() - t0)
-                if rate > 25:
-                    pause = min(0.6, pause * 1.5)
-                elif rate < 10 and pause > grunn:
-                    pause = max(grunn, pause / 1.25)
-                else:
-                    pause = max(grunn, pause) if rate > 15 else grunn
-                seq0, t0 = tun.seq, loop.time()
-            neste += pause
-            ventetid = neste - loop.time()
-            if ventetid > 0:
-                await asyncio.sleep(ventetid)
-            else:
-                neste = loop.time()
+
+    async def vurder() -> None:
+        await asyncio.sleep(6.0)
+        maal = 1.0 / sty["pause"]
+        oppnaadd = st["spurt"] / max(1.0, loop.time() - sty["start"])
+        if oppnaadd < 0.7 * maal and kø.qsize() > 40 and tun.connected and not getattr(tun, "routing", False):
+            t2 = nkx.KnxTunnel(tun.host, tun.port, 3.0)
+            try:
+                await t2.connect()
+            except nkx.KnxError:
+                return                          # the gateway has no tunnel to spare: the one goes on alone
+            t2.values = tun.values              # what the second hears lands in the same place
+            ekstra.append(t2)
+            st["tunneler"] = 2
+            oppgaver.append(asyncio.create_task(arbeider(t2)))
+
+    oppgaver = [asyncio.create_task(arbeider(tun)), asyncio.create_task(vurder())]
+    try:
+        while oppgaver and not all(o.done() for o in oppgaver):
+            await asyncio.wait(oppgaver, timeout=1.0)
+        await asyncio.gather(*oppgaver, return_exceptions=True)
     except asyncio.CancelledError:
+        for o in oppgaver:
+            o.cancel()
         raise
     finally:
+        for t2 in ekstra:
+            try:
+                await t2.close()
+            except Exception:
+                pass
         st["kjorer"] = False
+        st["tunneler"] = 1
 
 
 @app.get("/api/knx/lesestatus")
@@ -6063,6 +6110,8 @@ async def knx_lesestatus(address: str):
     tun = _KNX_ROR.get(f"{parsed[0]}:{parsed[1]}") if parsed else None
     return {"status": "done", "kjorer": bool(st and st.get("kjorer")), "spurt": (st or {}).get("spurt", 0), "total": (st or {}).get("total", 0),
             "verdier": len(tun.values) if tun else 0, "tempo": float((st or {}).get("tempo") or KNX_TEMPO),
+            "rate": (st or {}).get("rate", 0.0), "tunneler": (st or {}).get("tunneler", 1), "bremset": bool((st or {}).get("bremset")),
+            "feil": (st or {}).get("feil", 0),
             "linje": tun.linje() if tun and hasattr(tun, "linje") else ""}
 
 
@@ -6247,7 +6296,7 @@ def _knx_points_job(body) -> Dict[str, Any]:
                              "total_objects": len(records), "type_counts": counts, "count": len(records),
                              "unread": sum(1 for r in records if r.get("unread")), "rpm": None,
                              "identity": job["identity"], "points": records,
-                             "knx": {"list": KNX_LISTER.assignments().get(body.address), "tunnel": tun.address}}
+                             "knx": {"list": KNX_LISTER.lid_for(body.address), "tunnel": tun.address}}
             job["status"] = "done"
         except asyncio.CancelledError:
             job["status"] = "cancelled"
@@ -6443,6 +6492,40 @@ class KnxListeBody(BaseModel):
     filnavn: str = ""
 
 
+@app.get("/api/knx/lister/info")
+def knx_liste_info(id: str):
+    i = KNX_LISTER.info(id)
+    return {"status": "done", **i} if i else {"status": "error", "error": t("Ukjent gruppeliste", "Unknown group list")}
+
+
+@app.get("/api/modbus/kart/info")
+def modbus_kart_info(id: str):
+    i = MODBUS_KART.info(id)
+    return {"status": "done", **i} if i else {"status": "error", "error": t("Ukjent registerkart", "Unknown register map")}
+
+
+class ApneMappeBody(BaseModel):
+    type: str
+    id: str
+
+
+@app.post("/api/apne-mappe")
+def apne_mappe(body: ApneMappeBody):
+    """Shows a stored list or map in the file manager of the PC, so the technician can see where it is kept. Only files inside NABE's own data folder."""
+    f = (KNX_LISTER.lists if body.type == "knx" else MODBUS_KART.maps) / f"{re.sub(r'[^A-Za-z0-9_.-]+', '_', body.id)}.json"
+    try:
+        f = f.resolve()
+        if DATA_DIR.resolve() not in f.parents or not f.is_file():
+            raise OSError("utenfor")
+        if os.name == "nt":
+            subprocess.Popen(["explorer", "/select,", str(f)])
+        else:
+            subprocess.Popen(["xdg-open", str(f.parent)])
+    except OSError:
+        return {"status": "error", "error": t("Fant ikke filen", "Could not find the file")}
+    return {"status": "done"}
+
+
 @app.get("/api/knx/lister/innhold")
 def knx_liste_innhold(id: str):
     """The group addresses of a stored list, for downloading it again with the changes made in the app."""
@@ -6466,7 +6549,11 @@ def knx_liste_lagre(body: KnxListeBody):
         parsed = nkx.parse_group_list(data, body.filnavn)
     except nkx.KnxError as e:
         return {"status": "error", "error": str(e)}
+    parsed["meta"] = {"filnavn": body.filnavn, "importert": time.time(), "bytes": len(data)}
     lid, diff = KNX_LISTER.save_merge(body.navn, parsed)
+    # One ETS project covers the whole plant: the first list that is imported is the one every gateway uses
+    if not KNX_LISTER.assignments().get("*"):
+        KNX_LISTER.assign("*", lid)
     return {"status": "done", "id": lid, "punkter": len(parsed["points"]), "endringer": _diff_kort(diff)}
 
 
@@ -6477,7 +6564,7 @@ class KnxTilordne(BaseModel):
 
 @app.post("/api/knx/tilordne")
 def knx_tilordne(body: KnxTilordne):
-    if not nkx.parse_address(body.address):
+    if body.address != "*" and not nkx.parse_address(body.address):
         return {"status": "error", "error": t("Ikke en KNX-gateway", "Not a KNX gateway")}
     if body.liste and KNX_LISTER.load(body.liste) is None:
         return {"status": "error", "error": t("Ukjent gruppeliste", "Unknown group list")}

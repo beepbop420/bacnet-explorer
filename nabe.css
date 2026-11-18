@@ -5518,3 +5518,28 @@ body[data-aktiv-prot=modbus] #covModus,body[data-aktiv-prot=knx] #covModus{displ
 
 .vgroup.uten-hode>.vgroup-head{display:none}
 .vgroup.uten-hode>.vgroup-body{grid-template-rows:1fr}
+
+/* The details of the list or map a device works from */
+.liste-tab{width:100%;border-collapse:collapse;font-size:12.5px}
+.liste-tab td{padding:6px 0;border-top:1px solid var(--line);vertical-align:top}
+.liste-tab td:first-child{width:34%;color:var(--fg-3);padding-right:12px}
+.liste-sti{font:11px var(--mono);word-break:break-all;color:var(--fg-2)}
+
+button.prot-skille{width:100%;background:transparent;border:0;cursor:pointer;text-align:left;font:inherit;font-size:11px}
+button.prot-skille:hover span{color:var(--fg)}
+.prot-chev{font-weight:400;color:var(--fg-3);transition:transform .2s;margin-left:6px}
+button.prot-skille[aria-expanded=false] .prot-chev{transform:rotate(180deg)}
+
+button.vsub-knapp{width:100%;background:transparent;border:0;cursor:pointer;text-align:left;font:inherit;display:flex;align-items:center;gap:8px}
+button.vsub-knapp:hover .vsub-navn{color:var(--fg)}
+.vsub-prikk{width:7px;height:7px;border-radius:50%;background:var(--prot-bacnet);flex:none}
+.vsub-prikk.p-modbus{background:var(--prot-modbus)}
+.vsub-prikk.p-knx{background:var(--prot-knx)}
+.vsub-knapp .vsub-n{margin-left:auto}
+button.vsub-knapp[aria-expanded=false] .prot-chev{transform:rotate(180deg)}
+
+/* The controls of the table stay on screen however narrow the pane is: they wrap to a second row instead of running out of it,
+   and the three that belong to Live (button, interval, COV or Poll) stay together */
+.filterbar{flex-wrap:wrap;row-gap:4px}
+.live-grp{display:inline-flex;align-items:center;gap:4px}
+.filterbar #covModus:hover{background:var(--hover)}
