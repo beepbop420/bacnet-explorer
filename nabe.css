@@ -5079,6 +5079,26 @@ tbody tr.fault td.c-act::before{content:'';position:absolute;left:0;top:2px;bott
 .oppd-gar{display:flex;align-items:center;gap:10px;font-size:13px}
 .oppd-nytt{margin:0;padding-left:18px;font-size:12px;line-height:1.6;color:var(--fg-2)}
 .oppd-feil{margin:0;font-size:12px;color:var(--warn)}
+.oppd-steg{list-style:none;margin:0 0 12px;padding:0;display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+.oppd-steg li{display:flex;flex-direction:column;gap:6px;font-size:11px;color:var(--fg-3);transition:color .3s}
+.oppd-steg li i{height:3px;border-radius:2px;background:var(--line-2);transition:background .4s}
+.oppd-steg li.ferdig{color:var(--fg-2)}
+.oppd-steg li.ferdig i{background:var(--accent)}
+.oppd-steg li.na{color:var(--fg)}
+.oppd-steg li.na i{background:linear-gradient(90deg,var(--accent),var(--accent-edge),var(--accent));background-size:200% 100%;animation:oppdGli 1.4s linear infinite}
+.oppd-stolpe{height:6px;border-radius:3px;background:var(--sunken);overflow:hidden}
+.oppd-stolpe b{display:block;height:100%;width:0;border-radius:3px;background:var(--accent);transition:width .6s cubic-bezier(.22,.8,.3,1)}
+.oppd-under{display:flex;justify-content:space-between;align-items:baseline;gap:12px;margin:10px 0 4px;min-height:34px}
+.oppd-linje{font-size:13px;color:var(--fg);transition:opacity .26s,transform .26s}
+.oppd-linje.bort{opacity:0;transform:translateY(3px)}
+.oppd-tall{font:11px var(--mono);font-style:normal;color:var(--fg-3);white-space:nowrap}
+.oppd-ferdig{display:flex;align-items:center;gap:10px;font-size:15px;font-weight:500;color:var(--ok)}
+.oppd-ferdig svg{animation:oppdPopp .5s cubic-bezier(.3,1.4,.5,1)}
+.sb-oppd.puls{animation:oppdPuls 1.5s ease-in-out 4}
+@keyframes oppdGli{to{background-position:-200% 0}}
+@keyframes oppdPopp{from{transform:scale(.4);opacity:0}to{transform:scale(1);opacity:1}}
+@keyframes oppdPuls{50%{box-shadow:0 0 0 4px var(--accent-dim)}}
+@media (prefers-reduced-motion:reduce){.oppd-steg li.na i,.oppd-ferdig svg,.sb-oppd.puls{animation:none}.oppd-stolpe b,.oppd-linje{transition:none}}
 .statusbar.sb-ny #sbOppd{margin-left:8px;color:var(--warn);font-weight:600;cursor:pointer}
 .sim-modal{width:min(600px,94vw)}
 .sim-kropp{padding:12px 16px 16px;display:flex;flex-direction:column;gap:12px;max-height:min(72vh,620px);overflow:auto}

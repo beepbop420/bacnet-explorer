@@ -131,7 +131,7 @@ def start_hjelper(ut: Path, pid: int) -> None:
 
 
 def oppdater(her_versjon: str, her_mappe: Path, arbeid: Path, pid: int, melding=lambda tekst: None,
-             hent_json=http_json, last=last_ned, offentlig_hex: str = None, start=True) -> dict:
+             hent_json=http_json, last=last_ned, offentlig_hex: str = None, start=True, fremdrift=None) -> dict:
     """Download, verify, unpack and hand over to the installer. Raises Feil."""
     if not er_installert(her_mappe):
         raise Feil("Oppdatering i appen virker bare for installert NABE")
@@ -147,7 +147,8 @@ def oppdater(her_versjon: str, her_mappe: Path, arbeid: Path, pid: int, melding=
     try:
         melding("Laster ned")
         last(u["sig"], sigfil)
-        sha = last(u["zip"], zipfil)
+        # `fremdrift(gjort, total)` is told how far the big file has come, so the window can show it
+        sha = last(u["zip"], zipfil, fremdrift=fremdrift) if fremdrift else last(u["zip"], zipfil)
         melding("Sjekker signaturen")
         try:
             sig = json.loads(sigfil.read_text(encoding="utf-8"))

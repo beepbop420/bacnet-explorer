@@ -205,6 +205,9 @@ const FAKTA = [
   ['COV betyr at regulatoren sier fra selv. Mindre spørring, mer ro.', 'COV means the controller speaks up itself. Less asking, more peace.'],
 ];
 const NYTT = {
+  '2.16': [
+    ['NABE sjekker nå etter oppdatering mens den er åpen, hvert tiende minutt og når du kommer tilbake til vinduet, så du slipper å starte på nytt for å få vite at en ny versjon finnes. Oppdateringsvinduet er bygget om: det hakker ikke lenger, viser fire steg med en stolpe og hvor mange megabyte som er lastet ned, og har noen ord å lese mens du venter', 'NABE now checks for an update while it is open, every ten minutes and when you come back to the window, so you no longer have to restart to learn that a new version exists. The update window has been rebuilt: it no longer stutters, shows four steps with a bar and how many megabytes have been downloaded, and has a few words to read while you wait'],
+  ],
   '2.15': [
     ['KNX har fått sin grønne farge, slik logoen er. BACnet er blå og Modbus oransje. Grønnen er den blågrønne i en palett for fargeblinde, så den skilles fra de to andre også ved rød-grønn fargeblindhet', 'KNX now has its green, like its logo. BACnet is blue and Modbus orange. The green is the bluish green of a palette for colour blindness, so it stays apart from the other two for red-green colour blindness too'],
   ],

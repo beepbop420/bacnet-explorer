@@ -809,6 +809,7 @@ def oppdatering():
     s = kall("/api/oppdatering")
     sjekk("oppdatering: serveren svarer, og en kopi fra kildemappa kan ikke oppdatere seg",
           s.get("status") == "done" and s.get("kanOppdatere") is False and bool(s.get("her")), str(s)[:150])
+    sjekk("oppdatering: jobben melder hvor langt nedlastingen har kommet", "gjort" in s.get("jobb", {}) and "total" in s.get("jobb", {}), str(s.get("jobb")))
     sjekk("oppdatering: å starte i en kopi som ikke er installert gir en forklaring", kall("/api/oppdater", {}).get("status") == "error")
 
     # The installer waits for NABE to close, and does not install over one that is still open.

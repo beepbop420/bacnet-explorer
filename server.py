@@ -235,7 +235,7 @@ def t(nb: str, en: str) -> str:
     return en if SPRAAK_VAR.get() == "en" else nb
 
 
-VERSJON = "2.15"
+VERSJON = "2.16"
 
 state = {"app": None, "local_address": None, "read_only": False, "bbmd": None, "primary": None}
 # The simulator: a scanned site run as devices on 127.0.0.x, in a process of its own.
@@ -2944,19 +2944,19 @@ else:
     import nabe_oppdater as _opp
 
 OPPD_DIR = DATA_DIR / "oppdatering"
-OPPD: Dict[str, Any] = {"status": "ledig", "tekst": "", "feil": "", "versjon": None}
+OPPD: Dict[str, Any] = {"status": "ledig", "tekst": "", "feil": "", "versjon": None, "gjort": 0, "total": 0}
 OPPD_INFO: Dict[str, Any] = {"t": 0.0, "info": None}
 _OPPD_GAAR = ("laster", "sjekker", "pakker ut", "starter", "klar")
 
 
 @app.get("/api/oppdatering")
 async def oppdatering():
-    """The newest release, checked at most every fifteen minutes, and what an
+    """The newest release, checked at most every nine minutes, and what an
     update in progress is doing. Without internet the answer is "nothing known"."""
     if MINI:
         return {"status": "done", "her": VERSJON, "ny": None, "notater": "", "signert": False,
                 "kanOppdatere": False, "jobb": dict(OPPD), "mini": True}
-    if time.time() - OPPD_INFO["t"] > 900:
+    if time.time() - OPPD_INFO["t"] > 540:
         OPPD_INFO["t"] = time.time()
         try:
             OPPD_INFO["info"] = await asyncio.get_event_loop().run_in_executor(None, _opp.siste_utgivelse)
@@ -2977,16 +2977,19 @@ async def oppdater():
             "Updating from inside the app only works for an installed NABE. Download the new version from GitHub.")}
     if OPPD["status"] in _OPPD_GAAR:
         return {"status": "error", "error": t("En oppdatering pågår allerede", "An update is already in progress")}
-    OPPD.update(status="laster", tekst=t("Ser etter ny versjon", "Looking for a new version"), feil="", versjon=None)
+    OPPD.update(status="laster", tekst=t("Ser etter ny versjon", "Looking for a new version"), feil="", versjon=None, gjort=0, total=0)
 
     def melding(tekst: str) -> None:
         OPPD["tekst"] = tekst
         OPPD["status"] = ("sjekker" if "ignatur" in tekst else "pakker ut" if "akker ut" in tekst
                           else "starter" if "tarter" in tekst else "laster")
 
+    def fremdrift(gjort: int, total: int) -> None:
+        OPPD["gjort"], OPPD["total"] = gjort, total
+
     def jobb() -> None:
         try:
-            r = _opp.oppdater(VERSJON, Path(__file__).parent, OPPD_DIR, os.getpid(), melding)
+            r = _opp.oppdater(VERSJON, Path(__file__).parent, OPPD_DIR, os.getpid(), melding, fremdrift=fremdrift)
             OPPD.update(status="klar", versjon=r["versjon"], tekst="")
         except _opp.Feil as e:
             OPPD.update(status="feil", feil=str(e), tekst="")
