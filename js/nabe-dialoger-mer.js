@@ -23,7 +23,7 @@ Object.assign(DIA_INNHOLD, {
   kartApnet: {pause: 900000, kans: 0.7, l: [
     'Kartet. PC-en til venstre, anleggene til høyre, og kortene imellom. Slik ser jeg det. | The map. The PC on the left, the plants on the right, the adapters in between. That is how I see it.',
     'Hver prikk er en enhet. Trekanter er alarm. Jeg bryr meg om trekantene. | Each dot is a device. Triangles are alarms. I care about the triangles.',
-    'Nettverkskart. Det eneste kartet der alle veier faktisk fører et sted. | A network map. The only map where every road actually leads somewhere.',
+    'Topologi. Det eneste kartet der alle veier faktisk fører et sted. | A topology map. The only map where every road actually leads somewhere.',
     'O: topologi | topology',
   ]},
   trafikkApnet: {pause: 900000, kans: 0.7, l: [

@@ -864,7 +864,11 @@ async function runScan() {
   const auto = !!S._autoNeste; S._autoNeste = false;
   if (!auto) S._tomtForsok = false;
   let proevIgjen = false;
-  const raa = $('rangeInput').value.trim();
+  let raa = $('rangeInput').value.trim();
+  if (window.nabeNavnTilOmraade) {
+    const nn = window.nabeNavnTilOmraade(raa);
+    if (nn.byttet.length) { raa = nn.tekst; $('rangeInput').value = raa; toast(nn.byttet.join(' · ')); }
+  }
   const omraader = parseRanges(raa);
   if (!omraader.length) { toast('Skriv inn et IP-område', true); return; }
   const mode = $('modeSel').value;
@@ -4780,7 +4784,7 @@ function commands() {
   add('Handling', 'Anleggsoversikt…', () => { closeCmd(); aapneOversikt(); }, {when: () => S.devices.length > 0});
   add('Handling', 'Siden sist…', () => { closeCmd(); aapneBesok(); }, {when: () => S.devices.length > 0});
   add('Handling', 'Besøksrapport…', () => { closeCmd(); aapneRapport(); }, {when: () => S.devices.length > 0});
-  add('Handling', 'Nettverkskart…', () => { closeCmd(); aapneKart(); });
+  add('Handling', 'Topologi…', () => { closeCmd(); aapneKart(); });
   add('Handling', 'Åpne lagret overvåkingsliste', () => { closeCmd(); fortsettHent(); });
   add('Handling', 'Simulator…', () => { closeCmd(); aapneSimulator(); });
   add('Handling', 'Se etter oppdatering…', () => { closeCmd(); aapneOppdatering(); });
@@ -10869,7 +10873,7 @@ const ORDBOK = {
   'Anleggsoversikt…': 'Plant overview…',
   'Skjema: aggregat og varmekurser': 'Schematic: air handling and heating circuits',
   'Besøksrapport…': 'Visit report…',
-  'Nettverkskart…': 'Network map…',
+  'Topologi…': 'Topology…',
   'Åpne lagret overvåkingsliste': 'Open saved watch list',
   'Simulator…': 'Simulator…',
   'Se etter oppdatering…': 'Check for updates…',
