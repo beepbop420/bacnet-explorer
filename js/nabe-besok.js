@@ -233,6 +233,10 @@
         DELER().filter(([k]) => r.diff[k].length).map(([k, tittel]) => [tittel, String(r.diff[k].length),
           r.diff[k].slice(0, 4).map(x => x.navn || x.enhet).join(', ') + (r.diff[k].length > 4 ? ' …' : '')])]);
     }
+    let fo = {synlige: [], skjulte: []};
+    try { fo = typeof window.forslagNaa === 'function' ? window.forslagNaa() : fo; } catch { /* the sheet stands without it */ }
+    deler.push([T('Forslag til service', 'Service suggestions'), fo.synlige.map((p) => [p.tittel, String(p.rader.length || ''), p.rader.slice(0, 3).map((x) => x.navn).join(', ') + (p.rader.length > 3 ? ' …' : '')])]);
+    deler.push([T('Utført eller satt til side', 'Done or put aside'), fo.skjulte.map((p) => [p.tittel, p.state === 'utfort' ? T('utført', 'done') : T('utsatt', 'aside'), ''])]);
     deler.push([T('I alarm', 'In alarm'), r.flagg('in-alarm')]);
     deler.push([T('Med feil', 'Faulty'), r.flagg('fault')]);
     deler.push([T('Overstyrt', 'Overridden'), r.flagg('overridden')]);
@@ -270,13 +274,16 @@
         <div class="rap-fot">NABE ${esc(typeof NABE_VERSJON !== 'undefined' ? NABE_VERSJON : '')} · ${T('lest fra anlegget, ingenting er endret av rapporten', 'read from the plant, the report changed nothing')}</div>
       </div>
       <div class="op-knapper rap-skjerm"><button type="button" class="btn" data-rap="kopier">${T('Kopier som tekst', 'Copy as text')}</button>
+        <button type="button" class="btn" data-rap="html">${T('Lagre som fil', 'Save as a file')}</button>
         <button type="button" class="btn primary" data-rap="skriv">${T('Skriv ut eller lagre som PDF', 'Print or save as PDF')}</button></div></div></div>`;
   }
   rap.addEventListener('click', async (e) => {
     if (e.target === rap || e.target.closest('.gs-close')) { rap.hidden = true; return; }
     const b = e.target.closest('[data-rap]');
     if (!b) return;
-    if (b.dataset.rap === 'kopier') {
+    if (b.dataset.rap === 'html') {
+      lagreRapportHtml();
+    } else if (b.dataset.rap === 'kopier') {
       try { await navigator.clipboard.writeText(rapportTekst()); toast(T('Rapporten er kopiert', 'The report is copied')); }
       catch { toast(T('Fikk ikke kopiert', 'Could not copy'), true); }
     } else {
@@ -286,6 +293,32 @@
       window.print();
     }
   });
+  /* The sheet as one file that opens in any browser, with nothing else needed. It is what the customer gets. */
+  const RAP_CSS = 'body{font:14px/1.55 system-ui,-apple-system,"Segoe UI",sans-serif;max-width:820px;margin:32px auto;padding:0 20px;color:#1b1f24;background:#fff}'
+    + '.rap-hode{padding-bottom:10px;border-bottom:1px solid #d8dde3;font-size:13px;color:#5b6570;line-height:1.6}.rap-hode h1{margin:0 0 2px;font-size:22px;font-weight:600;color:#1b1f24}'
+    + 'h2{margin:22px 0 4px;font-size:13px;font-weight:600;color:#38414a}h2 small{margin-left:6px;font-weight:500;color:#7a858f}'
+    + 'table{width:100%;border-collapse:collapse;font-size:13px}td{padding:5px 8px 5px 0;border-bottom:1px solid #e6e9ed;vertical-align:top}td:first-child{width:30%;color:#38414a}td:last-child{text-align:right;white-space:nowrap}'
+    + '.rap-fot{margin-top:28px;font-size:12px;color:#7a858f}.bs-mer{font-size:12px;color:#7a858f;padding:4px 0}'
+    + '@media (prefers-color-scheme:dark){body{background:#14171a;color:#e3e7eb}.rap-hode{border-color:#2d343a;color:#9aa5af}.rap-hode h1{color:#e3e7eb}h2{color:#c5ccd3}td{border-color:#262c31}td:first-child{color:#c5ccd3}}'
+    + '@media print{body{margin:0;max-width:none}}';
+  function rapportHtml() {
+    const ark = document.getElementById('rapArk');
+    if (!ark) return '';
+    const navn = asNavn() || asNokkel();
+    return `<!doctype html><html lang="${SPRAAK === 'en' ? 'en' : 'nb'}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(navn)}</title><style>${RAP_CSS}</style></head><body>${ark.innerHTML}</body></html>`;
+  }
+  function lagreRapportHtml() {
+    const html = rapportHtml();
+    if (!html) return;
+    const trygt = (asNavn() || 'anlegg').replace(/[^\wæøåÆØÅ.-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'anlegg';
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([html], {type: 'text/html;charset=utf-8'}));
+    a.download = `NABE-rapport-${trygt}-${new Date().toISOString().slice(0, 10)}.html`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+    toast(T('Rapporten er lagret som fil', 'The report is saved as a file'));
+  }
+  window.rapportHtml = rapportHtml;
   window.aapneRapport = function () {
     if (!S.devices.length) { toast(T('Skann et anlegg først', 'Scan a plant first')); return; }
     tegnRapport();

@@ -123,7 +123,7 @@ ALLOWED_ORIGINS = {
 READ_ONLY_PATHS = {"/api/sites",
                    
     "/api/status", "/api/interfaces", "/api/readonly", "/api/mine", "/api/ny-versjon",
-    "/api/anlegg", "/api/sim", "/api/vakt", "/api/storm", "/api/regler", "/api/punktlogg", "/api/oppdatering", "/api/route", "/api/var-fasit", "/api/kabelnett", "/api/object/all",
+    "/api/anlegg", "/api/sim", "/api/vakt", "/api/storm", "/api/regler", "/api/punktlogg", "/api/arbeidsliste", "/api/oppdatering", "/api/route", "/api/var-fasit", "/api/kabelnett", "/api/object/all",
     "/api/writelog", "/api/notes", "/download", "/logo",
 }
 
@@ -235,7 +235,10 @@ def t(nb: str, en: str) -> str:
     return en if SPRAAK_VAR.get() == "en" else nb
 
 
-VERSJON = "2.29"
+VERSJON = "2.30"
+app.version = VERSJON
+app.description = ("NABE sitt eget grensesnitt. Det som leser fra anlegget (enheter, punkter, ukeprogram, trend) kan brukes fra Python, Excel eller curl mens NABE kjører. "
+                   "Dokumentasjonen (Swagger) laster fra internett.")
 
 state = {"app": None, "local_address": None, "read_only": False, "bbmd": None, "primary": None}
 # The simulator: a scanned site run as devices on 127.0.0.x, in a process of its own.
@@ -5741,6 +5744,51 @@ def _punktlogg_fil(nokkel: str) -> Path:
 class PunktloggBody(BaseModel):
     nokkel: str
     data: Dict[str, Any]
+
+
+ARBEIDSLISTE_DIR = DATA_DIR / "arbeidsliste"
+ARBEIDSLISTE_MAKS = 400_000         # bytes in one plant's file
+ARBEIDSLISTE_FILER = 64             # plants kept
+
+
+def _arbeidsliste_fil(nokkel: str) -> Path:
+    return ARBEIDSLISTE_DIR / (hashlib.sha1(nokkel.encode("utf-8")).hexdigest()[:20] + ".json")
+
+
+@app.get("/api/arbeidsliste")
+def arbeidsliste_les(nokkel: str):
+    """Which service suggestions have been marked done or put aside, per plant. A file on this PC, nothing is sent to the plant."""
+    if not nokkel or len(nokkel) > 2000:
+        return {"status": "error", "error": t("Ugyldig anlegg", "Invalid plant")}
+    try:
+        data = json.loads(_arbeidsliste_fil(nokkel).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        data = None
+    return {"status": "done", "data": data}
+
+
+@app.post("/api/arbeidsliste")
+def arbeidsliste_lagre(body: PunktloggBody):
+    if not body.nokkel or len(body.nokkel) > 2000:
+        return {"status": "error", "error": t("Ugyldig anlegg", "Invalid plant")}
+    tekst = json.dumps(body.data, ensure_ascii=False, separators=(",", ":"))
+    if len(tekst.encode("utf-8")) > ARBEIDSLISTE_MAKS:
+        return {"status": "error", "error": t("For stort", "Too large")}
+    fil = _arbeidsliste_fil(body.nokkel)
+    try:
+        ARBEIDSLISTE_DIR.mkdir(parents=True, exist_ok=True)
+        tmp = fil.with_suffix(".tmp")
+        tmp.write_text(tekst, encoding="utf-8")
+        os.replace(tmp, fil)
+        alle = sorted(ARBEIDSLISTE_DIR.glob("*.json"), key=lambda f: f.stat().st_mtime)
+        for g in alle[:-ARBEIDSLISTE_FILER]:
+            try:
+                g.unlink()
+            except OSError:
+                pass
+    except OSError as e:
+        return {"status": "error", "error": str(e)}
+    return {"status": "done", "bytes": len(tekst)}
 
 
 @app.get("/api/punktlogg")

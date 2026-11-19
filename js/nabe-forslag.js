@@ -359,28 +359,41 @@
     const rest = p.rader.length - vis.length;
     // The user's own rules and what is wrong with their file are written by them (or already in the right language): the language sweep leaves them alone
     return `<section class="fo-post p${p.prio}${p.egen || p.id === 'regelfeil' ? ' egen' : ''}">
-      <div class="fo-tittel"><span class="fo-prikk" aria-hidden="true"></span>${esc(p.tittel)}</div>
+      <div class="fo-tittel"><span class="fo-prikk" aria-hidden="true"></span>${esc(p.tittel)}${p.kom ? `<span class="fo-ny">${p.kom === 'nye' ? T(`${p.nyeAntall} nye`, `${p.nyeAntall} new`) : T('tilbake', 'back')}</span>` : ''}</div>
       <div class="fo-hvorfor">${esc(p.hvorfor)}</div>
       <ul class="fo-sjekk">${p.sjekk.map((s) => `<li>${esc(s)}</li>`).join('')}</ul>
       <div class="fo-rader">${vis.map((r) => `<button type="button" class="fo-rad${r.lang ? ' lang' : ''}" data-ip="${esc(r.ip)}" data-o="${esc(r.objid)}">
         <b>${esc(r.navn)}</b>${r.tekst ? `<span>${esc(r.tekst)}</span>` : ''}</button>`).join('')}
         ${rest > 0 ? `<span class="fo-flere">${T(`og ${rest} til`, `and ${rest} more`)}</span>` : ''}</div>
+      ${window.nabeArbeid ? `<div class="fo-hand"><button type="button" data-fo="utfort" data-id="${esc(p.id)}">${T('Utført', 'Done')}</button>
+        <button type="button" data-fo="utsett" data-id="${esc(p.id)}">${T('Utsett en uke', 'Put aside a week')}</button>
+        <button type="button" data-fo="kopier" data-id="${esc(p.id)}">${T('Kopier som melding', 'Copy as message')}</button></div>` : ''}
     </section>`;
   }
 
-  let SISTE = null, EKSTRA = {};
+  let SISTE = null, EKSTRA = {}, SYNLIGE = [], SKJULT_APEN = false;
   function tegn(ekstra) {
     EKSTRA = ekstra || EKSTRA;
     const r = SISTE = bygForslag(data(EKSTRA));
+    const A = window.nabeArbeid;
+    const delt = A ? A.del(r.liste) : {synlige: r.liste, skjulte: []};
+    SYNLIGE = delt.synlige;
     let kropp;
     if (!r.totalt) kropp = `<div class="fo-tom">${T('Skann et anlegg først. Forslagene bygger på det som er lest.', 'Scan a plant first. The suggestions are built on what has been read.')}</div>`;
     else if (!r.liste.length) kropp = `<div class="fo-tom">${T('Ingenting å foreslå nå. Alt som er lest ser rolig ut.', 'Nothing to suggest now. Everything that has been read looks calm.')}</div>`;
+    else if (!delt.synlige.length) kropp = `<div class="fo-tom">${T('Alt er satt til side eller utført. Det kommer tilbake hvis noe nytt dukker opp.', 'Everything is done or put aside. It comes back if something new turns up.')}</div>`;
     else {
       const grupper = PRIO();
       kropp = [1, 2, 3].map((n) => {
-        const l = r.liste.filter((p) => p.prio === n);
+        const l = delt.synlige.filter((p) => p.prio === n);
         return l.length ? `<div class="fo-gruppe">${esc(grupper[n])}</div>${l.map(postHtml).join('')}` : '';
       }).join('');
+    }
+    if (delt.skjulte.length) {
+      const dato = (ms) => new Date(ms).toLocaleDateString(SPRAAK === 'en' ? 'en-GB' : 'nb-NO', {day: 'numeric', month: 'short'});
+      kropp += `<div class="fo-skjult"><button type="button" class="fo-skjult-k" data-fo="skjult-veksle" aria-expanded="${SKJULT_APEN}">${T(`Utført eller satt til side: ${delt.skjulte.length}`, `Done or put aside: ${delt.skjulte.length}`)}</button>
+        ${SKJULT_APEN ? delt.skjulte.map((p) => `<div class="fo-skjult-rad"><span>${esc(p.tittel)}</span><span class="fo-skjult-n">${p.state === 'utfort' ? T('Utført ', 'Done ') + dato(p.t) : T('Utsatt til ', 'Aside until ') + dato(p.til)}</span>
+          <button type="button" data-fo="vis" data-id="${esc(p.id)}">${T('Vis igjen', 'Show again')}</button></div>`).join('') : ''}</div>`;
     }
     const urTekst = r.ur && r.ur.totalt ? T(` Ukeprogram lest på ${r.ur.lest} av ${r.ur.totalt} enheter som har ur.`, ` Schedules read on ${r.ur.lest} of ${r.ur.totalt} devices that have them.`) : '';
     const grunnlag = r.totalt ? `<div class="fo-grunnlag">${T(`Bygger på ${r.lest} av ${r.totalt} enheter som er lest.`, `Based on ${r.lest} of ${r.totalt} devices read.`)}${urTekst}</div>` : '';
@@ -408,6 +421,21 @@
   lag.addEventListener('click', async (e) => {
     if (e.target === lag || e.target.closest('.gs-close')) { lag.hidden = true; return; }
     const k = e.target.closest('[data-fo]');
+    if (k && window.nabeArbeid && ['utfort', 'utsett', 'kopier', 'vis', 'skjult-veksle'].includes(k.dataset.fo)) {
+      const A = window.nabeArbeid, p = SISTE && SISTE.liste.find((x) => x.id === k.dataset.id);
+      if (k.dataset.fo === 'skjult-veksle') SKJULT_APEN = !SKJULT_APEN;
+      else if (k.dataset.fo === 'vis') A.vis(k.dataset.id);
+      else if (!p) return;
+      else if (k.dataset.fo === 'kopier') {
+        try { await navigator.clipboard.writeText(A.melding(p, `${asNavn() || asNokkel()} · ${new Date().toLocaleDateString(SPRAAK === 'en' ? 'en-GB' : 'nb-NO')}`)); toast(T('Kopiert som melding', 'Copied as a message')); }
+        catch { toast(T('Fikk ikke kopiert', 'Could not copy'), true); }
+        return;
+      } else { A.marker(p, k.dataset.fo === 'utfort' ? 'utfort' : 'utsatt', 7); toast(k.dataset.fo === 'utfort' ? T('Merket som utført', 'Marked as done') : T('Satt til side i en uke', 'Put aside for a week')); }
+      const rull = lag.querySelector('.fo-kropp') && lag.querySelector('.fo-kropp').scrollTop;
+      tegn();
+      if (rull && lag.querySelector('.fo-kropp')) lag.querySelector('.fo-kropp').scrollTop = rull;
+      return;
+    }
     if (k && window.nabeRegler) {
       if (k.dataset.fo === 'regler-aapne') { await window.nabeRegler.aapne(); return; }
       if (k.dataset.fo === 'regler-last') {
@@ -426,6 +454,7 @@
   }, true);
 
   window.aapneForslag = async () => {
+    if (window.nabeArbeid) await Promise.race([window.nabeArbeid.last(), new Promise((ok) => setTimeout(ok, 1500))]);
     tegn({});
     lag.hidden = false;
     // What the server has counted, the rules file and the storm state come a moment later and fill in
@@ -442,5 +471,12 @@
     return linjer.join('\n');
   };
   window.bygForslag = bygForslag;
+  /* What is open and what is done, as the list stands now (the visit report uses it) */
+  window.forslagNaa = () => {
+    if (!S.devices || !S.devices.length) return {synlige: [], skjulte: []};
+    const r = bygForslag(data(EKSTRA));
+    return window.nabeArbeid ? window.nabeArbeid.del(r.liste) : {synlige: r.liste, skjulte: []};
+  };
+  if ($('apiBtn')) $('apiBtn').onclick = () => { closeMenus(); window.open('/docs', '_blank', 'noopener'); };
   if ($('forslagBtn')) $('forslagBtn').onclick = () => { closeMenus(); window.aapneForslag(); };
 })();

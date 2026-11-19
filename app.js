@@ -10920,6 +10920,7 @@ const ORDBOK = {
   'Opptak av punkter…': 'Recording points…',
   'Avvik fra settpunkt…': 'Deviation from setpoint…',
   'Forslag til service…': 'Service suggestions…',
+  'API og dokumentasjon…': 'API and documentation…',
   'Idriftsettelse…': 'Commissioning…',
   'Mest alarmerende…': 'Most alarming…',
   'Grensevarsler…': 'Limit alerts…',
