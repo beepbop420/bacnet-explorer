@@ -205,6 +205,9 @@ const FAKTA = [
   ['COV betyr at regulatoren sier fra selv. Mindre spørring, mer ro.', 'COV means the controller speaks up itself. Less asking, more peace.'],
 ];
 const NYTT = {
+  '2.26': [
+    ['Flere anlegg i ett skann. På startkortet kan du huke av flere kjente anlegg (boksen kommer fram når du peker på prikken, mellomrom huker av det markerte, og «Velg alle i rekkevidde» tar alle du har vei til), og trykke «Skann» én gang. Har du først huket av ett, velger et trykk på en rad flere. Områder på ulike nettkort skannes samtidig; er de bak samme kort, tas de etter hverandre', 'Several sites in one scan. On the start card you can tick several known sites (the box appears when you point at the dot, space ticks the marked one, and “Select all in reach” takes every one you have a route to), and press Scan once. Once one is ticked, a click on a row selects more. Ranges on different network adapters are scanned at the same time; behind the same adapter they are taken one after another'],
+  ],
   '2.25': [
     ['Forslag til service: en kort liste over hva som er verdt å se på først i anlegget, og hva du kan sjekke der. Den bygger på det som allerede er lest (enheter med nesten alle punkter i feil, enkeltpunkter med feil, alarmer, målinger langt fra settpunktet, overstyringer, punkter ute av drift, enheter som ikke lot seg lese, felles enhets-ID, stille enheter, feil klokke og like navn), og sier hvor mye den bygger på. Klikk en enhet for å gå dit. Åpnes fra Verktøy eller søket', 'Service suggestions: a short list of what is worth looking at first in the plant, and what you can check there. It is built on what has already been read (devices with nearly all points faulty, single faulty points, alarms, measurements far from their setpoint, overrides, points out of service, devices that could not be read, shared device IDs, silent devices, wrong clocks and equal names), and says how much it is built on. Click a device to go there. Opened from Tools or the search'],
   ],
@@ -821,11 +824,16 @@ async function visStartskjerm(igjen = false) {
         </div>
       </section>
       <section class="ss-hoyre">
-        <div class="ss-liste-hode">${T('Anlegg', 'Sites')}</div>
-        <div class="ss-liste" role="listbox" aria-label="${T('Anlegg', 'Sites')}">
+        <div class="ss-liste-hode"><span>${T('Anlegg', 'Sites')}</span><button type="button" class="ss-alle" hidden>${T('Velg alle i rekkevidde', 'Select all in reach')}</button></div>
+        <div class="ss-liste" role="listbox" aria-multiselectable="true" aria-label="${T('Anlegg', 'Sites')}">
           <div class="ss-tom">${T('Ser etter anlegg og nett…', 'Looking for sites and networks…')}</div>
         </div>
-        <div class="ss-tast" aria-hidden="true"><kbd>↑</kbd><kbd>↓</kbd> ${T('velg', 'choose')} <kbd>↵</kbd> ${T('skann', 'scan')}</div>
+        <div class="ss-valgt" hidden>
+          <span class="ss-valgt-n"></span>
+          <button type="button" class="btn" data-fjern>${T('Fjern valg', 'Clear')}</button>
+          <button type="button" class="btn primary" data-skannvalgte></button>
+        </div>
+        <div class="ss-tast" aria-hidden="true"><kbd>↑</kbd><kbd>↓</kbd> ${T('velg', 'choose')} <kbd>↵</kbd> ${T('skann', 'scan')} <kbd style="margin-left:8px">${T('mellomrom', 'space')}</kbd> ${T('velg flere', 'select more')}</div>
       </section>
     </div>`;
   document.body.appendChild(lag);
@@ -865,6 +873,8 @@ async function visStartskjerm(igjen = false) {
     r[i].scrollIntoView({block: 'nearest'});
   };
   const markert = () => rader().findIndex(x => x.getAttribute('aria-selected') === 'true');
+  // Sites ticked for one scan. The functions are filled in once the list is built.
+  const valg = {set: new Set(), veksle: null, skann: null};
   const tast = (e) => {
     if (e.key === 'Escape') { e.preventDefault(); if (typeof stoppAutoSkann === 'function') stoppAutoSkann(); lukk(); return; }
     const felt = $('ssOmr');
@@ -875,6 +885,16 @@ async function visStartskjerm(igjen = false) {
       e.preventDefault();
       const i = markert();
       marker(i < 0 ? 0 : i + (e.key === 'ArrowDown' ? 1 : -1));
+      return;
+    }
+    if (e.key === ' ' && document.activeElement !== felt && markert() >= 0 && rader()[markert()].dataset.k && valg.veksle) {
+      e.preventDefault();
+      valg.veksle(rader()[markert()].dataset.k);
+      return;
+    }
+    if (e.key === 'Enter' && !felt.value.trim() && valg.set.size && valg.skann) {
+      e.preventDefault();
+      valg.skann();
       return;
     }
     if (e.key === 'Enter' && !felt.value.trim() && markert() >= 0) {
@@ -957,7 +977,7 @@ async function visStartskjerm(igjen = false) {
     const b = sisteBesok(key);
     const naabar = !!via[key];
     return `<button type="button" class="ss-rad" role="option" aria-selected="false" data-k="${esc(key)}" style="--i:${i}" title="${esc(enhetsliste(s))}">
-        <i class="ss-dot${naabar ? ' paa' : ''}" title="${naabar ? T('Nåbar nå', 'In reach now') : T('Ingen vei dit nå', 'No route there now')}"></i>
+        <span class="ss-hake" role="checkbox" aria-checked="false" aria-label="${esc(T('Velg for felles skann', 'Select for a joint scan'))}"><i class="ss-dot${naabar ? ' paa' : ''}" title="${naabar ? T('Nåbar nå', 'In reach now') : T('Ingen vei dit nå', 'No route there now')}"></i></span>
         <span class="ss-rad-tekst">
           <span class="ss-rad-navn">${esc(tittel)}</span>
           <span class="ss-rad-meta"><span class="ss-ip">${esc(key)}</span> · ${n} ${n === 1 ? T('enhet', 'device') : T('enheter', 'devices')}${leverandorer(s)}${s.modus === 'bbmd' ? ' · BBMD' : ''}${naabar ? ` · via ${esc(via[key])}` : ''}</span>
@@ -981,7 +1001,43 @@ async function visStartskjerm(igjen = false) {
         </button>`).join('');
   }
   liste.innerHTML = html || `<div class="ss-tom">${T('Ingen anlegg ennå. Skriv et område til venstre.', 'No sites yet. Type a range on the left.')}</div>`;
+  const oppdaterValg = () => {
+    liste.classList.toggle('valg', valg.set.size > 0);
+    for (const r of liste.querySelectorAll('.ss-rad[data-k]')) {
+      const paa = valg.set.has(r.dataset.k);
+      r.classList.toggle('valgt', paa);
+      r.querySelector('.ss-hake')?.setAttribute('aria-checked', String(paa));
+    }
+    const bar = lag.querySelector('.ss-valgt'), n = valg.set.size;
+    bar.hidden = !n;
+    if (!n) return;
+    const enheter = [...valg.set].reduce((t, k) => t + ((MINNE[k] || {}).enheter || []).length, 0);
+    bar.querySelector('.ss-valgt-n').textContent = T(`${n} anlegg valgt · ${enheter} enheter fra før`, `${n} sites chosen · ${enheter} devices from before`);
+    bar.querySelector('[data-skannvalgte]').textContent = T(`Skann ${n} anlegg`, `Scan ${n} sites`);
+  };
+  valg.veksle = (k) => { if (valg.set.has(k)) valg.set.delete(k); else valg.set.add(k); oppdaterValg(); };
+  valg.skann = () => {
+    const nokler = [...valg.set];
+    if (!nokler.length) return;
+    // Every range once, each in the way the site was last scanned (or the default when they differ)
+    const omr = [...new Set(nokler.flatMap(k => k.split(' ')))];
+    const modi = new Set(nokler.map(k => (MINNE[k] || {}).modus));
+    skann(omr.join(', '), modi.size === 1 ? [...modi][0] : undefined);
+  };
+  lag.querySelector('[data-skannvalgte]').onclick = () => valg.skann();
+  lag.querySelector('[data-fjern]').onclick = () => { valg.set.clear(); oppdaterValg(); };
+  const iRekkevidde = steder.map(([k]) => k).filter(k => via[k]);
+  const alle = lag.querySelector('.ss-alle');
+  if (iRekkevidde.length > 1) {
+    alle.hidden = false;
+    alle.onclick = () => { iRekkevidde.forEach(k => valg.set.add(k)); oppdaterValg(); };
+  }
   liste.querySelectorAll('.ss-rad[data-k]').forEach(b => b.onclick = async (e) => {
+    if (e.target.closest('.ss-hake') || e.ctrlKey || e.metaKey || e.shiftKey || (valg.set.size && !e.target.closest('[data-navngi],[data-glem]'))) {
+      e.stopPropagation();
+      valg.veksle(b.dataset.k);
+      return;
+    }
     // Naming and forgetting live on the row, as they did in the old list of
     // sites: shown when you point at it, and never a scan.
     const navngi = e.target.closest('[data-navngi]'), glem = e.target.closest('[data-glem]');

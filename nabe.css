@@ -5849,3 +5849,21 @@ body.uten-bevegelse .tp-radar{animation:tp-rot 2.2s linear infinite!important}
 .fo-rad span{color:var(--fg-3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:260px}
 .fo-flere,.fo-tom{font-size:11.5px;color:var(--fg-3)}
 .fo-tom{padding:28px 0;text-align:center}
+
+/* ---- several sites in one scan ---- */
+.ss-rad{grid-template-columns:16px minmax(0,1fr) auto}
+.ss-rad-nett .ss-dot{margin-left:4px}
+.ss-liste-hode{display:flex;align-items:baseline;justify-content:space-between;gap:12px}
+.ss-alle{border:0;background:none;padding:0;color:var(--fg-3);font:inherit;font-size:11px;font-weight:400;cursor:pointer}
+.ss-alle:hover{color:var(--fg)}
+.ss-hake{width:16px;height:16px;margin-top:-1px;display:grid;place-items:center;border-radius:4px;position:relative;
+  transition:background var(--mot-rask) ease,box-shadow var(--mot-rask) ease}
+.ss-rad[data-k]:hover .ss-hake,.ss-liste.valg .ss-rad[data-k] .ss-hake{box-shadow:inset 0 0 0 1.5px var(--fg-3)}
+.ss-rad[data-k]:hover .ss-hake .ss-dot,.ss-liste.valg .ss-rad[data-k] .ss-hake .ss-dot{opacity:0;box-shadow:none}
+.ss-rad[data-k] .ss-hake:hover{box-shadow:inset 0 0 0 1.5px var(--fg)}
+.ss-rad.valgt .ss-hake{background:var(--accent);box-shadow:none}
+.ss-rad.valgt .ss-hake::after{content:'';position:absolute;left:5px;top:2px;width:4px;height:8px;border:solid var(--bg,#fff);border-width:0 1.8px 1.8px 0;transform:rotate(45deg)}
+.ss-rad.valgt{background:color-mix(in srgb,var(--accent) 10%,transparent)}
+.ss-valgt{display:flex;align-items:center;gap:8px;padding:10px 18px;border-top:1px solid var(--line)}
+.ss-valgt[hidden]{display:none}
+.ss-valgt-n{flex:1;font-size:12px;color:var(--fg-2);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
