@@ -683,6 +683,47 @@
         <span class="tp-prikk"></span><span class="tp-tekst"><b>${esc(navn)}</b><small>${a.enheter} ${ent(a.enheter)}${a.sist ? ' · ' + esc(siden(a.sist)) : ''}</small></span>
         <span class="tp-rad-t">${skanner ? '<span class="tp-radar liten"></span>' : esc(tekst[tilst])}</span></button>`;
     }).join('') || `<div class="tp-tomt">${KT.anlegg.length ? T('Ingen treff', 'No match') : T('Ingen anlegg husket ennå. Skann et anlegg, så dukker det opp her.', 'No sites remembered yet. Scan a site and it shows up here.')}</div>`;
+    ruterRail();
+  }
+
+  /* ------------------------------------------------------------ routers and MS/TP
+     A router puts the devices behind it on a network of its own. One MS/TP trunk takes 32 devices without a repeater, and a router that
+     carries many networks is the first to stall, so the list says how much each carries and marks the ones near or over. */
+  const ruterData = () => (window.nabeNett ? window.nabeNett.ruterBelastning(Array.isArray(S.rutere) ? S.rutere : [], S.devices || []) : {rutere: [], utenRuter: [], maks: 32});
+  const NIVA_TXT = () => ({over: T('over grensen', 'over the limit'), tung: T('tung', 'heavy'), naer: T('nær grensen', 'near the limit'), ok: ''});
+  function ruterRail() {
+    const el = $('tpRutere');
+    if (!el) return;
+    const r = ruterData();
+    if (!r.rutere.length && !r.utenRuter.length) { el.hidden = true; el.innerHTML = ''; return; }
+    el.hidden = false;
+    const rad = (id, tittel, under, niva) => `<button type="button" class="tp-rad ruter n-${niva}${KT.valgt === 'r:' + id ? ' valgt' : ''}" data-tp="ruter" data-ruter="${esc(id)}" data-tip="t:${esc(under)}">
+      <span class="tp-prikk"></span><span class="tp-tekst"><b>${esc(tittel)}</b><small>${esc(under)}</small></span><span class="tp-rad-t">${esc(NIVA_TXT()[niva])}</span></button>`;
+    el.innerHTML = `<div class="tp-rail-h"><b>${T('Rutere og MS/TP', 'Routers and MS/TP')}</b></div>`
+      + r.rutere.map((x) => rad(x.ruter, x.ruter, `${x.nett.length} ${x.nett.length === 1 ? T('nett', 'network') : T('nett', 'networks')} · ${x.total} ${ent(x.total)}`, x.niva)).join('')
+      + r.utenRuter.map((n) => rad('n:' + n.nett, T(`Nett ${n.nett}`, `Network ${n.nett}`), `${n.antall} ${ent(n.antall)} · ${T('ruter ikke funnet', 'router not found')}`, n.niva)).join('');
+  }
+  function ruterDetalj(id) {
+    const r = ruterData();
+    const ruter = id.startsWith('n:') ? null : r.rutere.find((x) => x.ruter === id);
+    const nett = ruter ? ruter.nett : r.utenRuter.filter((n) => 'n:' + n.nett === id);
+    if (!nett.length) return '';
+    const niva = ruter ? ruter.niva : nett[0].niva;
+    const RAAD = () => ({
+      over: T(`Mer enn ${r.maks} enheter på ett MS/TP-nett er mer enn et segment tar uten repeater. Del det med en repeater eller en ekstra ruter.`, `More than ${r.maks} devices on one MS/TP network is more than a segment takes without a repeater. Split it with a repeater or an extra router.`),
+      tung: T('Mange enheter bak én ruter. Den er den første som stopper når trafikken øker.', 'Many devices behind one router. It is the first to stall when the traffic grows.'),
+      naer: T(`Nær grensen på ${r.maks} enheter for ett MS/TP-segment.`, `Close to the limit of ${r.maks} devices for one MS/TP segment.`),
+      ok: T('Ingen grenser er nær.', 'No limit is close.'),
+    });
+    const verst = nett.slice().sort((a, b) => b.mstp - a.mstp || b.antall - a.antall).find((n) => n.forste) || {};
+    const rad = (n, v) => `<tr><td>${n}</td><td>${v}</td></tr>`;
+    return `<div class="tp-d-h"><span class="tp-ikon stor">${ikon('sentral')}</span><div class="tp-tekst"><b>${esc(ruter ? ruter.ruter : T(`Nett ${nett[0].nett}`, `Network ${nett[0].nett}`))}</b><small>${ruter ? T('Ruter', 'Router') : T('Ruter ikke funnet', 'Router not found')}</small></div>
+        <button type="button" class="tp-x" data-tp="lukk-d" aria-label="${esc(T('Lukk', 'Close'))}">✕</button></div>
+      <div class="tp-d-stat n-${niva}"><span>${esc(NIVA_TXT()[niva] || T('i orden', 'fine'))}${ruter ? ` · ${ruter.total} ${ent(ruter.total)}` : ''}</span></div>
+      <table class="tp-d-tab"><tbody>${nett.map((n) => rad(T(`Nett ${n.nett}`, `Network ${n.nett}`),
+        `${n.antall} ${ent(n.antall)}${n.mstp ? ` <span class="sp-meta">· ${n.mstp} MS/TP ${T('av', 'of')} ${r.maks}</span>` : ''}`)).join('')}</tbody></table>
+      <p class="sp-meta">${esc(RAAD()[niva])}</p>
+      ${verst.forste ? `<div class="tp-d-knapper"><button type="button" class="btn" data-tp="aapne-e" data-adr="${esc(verst.forste)}">${T('Åpne en enhet på nettet', 'Open a device on the network')}</button></div>` : ''}`;
   }
 
   /* ------------------------------------------------------------ the details */
@@ -763,6 +804,7 @@
     if (v.startsWith('e:')) { const d = S.devices.find(x => x.address === v.slice(2)); h = d ? enhetDetalj(d) : ''; }
     else if (v.startsWith('s:')) h = stedDetalj(v.slice(2));
     else if (v.startsWith('k:')) h = kortDetalj(v.slice(2));
+    else if (v.startsWith('r:')) h = ruterDetalj(v.slice(2));
     el.hidden = !h;
     el.innerHTML = h;
     lag.classList.toggle('tp-medDetalj', !!h);
@@ -793,12 +835,13 @@
   function skjelett() {
     lag.innerHTML = `<div class="gs-modal tp-modal"><div class="gs-head"><span class="gd-tittel">${T('Topologi', 'Topology')}</span>
       <span class="tp-visning" role="group" aria-label="${esc(T('Visning', 'View'))}"><button type="button" data-tp="v-status" class="${KT.visning === 'status' ? 'on' : ''}" title="${esc(T('Bare status for hele anlegget', 'Only the status of the whole plant'))}">${T('Status', 'Status')}</button><button type="button" data-tp="v-samlet" class="${KT.visning === 'samlet' ? 'on' : ''}" title="${esc(T('Enhetene samlet i grupper', 'Devices gathered in groups'))}">${T('Samlet', 'Grouped')}</button><button type="button" data-tp="v-spredt" class="${KT.visning === 'spredt' ? 'on' : ''}" title="${esc(T('Hver enhet for seg, med koblingene mellom dem', 'Every device on its own, with the connections between them'))}">${T('Spredt', 'Spread')}</button></span>
-      <button class="gs-close" style="margin-left:auto"><span class="lbl">${T('Lukk', 'Close')}</span> ✕</button></div>
+      <button type="button" class="btn tp-eksport" style="margin-left:auto" data-tp="eksport" title="${esc(T('Lagre bildet av anlegget som SVG eller PNG, til dokumentasjon', 'Save a picture of the plant as SVG or PNG, for documentation'))}">${T('Eksporter', 'Export')}</button>
+      <button class="gs-close" style="margin-left:0"><span class="lbl">${T('Lukk', 'Close')}</span> ✕</button></div>
       <div class="tp-kropp">
         <aside class="tp-rail"><div class="tp-rail-h"><b>${T('Husket anlegg', 'Remembered sites')}</b>
           <div class="tp-valg"><button type="button" data-tp="alle" class="on">${T('Alle', 'All')}</button><button type="button" data-tp="bare">${T('I rekkevidde', 'In reach')}</button></div></div>
           <input id="tpSok" class="field" type="search" placeholder="${esc(T('Søk etter anlegg', 'Search sites'))}" aria-label="${esc(T('Søk etter anlegg', 'Search sites'))}">
-          <div id="tpListe" class="tp-liste"></div></aside>
+          <div id="tpListe" class="tp-liste"></div><div id="tpRutere" class="tp-rutere" hidden></div></aside>
         <section id="tpKol" class="tp-lerret"><div id="tpStatus" class="tp-status"></div>
           <div class="tp-verktoy" role="toolbar" aria-label="${esc(T('Zoom', 'Zoom'))}"><button type="button" data-tp="z-pluss" aria-label="${esc(T('Zoom inn', 'Zoom in'))}" title="${esc(T('Zoom inn (+)', 'Zoom in (+)'))}">+</button><button type="button" data-tp="z-minus" aria-label="${esc(T('Zoom ut', 'Zoom out'))}" title="${esc(T('Zoom ut (-)', 'Zoom out (-)'))}">−</button><button type="button" data-tp="z-fit" aria-label="${esc(T('Tilpass til vinduet', 'Fit to the window'))}" title="${esc(T('Tilpass til vinduet (0)', 'Fit to the window (0)'))}"><svg viewBox="0 0 16 16" class="tp-ik"><path d="M2.5 6V2.5H6M10 2.5h3.5V6M13.5 10v3.5H10M6 13.5H2.5V10"/></svg></button><button type="button" data-tp="z-navn" aria-label="${esc(T('Vis alle navn', 'Show every name'))}" title="${esc(T('Vis alle navn', 'Show every name'))}">Aa</button></div><svg id="tpGraf" class="tp-graf-svg" role="img" aria-label="${esc(T('Topologi, spredt', 'Topology, spread'))}"></svg><svg id="tpLenker" class="tp-lenker" aria-hidden="true"></svg>
           <div class="tp-rad-pc"><div id="tpPc" class="tp-pc"></div><div id="tpInnhold" class="tp-innhold"></div></div></section>
@@ -951,6 +994,7 @@
     else if (t === 'z-navn') { KT.navn = !KT.navn; n.classList.toggle('on', KT.navn); maal(); }
     else if (t === 'vis') { KT.apen.add(n.dataset.key); KT.valgt = 's:' + n.dataset.key; tegn(true); }
     else if (t === 'kort') velg('k:' + n.dataset.kortid);
+    else if (t === 'ruter') velg('r:' + n.dataset.ruter);
     else if (t === 'skann') { e.stopPropagation(); leggTil(n.dataset.key, n.dataset.modus); }
     else if (t === 'rad') {
       const a = KT.anlegg.find(x => x.key === n.dataset.key);
@@ -1007,6 +1051,8 @@
     start();
     await hent();
     tegn(true);
+    // The routers are asked for once, the first time the picture is opened, unless a scan has already done it
+    if (!S.rutere && S.connected && S.devices.length && typeof visRutere === 'function') visRutere().then(() => { if (!lag.hidden) { rail(); detalj(); } });
     clearInterval(KT.timer);
     KT.timer = setInterval(tikk, document.body.classList.contains('skanner') ? 600 : 6000);
   };
@@ -1038,6 +1084,6 @@
   setTimeout(lastNavn, 2500);
   // The language was switched while the page is open: build it again in the new language
   window.nabeKartSprak = () => { if (!lag.hidden) { skjelett(); KT.sig = ''; KT.vbNy = true; tegn(true); } };
-  window.nabeKart = {steder, ip0, leggTil, lastNavn};
+  window.nabeKart = {steder, ip0, leggTil, lastNavn, sted, levAv, protAv, tilstand, slag, kortListe: () => KT.kort, STAT_TXT, ruterData};
   if ($('kartBtn')) $('kartBtn').onclick = () => { closeMenus(); window.aapneKart(); };
 })();

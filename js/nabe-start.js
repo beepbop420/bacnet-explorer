@@ -106,6 +106,7 @@ async function visRutere() {
   let r;
   try { r = await (await fetch('/api/routers')).json(); } catch { return; }
   const liste = (r && r.rutere) || [];
+  S.rutere = liste;
   let el = document.getElementById('ruterInfo');
   if (!el) {
     el = document.createElement('div');
@@ -205,6 +206,12 @@ const FAKTA = [
   ['COV betyr at regulatoren sier fra selv. Mindre spørring, mer ro.', 'COV means the controller speaks up itself. Less asking, more peace.'],
 ];
 const NYTT = {
+  '2.27': [
+    ['Idriftsettelse: lim inn en punktliste med område for hvert punkt, så leser NABE alt, krysser av det som svarer, ikke er i feil, overstyrt eller ute av drift og ligger innenfor, og lager en rapport du kan skrive ut eller lagre som PDF. Resten kan godkjennes for hånd med en kommentar', 'Commissioning: paste a point list with a range for each point and NABE reads everything, ticks off what answers, is not faulty, overridden or out of service and sits inside its range, and makes a report you can print or save as PDF. The rest can be approved by hand with a comment'],
+    ['Starter per time for festede punkter: en pumpe eller kompressor som starter mange ganger i timen slites ut lenge før den alarmerer. NABE teller i bakgrunnen og sier fra, også i opptak. Urimelige verdier som -50 grader og 0 ppm CO2 merkes med forklaring, og står en føler helt stille finner du det i «Forslag til service»', 'Starts an hour for pinned points: a pump or compressor that starts many times an hour wears out long before it alarms. NABE counts in the background and says so, in recordings too. Impossible values like -50 degrees and 0 ppm CO2 are marked with the reason, and a sensor that stands perfectly still is found in “Service suggestions”'],
+    ['Grenser på festede punkter: klokka på et festet punkt setter nedre og øvre grense, og NABE gir beskjed når den passeres, også når vinduet ikke er foran (skrivebordsvarsel og kort lyd, hvis du vil ha det). «Mest alarmerende» viser hvilke punkter som alarmerer oftest, med de nye og sjeldne først så de som alltid roper ikke skjuler dem', 'Limits on pinned points: the bell on a pinned point sets a lower and an upper limit, and NABE tells you when it is passed, also when the window is not in front (desktop notification and a short tone, if you want them). “Most alarming” shows which points alarm most often, the new and the rare first so the ones that always shout do not hide them'],
+    ['Rutere og MS/TP i Topologi: hvor mange enheter hver ruter og hvert nett bærer, med varsel nær og over 32 enheter på ett MS/TP-nett. To enheter som svarer fra samme adresse, og samme MAC på flere adresser, meldes. Topologi kan lagres som SVG eller PNG til dokumentasjon, og «Støttepakke» samler enhetsliste, forslag og trafikklogg i én fil du kan sende videre', 'Routers and MS/TP in Topology: how many devices each router and each network carries, with a warning near and over 32 devices on one MS/TP network. Two devices answering from one address, and the same MAC on several addresses, are reported. Topology can be saved as SVG or PNG for documentation, and “Support package” gathers the device list, suggestions and traffic log in one file you can send on'],
+  ],
   '2.26': [
     ['Flere anlegg i ett skann. På startkortet kan du huke av flere kjente anlegg (boksen kommer fram når du peker på prikken, mellomrom huker av det markerte, og «Velg alle i rekkevidde» tar alle du har vei til), og trykke «Skann» én gang. Har du først huket av ett, velger et trykk på en rad flere. Områder på ulike nettkort skannes samtidig; er de bak samme kort, tas de etter hverandre', 'Several sites in one scan. On the start card you can tick several known sites (the box appears when you point at the dot, space ticks the marked one, and “Select all in reach” takes every one you have a route to), and press Scan once. Once one is ticked, a click on a row selects more. Ranges on different network adapters are scanned at the same time; behind the same adapter they are taken one after another'],
   ],

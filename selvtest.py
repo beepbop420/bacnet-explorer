@@ -87,6 +87,10 @@ def lag_enhet(siste_oktett: int, instans: int, navn: str, skjev_klokke: bool = F
         app.add_object(BinaryInputObject(objectIdentifier=("binary-input", 5), objectName=f"{navn}_ALARM",
                                          presentValue="active", polarity="normal", description="Alarm ved på",
                                          statusFlags=[1, 0, 0, 0], eventState="offnormal", alarmValue="active"))
+        # A pump that starts every six seconds, for the count of starts an hour
+        app.add_object(BinaryInputObject(objectIdentifier=("binary-input", 6), objectName=f"{navn}_PUMPE",
+                                         presentValue="inactive", polarity="normal", description="Sirkulasjonspumpe",
+                                         statusFlags=[0, 0, 0, 0]))
     # Lets a test make the device go quiet: it keeps the subscription but
     # stops pushing, which is what a restarted controller looks like.
     app.stum = False
@@ -142,6 +146,9 @@ RESULTAT = []
 def sjekk(navn, ok, detalj=""):
     RESULTAT.append(bool(ok))
     print(f"  {'OK ' if ok else 'FEIL'}  {navn}{'  - ' + detalj if detalj else ''}", flush=True)
+
+
+NYE_RYKTEST = r'''  urimelig: (() => {    const ai = (v, u, n) => ({type: 'analog-input', value: v, units: u, name: n || 'X'});    return !!rarGrunn(ai(-50, 'degrees-celsius')) && !!rarGrunn(ai(32767, 'degrees-celsius')) && !rarGrunn(ai(21.5, 'degrees-celsius'))      && !!rarGrunn(ai(0, 'parts-per-million', 'CO2_PV')) && !rarGrunn(ai(0, 'parts-per-million', 'CO_PV')) && !rarGrunn(ai(650, 'parts-per-million', 'CO2_PV'))      && !!rarGrunn(ai(120, 'percent-relative-humidity')) && !!rarGrunn(ai(0, 'percent-relative-humidity')) && !rarGrunn(ai(45, 'percent-relative-humidity'))      && !rarGrunn({...ai(-50, 'degrees-celsius'), type: 'analog-output'}) && !rarGrunn({...ai(-50, 'degrees-celsius'), unread: true})      && !!rarGrunn(ai(-60, 'degrees-celsius')) && rarVerdi(ai(-50, 'degrees-celsius')) === true && rarGrunn({type: 'analog-input', value: 5, units: 'degrees-celsius'}) === ''; })(),  nett: !!window.nabeNett && (() => {    const N = window.nabeNett, mk = (net, n) => Array.from({length: n}, (_, i) => ({address: net + ':' + i, device_instance: net * 100 + i, protocol: 'bacnet'}));    const r = N.ruterBelastning([{ruter: '10.0.0.1', nett: [5, 6]}, {ruter: '10.0.0.2', nett: [7]}], [...mk(5, 33), ...mk(6, 5), ...mk(7, 25), ...mk(9, 4), {address: '10.0.0.9', device_instance: 1}]);    const a = r.rutere.find(x => x.ruter === '10.0.0.1'), b = r.rutere.find(x => x.ruter === '10.0.0.2');    const m = N.sammeMac([{address: '10.0.0.1', mac: 'AA:BB:CC:00:00:01'}, {address: '10.0.0.2', mac: 'aa-bb-cc-00-00-01'}, {address: '10.0.0.3:47809', mac: '11:22:33:44:55:66'}, {address: '10.0.0.3', mac: '11:22:33:44:55:66'}]);    S._sammeAdr = {};    const it = N.ny();    N.noterAdresse(null, {address: '10.1.1.1', device_instance: 1}, it); N.noterAdresse(null, {address: '10.1.1.1', device_instance: 2}, it); N.noterAdresse(null, {address: '10.1.1.2', device_instance: 3}, it);    N.ferdigMed(it);    const konf = N.sammeAdresse([{address: '10.1.1.1'}, {address: '10.1.1.2'}]);    const it2 = N.ny(); N.noterAdresse({device_instance: 1}, {address: '10.1.1.1', device_instance: 1}, it2); N.ferdigMed(it2);    const etter = N.sammeAdresse([{address: '10.1.1.1'}]);    S._sammeAdr = {};    return a.niva === 'over' && a.nett[0].antall === 33 && a.nett[0].mstp === 33 && a.total === 38 && b.niva === 'naer' && r.utenRuter.length === 1 && r.utenRuter[0].nett === 9      && m.length === 1 && m[0].enheter.length === 2 && konf.length === 1 && konf[0].ider.join() === '1,2' && etter.length === 0 && N.nettAv('10.0.0.1:47808') === null && N.nettAv('50:2').nett === 50      && typeof window.nabeKart.ruterData === 'function'; })(),  alarmhist: !!window.nabeAlarmhist && typeof aapneAlarmhist === 'function' && !!document.getElementById('alarmhistBtn') && (() => {    const A = window.nabeAlarmhist, lager = {anlegg: {}}, a = A.anlegg(lager, 'k'), dag = 864e5, t0 = Date.UTC(2026, 5, 1, 10);    const d = {address: '10.0.0.1', object_name: 'RTU'}, p = (n, f) => ({objid: 'ai,' + n, name: 'P' + n, status: f});    const n1 = A.registrerEnhet(a, d, [p(1, ['in-alarm']), p(2, [])], t0);    const n2 = A.registrerEnhet(a, d, [p(1, ['in-alarm']), p(2, ['in-alarm']), p(3, ['fault'])], t0 + dag);    A.registrerEnhet(a, d, [p(1, ['in-alarm']), p(2, [])], t0 + 2 * dag);    A.registrerEnhet(a, d, [p(1, ['in-alarm']), p(2, ['in-alarm'])], t0 + 3 * dag);    const dd = a.enh['10.0.0.1'].dager, nu = t0 + 3 * dag + 1000, x = (n) => a.pkt['10.0.0.1|ai,' + n];    return n1 === 0 && n2 === 2 && x(1).grunnlag === true && A.klassifiser(x(1), dd, nu).kronisk && !A.klassifiser(x(1), dd, nu).ny      && !A.klassifiser(x(2), dd, nu).kronisk && A.klassifiser(x(2), dd, nu).sjelden && x(2).n === 2      && A.klassifiser(x(3), dd, t0 + dag + 1000).ny && !A.klassifiser(x(3), dd, nu).ny; })(),  idriftsettelse: !!window.nabeSat && typeof aapneSat === 'function' && !!document.getElementById('satBtn') && (() => {    const Z = window.nabeSat;    const r = Z.parsPunktliste('Enhet;Punkt;Min;Maks;Merknad\nRTU-1;RT401;19,5;23;Rom\nRTU-1;FS401\n# kommentar\n;P9;;5');    const r2 = Z.parsPunktliste('RT401\nRT402'), r3 = Z.parsPunktliste('A,B,1,2');    const devs = [{address: '10.0.0.1', device_instance: 11, object_name: 'RTU-1'}, {address: '10.0.0.2', device_instance: 12, object_name: 'RTU-2'}, {address: '10.0.0.3', device_instance: 13, object_name: 'RTU-2'}];    const cache = {'10.0.0.1': [{objid: 'ai,1', name: 'RT401', value: 21, status: []}, {objid: 'ai,2', name: 'Fs 401', value: 5, status: ['overridden']}], '10.0.0.2': [{objid: 'ai,1', name: 'RT401', value: 21}]};    const f = (e, p) => Z.finnPunkt({enhet: e, punkt: p}, devs, cache);    const v = (rad, p, val) => Z.vurder(rad, p, val);    const ok = {objid: 'ai,1', name: 'T', value: 21, status: []};    const o = Z.oppsummer([{res: {status: 'ok'}}, {res: {status: 'utenfor'}}, {res: {status: 'over'}, godkjent: true}, {res: {status: 'over'}}, {}]);    return r.length === 3 && r[0].lav === 19.5 && r[0].hoy === 23 && r[0].merknad === 'Rom' && r[1].lav === null && r[2].enhet === '' && r[2].hoy === 5      && r2.length === 2 && r2[0].punkt === 'RT401' && r3.length === 1 && r3[0].lav === 1      && f('RTU-1', 'RT401').status === 'funnet' && f('11', 'RT401').p.objid === 'ai,1' && f('10.0.0.1', 'fs401').status === 'funnet' && f('RTU-1', 'FS-401').p.objid === 'ai,2'      && f('RTU-2', 'RT401').status === 'flere-enheter' && f('Finnes ikke', 'X').status === 'ingen-enhet' && f('RTU-1', 'X').status === 'ingen-punkt' && f('', 'RT401').status === 'flere-punkter'      && f('RTU-3', 'RT401').status === 'ingen-enhet'      && Z.objidFraKortform('AI 10000') === 'analog-input,10000' && Z.objidFraKortform('bv1') === 'binary-value,1' && Z.objidFraKortform('RT401') === '' && Z.objidFraKortform('msv-3') === 'multi-state-value,3'      && v({lav: 19, hoy: 23}, ok).status === 'ok' && v({lav: 22, hoy: null}, ok).status === 'utenfor' && v({lav: null, hoy: 20}, ok).status === 'utenfor'      && v({}, {...ok, status: ['fault']}).status === 'feil' && v({}, {...ok, status: ['overridden']}).status === 'over' && v({}, {...ok, status: ['out-of-service']}).status === 'ute' && v({}, {...ok, value: null}).status === 'ikke'      && v({}, {...ok, status: ['in-alarm']}).status === 'alarm' && o.ok === 1 && o.godkjent === 1 && o.avvik === 1 && o.varsel === 1 && o.ikkeKjort === 1 && o.ferdige === 2; })(),  forslag2: (() => {    const dev = (a, n) => ({address: a, object_name: n, device_instance: 1});    const r = bygForslag({devices: [dev('10.0.0.1', 'A')], cache: {'10.0.0.1': [{objid: 'ai,1', name: 'P', status: []}]}, failed: new Set(), varsler: [], avvik: [],      urimelig: [{ip: '10.0.0.1', objid: 'ai,1', navn: 'T1', verdi: '-50 C'}], flate: [{ip: '10.0.0.1', objid: 'ai,1', navn: 'T2', minutter: 40}],      sykluser: [{address: '10.0.0.1', objid: 'bi,1', navn: 'Pumpe (x)', per_time: 9.5, dom: 'mange'}], tips: [{ip: '10.0.0.1', objid: 'bo,1', navn: 'Pumpe 2'}],      alarmhist: [{ip: '10.0.0.1', objid: 'ai,3', navn: 'N', ny: true, kjent: false, dager: ['d'], kronisk: false}, {ip: '10.0.0.1', objid: 'ai,4', navn: 'K', kronisk: true, kjent: false, dager: ['a', 'b', 'c']}, {ip: '10.0.0.1', objid: 'ai,5', navn: 'Kj', kronisk: true, kjent: true, dager: ['a']}],      ruter: {rutere: [{ruter: '10.0.0.9', total: 40, niva: 'over', nett: [{nett: 5, antall: 40, mstp: 40, niva: 'over', forste: '5:1'}]}], utenRuter: []},      sammeMac: [{mac: 'aa:bb', enheter: [{address: '10.0.0.1'}, {address: '10.0.0.2'}]}], endretId: [{ip: '10.0.0.1', fra: 1, til: 2}]});    const id = r.liste.map(p => p.id), get = (x) => r.liste.find(p => p.id === x);    return ['urimelig', 'flat', 'sykluser', 'syk-tips', 'alarm-nye', 'alarm-ofte', 'ruter', 'mac', 'endret-id'].every(x => id.includes(x))      && get('sykluser').prio === 2 && get('ruter').prio === 2 && get('alarm-ofte').rader.length === 1 && get('alarm-nye').rader.length === 1 && id.indexOf('urimelig') < id.indexOf('flat')      && get('sykluser').rader[0].navn !== undefined && /9,5/.test(get('sykluser').rader[0].tekst) && /kan ikke stemme|cannot be right/.test(get('urimelig').tittel); })(),  grenser: !!window.nabeGrenser && (() => {    const G = window.nabeGrenser;    const ev = [{id: 1, address: 'a', objid: 'o', type: 'over'}, {id: 2, address: 'a', objid: 'o', type: 'tilbake'}, {id: 3, address: 'b', objid: 'o', type: 'under'}, {id: 4, address: 'b', objid: 'o', type: 'fortsatt'}];    const ak = G.aktive(ev), t = G.tekst({type: 'over', verdi: 33.2, grense: 30, enhet: 'C'});    return ak.length === 1 && ak[0].address === 'b' && /30/.test(t) && /33/.test(t) && /Fortsatt under|Still below/.test(G.tekst({type: 'fortsatt', verdi: 5, grense: 10, enhet: 'C'}))      && /Tilbake|Back/.test(G.tekst({type: 'tilbake', verdi: 20, grense: null, enhet: 'C'})) && typeof aapneGrenser === 'function'; })(),  stotte: typeof aapneStotte === 'function' && !!document.getElementById('stotteBtn') && typeof window.nabeStotte.enhetsCsv() === 'string' && window.nabeStotte.enhetsCsv().startsWith('adresse;instans'),  eksport: !!window.nabeKartEksport && (() => {    const foer = S.devices;    S.devices = [{address: '10.0.0.1', device_instance: 1, object_name: 'A <&> "B"', _range: '10.0.0.0/24'}, {address: 'mb:10.0.0.2', protocol: 'modbus', object_name: 'M', _range: '10.0.0.0/24'}];    let ok = false;    try {      const r = window.nabeKartEksport.bygSvg(), x = new DOMParser().parseFromString(r.svg, 'image/svg+xml');      ok = !x.querySelector('parsererror') && x.documentElement.nodeName === 'svg' && r.W > 500 && r.H > 200 && !r.svg.includes('A <&>');    } finally { S.devices = foer; }    return ok && window.nabeKartEksport.bygSvg() === null; })(),'''
 
 
 def royktest():
@@ -422,7 +429,7 @@ def royktest():
               "  const ids = r.liste.map(p => p.id).join();"
               "  const tom = bygForslag({devices: [], cache: {}, failed: new Set(), varsler: [], avvik: []});"
               "  return ids === 'feil-enhet,feil-punkt,lesefeil,overstyrt,navn' && r.lest === 2 && r.totalt === 5 && tom.liste.length === 0"
-              "    && r.liste[0].rader[0].ip === '10.0.0.1'; })()})"}})
+              "    && r.liste[0].rader[0].ip === '10.0.0.1'; })()," + NYE_RYKTEST + "})"}})
         # A slow page (the machine busy with something else) gets a few more tries
         # before it counts as broken: the late scripts may simply not have run yet.
         for forsok in range(8):
@@ -907,16 +914,54 @@ def vakt():
     when the swing began."""
     punkter = [{"address": "127.0.0.6", "objid": "analog-input,2", "navn": "360.003-RT402", "enhet": "°C"},
                {"address": "127.0.0.6", "objid": "analog-input,3", "navn": "360.003-SB402", "enhet": "%"},
-               {"address": "127.0.0.6", "objid": "analog-input,1", "navn": "VAKT-FLAT", "enhet": "°C"}]
+               {"address": "127.0.0.6", "objid": "analog-input,1", "navn": "VAKT-FLAT", "enhet": "°C"},
+               {"address": "127.0.0.6", "objid": "binary-input,6", "navn": "SIM-PUMPE", "enhet": ""}]
+    # A limit on the swinging point: it is above 21.0 for two and a half seconds in every five
+    punkter[0]["hoy"] = 21.0
     r = kall("/api/vakt/sett", {"punkter": punkter})
-    sjekk("opptak bakover: festede punkter følges", r.get("punkter") == 3, str(r))
+    sjekk("opptak bakover: festede punkter følges", r.get("punkter") == 4, str(r))
+    # The same pump recorded to a file, for the count of starts from a recording
+    opp = kall("/api/opptak/start", {"punkter": [{"address": "127.0.0.6", "objid": "binary-input,6", "navn": "SIM-PUMPE"}], "intervall": 1})
     time.sleep(32)
+    kall("/api/opptak/stopp", {})
     st = kall("/api/vakt")
     sjekk("opptak bakover: punktene leses i bakgrunnen uten at noe annet pågår",
-          st.get("aktiv") and st.get("punkter") == 3 and st.get("eldste") is not None, str(st))
+          st.get("aktiv") and st.get("punkter") == 4 and st.get("eldste") is not None, str(st))
     se = kall("/api/vakt/serier", {"minutter": 5})
     n = {s["navn"]: len(s["t"]) for s in se.get("serier", [])}
-    sjekk("opptak bakover: det er målinger å se tilbake på", len(n) == 3 and all(v >= 15 for v in n.values()), str(n))
+    sjekk("opptak bakover: det er målinger å se tilbake på", len(n) == 4 and all(v >= 15 for v in n.values()), str(n))
+    syk = kall("/api/vakt/sykluser", {}).get("sykluser", [])
+    pumpe = next((x for x in syk if x["objid"] == "binary-input,6"), {})
+    sjekk("starter per time: en pumpe som starter hvert sjette sekund er funnet, med tall",
+          pumpe.get("dom") == "mange" and pumpe.get("per_time", 0) > 300 and 2 <= (pumpe.get("snitt_pa_s") or 0) <= 4 and pumpe.get("starter", 0) >= 3, str(pumpe))
+    sjekk("starter per time: et punkt som ikke er av og på er ikke med", all(x["objid"] == "binary-input,6" for x in syk), str(syk))
+    sjekk("starter per time: kommer også i statuslista", any(x["objid"] == "binary-input,6" for x in kall("/api/vakt").get("sykluser", [])))
+    st2 = kall("/api/vakt")
+    ev = st2.get("hendelser", [])
+    typer = [e["type"] for e in ev if e["objid"] == "analog-input,2"]
+    sjekk("grenser: et punkt som går over grensen gir en hendelse med verdi og grense", "over" in typer and st2.get("grenser") == 1
+          and all(e["grense"] == 21.0 and e["verdi"] > 21.0 for e in ev if e["type"] == "over"), str(ev[:3]))
+    sjekk("grenser: og når det kommer tilbake sies det", "tilbake" in typer, str(typer))
+    sjekk("grenser: bare punktet med grense gir hendelser", {e["objid"] for e in ev} == {"analog-input,2"}, str({e["objid"] for e in ev}))
+    pe2 = kall("/api/pendling", {"paa_av": {"P": {"t": [i * 10.0 for i in range(180)], "v": [1.0 if (i * 10) % 300 < 120 else 0.0 for i in range(180)]},
+                                              "R": {"t": [i * 10.0 for i in range(180)], "v": [1.0 if i > 90 else 0.0 for i in range(180)]}}})
+    sjekk("starter per time: pendling-kallet teller også på/av-serier uten fil",
+          [x["navn"] for x in pe2.get("sykluser", [])] == ["P"] and pe2["sykluser"][0]["dom"] == "mange", str(pe2.get("sykluser")))
+    logg = {"L": {"t": [0, 10, 20, 30, 40, 50, 9000, 9010, 18000], "v": [1, 1, 1, 1, 1, 0, 1, 1, 0]}}
+    lt = kall("/api/pendling", {"paa_av": logg, "trinn": True, "alle": True}).get("sykluser", [{}])[0]
+    ln = kall("/api/pendling", {"paa_av": logg, "alle": True}).get("sykluser", [{}])[0]
+    sjekk("starter per time: en trendlogg som bare skriver ved endring telles som trinn, ikke som hull",
+          lt.get("starter") == 1 and lt.get("dom") == "ok" and 0.15 <= (lt.get("per_time") or 0) <= 0.25 and ln.get("starter") == 0, f"{lt} / {ln}")
+    pf = kall("/api/pendling", {})
+    sjekk("starter per time: fra et opptak med på/av-kolonne", any("PUMPE" in x["navn"] and x["dom"] == "mange" for x in pf.get("sykluser", [])), str(pf)[:300])
+    stp = kall("/api/stotte", {"med": ["enheter", "forslag", "trafikk", "rutere", "innstillinger"], "enheter": "adresse;navn\\r\\n10.0.0.1;A", "forslag": "x",
+                               "rutere": [], "klient": {"spraak": "nb", "x": {"a": 1}}, "merknad": "Pumpa går hele tiden"})
+    import zipfile as _zf
+    navn_zip = _zf.ZipFile(stp["fil"]).namelist() if stp.get("status") == "done" and Path(stp["fil"]).is_file() else []
+    sjekk("støttepakke: lages som én fil med det som er valgt, og ikke mer",
+          sorted(navn_zip) == sorted(["LESMEG.txt", "info.json", "merknad.txt", "enheter.csv", "forslag.txt", "trafikk.csv", "rutere.json", "innstillinger.json"]), str(navn_zip))
+    sjekk("støttepakke: trafikkloggen fra denne økta er med", len(_zf.ZipFile(stp["fil"]).read("trafikk.csv").decode("utf-8").splitlines()) > 5 if navn_zip else False)
+    sjekk("støttepakke: innstillinger har bare enkle verdier", json.loads(_zf.ZipFile(stp["fil"]).read("innstillinger.json")) == {"spraak": "nb"} if navn_zip else False)
     pe = kall("/api/vakt/pendling", {"minutter": 5})
     ser = {x["navn"]: x for x in pe.get("serier", [])}
     rt, flat = ser.get("360.003-RT402 (°C)", {}), ser.get("VAKT-FLAT (°C)", {})
@@ -1583,7 +1628,7 @@ def kjor_tester():
     # Last: it silences the simulated device on 127.0.0.6.
     mine_uten_kontakt()
 
-    for fil in ("nabe-start", "nabe-verktoy", "nabe-felt", "nabe-moro", "nabe-finn", "nabe-skann", "nabe-anlegg", "nabe-bunn", "nabe-graf", "nabe-tunnel", "nabe-sammen", "nabe-flyt", "nabe-peker", "nabe-pekere", "nabe-skrift", "nabo", "nabo-brodre", "nabo-fasit", "nabe-garderobe", "nabe-opptak", "nabe-trafikk", "nabe-forslag", "nabe-modbus", "nabe-knx", "nabe-rediger", "nabe-besok", "nabe-runde", "nabe-skjema-ordbok", "nabe-skjema", "nabe-flater", "nabe-fortsett", "nabe-simulator", "nabe-oppdatering", "nabe-bakover", "nabe-kart", "nabe-syn", "nabe-raad", "nabe-dialoger-innhold", "nabe-dialoger-mer", "nabe-dialoger", "nabe-tilbehor", "nabe-kunnskap", "nabe-spor"):
+    for fil in ("nabe-start", "nabe-verktoy", "nabe-felt", "nabe-moro", "nabe-finn", "nabe-skann", "nabe-anlegg", "nabe-bunn", "nabe-graf", "nabe-tunnel", "nabe-sammen", "nabe-flyt", "nabe-peker", "nabe-pekere", "nabe-skrift", "nabo", "nabo-brodre", "nabo-fasit", "nabe-garderobe", "nabe-opptak", "nabe-trafikk", "nabe-forslag", "nabe-nett", "nabe-alarmhist", "nabe-grenser", "nabe-sat", "nabe-stotte", "nabe-kart-eksport", "nabe-modbus", "nabe-knx", "nabe-rediger", "nabe-besok", "nabe-runde", "nabe-skjema-ordbok", "nabe-skjema", "nabe-flater", "nabe-fortsett", "nabe-simulator", "nabe-oppdatering", "nabe-bakover", "nabe-kart", "nabe-syn", "nabe-raad", "nabe-dialoger-innhold", "nabe-dialoger-mer", "nabe-dialoger", "nabe-tilbehor", "nabe-kunnskap", "nabe-spor"):
         try:
             with urllib.request.urlopen(f"{BASE}/js/{fil}.js", timeout=5) as rr:
                 ok = rr.status == 200
@@ -1636,8 +1681,10 @@ async def main():
         import math
         rt = APPS["127.0.0.6"].get_object_name("SIM-AVVIK_RT402")
         sb = APPS["127.0.0.6"].get_object_name("SIM-AVVIK_SB402")
+        pu = APPS["127.0.0.6"].get_object_name("SIM-AVVIK_PUMPE")
         while True:
             t = time.time()
+            pu.presentValue = "active" if int(t) % 6 < 3 else "inactive"
             rt.presentValue = 21.0 + 1.0 * math.sin(2 * math.pi * t / 5)
             sb.presentValue = 50.0 + 30.0 * math.sin(2 * math.pi * t / 5 + math.pi / 2)
             await asyncio.sleep(0.2)
@@ -1654,7 +1701,7 @@ async def main():
     import tempfile
     data = tempfile.mkdtemp(prefix="nabe-selvtest-")
     env = dict(os.environ, NABE_ALLOWED_ORIGINS=BASE, NABE_DATA=data,
-               NABE_MB_LEDIG="4", NABE_COV_LIFETIME="6", NABE_COV_PAA_NYTT="3", NABE_TILLAT_LOOPBACK="1", NABE_VAKT_SEK="1")
+               NABE_MB_LEDIG="4", NABE_COV_LIFETIME="6", NABE_COV_PAA_NYTT="3", NABE_TILLAT_LOOPBACK="1", NABE_VAKT_SEK="1", NABE_SYK_MIN_S="20")
     server = subprocess.Popen([sys.executable, "-m", "uvicorn", "server:app", "--host", "127.0.0.1",
                                "--port", str(PORT), "--log-level", "warning"], cwd=HER, env=env)
     try:

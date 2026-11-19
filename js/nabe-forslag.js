@@ -10,6 +10,7 @@
 (function forslag() {
   const MAKS_RADER = 6;
   const navnPaa = (d) => (d && (d.object_name || String(d.device_instance ?? ''))) || '';
+  const vertAdr = (a) => String(a || '').replace(/^(mb|mr|ms|kx):/, '');
 
   /* data: {devices, cache, failed, varsler, avvik}
      varsler is what siteWarnings() gives, avvik what settpunktAvvik() gives. */
@@ -130,6 +131,85 @@
       sjekk: [T('NABO kan gi dem unike navn ut fra adresse og instans.', 'NABO can give them unique names from the address and instance.')],
       rader: dubl.map(([n, l]) => rad(l[0].address, `«${n}» ×${l.length}`))});
 
+    // Values that cannot be right: -50 degrees, 0 ppm CO2, humidity over 100
+    const urimelig = data.urimelig || [];
+    const perUr = new Map();
+    for (const u of urimelig) (perUr.get(u.ip) || perUr.set(u.ip, []).get(u.ip)).push(u);
+    legg({id: 'urimelig', prio: 2,
+      tittel: T(`${urimelig.length} ${urimelig.length === 1 ? 'punkt' : 'punkter'} med verdi som ikke kan stemme`, `${urimelig.length} ${urimelig.length === 1 ? 'point' : 'points'} with a value that cannot be right`),
+      hvorfor: T('-50 grader, 0 ppm CO2 eller 120 % fuktighet er sjelden en måling. Som regel er det en føler som ikke er koblet til.', '-50 degrees, 0 ppm CO2 or 120 % humidity is seldom a measurement. Usually it is a sensor that is not connected.'),
+      sjekk: [T('Mål ved inngangen. Åpen krets og kortslutning gir hver sin verdi, og feilkoden sier hvilken.', 'Measure at the input. An open circuit and a short give different values, and the error value says which.'),
+              T('Står flere på samme modul, sjekk forsyningen til modulen før du går til hver føler.', 'If several sit on one module, check the module’s supply before going to each sensor.')],
+      rader: [...perUr].map(([ip, l]) => rad(ip, T(`${l.length} ${l.length === 1 ? 'urimelig' : 'urimelige'}, for eksempel ${l[0].navn} = ${l[0].verdi}`, `${l.length} impossible, for example ${l[0].navn} = ${l[0].verdi}`), l[0].objid))});
+
+    // An analog input that has not moved at all: the wire, or a value left fixed
+    const flate = data.flate || [];
+    legg({id: 'flat', prio: 3,
+      tittel: T(`${flate.length} ${flate.length === 1 ? 'måling står' : 'målinger står'} helt stille`, `${flate.length} ${flate.length === 1 ? 'measurement stands' : 'measurements stand'} perfectly still`),
+      hvorfor: T('En levende føler flytter seg litt. En som står helt stille har ofte mistet ledningen, eller er satt til en fast verdi.', 'A live sensor moves a little. One that stands perfectly still has often lost its wire, or been set to a fixed value.'),
+      sjekk: [T('Se først om punktet er overstyrt eller ute av drift.', 'First see whether the point is overridden or out of service.'),
+              T('Ellers: ledning og føler. Dette sees bare for enheten som er åpen mens Live går.', 'Otherwise: the wire and the sensor. This is seen only for the device that is open while Live runs.')],
+      rader: flate.map((f) => rad(f.ip, T(`${f.navn} uendret i ${f.minutter} min`, `${f.navn} unchanged for ${f.minutter} min`), f.objid))});
+
+    // Starting and stopping too often, counted from the points NABE follows in the background
+    const syk = data.sykluser || [];
+    const sykMange = syk.filter((x) => x.dom === 'mange');
+    legg({id: 'sykluser', prio: sykMange.length ? 2 : 3,
+      tittel: T(`${syk.length} ${syk.length === 1 ? 'utstyr starter' : 'utstyr starter'} ofte`, `${syk.length} ${syk.length === 1 ? 'item starts' : 'items start'} often`),
+      hvorfor: T('Hyppig av og på sliter motor og kontaktor lenge før noe alarmerer. Seks starter i timen er der mange produsenter setter grensen for en kompressor.', 'Frequent on and off wears out a motor and contactor long before anything alarms. Six starts an hour is where many makers draw the line for a compressor.'),
+      sjekk: [T('Se på reguleringen: for smalt dødbånd, for kort minste gangtid eller en føler som svinger gir ofte dette.', 'Look at the control: too narrow a dead band, too short a minimum run time or a sensor that swings often gives this.'),
+              T('Er det bare noen få minutter mellom starter, mangler det trolig en minste av-tid.', 'If there are only a few minutes between starts, a minimum off time is probably missing.')],
+      rader: syk.map((x) => rad(x.address, `${String(x.navn).replace(/ \([^)]*\)$/, '')} · ${String(x.per_time).replace('.', ',')} ${T('i timen', 'an hour')}`, x.objid))});
+    const tips = data.tips || [];
+    legg({id: 'syk-tips', prio: 3,
+      tittel: T(`${tips.length} ${tips.length === 1 ? 'punkt' : 'punkter'} kan sjekkes for hyppige starter`, `${tips.length} ${tips.length === 1 ? 'point' : 'points'} can be checked for frequent starts`),
+      hvorfor: T('NABE teller starter per time for festede punkter. Ingen av disse følges nå.', 'NABE counts starts an hour for pinned points. None of these is followed now.'),
+      sjekk: [T('Fest dem med ☆, la det gå en halvtime, og se i «Se bakover».', 'Pin them with ☆, let half an hour pass, and look in “Look back”.')],
+      rader: tips.map((x) => rad(x.ip, x.navn, x.objid))});
+
+    // Alarms: what is new first, and what shouts all the time after it
+    const ah = data.alarmhist || [];
+    const ahNye = ah.filter((x) => x.ny && !x.kjent), ahOfte = ah.filter((x) => x.kronisk && !x.kjent);
+    legg({id: 'alarm-nye', prio: 2,
+      tittel: T(`${ahNye.length} ${ahNye.length === 1 ? 'ny alarm' : 'nye alarmer'} siste døgn`, `${ahNye.length} new ${ahNye.length === 1 ? 'alarm' : 'alarms'} in the last day`),
+      hvorfor: T('Disse har ikke stått i alarm før, så ingen har sett dem ennå.', 'These have not been in alarm before, so nobody has seen them yet.'),
+      sjekk: [T('Se hva som skjedde da alarmen kom. «Se bakover» viser de siste to timene for festede punkter.', 'See what happened when the alarm came. “Look back” shows the last two hours for pinned points.')],
+      rader: ahNye.map((x) => rad(x.ip, `${x.navn}`, x.objid))});
+    legg({id: 'alarm-ofte', prio: 3,
+      tittel: T(`${ahOfte.length} ${ahOfte.length === 1 ? 'punkt alarmerer' : 'punkter alarmerer'} nesten hver gang`, `${ahOfte.length} ${ahOfte.length === 1 ? 'point alarms' : 'points alarm'} nearly every time`),
+      hvorfor: T('Det som alltid roper skjuler det nye. Enten er det en feil som ikke blir rettet, eller en grense som er satt for stramt.', 'What always shouts hides what is new. Either it is a fault that is not fixed, or a limit set too tight.'),
+      sjekk: [T('Rett feilen eller løsne grensen, så alarmlista igjen forteller noe. Marker dem som «kjent» i «Mest alarmerende» i mellomtiden.', 'Fix the fault or loosen the limit, so the alarm list says something again. Mark them “known” in “Most alarming” meanwhile.')],
+      rader: ahOfte.map((x) => rad(x.ip, T(`${x.navn} · ${x.dager.length} dager`, `${x.navn} · ${x.dager.length} days`), x.objid))});
+
+    // Routers and MS/TP: 32 devices is what one trunk takes without a repeater
+    const rb = data.ruter || {rutere: [], utenRuter: []};
+    const tunge = rb.rutere.filter((r) => r.niva !== 'ok');
+    const utenTung = (rb.utenRuter || []).filter((n) => n.niva !== 'ok');
+    const over = tunge.some((r) => r.niva === 'over') || utenTung.some((n) => n.niva === 'over');
+    const nettRad = (r) => r.nett.filter((n) => n.niva !== 'ok').map((n) => rad(n.forste || '', T(`Ruter ${r.ruter}: nett ${n.nett} har ${n.mstp} MS/TP-enheter`, `Router ${r.ruter}: network ${n.nett} has ${n.mstp} MS/TP devices`)));
+    legg({id: 'ruter', prio: over ? 2 : 3,
+      tittel: T(`${tunge.length + utenTung.length} ${tunge.length + utenTung.length === 1 ? 'ruter eller nett bærer' : 'rutere og nett bærer'} mye`, `${tunge.length + utenTung.length} ${tunge.length + utenTung.length === 1 ? 'router or network carries' : 'routers and networks carry'} a lot`),
+      hvorfor: T('Ett MS/TP-segment tar 32 enheter uten repeater. Over det blir svartidene lange og meldinger går tapt, og en ruter med mange nett er den første som stopper.', 'One MS/TP segment takes 32 devices without a repeater. Beyond that the answers get slow and messages are lost, and a router with many networks is the first to stall.'),
+      sjekk: [T('Del nettet med en repeater eller en ekstra ruter.', 'Split the network with a repeater or an extra router.'),
+              T('Sjekk at baudrate og Max_Master er satt riktig i alle enhetene på trunken.', 'Check that the baud rate and Max_Master are set right in every device on the trunk.')],
+      rader: tunge.flatMap((r) => r.niva === 'tung' && !r.nett.some((n) => n.niva !== 'ok')
+        ? [rad(r.nett.find((n) => n.forste) ? r.nett.find((n) => n.forste).forste : '', T(`Ruter ${r.ruter}: ${r.total} enheter bak seg`, `Router ${r.ruter}: ${r.total} devices behind it`))] : nettRad(r))
+        .concat(utenTung.map((n) => rad(n.forste || '', T(`Nett ${n.nett}: ${n.mstp} MS/TP-enheter, ruteren er ikke funnet`, `Network ${n.nett}: ${n.mstp} MS/TP devices, the router was not found`))))});
+
+    // Equal MAC on different addresses, and devices whose ID changed between two scans
+    const mac = data.sammeMac || [];
+    legg({id: 'mac', prio: 3,
+      tittel: T(`${mac.length} MAC-${mac.length === 1 ? 'adresse' : 'adresser'} går igjen på flere IP-adresser`, `${mac.length} MAC ${mac.length === 1 ? 'address shows' : 'addresses show'} on several IP addresses`),
+      hvorfor: T('Samme MAC bak to IP-adresser er vanlig bak en ruter eller proxy, men kan også være en IP som er brukt to ganger.', 'The same MAC behind two IP addresses is usual behind a router or proxy, but can also be an IP used twice.'),
+      sjekk: [T('Er det ikke en ruter eller proxy: se etter to enheter som har fått samme IP, for eksempel fra et kopiert oppsett.', 'If it is not a router or proxy: look for two devices that were given the same IP, for example from a copied setup.')],
+      rader: mac.map((m) => rad(m.enheter[0].address, `${m.mac} · ${m.enheter.map((d) => vertAdr(d.address)).join(', ')}`))});
+    const endret = data.endretId || [];
+    legg({id: 'endret-id', prio: 3,
+      tittel: T(`${endret.length} ${endret.length === 1 ? 'enhet har' : 'enheter har'} skiftet enhets-ID siden forrige skann`, `${endret.length} ${endret.length === 1 ? 'device has' : 'devices have'} changed device ID since the last scan`),
+      hvorfor: T('Samme adresse, nytt enhets-ID. Noen har endret det, eller en annen enhet har tatt over adressen.', 'The same address, a new device ID. Somebody changed it, or another device has taken over the address.'),
+      sjekk: [T('Passer det ikke med en endring du kjenner til, sjekk hvilken enhet som står på adressen nå.', 'If it does not fit a change you know of, check which device is on the address now.')],
+      rader: endret.map((x) => rad(x.ip, T(`ID ${x.fra} ble ${x.til}`, `ID ${x.fra} became ${x.til}`)))});
+
     ut.sort((a, b) => a.prio - b.prio);
     const lest = per.length;
     return {liste: ut, lest, totalt: devices.length};
@@ -145,11 +225,40 @@
 
   const PRIO = () => ({1: T('Se på først', 'Look at first'), 2: T('Verdt å se på', 'Worth a look'), 3: T('Når det passer', 'When it suits')});
 
-  function data() {
+  const PUMPE = /pump|kompress|compress|sirkul|vifte|\bfan\b|kjel|boiler|motor/i;
+  const verdiTekst = (p) => `${fmtVal(p.value).t}${p.unit_symbol ? ' ' + p.unit_symbol : ''}`;
+  async function vaktSykluser() {
+    try {
+      const c = new AbortController(), t = setTimeout(() => c.abort(), 2500);
+      const d = await (await fetch('/api/vakt', {cache: 'no-store', signal: c.signal})).json();
+      clearTimeout(t);
+      return d && d.status === 'done' ? d.sykluser || [] : [];
+    } catch { return []; }
+  }
+  function data(sykluser = []) {
     let varsler = [], avvik = [];
     try { varsler = siteWarnings(); } catch { /* none */ }
     try { avvik = settpunktAvvik(S.cache); } catch { /* none */ }
-    return {devices: S.devices, cache: S.cache, failed: PRE.failed, varsler, avvik};
+    const urimelig = [], tips = [];
+    const fulgte = new Set((S.watch || []).map((w) => w.ip + '|' + w.objid));
+    for (const d of S.devices || []) {
+      for (const p of S.cache[d.address] || []) {
+        if (typeof rarGrunn === 'function' && rarGrunn(p)) urimelig.push({ip: d.address, objid: p.objid, navn: p.name || p.objid, verdi: verdiTekst(p), grunn: rarGrunn(p)});
+        else if (/^binary-(output|value)$/.test(p.type || '') && PUMPE.test(`${p.name || ''} ${p.description || ''}`) && !fulgte.has(d.address + '|' + p.objid)) tips.push({ip: d.address, objid: p.objid, navn: p.name || p.objid});
+      }
+    }
+    const flate = [];
+    if (S.activeDev && typeof flatVerdi === 'function') {
+      for (const p of S.points || []) if (flatVerdi(p)) flate.push({ip: S.activeDev.address, objid: p.objid, navn: p.name || p.objid, minutter: Math.max(1, Math.round((Date.now() - p._flatEndret) / 60000))});
+    }
+    const N = window.nabeNett;
+    const rutere = Array.isArray(S.rutere) ? S.rutere : [];
+    return {devices: S.devices, cache: S.cache, failed: PRE.failed, varsler, avvik, urimelig, flate, sykluser,
+      tips: sykluser.length ? [] : tips.slice(0, 30),
+      alarmhist: window.nabeAlarmhist ? window.nabeAlarmhist.liste() : [],
+      ruter: N ? N.ruterBelastning(rutere, S.devices) : {rutere: [], utenRuter: []},
+      sammeMac: N ? N.sammeMac(S.devices) : [],
+      endretId: Object.entries(S._endretId || {}).filter(([a]) => (S.devices || []).some((d) => d.address === a)).map(([ip, x]) => ({ip, ...x}))};
   }
 
   function postHtml(p) {
@@ -165,8 +274,9 @@
     </section>`;
   }
 
-  function tegn() {
-    const r = bygForslag(data());
+  let SISTE = null;
+  function tegn(sykluser) {
+    const r = SISTE = bygForslag(data(sykluser));
     let kropp;
     if (!r.totalt) kropp = `<div class="fo-tom">${T('Skann et anlegg først. Forslagene bygger på det som er lest.', 'Scan a plant first. The suggestions are built on what has been read.')}</div>`;
     else if (!r.liste.length) kropp = `<div class="fo-tom">${T('Ingenting å foreslå nå. Alt som er lest ser rolig ut.', 'Nothing to suggest now. Everything that has been read looks calm.')}</div>`;
@@ -204,7 +314,22 @@
     if (e.key === 'Escape' && !lag.hidden) { lag.hidden = true; e.stopPropagation(); }
   }, true);
 
-  window.aapneForslag = () => { tegn(); lag.hidden = false; };
+  window.aapneForslag = async () => {
+    tegn([]);
+    lag.hidden = false;
+    // What the server has counted for the pinned points comes a moment later and fills in
+    const syk = await vaktSykluser();
+    if (syk.length && !lag.hidden) tegn(syk);
+  };
+  /* The list as plain text, for the support package and for pasting into a message. */
+  window.forslagTekst = async () => {
+    const r = bygForslag(data(await vaktSykluser()));
+    const linjer = [`${asNavn() || asNokkel()} · ${new Date().toLocaleDateString(T('no', 'en-GB'))}`, T(`Bygger på ${r.lest} av ${r.totalt} enheter som er lest.`, `Based on ${r.lest} of ${r.totalt} devices read.`), ''];
+    for (const p of r.liste) {
+      linjer.push(`[${p.prio}] ${p.tittel}`, '  ' + p.hvorfor, ...p.sjekk.map((s) => '  - ' + s), ...p.rader.slice(0, 20).map((x) => `  > ${x.navn}${x.tekst ? ' · ' + x.tekst : ''}`), '');
+    }
+    return linjer.join('\n');
+  };
   window.bygForslag = bygForslag;
   if ($('forslagBtn')) $('forslagBtn').onclick = () => { closeMenus(); window.aapneForslag(); };
 })();

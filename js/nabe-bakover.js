@@ -13,7 +13,7 @@
 
 (function bakover() {
   const MIN = [30, 60, 120];
-  let minutter = 60, data = null, varsler = [], sendt = null, klar = false, tidtaker = 0;
+  let minutter = 60, data = null, varsler = [], sykluser = [], sendt = null, klar = false, tidtaker = 0;
   const rader = new Map();         // key -> {t, v, enhet}, for the pointer on the charts
 
   const lag = document.createElement('div');
@@ -37,6 +37,9 @@
   const tall = (v) => typeof v === 'number' ? fmtVal(Math.round(v * 100) / 100).t : (v === 'active' ? T('på', 'on') : v === 'inactive' ? T('av', 'off') : '–');
   const numerisk = (v) => typeof v === 'number' ? v : v === 'active' ? 1 : v === 'inactive' ? 0 : null;
   const utenEnhet = (n) => String(n).replace(/ \([^)]*\)$/, '');
+  /* A pump that starts nine times an hour. The numbers come from the readings the server has kept. */
+  const sykTekst = (x) => T(`${utenEnhet(x.navn)} starter ${String(x.per_time).replace('.', ',')} ganger i timen${x.snitt_pa_s ? `, i snitt ${per(x.snitt_pa_s)} på om gangen` : ''}.`,
+    `${utenEnhet(x.navn)} starts ${x.per_time} times an hour${x.snitt_pa_s ? `, ${per(x.snitt_pa_s)} on at a time on average` : ''}.`);
 
   /* A line for the series, broken where nothing was read for a while, so a gap
      is shown as a gap and not drawn across. */
@@ -54,13 +57,16 @@
   }
 
   /* ----------------------------------------------- to the server */
-  const sig = () => S.watch.map(w => w.ip + '~' + w.objid).join(';');
+  // The limits set with the bell on a pinned point go along, so the server can watch them
+  const gr = (w) => (window.nabeGrenser && window.nabeGrenser.hent(w.ip, w.objid)) || {};
+  const lim = (v) => (typeof v === 'number' ? v : null);
+  const sig = () => S.watch.map(w => w.ip + '~' + w.objid + '~' + lim(gr(w).lav) + '~' + lim(gr(w).hoy)).join(';');
   async function send() {
     const s = sig();
     if (s === sendt) return;
     sendt = s;
     try {
-      await api('/api/vakt/sett', {punkter: S.watch.map(w => ({address: w.ip, objid: w.objid, navn: w.name, enhet: w.unit || ''}))});
+      await api('/api/vakt/sett', {punkter: S.watch.map(w => ({address: w.ip, objid: w.objid, navn: w.name, enhet: w.unit || '', lav: lim(gr(w).lav), hoy: lim(gr(w).hoy)}))});
     } catch { sendt = null; }
   }
   /* Only what you change is sent. An empty list at start-up, before the saved
@@ -83,12 +89,22 @@
     try { d = await (await fetch('/api/vakt', {cache: 'no-store'})).json(); } catch { return; }
     if (!d || d.status !== 'done') return;
     varsler = d.varsler || [];
-    chip.hidden = !varsler.length;
-    if (varsler.length) {
-      chip.textContent = T(`${varsler.length} pendler`, `${varsler.length} hunting`);
-      chip.title = varsler.map(v => `${utenEnhet(v.navn)}${v.siden_t ? ' · ' + T('siden ', 'since ') + kl(v.siden_t) : ''} · ${per(v.periode_s)}`).join('\n');
+    sykluser = d.sykluser || [];
+    chip.hidden = !varsler.length && !sykluser.length;
+    if (!chip.hidden) {
+      chip.textContent = [varsler.length ? T(`${varsler.length} pendler`, `${varsler.length} hunting`) : '',
+        sykluser.length ? T(`${sykluser.length} starter ofte`, `${sykluser.length} starting often`) : ''].filter(Boolean).join(' · ');
+      chip.title = varsler.map(v => `${utenEnhet(v.navn)}${v.siden_t ? ' · ' + T('siden ', 'since ') + kl(v.siden_t) : ''} · ${per(v.periode_s)}`)
+        .concat(sykluser.map(sykTekst)).join('\n');
     }
     const s = sagt();
+    // Switching on and off too often: said once, and again only if it is still going on six hours later
+    for (const x of sykluser) {
+      const k = 'syk:' + x.address + '|' + x.objid, nu = Date.now() / 1000;
+      if (x.dom !== 'mange' || (s[k] && nu - s[k] < 6 * 3600)) continue;
+      s[k] = nu;
+      nabeSier(sykTekst(x), 'nervos', k);
+    }
     for (const v of varsler) {
       // Said once per swing: the same loop, started at about the same time, is not announced again.
       if (s[v.navn] && Math.abs((s[v.navn] || 0) - (v.siden_t || 0)) < 1800) continue;
@@ -116,6 +132,7 @@
     const pad = (hi - lo) * 0.08;
     lo -= pad; hi += pad;
     const vars = varsler.find(x => utenEnhet(x.navn) === utenEnhet(s.navn) || x.navn === s.navn);
+    const syk = sykluser.find(x => x.address === s.address && x.objid === s.objid);
     const sist = v[v.length - 1];
     return `<div class="bk-rad" data-k="${esc(key)}">
       <div class="bk-hode"><span class="bk-navn" title="${esc(s.navn)} · ${esc(s.address)}">${esc(utenEnhet(s.navn))}</span>
@@ -124,7 +141,8 @@
         <path d="${bane(t, v, fra, nu, 400, 44, lo, hi)}"/>
         <line class="bk-kors" x1="0" y1="0" x2="0" y2="44"/></svg>
       <div class="bk-meta"><span>${esc(tall(Math.min(...nums)))}, ${esc(tall(Math.max(...nums)))} ${esc(s.enhet || '')}</span>
-        ${vars ? `<span class="bk-pend">${T('pendler', 'hunting')}${vars.siden_t ? ' ' + T('siden ', 'since ') + kl(vars.siden_t) : ''} · ${esc(per(vars.periode_s))}</span>` : ''}</div></div>`;
+        ${vars ? `<span class="bk-pend">${T('pendler', 'hunting')}${vars.siden_t ? ' ' + T('siden ', 'since ') + kl(vars.siden_t) : ''} · ${esc(per(vars.periode_s))}</span>` : ''}
+        ${syk ? `<span class="bk-pend" title="${esc(sykTekst(syk))}">${T('starter', 'starts')} ${esc(String(syk.per_time).replace('.', ','))} ${T('i timen', 'an hour')}</span>` : ''}</div></div>`;
   }
 
   function tegnRader() {
@@ -211,6 +229,7 @@
 
   let timer = 0;
   window.aapneBakover = async () => {
+    try { await api('/api/vakt/sykluser', {}); } catch { /* the five-minute round will do */ }
     await sjekk();
     tegn();
     lag.hidden = false;
@@ -219,7 +238,7 @@
     // New readings come in while it is open.
     timer = setInterval(() => { if (!lag.hidden) hent(); }, 10000);
   };
-  window.nabeVakt = {bane, kl};       // for the self-test
+  window.nabeVakt = {bane, kl, send: () => { sendt = null; return send(); }};       // for the self-test, and for the limits
 
   // A way in from the watch list itself.
   const verktoy = document.querySelector('.watch-verktoy');

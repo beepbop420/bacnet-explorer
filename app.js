@@ -842,8 +842,11 @@ async function gruppeEtterKort(omraader, via) {
    updates in place instead of duplicating. */
 function mergeDevices(funnet, subnet) {
   S.tomtSkann = null;   // det kom noe likevel
+  // Two answers from one address with different device IDs would otherwise be one device with the last one's ID.
+  const iDenne = window.nabeNett ? window.nabeNett.ny() : null;
   for (const d of funnet || []) {
     const eksisterende = S.devices.find(x => x.address === d.address);
+    if (iDenne) window.nabeNett.noterAdresse(eksisterende, d, iDenne);
     if (eksisterende) Object.assign(eksisterende, d, {_range: subnet});
     else {
       // Marked so the list can stage its arrival once, and only once - a
@@ -852,6 +855,7 @@ function mergeDevices(funnet, subnet) {
       S.devices.push(Object.assign({}, d, {_range: subnet, _seen: [], _ny: true}));
     }
   }
+  if (iDenne) window.nabeNett.ferdigMed(iDenne);
 }
 
 async function runScan() {
@@ -1113,6 +1117,20 @@ function siteWarnings() {
       rader: dup.map(([inst, ips]) => ({
         alvorlig: true, id: inst, adresse: ips.join('  '),
         tekst: T(`svarer fra ${ips.length} adresser`, `answers from ${ips.length} addresses`), ip: ips[0],
+      })),
+    });
+  }
+
+  const samme = window.nabeNett ? window.nabeNett.sammeAdresse(S.devices) : [];
+  if (samme.length) {
+    ut.push({
+      nokkel: 'sammeadr',
+      tittel: T(`${samme.length} ${samme.length === 1 ? 'adresse svarer' : 'adresser svarer'} med flere enhets-ID`, `${samme.length} ${samme.length === 1 ? 'address answers' : 'addresses answer'} with several device IDs`),
+      note: T('Samme adresse, ulike enhets-ID i samme skann. Én av dem står ikke der den skal, eller en gateway melder seg som flere enheter.',
+              'One address, different device IDs in the same scan. One of them is not where it should be, or a gateway presents itself as several devices.'),
+      rader: samme.map(x => ({
+        alvorlig: true, id: x.ider.join(', '), adresse: x.adresse,
+        tekst: T(`svarer som ${x.ider.length} enheter`, `answers as ${x.ider.length} devices`), ip: x.adresse,
       })),
     });
   }
@@ -4793,6 +4811,10 @@ function commands() {
   add('Handling', 'Se bakover…', () => { closeCmd(); aapneBakover(); });
   add('Handling', 'Avvik fra settpunkt…', () => { closeCmd(); aapneAvvik(); });
   add('Handling', 'Forslag til service…', () => { closeCmd(); aapneForslag(); }, {when: () => S.devices.length > 0});
+  add('Handling', 'Idriftsettelse…', () => { closeCmd(); aapneSat(); }, {when: () => S.devices.length > 0});
+  add('Handling', 'Mest alarmerende…', () => { closeCmd(); aapneAlarmhist(); }, {when: () => S.devices.length > 0});
+  add('Handling', 'Grensevarsler…', () => { closeCmd(); aapneGrenser(); });
+  add('Handling', 'Støttepakke…', () => { closeCmd(); aapneStotte(); });
   add('Visning', 'Innstillinger…', () => { closeCmd(); openTema(); });
   add('Eksport', 'NABO: tagger og Variabel-fil…', () => { closeCmd(); aapneNabo(); }, {hint: 'N'});
   add('Visning', 'Utseende: farger, bilder og størrelse…',
@@ -5203,6 +5225,7 @@ const COLS = [
      + (typeof rarVerdi === 'function' && rarVerdi(p) ? ' rar' : '')
      + (typeof flatVerdi === 'function' && flatVerdi(p) ? ' flat' : ''),
    attrs: p => p.unread ? ` title="${T('Ingen svar fra enheten på dette punktet', 'No answer from the device for this point')}"`
+     : (typeof rarGrunn === 'function' && rarGrunn(p)) ? ` title="${esc(rarGrunn(p))}"`
      : p.sist ? ` title="${esc(alderTekst(p.sist))}"`
      : (typeof flatVerdi === 'function' && flatVerdi(p) ? ` title="${esc(flatTittel(p))}"` : ''),
    cell: p => {
@@ -7156,6 +7179,32 @@ async function hentTrendlogg(p) {
   S.tlData = d;
   boks.innerHTML = tlInnhold(d);
   wireLogg(d);
+  tlSykluser(d);
+}
+
+/* A log of something that switches on and off says how often: starts an hour, and how long it runs each time. The server counts,
+   with every row taken as a change, since a log that only writes when the value moves has long waits that are not gaps. */
+async function tlSykluser(d) {
+  const recs = (d.records || []).filter(r => r.value !== null && r.value !== undefined);
+  const paa = v => v === 1 || v === true || v === 'active' || v === '1';
+  const av = v => v === 0 || v === false || v === 'inactive' || v === '0';
+  if (recs.length < 8 || !recs.every(r => paa(r.value) || av(r.value))) return;
+  const t = recs.map(r => Date.parse(String(r.ts).replace(' ', 'T')) / 1000);
+  if (t.some(x => !isFinite(x))) return;
+  let r;
+  try { r = await api('/api/pendling', {paa_av: {logg: {t, v: recs.map(x => (paa(x.value) ? 1 : 0))}}, trinn: true, alle: true}); } catch { return; }
+  const x = r && r.sykluser && r.sykluser[0], boks = $('tlBody');
+  if (!x || !boks || S.tlData !== d) return;
+  const min = s => (s < 120 ? `${Math.round(s)} s` : `${(s / 60).toFixed(1).replace('.', ',')} min`);
+  const vindu = x.vindu_s >= 7200 ? T(`${(x.vindu_s / 3600).toFixed(1).replace('.', ',')} t`, `${(x.vindu_s / 3600).toFixed(1)} h`) : min(x.vindu_s);
+  const tekst = x.per_time === null
+    ? T(`${x.starter} starter på ${vindu}. For kort tid til å si hvor ofte.`, `${x.starter} starts in ${vindu}. Too short a time to say how often.`)
+    : T(`${String(x.per_time).replace('.', ',')} starter i timen (${x.starter} på ${vindu})${x.snitt_pa_s ? `, i snitt ${min(x.snitt_pa_s)} på om gangen` : ''}${x.dom === 'mange' ? '. Det er mange.' : x.dom === 'noen' ? '. Verdt å følge med på.' : '.'}`,
+        `${x.per_time} starts an hour (${x.starter} in ${vindu})${x.snitt_pa_s ? `, ${min(x.snitt_pa_s)} on at a time on average` : ''}${x.dom === 'mange' ? '. That is a lot.' : x.dom === 'noen' ? '. Worth watching.' : '.'}`);
+  const el = document.createElement('div');
+  el.className = 'tl-note tl-syk' + (x.dom === 'mange' ? ' mange' : '');
+  el.textContent = tekst;
+  boks.querySelector('.tl-note')?.after(el);
 }
 
 function wireLogg(d) {
@@ -10869,6 +10918,10 @@ const ORDBOK = {
   'Opptak av punkter…': 'Recording points…',
   'Avvik fra settpunkt…': 'Deviation from setpoint…',
   'Forslag til service…': 'Service suggestions…',
+  'Idriftsettelse…': 'Commissioning…',
+  'Mest alarmerende…': 'Most alarming…',
+  'Grensevarsler…': 'Limit alerts…',
+  'Støttepakke…': 'Support package…',
   'Trafikklogg…': 'Traffic log…',
   'Bytt BACnet-port…': 'Change BACnet port…',
   'Modbus…': 'Modbus…',

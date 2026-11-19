@@ -154,16 +154,38 @@ function grupperEtterSystem(rader) {
     .sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : a[1] - b[1]))
     .map(x => x[2]);
 }
-/* Values that are possible but rarely right. Marked, never hidden. */
-function rarVerdi(p) {
+/* Values that are possible but rarely right. Marked, never hidden, and the mark says why.
+
+   Two kinds: a value outside what the quantity can be (a humidity of 120 %, a CO2 reading of 0), and a value
+   that is a controller's way of saying "no sensor": -50 °C, 32767, 6553.5 and the like are what an open or shorted
+   input shows, and they look like measurements until somebody asks. Only analog inputs are judged for the second
+   kind: an output or a value is whatever someone commanded. */
+const FEILKODER = [-50, -99, -999, -9999, 999, 9999, 327.67, 655.35, 3276.7, 6553.5, 32767, 32768, -32768, 65535];
+const erFeilkode = (v) => FEILKODER.some((k) => Math.abs(v - k) < 0.05 * Math.max(1, Math.abs(k) / 1000));
+function rarGrunn(p) {
   const v = p.value;
-  if (typeof v !== 'number' || p.unread) return false;
+  if (typeof v !== 'number' || !isFinite(v) || p.unread) return '';
   const u = String(p.units || '');
-  if (u === 'percent') return v < -1 || v > 101;
-  if (u === 'degrees-celsius') return v < -50 || v > 150;
-  if (/per-second|per-hour|per-minute/.test(u)) return v < -0.5;
-  return false;
+  const innLop = p.type === 'analog-input';
+  const navn = `${p.name || ''} ${p.description || ''}`;
+  if (u === 'percent' && (v < -1 || v > 101)) return T('Prosent utenfor 0 til 100.', 'A percentage outside 0 to 100.');
+  if (u === 'percent-relative-humidity' && (v < -1 || v > 101)) return T('Fuktighet utenfor 0 til 100 %.', 'Humidity outside 0 to 100 %.');
+  if (u === 'degrees-celsius' && (v < -50 || v > 150)) return T('Utenfor det en temperaturføler kan vise.', 'Outside what a temperature sensor can show.');
+  if (/per-second|per-hour|per-minute/.test(u) && v < -0.5) return T('Negativ strømning.', 'Negative flow.');
+  if (!innLop) return '';
+  if (u === 'percent-relative-humidity' && v === 0) return T('0 % fuktighet finnes ikke i luft. Føleren er trolig frakoblet.', '0 % humidity does not exist in air. The sensor is probably disconnected.');
+  if (u === 'parts-per-million' && /co2|co_2|karbondioksid|carbon.?dioxide/i.test(navn)) {
+    if (v === 0) return T('0 ppm CO2 finnes ikke. Uteluft er rundt 420. Føleren er trolig frakoblet.', '0 ppm CO2 does not exist. Outdoor air is around 420. The sensor is probably disconnected.');
+    if (v < 250) return T('Under det som finnes i uteluft (rundt 420 ppm).', 'Below what outdoor air holds (around 420 ppm).');
+    if (v > 10000) return T('Over det en CO2-føler måler.', 'Above what a CO2 sensor measures.');
+  }
+  if (erFeilkode(v) && u && u !== 'no-units') {
+    return T(`${String(v).replace('.', ',')} er en vanlig feilverdi fra en føler som ikke er koblet til.`,
+             `${v} is a common error value from a sensor that is not connected.`);
+  }
+  return '';
 }
+function rarVerdi(p) { return !!rarGrunn(p); }
 
 /* Flat line: an analog input that has not moved for a chosen time. A live
    sensor jitters a little; one that stands perfectly still has often lost its

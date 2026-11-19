@@ -235,7 +235,7 @@ def t(nb: str, en: str) -> str:
     return en if SPRAAK_VAR.get() == "en" else nb
 
 
-VERSJON = "2.26"
+VERSJON = "2.27"
 
 state = {"app": None, "local_address": None, "read_only": False, "bbmd": None, "primary": None}
 # The simulator: a scanned site run as devices on 127.0.0.x, in a process of its own.
@@ -3893,11 +3893,24 @@ class PendlingBody(BaseModel):
     fil: Optional[str] = None
     serier: Optional[Dict[str, List[Optional[float]]]] = None
     intervall: Optional[float] = None
+    # On/off series with their times, for the cycling count without a file: {navn: {"t": [...], "v": [1, 0, ...]}}
+    paa_av: Optional[Dict[str, Dict[str, List[Optional[float]]]]] = None
+    trinn: bool = False        # the rows are changes (a trend log), not readings at an even pace
+    alle: bool = False         # also the calm ones, with their numbers
 
 
 @app.post("/api/pendling")
 async def pendling(body: PendlingBody):
     serier, dt = body.serier, body.intervall or 0.0
+    syk: List[Dict[str, Any]] = []
+    if body.paa_av is not None:
+        for navn, d in body.paa_av.items():
+            r = _syk_serie(list(d.get("t") or []), list(d.get("v") or []), body.trinn)
+            if r["dom"] in ("mange", "noen") or body.alle:
+                syk.append({"navn": navn, **r})
+        syk.sort(key=lambda r: -(r["per_time"] or 0))
+        if serier is None:
+            return {"status": "done", "intervall": dt, "serier": [], "par": [], "sykluser": syk}
     if serier is None:
         fil = Path(body.fil or OPPTAK["fil"] or "")
         try:
@@ -3908,11 +3921,16 @@ async def pendling(body: PendlingBody):
         if not ok:
             return {"status": "error", "error": t("Fant ikke opptaket", "Recording not found")}
         serier, dt = await asyncio.to_thread(_pend_les_fil, fil)
+        try:
+            syk = await asyncio.to_thread(_syk_les_fil, fil)
+        except (OSError, ValueError):
+            syk = []
     feil = {"status": "error", "error": t("For få rader til å si noe", "Too few rows to say anything")}
     if dt <= 0 or not serier:
         return feil
     res = await asyncio.to_thread(_pend_analyser, serier, dt)
-    return res if res["serier"] else feil
+    res["sykluser"] = syk
+    return res if (res["serier"] or syk) else feil
 
 
 # The counters behind the wardrobe, what NABE and NABO wear, and the tunnel
@@ -4430,7 +4448,8 @@ VAKT_MIN = 120                                                # minutes kept
 VAKT_MAKS = 120                                               # points followed
 VAKT_FIL = DATA_DIR / "vakt" / "siste.json"
 VAKT: Dict[str, Any] = {"punkter": {}, "start": 0.0, "bom": 0, "lagret": None, "varsler": [],
-                        "sist_analyse": 0.0, "sist_lagret": 0.0}
+                        "sist_analyse": 0.0, "sist_lagret": 0.0, "sykluser": [],
+                        "hendelser": collections.deque(maxlen=200), "hendelse_nr": 0}
 
 
 def _vakt_nokkel(adresse: str, objid: str) -> str:
@@ -4439,8 +4458,43 @@ def _vakt_nokkel(adresse: str, objid: str) -> str:
 
 def _vakt_ny(adresse: str, objid: str, navn: str, enhet: str) -> Dict[str, Any]:
     lengde = int(VAKT_MIN * 60 / VAKT_SEK) + 5
-    return {"address": adresse, "objid": objid, "navn": navn, "enhet": enhet,
+    return {"address": adresse, "objid": objid, "navn": navn, "enhet": enhet, "lav": None, "hoy": None,
             "t": collections.deque(maxlen=lengde), "v": collections.deque(maxlen=lengde)}
+
+
+def _vakt_hendelse(p: Dict[str, Any], nu: float, typ: str, verdi: Any, grense: Any) -> None:
+    VAKT["hendelse_nr"] += 1
+    VAKT["hendelser"].append({"id": VAKT["hendelse_nr"], "t": round(nu, 1), "address": p["address"], "objid": p["objid"],
+                              "navn": p["navn"] or p["objid"], "enhet": p["enhet"], "type": typ,
+                              "verdi": verdi, "grense": grense})
+
+
+def _vakt_grense(p: Dict[str, Any], x: Any, nu: float) -> None:
+    """Outside the limits the user set on a pinned point. Two readings in a row are
+    needed before it is said, so one stray value is not an event, and the same again
+    to be called back inside. While it stays outside it is repeated every half hour."""
+    lo, hi = p.get("lav"), p.get("hoy")
+    if lo is None and hi is None:
+        p["ut_n"], p["inne_n"], p["brudd"] = 0, 0, None
+        return
+    if isinstance(x, bool) or not isinstance(x, (int, float)):
+        return
+    typ = "under" if (lo is not None and x < lo) else "over" if (hi is not None and x > hi) else None
+    if typ:
+        p["inne_n"] = 0
+        p["ut_n"] = p.get("ut_n", 0) + 1
+        if p["ut_n"] >= 2:
+            ny = p.get("brudd") != typ
+            if ny or nu - p.get("brudd_t", 0) > 1800:
+                p["brudd"], p["brudd_t"] = typ, nu
+                _vakt_hendelse(p, nu, typ if ny else "fortsatt", x, lo if typ == "under" else hi)
+    else:
+        p["ut_n"] = 0
+        if p.get("brudd"):
+            p["inne_n"] = p.get("inne_n", 0) + 1
+            if p["inne_n"] >= 2:
+                _vakt_hendelse(p, nu, "tilbake", x, None)
+                p["brudd"] = None
 
 
 def _vakt_verdi(v: Any) -> Any:
@@ -4488,6 +4542,7 @@ async def _vakt_les() -> None:
                 continue
             p["t"].append(round(nu, 1))
             p["v"].append(x)
+            _vakt_grense(p, x, nu)
     VAKT["bom"] += manglet
 
 
@@ -4497,6 +4552,7 @@ def _vakt_lagre() -> None:
         VAKT_FIL.parent.mkdir(parents=True, exist_ok=True)
         d = {"t": time.time(), "sek": VAKT_SEK,
              "punkter": [{"address": p["address"], "objid": p["objid"], "navn": p["navn"], "enhet": p["enhet"],
+                          "lav": p.get("lav"), "hoy": p.get("hoy"),
                           "t": list(p["t"]), "v": list(p["v"])} for p in VAKT["punkter"].values()]}
         tmp = VAKT_FIL.with_suffix(".tmp")
         tmp.write_text(json.dumps(d), encoding="utf-8")
@@ -4516,6 +4572,7 @@ def _vakt_last() -> None:
     for q in (d.get("punkter") or [])[:VAKT_MAKS]:
         try:
             p = _vakt_ny(q["address"], q["objid"], q.get("navn") or "", q.get("enhet") or "")
+            p["lav"], p["hoy"] = q.get("lav"), q.get("hoy")
             for t, v in zip(q.get("t") or [], q.get("v") or []):
                 if t >= grense:
                     p["t"].append(t)
@@ -4577,6 +4634,121 @@ def _pend_oppstart(x: List[float], dt: float, periode: float) -> Optional[int]:
         else:
             break
     return start if opp[-1] - start >= 2 * P else None
+
+
+# ------------------------------------------------------------ short cycling
+# A pump or a compressor that starts many times an hour wears out its motor and
+# contactor long before it raises an alarm, and a reading of "on" now and then
+# does not show it. The starts are counted from the readings that are kept.
+SYK_MIN_VINDU = float(_env("SYK_MIN_S", "1200") or 1200)        # seconds of readings before a rate is quoted
+SYK_MANGE = 6.0                # starts an hour: where a compressor's maker usually draws the line
+SYK_NOEN = 3.0
+
+
+def _syk_serie(t: List[float], v: List[Optional[float]], trinn: bool = False) -> Dict[str, Any]:
+    """Starts and durations for one on/off series (1 on, 0 off, None unknown). A stretch
+    with no readings is a break: it counts for nothing, neither as time nor as a start.
+    `trinn`: every row is a change, as in a trend log that only writes when the value moves, so a long
+    wait between two rows is the state lasting and not a gap in the readings."""
+    ut: Dict[str, Any] = {"starter": 0, "vindu_s": 0.0, "per_time": None, "snitt_pa_s": None, "snitt_av_s": None,
+                          "korteste_pa_s": None, "siste_start_t": None, "dom": "nei"}
+    pts = [(a, b) for a, b in zip(t, v) if b is not None]
+    if len(pts) < 4:
+        return ut
+    dts = sorted(b[0] - a[0] for a, b in zip(pts, pts[1:]) if b[0] > a[0])
+    if not dts:
+        return ut
+    gap = float("inf") if trinn else max(90.0, 4 * dts[len(dts) // 2])
+    deler: List[list] = [[pts[0]]]
+    for a, b in zip(pts, pts[1:]):
+        if b[0] - a[0] > gap:
+            deler.append([b])
+        else:
+            deler[-1].append(b)
+    vindu, starter, siste = 0.0, 0, None
+    pa: List[float] = []
+    av: List[float] = []
+    for d in deler:
+        if len(d) < 2:
+            continue
+        vindu += d[-1][0] - d[0][0]
+        til, fra, forste = d[0][1] >= 0.5, d[0][0], True       # the first stretch began before we looked
+        for tt, x in d[1:]:
+            ny = x >= 0.5
+            if ny != til:
+                if not forste:
+                    (pa if til else av).append(tt - fra)
+                forste = False
+                if ny:
+                    starter += 1
+                    siste = tt
+                til, fra = ny, tt
+    ut.update(starter=starter, vindu_s=round(vindu, 1), siste_start_t=siste,
+              snitt_pa_s=round(sum(pa) / len(pa), 1) if pa else None,
+              snitt_av_s=round(sum(av) / len(av), 1) if av else None,
+              korteste_pa_s=round(min(pa), 1) if pa else None)
+    if vindu < SYK_MIN_VINDU:
+        return ut
+    per = starter / (vindu / 3600.0)
+    ut["per_time"] = round(per, 1)
+    ut["dom"] = "mange" if per >= SYK_MANGE else "noen" if per >= SYK_NOEN else "ok"
+    return ut
+
+
+def _syk_binar(v: List[Any]) -> Optional[List[Optional[float]]]:
+    """1/0 for a series of active/inactive, None for anything else (an analog point is not on or off)."""
+    ut: List[Optional[float]] = []
+    for x in v:
+        if x == "active":
+            ut.append(1.0)
+        elif x == "inactive":
+            ut.append(0.0)
+        elif x is None or x == "":
+            ut.append(None)
+        else:
+            return None
+    return ut if any(x is not None for x in ut) else None
+
+
+def _vakt_sykluser() -> List[Dict[str, Any]]:
+    ut: List[Dict[str, Any]] = []
+    for p in VAKT["punkter"].values():
+        b = _syk_binar(list(p["v"]))
+        if b is None:
+            continue
+        r = _syk_serie(list(p["t"]), b)
+        if r["dom"] in ("mange", "noen"):
+            ut.append({"address": p["address"], "objid": p["objid"], "navn": p["navn"] or p["objid"], **r})
+    ut.sort(key=lambda r: -(r["per_time"] or 0))
+    return ut
+
+
+def _syk_les_fil(fil: Path) -> List[Dict[str, Any]]:
+    """The on/off columns of a recording, with their times. A column counts when everything in it is active or inactive."""
+    linjer = fil.read_text(encoding="utf-8-sig").splitlines()
+    if len(linjer) < 5:
+        return []
+    hode = linjer[0].split(";")[1:]
+    tider: List[float] = []
+    kol: List[List[str]] = [[] for _ in hode]
+    for linje in linjer[1:]:
+        c = linje.split(";")
+        try:
+            tider.append(time.mktime(time.strptime(c[0], "%Y-%m-%d %H:%M:%S")))
+        except (ValueError, IndexError):
+            continue
+        for i in range(len(hode)):
+            kol[i].append(c[i + 1].strip() if i + 1 < len(c) else "")
+    ut: List[Dict[str, Any]] = []
+    for navn, v in zip(hode, kol):
+        b = _syk_binar(v)
+        if b is None:
+            continue
+        r = _syk_serie(tider[:len(b)], b)
+        if r["dom"] in ("mange", "noen"):
+            ut.append({"navn": navn, **r})
+    ut.sort(key=lambda r: -(r["per_time"] or 0))
+    return ut
 
 
 def _vakt_vurder(x: List[float], dt: float, enhet: str) -> Dict[str, Any]:
@@ -4652,6 +4824,10 @@ def _vakt_analyse() -> None:
     """Every five minutes: which of the followed points are hunting, and since when."""
     VAKT["sist_analyse"] = time.time()
     try:
+        VAKT["sykluser"] = _vakt_sykluser()
+    except Exception:
+        VAKT["sykluser"] = []
+    try:
         res = _vakt_pendling(VAKT_MIN)
     except Exception:
         return
@@ -4689,6 +4865,8 @@ class VaktPunkt(BaseModel):
     objid: str
     navn: str = ""
     enhet: str = ""
+    lav: Optional[float] = None      # lower limit, if the user set one
+    hoy: Optional[float] = None      # upper limit
 
 
 class VaktSett(BaseModel):
@@ -4704,7 +4882,9 @@ def vakt_status():
     p = VAKT["punkter"]
     eldste = min((x["t"][0] for x in p.values() if x["t"]), default=None)
     return {"status": "done", "punkter": len(p), "sek": VAKT_SEK, "eldste": eldste, "bom": VAKT["bom"],
-            "lagret": VAKT["lagret"], "varsler": VAKT["varsler"], "aktiv": state["app"] is not None and bool(p)}
+            "lagret": VAKT["lagret"], "varsler": VAKT["varsler"], "aktiv": state["app"] is not None and bool(p),
+            "sykluser": VAKT["sykluser"], "hendelser": list(VAKT["hendelser"]),
+            "grenser": sum(1 for x in p.values() if x.get("lav") is not None or x.get("hoy") is not None)}
 
 
 @app.post("/api/vakt/sett")
@@ -4716,6 +4896,9 @@ async def vakt_sett(body: VaktSett):
         k = _vakt_nokkel(q.address, q.objid)
         p = VAKT["punkter"].get(k) or _vakt_ny(q.address, q.objid, q.navn, q.enhet)
         p["navn"], p["enhet"] = q.navn or p["navn"] or q.objid, q.enhet
+        if (p.get("lav"), p.get("hoy")) != (q.lav, q.hoy):
+            p["lav"], p["hoy"] = q.lav, q.hoy
+            p["ut_n"], p["inne_n"], p["brudd"] = 0, 0, None
         nye[k] = p
     VAKT["punkter"] = nye
     if not VAKT["start"]:
@@ -4745,6 +4928,13 @@ async def vakt_pendling(body: VaktMinutter):
     if not res.get("serier"):
         return {"status": "error", "error": t("For få målinger til å si noe ennå", "Too few readings to say anything yet")}
     return res
+
+
+@app.post("/api/vakt/sykluser")
+async def vakt_sykluser_na():
+    """Worked out now rather than at the next five-minute round."""
+    VAKT["sykluser"] = await asyncio.get_event_loop().run_in_executor(None, _vakt_sykluser)
+    return {"status": "done", "sykluser": VAKT["sykluser"]}
 
 
 @app.post("/api/vakt/lagre")
@@ -5258,6 +5448,99 @@ async def trafikk(etter: int = 0):
 async def trafikk_tom():
     TRAFIKK.clear()
     return {"status": "done"}
+
+
+# ------------------------------------------------------------ support package
+# What someone else needs to look at a plant from afar, in one file: the devices, the
+# suggestions, the traffic log, the routers and how NABE is set up. The user chooses
+# what goes in. It is written to the data folder and shown in Explorer, and goes
+# nowhere by itself. Passwords, keys and values written to a plant are never in it.
+STOTTE_START = time.time()
+STOTTE_DIR = DATA_DIR / "stotte"
+STOTTE_DELER = ("enheter", "forslag", "trafikk", "rutere", "alarmer", "innstillinger")
+
+
+class StotteBody(BaseModel):
+    med: List[str] = []
+    enheter: str = ""
+    forslag: str = ""
+    rutere: Any = None
+    alarmer: Any = None
+    klient: Dict[str, Any] = {}
+    merknad: str = ""
+
+
+def _stotte_rens(d: Dict[str, Any]) -> Dict[str, Any]:
+    """Plain values only, and short ones: what the page says about its own settings, not whatever it holds."""
+    ut: Dict[str, Any] = {}
+    for k, v in (d or {}).items():
+        if isinstance(k, str) and len(k) <= 60 and isinstance(v, (bool, int, float)):
+            ut[k] = v
+        elif isinstance(k, str) and len(k) <= 60 and isinstance(v, str) and len(v) <= 120:
+            ut[k] = v
+    return ut
+
+
+def _stotte_bygg(body: StotteBody) -> Dict[str, Any]:
+    import io
+    import platform
+    import zipfile
+    med = [x for x in (body.med or list(STOTTE_DELER)) if x in STOTTE_DELER]
+    nu = time.time()
+    filer: List[tuple] = []          # (name, text, what it is)
+    info = {"versjon": VERSJON, "mini": MINI, "tid": time.strftime("%Y-%m-%d %H:%M:%S"), "python": platform.python_version(),
+            "system": platform.platform(), "oppetid_s": int(nu - STOTTE_START), "kun_lesing": state["read_only"],
+            "bacnet_port": BACNET_PORT, "kort": _kort_liste(), "protokoller": {"modbus": True, "knx": True}}
+    filer.append(("info.json", json.dumps(info, ensure_ascii=False, indent=2), t("Versjon, system og nettkort", "Version, system and network adapters")))
+    if body.merknad.strip():
+        filer.append(("merknad.txt", body.merknad.strip()[:4000], t("Din beskrivelse av problemet", "Your description of the problem")))
+    if "enheter" in med and body.enheter:
+        filer.append(("enheter.csv", "\ufeff" + body.enheter[:3_000_000], t("Enhetslista", "The device list")))
+    if "forslag" in med and body.forslag:
+        filer.append(("forslag.txt", body.forslag[:200_000], t("Forslag til service slik de sto", "Service suggestions as they stood")))
+    if "trafikk" in med:
+        rader = list(TRAFIKK)[-2000:]
+        linjer = [";".join(["n", "tid", "til", "tjeneste", "objekt", "egenskap", "ms", "svar", "kode", "forsok", "kort"])]
+        for r in rader:
+            linjer.append(";".join(str(x).replace(";", ",") for x in (
+                r["n"], time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(r["t"])), r["til"], r["tjeneste"], r["obj"], r["prop"],
+                r["ms"], r["svar"], r["kode"], r["forsok"], r["kort"])))
+        filer.append(("trafikk.csv", "\ufeff" + "\r\n".join(linjer), t("Trafikkloggen (de siste forespørslene og svarene)", "The traffic log (the latest requests and answers)")))
+    if "rutere" in med and body.rutere is not None:
+        filer.append(("rutere.json", json.dumps(body.rutere, ensure_ascii=False, indent=2)[:200_000], t("Rutere og nett bak dem", "Routers and the networks behind them")))
+    if "alarmer" in med and body.alarmer is not None:
+        filer.append(("alarmhistorikk.json", json.dumps(body.alarmer, ensure_ascii=False)[:1_000_000], t("Hva som har stått i alarm og hvor ofte", "What has stood in alarm and how often")))
+    if "innstillinger" in med:
+        filer.append(("innstillinger.json", json.dumps(_stotte_rens(body.klient), ensure_ascii=False, indent=2), t("Valg i NABE (bare enkle verdier)", "NABE settings (plain values only)")))
+    lesmeg = [t("NABE støttepakke", "NABE support package"), info["tid"] + " · NABE " + VERSJON, "",
+              t("Innhold:", "Contents:")] + [f"  {n}: {f}" for n, _, f in filer] + [
+              "", t("Ikke med: passord, nøkler og verdier som er skrevet til anlegget. NABE har ikke skrevet noe for å lage denne fila.",
+                    "Not included: passwords, keys and values written to a plant. NABE wrote nothing to make this file."),
+              t("Med: IP-adresser og navn på enheter og punkter. Se gjennom før du sender.", "Included: IP addresses and the names of devices and points. Look through it before you send it.")]
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
+        z.writestr("LESMEG.txt", "\ufeff" + "\r\n".join(lesmeg))
+        for n, tekst, _ in filer:
+            z.writestr(n, ("\ufeff" + tekst) if n.endswith(".txt") else tekst)
+    return {"bytes": buf.getvalue(), "innhold": ["LESMEG.txt"] + [n for n, _, _ in filer]}
+
+
+@app.post("/api/stotte")
+async def stotte(body: StotteBody):
+    try:
+        ut = await asyncio.get_event_loop().run_in_executor(None, _stotte_bygg, body)
+        STOTTE_DIR.mkdir(parents=True, exist_ok=True)
+        fil = STOTTE_DIR / f"NABE-stotte-{time.strftime('%Y%m%d-%H%M%S')}.zip"
+        fil.write_bytes(ut["bytes"])
+        gamle = sorted(STOTTE_DIR.glob("NABE-stotte-*.zip"))
+        for g in gamle[:-10]:           # ten are kept, the rest would only fill the folder
+            try:
+                g.unlink()
+            except OSError:
+                pass
+    except OSError as e:
+        return {"status": "error", "error": str(e)}
+    return {"status": "done", "fil": str(fil), "bytes": len(ut["bytes"]), "innhold": ut["innhold"]}
 
 
 def _brannmur_sjekk() -> Dict[str, Any]:
