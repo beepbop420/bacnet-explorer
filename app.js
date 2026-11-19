@@ -4792,6 +4792,7 @@ function commands() {
   add('Handling', 'Se etter oppdatering…', () => { closeCmd(); aapneOppdatering(); });
   add('Handling', 'Se bakover…', () => { closeCmd(); aapneBakover(); });
   add('Handling', 'Avvik fra settpunkt…', () => { closeCmd(); aapneAvvik(); });
+  add('Handling', 'Forslag til service…', () => { closeCmd(); aapneForslag(); }, {when: () => S.devices.length > 0});
   add('Visning', 'Innstillinger…', () => { closeCmd(); openTema(); });
   add('Eksport', 'NABO: tagger og Variabel-fil…', () => { closeCmd(); aapneNabo(); }, {hint: 'N'});
   add('Visning', 'Utseende: farger, bilder og størrelse…',
@@ -10867,6 +10868,7 @@ const ORDBOK = {
   'Spør NABE…': 'Ask NABE…',
   'Opptak av punkter…': 'Recording points…',
   'Avvik fra settpunkt…': 'Deviation from setpoint…',
+  'Forslag til service…': 'Service suggestions…',
   'Trafikklogg…': 'Traffic log…',
   'Bytt BACnet-port…': 'Change BACnet port…',
   'Modbus…': 'Modbus…',

@@ -412,7 +412,17 @@ def royktest():
               "             {name:'Dup1',value:1,objid:'7'},{name:'Dup2',value:1,objid:'8'},{name:'Dup_SP',value:2,objid:'9'}];"
               "  const r = settpunktAvvik({a, b: [{name:'Z',value:1,objid:'1'},{name:'Z.SP',value:1,objid:'2'}]});"
               "  return n.join() === 'X,X,X,X,RT401,Akt,Akt' && ikke && r.length === 4 && r[0].p.name === 'AktTemp' && r[1].p.name === 'X' && r[1].avvik === 3"
-              "    && !r.some(x => x.p.name.startsWith('Dup')); })()})"}})
+              "    && !r.some(x => x.p.name.startsWith('Dup')); })(),"
+              " service: typeof aapneForslag === 'function' && !!document.getElementById('forslagBtn') && (() => {"
+              "  const d = (a, n) => ({address: a, object_name: n, device_instance: 1});"
+              "  const pt = (n, s) => ({objid: 'ai,' + n, name: 'P' + n, status: s});"
+              "  const devs = [d('10.0.0.1', 'A'), d('10.0.0.2', 'B'), d('10.0.0.3', 'X'), d('10.0.0.4', 'X'), d('10.0.0.5', 'X')];"
+              "  const cache = {'10.0.0.1': [1, 2, 3, 4, 5].map(i => pt(i, ['fault'])), '10.0.0.2': [pt(1, ['fault']), pt(2, []), pt(3, ['overridden']), pt(4, [])]};"
+              "  const r = bygForslag({devices: devs, cache, failed: new Set(['10.0.0.5']), varsler: [], avvik: []});"
+              "  const ids = r.liste.map(p => p.id).join();"
+              "  const tom = bygForslag({devices: [], cache: {}, failed: new Set(), varsler: [], avvik: []});"
+              "  return ids === 'feil-enhet,feil-punkt,lesefeil,overstyrt,navn' && r.lest === 2 && r.totalt === 5 && tom.liste.length === 0"
+              "    && r.liste[0].rader[0].ip === '10.0.0.1'; })()})"}})
         # A slow page (the machine busy with something else) gets a few more tries
         # before it counts as broken: the late scripts may simply not have run yet.
         for forsok in range(8):
@@ -1573,7 +1583,7 @@ def kjor_tester():
     # Last: it silences the simulated device on 127.0.0.6.
     mine_uten_kontakt()
 
-    for fil in ("nabe-start", "nabe-verktoy", "nabe-felt", "nabe-moro", "nabe-finn", "nabe-skann", "nabe-anlegg", "nabe-bunn", "nabe-graf", "nabe-tunnel", "nabe-sammen", "nabe-flyt", "nabe-peker", "nabe-pekere", "nabe-skrift", "nabo", "nabo-brodre", "nabo-fasit", "nabe-garderobe", "nabe-opptak", "nabe-trafikk", "nabe-modbus", "nabe-knx", "nabe-rediger", "nabe-besok", "nabe-runde", "nabe-skjema-ordbok", "nabe-skjema", "nabe-flater", "nabe-fortsett", "nabe-simulator", "nabe-oppdatering", "nabe-bakover", "nabe-kart", "nabe-syn", "nabe-raad", "nabe-dialoger-innhold", "nabe-dialoger-mer", "nabe-dialoger", "nabe-tilbehor", "nabe-kunnskap", "nabe-spor"):
+    for fil in ("nabe-start", "nabe-verktoy", "nabe-felt", "nabe-moro", "nabe-finn", "nabe-skann", "nabe-anlegg", "nabe-bunn", "nabe-graf", "nabe-tunnel", "nabe-sammen", "nabe-flyt", "nabe-peker", "nabe-pekere", "nabe-skrift", "nabo", "nabo-brodre", "nabo-fasit", "nabe-garderobe", "nabe-opptak", "nabe-trafikk", "nabe-forslag", "nabe-modbus", "nabe-knx", "nabe-rediger", "nabe-besok", "nabe-runde", "nabe-skjema-ordbok", "nabe-skjema", "nabe-flater", "nabe-fortsett", "nabe-simulator", "nabe-oppdatering", "nabe-bakover", "nabe-kart", "nabe-syn", "nabe-raad", "nabe-dialoger-innhold", "nabe-dialoger-mer", "nabe-dialoger", "nabe-tilbehor", "nabe-kunnskap", "nabe-spor"):
         try:
             with urllib.request.urlopen(f"{BASE}/js/{fil}.js", timeout=5) as rr:
                 ok = rr.status == 200
