@@ -967,7 +967,8 @@ async function runScan() {
       // is shown as remembered rather than as answering now.
       const svarte = new Set((d.devices || []).map(x => x.address));
       for (const dev of S.devices) {
-        if (dev._range === subnet) noteSeen(dev.address, svarte.has(dev.address));
+        // Only BACnet devices answer this search: a Modbus or KNX device is not "quiet" for not being in the list of BACnet answers
+        if (dev._range === subnet && (!dev.protocol || dev.protocol === 'bacnet')) noteSeen(dev.address, svarte.has(dev.address));
       }
       renderDevices();
       rememberRange(subnet);
@@ -1444,8 +1445,9 @@ function levKandidater(d) {
   const legg = (label, grunn) => { if (label && !ut.some(x => x.label === label)) ut.push({label, grunn}); };
   if (d.web_vendor) legg(d.web_vendor, T('nettsiden sier det', 'its web page says so'));
   if (d.mac_vendor) legg(d.mac_vendor, T('MAC-adressen er fra dem', 'its MAC address is theirs'));
-  const navn = [d.object_name, d.model_name, d.description].filter(Boolean).join(' ');
-  for (const [re, label] of NAVN_LEVERANDOR) if (re.test(d.object_name || '') || re.test(navn)) { legg(label, T('navnet ligner', 'the name looks like it')); break; }
+  const id = S.identity[d.address] || {};
+  const navn = [d.object_name, d.model_name, d.description, id['model-name'], id.description, id['application-software-version'], id['firmware-revision']].filter(Boolean).join(' ');
+  for (const [re, label] of NAVN_LEVERANDOR) if (re.test(d.object_name || '') || re.test(navn)) { legg(label, id['model-name'] && re.test(id['model-name']) ? T('modellnavnet sier det', 'its model name says so') : T('navnet ligner', 'the name looks like it')); break; }
   return ut;
 }
 function gruppeFor(d) {
@@ -2878,7 +2880,7 @@ async function rescanOnce(manuell) {
       const sv = await api('/api/svar', {adresser: S.devices.map(d => d.address)});
       for (const [a, ok] of Object.entries((sv && sv.svar) || {})) if (ok) funnet.add(a);
     } catch { /* the sweep alone then */ }
-    for (const d of S.devices) noteSeen(d.address, funnet.has(d.address));
+    for (const d of S.devices) if (!d.protocol || d.protocol === 'bacnet') noteSeen(d.address, funnet.has(d.address));
 
     RESCAN.runs++; RESCAN.last = Date.now();
     renderDevices(); renderRescanStatus();
@@ -11387,6 +11389,7 @@ function settSprak(kode, lagre) {
     b.setAttribute('aria-label', b.title);
   }
   document.documentElement.lang = til ? 'en' : 'no';
+  if (window.nabeKartSprak) window.nabeKartSprak();
 }
 
 (function sprakOppstart() {

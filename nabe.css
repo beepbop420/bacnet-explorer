@@ -5614,7 +5614,7 @@ button.vsub-knapp[aria-expanded=false] .prot-chev{transform:rotate(180deg)}
 @keyframes tp-flyt{to{stroke-dashoffset:-23}}
 .tp-skanner .tp-s,.tp-skanner .tp-flyt{animation-duration:.45s}
 .tp-stille .tp-s,.tp-stille .tp-flyt{animation:none;stroke-dasharray:none;stroke-width:1.4;opacity:.7}
-@media (prefers-reduced-motion:reduce){.tp-s,.tp-flyt{animation:none;stroke-dasharray:none;stroke-width:1.4;opacity:.7}.tp-flis.ny{animation:none}.tp-radar{animation:none}}
+@media (prefers-reduced-motion:reduce){.tp-flis.ny{animation:none}.tp-radar{animation:none}}
 
 .tp-radar{flex:none;width:22px;height:22px;border-radius:50%;border:1px solid var(--accent);background:conic-gradient(from 0deg,transparent 0 70%,color-mix(in srgb,var(--accent) 70%,transparent) 100%);animation:tp-rot 1.1s linear infinite}
 .tp-radar.liten{width:14px;height:14px;display:inline-block;vertical-align:middle}
@@ -5730,6 +5730,90 @@ button.vsub-knapp[aria-expanded=false] .prot-chev{transform:rotate(180deg)}
 .tp-stille *,.tp-stille.tp-spredt .tp-graf-svg *{animation:none!important}
 body.uten-bevegelse .tp-modal *{animation:none!important;transition:none!important}
 body.uten-bevegelse .tp-radar{animation:tp-rot 2.2s linear infinite!important}
-@media (prefers-reduced-motion:reduce){.tp-modal *{animation:none!important;transition:none!important}.tp-radar{animation:tp-rot 2.2s linear infinite!important}}
+@media (prefers-reduced-motion:reduce){.tp-modal *:not(.tp-flyt):not(.tp-s){animation:none!important;transition:none!important}.tp-radar{animation:tp-rot 2.2s linear infinite!important}}
 .tp-gs text,.tp-gh text,.tp-gk text{paint-order:stroke;stroke:var(--panel);stroke-width:3.5px;stroke-linejoin:round}
 .tp-gh text{font-weight:600;font-size:12px}
+
+/* Topologi, spread: names that keep their size, glide, focus */
+.tp-spredt .tp-lerret{background:radial-gradient(circle at 50% 45%,color-mix(in srgb,var(--fg) 4%,transparent),transparent 70%)}
+.tp-graf-svg{cursor:grab;user-select:none;-webkit-user-select:none}
+.tp-graf-svg.drar{cursor:grabbing}
+.tp-graf-svg .tp-k text{font:500 12px var(--sans,inherit);fill:var(--fg);paint-order:stroke;stroke:var(--panel);stroke-width:4px;stroke-linejoin:round;pointer-events:none}
+.tp-graf-svg .tp-k .u{font:400 10.5px var(--sans,inherit);fill:var(--fg-3)}
+.tp-graf-svg .tp-gh circle{fill:var(--panel);stroke:var(--ok);stroke-width:2.4;cursor:pointer}
+.tp-graf-svg .tp-gh{cursor:pointer}
+.tp-graf-svg .tp-gh.valgt circle{stroke:var(--accent);stroke-width:3}
+.tp-graf-svg .tp-gs text{display:none;font-weight:600;font-size:11px}
+.tp-graf-svg.n-proto .tp-gs text{display:block}
+.tp-graf-svg .tp-gk rect{fill:var(--panel);stroke:var(--fg-3);cursor:pointer}
+.tp-graf-svg .tp-gk.valgt rect{stroke:var(--accent);stroke-width:2}
+.tp-graf-svg .tp-gk text{font:500 11px var(--mono)}
+.tp-graf-svg .tp-gp circle{fill:var(--raised);stroke:var(--line-2);stroke-width:1.5}
+.tp-gt{display:none;font:500 var(--dl,11px) var(--sans,inherit);fill:var(--fg);paint-order:stroke;stroke:var(--panel);stroke-width:calc(var(--dl,11px)*.35);stroke-linejoin:round;pointer-events:none}
+.tp-graf-svg.n-alle .tp-gt,.tp-graf-svg.n-feil .tp-gt.fs,.tp-gn:hover + .tp-gt,.tp-gn.valgt + .tp-gt{display:block}
+.tp-gn{transition:opacity .2s}
+.tp-gn.valgt{stroke:var(--accent);stroke-width:2.5}
+.tp-graf-svg.fokus [data-s]:not(.hel){opacity:.16;transition:opacity .25s}
+.tp-graf-svg.fokus .hel{opacity:1;transition:opacity .25s}
+.tp-graf-svg.fokus .tp-gt:not(.hel){opacity:1}
+.tp-graf-svg .tp-gn,.tp-graf-svg .tp-gl-l,.tp-graf-svg .tp-gs-l{animation:none}
+.tp-graf-svg.inn .tp-gn{animation:tp-nod .5s cubic-bezier(.2,.9,.3,1.2) both}
+.tp-graf-svg.inn .tp-gl-l,.tp-graf-svg.inn .tp-gs-l{animation:tp-fade .8s ease both}
+.tp-graf-svg .tp-gn.ny{animation:tp-nod .6s cubic-bezier(.2,.9,.3,1.3) both}
+.tp-graf-svg .tp-gn.s-alarm,.tp-graf-svg .tp-gn.s-feil{animation:tp-ring 2.2s ease-out infinite}
+.tp-verktoy{display:none;position:absolute;right:14px;top:14px;z-index:3;flex-direction:column;border:1px solid var(--line);border-radius:10px;background:color-mix(in srgb,var(--panel) 92%,transparent);backdrop-filter:blur(6px);overflow:hidden}
+.tp-spredt .tp-verktoy{display:flex}
+.tp-verktoy button{width:32px;height:32px;border:0;border-bottom:1px solid var(--line);background:transparent;color:var(--fg-2);font:500 15px var(--sans,inherit);cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background .15s,color .15s}
+.tp-verktoy button:last-child{border-bottom:0;font-size:11.5px}
+.tp-verktoy button:hover{background:var(--hover);color:var(--fg)}
+.tp-verktoy button.on{background:var(--accent-dim);color:var(--accent)}
+.tp-verktoy button:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+
+.tp-graf-svg [data-skjul]{visibility:hidden}
+.tp-graf-svg .tp-gn:hover + .tp-gt,.tp-graf-svg .tp-gn.valgt + .tp-gt{visibility:visible}
+.tp-verktoy{right:auto;top:auto;left:16px;bottom:16px;flex-direction:row}
+.tp-verktoy button{border-bottom:0;border-right:1px solid var(--line)}
+.tp-verktoy button:last-child{border-right:0}
+
+/* Topologi 2.22: it plays its entrance once, lines are drawn in screen pixels so they stay sharp and the dots on them stay visible, cards when close */
+.tp-modal .tp-sted,.tp-modal .tp-kort,.tp-modal .tp-srad,.tp-modal .tp-pc,.tp-modal .tp-sum,.tp-modal .tp-status,.tp-modal .tp-graf-svg{animation:none}
+.tp-start .tp-modal .tp-sted,.tp-start .tp-modal .tp-kort,.tp-start .tp-modal .tp-srad,.tp-start .tp-modal .tp-pc,.tp-start .tp-modal .tp-sum{animation:tp-inn .45s cubic-bezier(.2,.8,.3,1) both}
+.tp-start .tp-modal .tp-status,.tp-start .tp-modal .tp-graf-svg{animation:tp-fade .35s ease both}
+.tp-start .tp-modal .tp-sted:nth-child(2),.tp-start .tp-modal .tp-srad:nth-child(2){animation-delay:.07s}.tp-start .tp-modal .tp-sted:nth-child(n+3),.tp-start .tp-modal .tp-srad:nth-child(n+3){animation-delay:.14s}
+.tp-graf-svg path{vector-effect:non-scaling-stroke}
+.tp-graf-svg .tp-nett{stroke-width:1.6px}
+.tp-graf-svg .tp-flyt{stroke-width:2.8px;stroke-dasharray:2 15;animation:tp-flyt-px 1.2s linear infinite;stroke:var(--fg-3)}
+.tp-graf-svg .tp-flyt.p-bacnet{stroke:var(--prot-bacnet)}.tp-graf-svg .tp-flyt.p-modbus{stroke:var(--prot-modbus)}.tp-graf-svg .tp-flyt.p-knx{stroke:var(--prot-knx)}
+.tp-skanner .tp-graf-svg .tp-flyt{animation-duration:.5s}
+@keyframes tp-flyt-px{to{stroke-dashoffset:-34}}
+.tp-graf-svg .tp-gl-l{stroke-width:.9px}
+.tp-graf-svg .tp-gs-l{stroke-width:1.8px}
+.tp-lerret path.tp-flyt{stroke-dasharray:2 14}
+.tp-gb{fill:var(--err);stroke:var(--panel);stroke-width:.8;pointer-events:none}
+.tp-graf-svg.n-kort .tp-gb,.tp-graf-svg.n-kort .tp-gt{display:none!important}
+.tp-graf-svg.n-kort .tp-gn{opacity:0;pointer-events:none}
+.tp-graf-svg .tp-dk{display:none;cursor:pointer}
+.tp-graf-svg.n-kort .tp-dk{display:block}
+.tp-dk{--c:var(--fg-3)}
+.tp-dk.p-bacnet{--c:var(--prot-bacnet)}.tp-dk.p-modbus{--c:var(--prot-modbus)}.tp-dk.p-knx{--c:var(--prot-knx)}
+.tp-dk .r1,.tp-dk .r2{fill:color-mix(in srgb,var(--ok) 8%,var(--panel));stroke:var(--line-2);stroke-width:1}
+.tp-dk.s-feil .r1,.tp-dk.s-feil .r2{fill:color-mix(in srgb,var(--warn) 12%,var(--panel));stroke:var(--warn)}
+.tp-dk.s-over .r1,.tp-dk.s-over .r2{fill:color-mix(in srgb,var(--adjust) 10%,var(--panel));stroke:var(--adjust)}
+.tp-dk.s-stille .r1,.tp-dk.s-stille .r2{fill:var(--panel);opacity:.7}
+.tp-dk:hover .r1,.tp-dk:hover .r2{stroke:var(--c);stroke-width:1.6}
+.tp-dk .str{fill:var(--c);stroke:none}
+.tp-dk .r2,.tp-dk .d2{display:none}
+.tp-graf-svg.n-detalj .tp-dk .r1{display:none}
+.tp-graf-svg.n-detalj .tp-dk .r2,.tp-graf-svg.n-detalj .tp-dk .d2{display:block}
+.tp-dk .ik{fill:none;stroke:var(--c);stroke-width:1.1;stroke-linecap:round;stroke-linejoin:round}
+.tp-graf-svg .tp-dk text{stroke:none;paint-order:normal;font:600 10.5px var(--sans,inherit);fill:var(--fg)}
+.tp-graf-svg .tp-dk text.k,.tp-graf-svg .tp-dk .d2 text{font-weight:400;font-size:9px;fill:var(--fg-3)}
+.tp-alm{display:inline-flex;align-items:center;margin-left:auto;flex:none}
+.tp-alm .tp-gl{width:9px;height:9px}
+.tp-verktoy{display:flex}
+.tp-statusvis .tp-verktoy{display:none}
+.gs-overlay:not(.tp-spredt) [data-tp=z-navn]{display:none}
+.gs-overlay:not(.tp-spredt) .tp-lerret,.gs-overlay .tp-status{cursor:grab}
+.tp-lerret.drar,.tp-status.drar{cursor:grabbing;user-select:none}
+.tp-lerret.drar *,.tp-status.drar *{cursor:grabbing!important}
+.tp-spredt .tp-lerret{cursor:default}

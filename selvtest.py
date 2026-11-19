@@ -265,6 +265,9 @@ def royktest():
               "  const d = nabeVakt.bane([0, 10, 20, 100, 110], [1, 2, 3, 2, 1], 0, 110, 100, 10, 1, 3);"
               "  return /^M/.test(d) && (d.match(/M/g) || []).length === 2 && /L/.test(d) && nabeVakt.bane([], [], 0, 10, 100, 10, 0, 1) === ''; })(),"
               " kart: typeof aapneKart === 'function' && !!document.getElementById('kartBtn') && typeof nabeKart.steder === 'function',"
+              " klassifisering: (() => { S.identity['9.9.9.8'] = {'model-name': 'BACnet/IP for TwinCAT'}; const a = gruppeFor({address: '9.9.9.8', protocol: 'bacnet'}).label; delete S.identity['9.9.9.8'];"
+              "  const b = gruppeFor({address: '9.9.9.7', protocol: 'bacnet', vendor_name: null, object_name: 'Beckhoff_0'}).label; const c = gruppeFor({address: '9.9.9.6', protocol: 'bacnet', vendor_id: 415}).label;"
+              "  return a === 'Beckhoff' && b === 'Beckhoff' && c === 'Beckhoff' && !!nabeNavnTilOmraade('10.0.0.1/24') && nabeNavnTilOmraade('10.0.0.1/24').tekst === '10.0.0.1/24'; })(),"
               " oppdatering: typeof aapneOppdatering === 'function' && typeof sjekkOppdatering === 'function',"
               " simulator: !!window.nabeSimulator && !!document.getElementById('simBtn') && (() => {"
               "  S.devices.push({address:'9.9.9.9', device_instance: 5, object_name:'X', vendor_name:'V'});"
@@ -592,6 +595,9 @@ def tilkobling():
           and etter_.get("local_address") == for_.get("local_address"), str(etter_.get("kort")))
     sv = kall("/api/svar", {"adresser": ["127.0.0.2", "127.0.0.3"]})
     sjekk("svarer nå: kjente enheter som svarer blir funnet", sv.get("svar") == {"127.0.0.2": True, "127.0.0.3": True}, str(sv))
+    ib = kall("/api/identitet-batch", {"enheter": [{"address": "127.0.0.20", "device_instance": 7001}, {"address": "127.0.0.99", "device_instance": 1}]})
+    sjekk("identitet for ukjente enheter: svarer, og en enhet som ikke svarer gir ikke feil",
+          ib.get("status") == "done" and isinstance(ib.get("identitet"), dict) and "127.0.0.99" not in ib["identitet"], str(ib))
 
 
 def flere_kort():

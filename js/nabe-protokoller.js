@@ -153,6 +153,17 @@
     // answer is blank or only names the platform. A device that already says who made it is not bothered.
     const generisk = (d) => { const v = vendorOf(d.vendor_name, d.vendor_id).label; return LEV_GENERISK.test(v) || LEV_PLATTFORM.has(v); };
     const ipAv = (d) => d.protocol === 'modbus' ? d.ip : String(d.address).split(':')[0];
+    // First what the device says about itself: its model name and description often name the maker where the vendor field is blank
+    // ("BACnet/IP for TwinCAT" is Beckhoff). Asked for a few at a time, only for the ones that are still unknown.
+    const ukjente = S.devices.filter(d => (d.protocol === undefined || d.protocol === 'bacnet') && d.device_instance != null && !(d.address in S.identity) && generisk(d));
+    for (let i = 0; i < ukjente.length && !stopp; i += 40) {
+      try {
+        const r = await api2('/api/identitet-batch', {enheter: ukjente.slice(i, i + 40).map(d => ({address: d.address, device_instance: d.device_instance}))});
+        if (r.status !== 'done') continue;
+        for (const [adr, idn] of Object.entries(r.identitet || {})) S.identity[adr] = Object.assign({}, S.identity[adr], idn);
+        renderDevices();
+      } catch { /* a bonus */ }
+    }
     const sak = S.devices.filter(d => !d.web && d.protocol !== 'knx' && !d.serial && /^\d+\.\d+\.\d+\.\d+$/.test(ipAv(d)) && (d.protocol === 'modbus' || generisk(d)));
     const ips = [...new Set(sak.map(ipAv))];
     for (let i = 0; i < ips.length; i += 60) {

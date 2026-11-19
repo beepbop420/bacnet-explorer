@@ -235,7 +235,7 @@ def t(nb: str, en: str) -> str:
     return en if SPRAAK_VAR.get() == "en" else nb
 
 
-VERSJON = "2.21"
+VERSJON = "2.22"
 
 state = {"app": None, "local_address": None, "read_only": False, "bbmd": None, "primary": None}
 # The simulator: a scanned site run as devices on 127.0.0.x, in a process of its own.
@@ -1509,11 +1509,21 @@ async def probe_host_unicast(bacnet_app, ip: str, per_host_timeout: float,
             if object_name is not None and vendor_name is not None:
                 break
 
+        vendor_id = None
+        if vendor_name is None:
+            # No name: the number the vendor was given by ASHRAE is shorter to ask for and is still enough to tell who made it
+            try:
+                vid = await bc.read_retry(bacnet_app, addr, real, "vendor-identifier",
+                                          attempts=2, timeout=max(per_host_timeout, 2.0))
+                vendor_id = int(vid) if vid is not None else None
+            except Exception:
+                pass
         return {
             "device_instance": device_instance,
             "address": ip,
             "object_name": str(object_name) if object_name is not None else None,
             "vendor_name": str(vendor_name) if vendor_name is not None else None,
+            **({"vendor_id": vendor_id} if vendor_id is not None else {}),
         }
 
 
@@ -1527,28 +1537,36 @@ async def berik_navn(bacnet_app, devices: List[Dict[str, Any]], timeout: float =
     through a BBMD did not ask at all - so a Beckhoff on the cable came up as
     "-" while the same controller over a VPN had its name.
     """
-    sem = asyncio.Semaphore(samtidig)
+    def mangler(d):
+        return d.get("device_instance") is not None and (d.get("object_name") is None or (d.get("vendor_name") is None and d.get("vendor_id") is None))
 
-    async def en(d):
-        if d.get("object_name") is not None or d.get("device_instance") is None:
-            return
-        async with sem:
-            addr = device_address(d["address"])
-            objid = f"device,{d['device_instance']}"
-            for prop, felt in (("object-name", "object_name"), ("vendor-name", "vendor_name")):
-                if d.get(felt) is not None:
-                    continue
-                try:
-                    v = await bc.read_retry(bacnet_app, addr, objid, prop,
-                                            attempts=2, timeout=timeout)
-                    if v is not None:
-                        d[felt] = str(v)
-                except COMM_ERRORS:
-                    pass
-                except Exception:
-                    pass
+    async def runde(liste, tid, par):
+        sem = asyncio.Semaphore(par)
 
-    await asyncio.gather(*(en(d) for d in devices))
+        async def en(d):
+            async with sem:
+                addr = device_address(d["address"])
+                objid = f"device,{d['device_instance']}"
+                for prop, felt in (("object-name", "object_name"), ("vendor-name", "vendor_name"), ("vendor-identifier", "vendor_id")):
+                    if d.get(felt) is not None or (felt == "vendor_id" and d.get("vendor_name") is not None):
+                        continue
+                    try:
+                        v = await bc.read_retry(bacnet_app, addr, objid, prop, attempts=2, timeout=tid)
+                        if v is not None:
+                            d[felt] = int(v) if felt == "vendor_id" else str(v)
+                    except COMM_ERRORS:
+                        pass
+                    except Exception:
+                        pass
+
+        await asyncio.gather(*(en(d) for d in liste))
+
+    await runde([d for d in devices if mangler(d)], timeout, samtidig)
+    # A second go at the ones that still said nothing, one at a time and with more patience: over a VPN, or with a busy
+    # controller, the first answer is often lost, and a device left as "Ukjent" costs the technician more than a second of waiting
+    igjen = [d for d in devices if mangler(d)]
+    if igjen:
+        await runde(igjen, max(timeout, 4.0), 3)
 
 
 async def scan_unicast_sweep(bacnet_app, hosts: List[str],
@@ -1777,7 +1795,7 @@ async def _run_scan(job, body: "ScanBody", hosts: List[str], net, kort: Optional
             devices, broadcast_ip = await scan_broadcast(bacnet_app, net, body.timeout, only)
             hosts_scanned = net.num_addresses
 
-    if any(d.get("object_name") is None for d in devices):
+    if any(d.get("object_name") is None or (d.get("vendor_name") is None and d.get("vendor_id") is None) for d in devices):
         job["phase"] = t("henter navn", "fetching names")
         await berik_navn(bacnet_app, devices)
     _noter_enheter(devices, kort)
@@ -2166,6 +2184,31 @@ async def _read_identity(bacnet_app, addr, device_objid) -> Dict[str, Any]:
         out["device-time"] = dev_now.isoformat(timespec="seconds")
         out["clock-drift"] = round(drift)
     return out
+
+
+class IdentBatch(BaseModel):
+    enheter: List[Dict[str, Any]]
+
+
+@app.post("/api/identitet-batch")
+async def identitet_batch(body: IdentBatch):
+    """Model, firmware and description for a handful of devices, one request each, a few at a time. The client asks for the ones it
+    could not tell the vendor of, because the model name ("BACnet/IP for TwinCAT") often says what the name and vendor did not."""
+    if state["app"] is None:
+        return {"status": "error", "error": t("Ikke koblet til", "Not connected")}
+    sem = asyncio.Semaphore(4)
+
+    async def en(e: Dict[str, Any]):
+        async with sem:
+            try:
+                adr = str(e.get("address") or "")
+                inst = int(e.get("device_instance"))
+                app_ = await _app_for(adr) or state["app"]
+                return adr, await _read_identity(app_, device_address(adr), f"device,{inst}")
+            except Exception:
+                return str(e.get("address") or ""), {}
+    ut = await asyncio.gather(*[en(e) for e in body.enheter[:60]])
+    return {"status": "done", "identitet": {a: i for a, i in ut if i}}
 
 
 PARTIAL_PUBLISH_FIRST = 0.5
