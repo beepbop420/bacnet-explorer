@@ -13,7 +13,7 @@
 
 (function bakover() {
   const MIN = [30, 60, 120];
-  let minutter = 60, data = null, varsler = [], sykluser = [], sendt = null, klar = false, tidtaker = 0;
+  let minutter = 60, data = null, varsler = [], sykluser = [], virkning = [], sendt = null, klar = false, tidtaker = 0;
   const rader = new Map();         // key -> {t, v, enhet}, for the pointer on the charts
 
   const lag = document.createElement('div');
@@ -37,6 +37,12 @@
   const tall = (v) => typeof v === 'number' ? fmtVal(Math.round(v * 100) / 100).t : (v === 'active' ? T('på', 'on') : v === 'inactive' ? T('av', 'off') : '–');
   const numerisk = (v) => typeof v === 'number' ? v : v === 'active' ? 1 : v === 'inactive' ? 0 : null;
   const utenEnhet = (n) => String(n).replace(/ \([^)]*\)$/, '');
+  /* The valve at 100 % and the room that does not follow. */
+  const virkTekst = (x) => {
+    const u = (/\(([^)]*)\)$/.exec(x.maling) || [])[1] || '', sp = x.settpunkt != null ? T(` mot settpunkt ${String(x.settpunkt).replace('.', ',')}`, ` against setpoint ${x.settpunkt}`) : '';
+    return T(`${utenEnhet(x.padrag)} har stått på 100 % i ${per(x.siden_s)}, men ${utenEnhet(x.maling)} er ${String(x.verdi).replace('.', ',')} ${u}${sp} og følger ikke.`,
+             `${utenEnhet(x.padrag)} has stood at 100 % for ${per(x.siden_s)}, but ${utenEnhet(x.maling)} is ${x.verdi} ${u}${sp} and does not follow.`);
+  };
   /* A pump that starts nine times an hour. The numbers come from the readings the server has kept. */
   const sykTekst = (x) => T(`${utenEnhet(x.navn)} starter ${String(x.per_time).replace('.', ',')} ganger i timen${x.snitt_pa_s ? `, i snitt ${per(x.snitt_pa_s)} på om gangen` : ''}.`,
     `${utenEnhet(x.navn)} starts ${x.per_time} times an hour${x.snitt_pa_s ? `, ${per(x.snitt_pa_s)} on at a time on average` : ''}.`);
@@ -60,13 +66,15 @@
   // The limits set with the bell on a pinned point go along, so the server can watch them
   const gr = (w) => (window.nabeGrenser && window.nabeGrenser.hent(w.ip, w.objid)) || {};
   const lim = (v) => (typeof v === 'number' ? v : null);
-  const sig = () => S.watch.map(w => w.ip + '~' + w.objid + '~' + lim(gr(w).lav) + '~' + lim(gr(w).hoy)).join(';');
+  const REGLER = ['lav', 'hoy', 'paa', 'stille', 'fart'];
+  const sig = () => S.watch.map(w => w.ip + '~' + w.objid + '~' + REGLER.map(k => lim(gr(w)[k])).join('~')).join(';');
   async function send() {
     const s = sig();
     if (s === sendt) return;
     sendt = s;
     try {
-      await api('/api/vakt/sett', {punkter: S.watch.map(w => ({address: w.ip, objid: w.objid, navn: w.name, enhet: w.unit || '', lav: lim(gr(w).lav), hoy: lim(gr(w).hoy)}))});
+      await api('/api/vakt/sett', {punkter: S.watch.map(w => ({address: w.ip, objid: w.objid, navn: w.name, enhet: w.unit || '',
+        lav: lim(gr(w).lav), hoy: lim(gr(w).hoy), paa: lim(gr(w).paa), stille: lim(gr(w).stille), fart: lim(gr(w).fart)}))});
     } catch { sendt = null; }
   }
   /* Only what you change is sent. An empty list at start-up, before the saved
@@ -90,14 +98,23 @@
     if (!d || d.status !== 'done') return;
     varsler = d.varsler || [];
     sykluser = d.sykluser || [];
-    chip.hidden = !varsler.length && !sykluser.length;
+    virkning = d.virkning || [];
+    chip.hidden = !varsler.length && !sykluser.length && !virkning.length;
     if (!chip.hidden) {
       chip.textContent = [varsler.length ? T(`${varsler.length} pendler`, `${varsler.length} hunting`) : '',
-        sykluser.length ? T(`${sykluser.length} starter ofte`, `${sykluser.length} starting often`) : ''].filter(Boolean).join(' · ');
+        sykluser.length ? T(`${sykluser.length} starter ofte`, `${sykluser.length} starting often`) : '',
+        virkning.length ? T(`${virkning.length} uten effekt`, `${virkning.length} with no effect`) : ''].filter(Boolean).join(' · ');
       chip.title = varsler.map(v => `${utenEnhet(v.navn)}${v.siden_t ? ' · ' + T('siden ', 'since ') + kl(v.siden_t) : ''} · ${per(v.periode_s)}`)
-        .concat(sykluser.map(sykTekst)).join('\n');
+        .concat(sykluser.map(sykTekst), virkning.map(virkTekst)).join('\n');
     }
     const s = sagt();
+    // An actuator that stands full and gets nowhere: said once, and again after six hours if it still does
+    for (const x of virkning) {
+      const k = 'virk:' + x.maling, nu = Date.now() / 1000;
+      if (s[k] && nu - s[k] < 6 * 3600) continue;
+      s[k] = nu;
+      nabeSier(virkTekst(x), 'nervos', k);
+    }
     // Switching on and off too often: said once, and again only if it is still going on six hours later
     for (const x of sykluser) {
       const k = 'syk:' + x.address + '|' + x.objid, nu = Date.now() / 1000;
@@ -133,6 +150,7 @@
     lo -= pad; hi += pad;
     const vars = varsler.find(x => utenEnhet(x.navn) === utenEnhet(s.navn) || x.navn === s.navn);
     const syk = sykluser.find(x => x.address === s.address && x.objid === s.objid);
+    const virk = virkning.find(x => (x.address === s.address && x.objid === s.objid) || utenEnhet(x.padrag) === utenEnhet(s.navn));
     const sist = v[v.length - 1];
     return `<div class="bk-rad" data-k="${esc(key)}">
       <div class="bk-hode"><span class="bk-navn" title="${esc(s.navn)} · ${esc(s.address)}">${esc(utenEnhet(s.navn))}</span>
@@ -142,7 +160,8 @@
         <line class="bk-kors" x1="0" y1="0" x2="0" y2="44"/></svg>
       <div class="bk-meta"><span>${esc(tall(Math.min(...nums)))}, ${esc(tall(Math.max(...nums)))} ${esc(s.enhet || '')}</span>
         ${vars ? `<span class="bk-pend">${T('pendler', 'hunting')}${vars.siden_t ? ' ' + T('siden ', 'since ') + kl(vars.siden_t) : ''} · ${esc(per(vars.periode_s))}</span>` : ''}
-        ${syk ? `<span class="bk-pend" title="${esc(sykTekst(syk))}">${T('starter', 'starts')} ${esc(String(syk.per_time).replace('.', ','))} ${T('i timen', 'an hour')}</span>` : ''}</div></div>`;
+        ${syk ? `<span class="bk-pend" title="${esc(sykTekst(syk))}">${T('starter', 'starts')} ${esc(String(syk.per_time).replace('.', ','))} ${T('i timen', 'an hour')}</span>` : ''}
+        ${virk ? `<span class="bk-pend" title="${esc(virkTekst(virk))}">${T('uten effekt', 'no effect')}</span>` : ''}</div></div>`;
   }
 
   function tegnRader() {
@@ -229,7 +248,7 @@
 
   let timer = 0;
   window.aapneBakover = async () => {
-    try { await api('/api/vakt/sykluser', {}); } catch { /* the five-minute round will do */ }
+    try { await api('/api/vakt/sykluser', {}); await api('/api/vakt/virkning', {}); } catch { /* the five-minute round will do */ }
     await sjekk();
     tegn();
     lag.hidden = false;

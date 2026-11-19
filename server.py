@@ -123,7 +123,7 @@ ALLOWED_ORIGINS = {
 READ_ONLY_PATHS = {"/api/sites",
                    
     "/api/status", "/api/interfaces", "/api/readonly", "/api/mine", "/api/ny-versjon",
-    "/api/anlegg", "/api/sim", "/api/vakt", "/api/oppdatering", "/api/route", "/api/var-fasit", "/api/kabelnett", "/api/object/all",
+    "/api/anlegg", "/api/sim", "/api/vakt", "/api/storm", "/api/regler", "/api/oppdatering", "/api/route", "/api/var-fasit", "/api/kabelnett", "/api/object/all",
     "/api/writelog", "/api/notes", "/download", "/logo",
 }
 
@@ -235,7 +235,7 @@ def t(nb: str, en: str) -> str:
     return en if SPRAAK_VAR.get() == "en" else nb
 
 
-VERSJON = "2.27"
+VERSJON = "2.28"
 
 state = {"app": None, "local_address": None, "read_only": False, "bbmd": None, "primary": None}
 # The simulator: a scanned site run as devices on 127.0.0.x, in a process of its own.
@@ -1162,7 +1162,7 @@ async def _vakt_kort() -> None:
 
 @app.on_event("startup")
 async def _start_kortvakt():
-    asyncio.get_running_loop().create_task(_vakt_kort())
+    BAKGRUNN.append(asyncio.get_running_loop().create_task(_vakt_kort()))
 
 
 async def _wait_registration(bacnet_app, timeout: float = 6.0) -> int:
@@ -3930,6 +3930,7 @@ async def pendling(body: PendlingBody):
         return feil
     res = await asyncio.to_thread(_pend_analyser, serier, dt)
     res["sykluser"] = syk
+    res["virkning"] = await asyncio.to_thread(_virkning, serier, dt, VIRKNING_MIN * 60)
     return res if (res["serier"] or syk) else feil
 
 
@@ -4142,7 +4143,7 @@ async def _notes_startup():
     NOTES_SYNC["pending"] = len(NOTES_QUEUE)
     await _flush_queue()
     await _pull_notes()
-    asyncio.create_task(_flush_loop())
+    BAKGRUNN.append(asyncio.create_task(_flush_loop()))
 
 
 # ----------------------------------------------------------------- visits
@@ -4448,7 +4449,7 @@ VAKT_MIN = 120                                                # minutes kept
 VAKT_MAKS = 120                                               # points followed
 VAKT_FIL = DATA_DIR / "vakt" / "siste.json"
 VAKT: Dict[str, Any] = {"punkter": {}, "start": 0.0, "bom": 0, "lagret": None, "varsler": [],
-                        "sist_analyse": 0.0, "sist_lagret": 0.0, "sykluser": [],
+                        "sist_analyse": 0.0, "sist_lagret": 0.0, "sykluser": [], "virkning": [],
                         "hendelser": collections.deque(maxlen=200), "hendelse_nr": 0}
 
 
@@ -4459,42 +4460,89 @@ def _vakt_nokkel(adresse: str, objid: str) -> str:
 def _vakt_ny(adresse: str, objid: str, navn: str, enhet: str) -> Dict[str, Any]:
     lengde = int(VAKT_MIN * 60 / VAKT_SEK) + 5
     return {"address": adresse, "objid": objid, "navn": navn, "enhet": enhet, "lav": None, "hoy": None,
+            "paa": None, "stille": None, "fart": None, "sist_ok": time.time(), "paa_siden": None, "regler": {},
             "t": collections.deque(maxlen=lengde), "v": collections.deque(maxlen=lengde)}
 
 
-def _vakt_hendelse(p: Dict[str, Any], nu: float, typ: str, verdi: Any, grense: Any) -> None:
+def _vakt_hendelse(p: Dict[str, Any], nu: float, typ: str, verdi: Any, grense: Any, regel: str = "grense") -> None:
     VAKT["hendelse_nr"] += 1
     VAKT["hendelser"].append({"id": VAKT["hendelse_nr"], "t": round(nu, 1), "address": p["address"], "objid": p["objid"],
-                              "navn": p["navn"] or p["objid"], "enhet": p["enhet"], "type": typ,
+                              "navn": p["navn"] or p["objid"], "enhet": p["enhet"], "type": typ, "regel": regel,
                               "verdi": verdi, "grense": grense})
 
 
+def _vakt_regel(p: Dict[str, Any], regel: str, typ: Optional[str], nu: float, verdi: Any, grense: Any) -> None:
+    """One rule on one pinned point. `typ` is what is wrong, or None when it is all right. Two readings in a
+    row are needed before it is said, so one stray value is not an event, and the same again to be called back
+    inside. While it stays wrong it is repeated every half hour."""
+    st = p.setdefault("regler", {}).setdefault(regel, {"ut": 0, "inne": 0, "brudd": None, "t": 0.0})
+    if typ:
+        st["inne"] = 0
+        st["ut"] += 1
+        if st["ut"] >= 2:
+            ny = st["brudd"] != typ
+            if ny or nu - st["t"] > 1800:
+                st["brudd"], st["t"] = typ, nu
+                _vakt_hendelse(p, nu, typ if ny else "fortsatt", verdi, grense, regel)
+    else:
+        st["ut"] = 0
+        if st["brudd"]:
+            st["inne"] += 1
+            if st["inne"] >= 2:
+                _vakt_hendelse(p, nu, "tilbake", verdi, None, regel)
+                st["brudd"] = None
+
+
 def _vakt_grense(p: Dict[str, Any], x: Any, nu: float) -> None:
-    """Outside the limits the user set on a pinned point. Two readings in a row are
-    needed before it is said, so one stray value is not an event, and the same again
-    to be called back inside. While it stays outside it is repeated every half hour."""
+    """Outside the limits the user set on a pinned point."""
     lo, hi = p.get("lav"), p.get("hoy")
     if lo is None and hi is None:
-        p["ut_n"], p["inne_n"], p["brudd"] = 0, 0, None
+        p.get("regler", {}).pop("grense", None)
         return
     if isinstance(x, bool) or not isinstance(x, (int, float)):
         return
     typ = "under" if (lo is not None and x < lo) else "over" if (hi is not None and x > hi) else None
-    if typ:
-        p["inne_n"] = 0
-        p["ut_n"] = p.get("ut_n", 0) + 1
-        if p["ut_n"] >= 2:
-            ny = p.get("brudd") != typ
-            if ny or nu - p.get("brudd_t", 0) > 1800:
-                p["brudd"], p["brudd_t"] = typ, nu
-                _vakt_hendelse(p, nu, typ if ny else "fortsatt", x, lo if typ == "under" else hi)
+    _vakt_regel(p, "grense", typ, nu, x, lo if typ == "under" else hi)
+
+
+FART_VINDU = float(_env("FART_S", "50") or 50)       # seconds back that "changing too fast" looks
+
+
+def _vakt_ekstra(p: Dict[str, Any], x: Any, nu: float) -> None:
+    """The rules beyond the two limits: on for too long, not read for too long, changing too fast.
+    `x` is what was just read, or None when the point did not answer."""
+    r = p.setdefault("regler", {})
+    s = p.get("stille")
+    if s:
+        stille = nu - p.get("sist_ok", nu)
+        _vakt_regel(p, "stille", "stille" if stille >= s * 60 else None, nu, round(stille / 60.0, 1), s)
     else:
-        p["ut_n"] = 0
-        if p.get("brudd"):
-            p["inne_n"] = p.get("inne_n", 0) + 1
-            if p["inne_n"] >= 2:
-                _vakt_hendelse(p, nu, "tilbake", x, None)
-                p["brudd"] = None
+        r.pop("stille", None)
+    if x is None:
+        return
+    pl = p.get("paa")
+    if pl:
+        if x == "active":
+            if p.get("paa_siden") is None:
+                p["paa_siden"] = nu
+            minutter = (nu - p["paa_siden"]) / 60.0
+            _vakt_regel(p, "paa", "paa_lenge" if minutter >= pl else None, nu, round(minutter, 1), pl)
+        elif x == "inactive" or x == 0:
+            p["paa_siden"] = None
+            _vakt_regel(p, "paa", None, nu, 0, pl)
+    else:
+        r.pop("paa", None)
+        p["paa_siden"] = None
+    f = p.get("fart")
+    if f and isinstance(x, (int, float)) and not isinstance(x, bool):
+        ts, vs = list(p["t"]), list(p["v"])
+        # What it did over the last minute: against a reading at least FART_VINDU seconds old
+        i = bisect.bisect_right(ts, nu - FART_VINDU) - 1
+        if i >= 0 and isinstance(vs[i], (int, float)) and not isinstance(vs[i], bool) and nu > ts[i]:
+            rate = (x - vs[i]) / ((nu - ts[i]) / 60.0)
+            _vakt_regel(p, "fart", "fort" if abs(rate) >= f else None, nu, round(rate, 3), f)
+    else:
+        r.pop("fart", None)
 
 
 def _vakt_verdi(v: Any) -> Any:
@@ -4528,12 +4576,13 @@ async def _vakt_les() -> None:
 
     svar = await asyncio.gather(*[en(ip, o) for ip, o in grupper.items()], return_exceptions=True)
     manglet = 0
+    sett = set()
     for r in svar:
         if not isinstance(r, tuple):
             manglet += 1
             continue
         ip, v = r
-        for p in VAKT["punkter"].values():
+        for k, p in VAKT["punkter"].items():
             if p["address"] != ip:
                 continue
             x = _vakt_verdi(v.get(p["objid"]))
@@ -4542,7 +4591,14 @@ async def _vakt_les() -> None:
                 continue
             p["t"].append(round(nu, 1))
             p["v"].append(x)
+            p["sist_ok"] = nu
+            sett.add(k)
             _vakt_grense(p, x, nu)
+            _vakt_ekstra(p, x, nu)
+    # What did not answer is also asked about: it is how "not read for too long" is found
+    for k, p in VAKT["punkter"].items():
+        if k not in sett:
+            _vakt_ekstra(p, None, nu)
     VAKT["bom"] += manglet
 
 
@@ -4552,7 +4608,7 @@ def _vakt_lagre() -> None:
         VAKT_FIL.parent.mkdir(parents=True, exist_ok=True)
         d = {"t": time.time(), "sek": VAKT_SEK,
              "punkter": [{"address": p["address"], "objid": p["objid"], "navn": p["navn"], "enhet": p["enhet"],
-                          "lav": p.get("lav"), "hoy": p.get("hoy"),
+                          "lav": p.get("lav"), "hoy": p.get("hoy"), "paa": p.get("paa"), "stille": p.get("stille"), "fart": p.get("fart"),
                           "t": list(p["t"]), "v": list(p["v"])} for p in VAKT["punkter"].values()]}
         tmp = VAKT_FIL.with_suffix(".tmp")
         tmp.write_text(json.dumps(d), encoding="utf-8")
@@ -4573,6 +4629,7 @@ def _vakt_last() -> None:
         try:
             p = _vakt_ny(q["address"], q["objid"], q.get("navn") or "", q.get("enhet") or "")
             p["lav"], p["hoy"] = q.get("lav"), q.get("hoy")
+            p["paa"], p["stille"], p["fart"] = q.get("paa"), q.get("stille"), q.get("fart")
             for t, v in zip(q.get("t") or [], q.get("v") or []):
                 if t >= grense:
                     p["t"].append(t)
@@ -4751,6 +4808,86 @@ def _syk_les_fil(fil: Path) -> List[Dict[str, Any]]:
     return ut
 
 
+# ------------------------------------------------------- an actuator with no effect
+# A valve that has stood at 100 % for a quarter of an hour and a room that has not moved: the loop is
+# doing everything it can and nothing happens. That says more than a measurement being off its
+# setpoint, because it points at the valve, the pump, the supply or the sensor, not at the control.
+VIRKNING_MIN = float(_env("VIRKNING_MIN", "15") or 15)       # minutes the actuator has to stand full
+_SP_RE = re.compile(r"(?i)(?:^|[^a-z0-9])(sp|spt)(?![a-z])")
+
+
+def _virkning(serier: Dict[str, List[Optional[float]]], dt: float, vindu_s: float,
+              kilde: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
+    n = max(3, int(vindu_s / dt))
+    enhet = {}
+    for navn in serier:
+        m = re.match(r"^(.*) \(([^)]*)\)$", navn)
+        enhet[navn] = (m.group(2) if m else "").lower()
+    rt: Dict[Any, str] = {}
+    sb: Dict[Any, str] = {}
+    sp: Dict[Any, str] = {}
+    for navn in serier:
+        k = _pend_nokkel(navn)
+        if not k:
+            continue
+        if _SP_RE.search(navn):
+            if k[0] == "RT":
+                sp[k[1:]] = navn
+        elif k[0] == "RT":
+            rt[k[1:]] = navn
+        else:
+            sb[k[1:]] = navn
+    ut: List[Dict[str, Any]] = []
+    for nokkel, mn in rt.items():
+        pn = sb.get(nokkel)
+        if not pn:
+            continue
+        a, b = serier[mn], serier[pn]
+        if len(a) < n + 1 or len(b) < n + 1:
+            continue
+        ha, hb = a[-n:], b[-n:]
+        if any(x is None for x in ha + hb):
+            continue
+        if enhet[pn] not in ("", "%", "percent", "prosent") or max(hb) > 100.5 or min(hb) < -0.5:
+            continue
+        if min(hb) < 95.0:
+            continue                                            # it has not stood full
+        k = max(2, n // 8)
+        m0, m1 = sum(ha[:k]) / k, sum(ha[-k:]) / k
+        e = enhet[mn]
+        tol = 0.5 if ("c" in e and ("celsius" in e or "°" in e)) else 2.0 if ("%" in e or "percent" in e) else max(0.05 * abs(m1), 0.1)
+        spn = sp.get(nokkel)
+        sv = None
+        if spn and len(serier[spn]) >= n and all(x is not None for x in serier[spn][-n:]):
+            sv = sum(serier[spn][-n:]) / n
+        if sv is not None:
+            d0, d1 = sv - m0, sv - m1
+            if abs(d1) < tol:
+                continue                                        # it is where it should be
+            if abs(d0) > 1e-9 and (abs(d0) - abs(d1)) / abs(d0) >= 0.2 and d0 * d1 > 0:
+                continue                                        # it is getting closer
+        elif abs(m1 - m0) >= tol:
+            continue                                            # without a setpoint: it must at least stand still to be suspect
+        siden = 0
+        for x in reversed(b):
+            if x is None or x < 95.0:
+                break
+            siden += 1
+        r = {"maling": mn, "padrag": pn, "dom": "ingen", "siden_s": round(siden * dt), "endring": round(m1 - m0, 2),
+             "avvik": round(sv - m1, 2) if sv is not None else None, "settpunkt": round(sv, 2) if sv is not None else None,
+             "verdi": round(m1, 2), "vindu_s": round(n * dt)}
+        if kilde and mn in kilde:
+            r["address"], r["objid"] = kilde[mn]
+        ut.append(r)
+    ut.sort(key=lambda r: -r["siden_s"])
+    return ut
+
+
+def _vakt_virkning() -> List[Dict[str, Any]]:
+    serier, _nu, kilde = _vakt_bygg(VAKT_MIN)
+    return _virkning(serier, VAKT_SEK, VIRKNING_MIN * 60, kilde)
+
+
 def _vakt_vurder(x: List[float], dt: float, enhet: str) -> Dict[str, Any]:
     """One series, looked at over the last 20 minutes, 40 minutes and all there is,
     each cut to about 240 samples; the window that shows the swing best wins.
@@ -4787,6 +4924,7 @@ def _vakt_bygg(minutter: int):
     nu = time.time()
     fra = nu - max(1, min(VAKT_MIN, minutter)) * 60
     serier: Dict[str, List[Optional[float]]] = {}
+    kilde: Dict[str, Any] = {}
     for p in VAKT["punkter"].values():
         t, v = list(p["t"]), list(p["v"])
         if not t or any(isinstance(x, str) for x in v):
@@ -4807,11 +4945,12 @@ def _vakt_bygg(minutter: int):
                 j += 1
             ut.append(siste)
         serier[navn] = ut
-    return serier, nu
+        kilde[navn] = (p["address"], p["objid"])
+    return serier, nu, kilde
 
 
 def _vakt_pendling(minutter: int) -> Dict[str, Any]:
-    serier, nu = _vakt_bygg(minutter)
+    serier, nu, _kilde = _vakt_bygg(minutter)
     res = _pend_analyser(serier, VAKT_SEK, vurder=_vakt_vurder)
     for r in res.get("serier", []):
         if r.get("siden_s"):
@@ -4827,6 +4966,10 @@ def _vakt_analyse() -> None:
         VAKT["sykluser"] = _vakt_sykluser()
     except Exception:
         VAKT["sykluser"] = []
+    try:
+        VAKT["virkning"] = _vakt_virkning()
+    except Exception:
+        VAKT["virkning"] = []
     try:
         res = _vakt_pendling(VAKT_MIN)
     except Exception:
@@ -4854,10 +4997,15 @@ async def _vakt_lokke() -> None:
         await asyncio.sleep(max(0.5, VAKT_SEK - (time.time() - t0)))
 
 
+# The loop only holds a weak reference to a task, so one that nobody keeps can be collected in the middle of its
+# work and simply stop. The background loops are kept here for as long as the server runs.
+BAKGRUNN: List[Any] = []
+
+
 @app.on_event("startup")
 async def _start_vakt() -> None:
     _vakt_last()
-    asyncio.get_running_loop().create_task(_vakt_lokke())
+    BAKGRUNN.append(asyncio.get_running_loop().create_task(_vakt_lokke()))
 
 
 class VaktPunkt(BaseModel):
@@ -4867,6 +5015,9 @@ class VaktPunkt(BaseModel):
     enhet: str = ""
     lav: Optional[float] = None      # lower limit, if the user set one
     hoy: Optional[float] = None      # upper limit
+    paa: Optional[float] = None      # minutes it may stay on
+    stille: Optional[float] = None   # minutes it may stay unread
+    fart: Optional[float] = None     # how much it may change in a minute (in its own unit)
 
 
 class VaktSett(BaseModel):
@@ -4884,7 +5035,8 @@ def vakt_status():
     return {"status": "done", "punkter": len(p), "sek": VAKT_SEK, "eldste": eldste, "bom": VAKT["bom"],
             "lagret": VAKT["lagret"], "varsler": VAKT["varsler"], "aktiv": state["app"] is not None and bool(p),
             "sykluser": VAKT["sykluser"], "hendelser": list(VAKT["hendelser"]),
-            "grenser": sum(1 for x in p.values() if x.get("lav") is not None or x.get("hoy") is not None)}
+            "virkning": VAKT["virkning"],
+            "grenser": sum(1 for x in p.values() if any(x.get(k) is not None for k in ("lav", "hoy", "paa", "stille", "fart")))}
 
 
 @app.post("/api/vakt/sett")
@@ -4896,9 +5048,9 @@ async def vakt_sett(body: VaktSett):
         k = _vakt_nokkel(q.address, q.objid)
         p = VAKT["punkter"].get(k) or _vakt_ny(q.address, q.objid, q.navn, q.enhet)
         p["navn"], p["enhet"] = q.navn or p["navn"] or q.objid, q.enhet
-        if (p.get("lav"), p.get("hoy")) != (q.lav, q.hoy):
-            p["lav"], p["hoy"] = q.lav, q.hoy
-            p["ut_n"], p["inne_n"], p["brudd"] = 0, 0, None
+        if tuple(p.get(k) for k in ("lav", "hoy", "paa", "stille", "fart")) != (q.lav, q.hoy, q.paa, q.stille, q.fart):
+            p["lav"], p["hoy"], p["paa"], p["stille"], p["fart"] = q.lav, q.hoy, q.paa, q.stille, q.fart
+            p["regler"], p["paa_siden"] = {}, None
         nye[k] = p
     VAKT["punkter"] = nye
     if not VAKT["start"]:
@@ -4928,6 +5080,12 @@ async def vakt_pendling(body: VaktMinutter):
     if not res.get("serier"):
         return {"status": "error", "error": t("For få målinger til å si noe ennå", "Too few readings to say anything yet")}
     return res
+
+
+@app.post("/api/vakt/virkning")
+async def vakt_virkning_na():
+    VAKT["virkning"] = await asyncio.get_event_loop().run_in_executor(None, _vakt_virkning)
+    return {"status": "done", "virkning": VAKT["virkning"]}
 
 
 @app.post("/api/vakt/sykluser")
@@ -5347,6 +5505,7 @@ def _trafikk_rad(apdu, t0: float, ms: float, svar: str, kode: str, kort: str = "
     _TRAFIKK_SEQ[0] += 1
     tjeneste = type(apdu).__name__
     tjeneste = tjeneste[:-7] if tjeneste.endswith("Request") else tjeneste
+    _storm_ut(tjeneste)
     obj = getattr(apdu, "objectIdentifier", None) or getattr(apdu, "monitoredObjectIdentifier", None)
     liste = getattr(apdu, "listOfReadAccessSpecs", None)
     if liste is not None:
@@ -5388,9 +5547,124 @@ def _trafikk_ferdig(apdu, t0: float, m0: float, forsok: int, fut, kort: str = ""
     TRAFIKK[-1]["forsok"] = forsok
 
 
+# ----------------------------------------------------------------- a storm
+# Who-Is, I-Am and COV notifications that come in by the hundred a second are not a plant working, they are a
+# network about to give up: a controller stuck in a loop, a second tool asking everybody the same thing, a
+# subscription that is renewed over and over. What comes in is counted at the door (the application's
+# indication), what NABE sends itself at the traffic log, and the rates over the last seconds are held up
+# against limits. It says who sends most, so the cable to pull is the right one.
+STORM_VINDU = max(2.0, float(_env("STORM_VINDU", "10") or 10))
+STORM_TERSKEL = {"whois": float(_env("STORM_WHOIS", "10") or 10), "iam": float(_env("STORM_IAM", "30") or 30),
+                 "cov": float(_env("STORM_COV", "80") or 80), "cov-kilde": float(_env("STORM_COV_KILDE", "20") or 20),
+                 "ut-whois": float(_env("STORM_UT_WHOIS", "3") or 3), "ut": float(_env("STORM_UT", "250") or 250)}
+_STORM_NAVN = {"WhoIsRequest": "whois", "IAmRequest": "iam", "UnconfirmedCOVNotificationRequest": "cov",
+               "ConfirmedCOVNotificationRequest": "cov"}
+STORM: Dict[str, Any] = {"inn": collections.deque(maxlen=40000), "ut_who": collections.deque(maxlen=5000),
+                         "ut": collections.deque(maxlen=60000), "aktiv": {}, "hist": collections.deque(maxlen=60), "nr": 0,
+                         "rolig": {}, "rater": {}, "mottatt": collections.Counter()}
+
+
+def _storm_inn(apdu) -> None:
+    navn = type(apdu).__name__
+    if len(STORM["mottatt"]) < 60 or navn in STORM["mottatt"]:
+        STORM["mottatt"][navn] += 1                       # everything that comes in, by service, since NABE started
+    k = _STORM_NAVN.get(navn)
+    if k:
+        STORM["inn"].append((time.time(), k, str(getattr(apdu, "pduSource", "") or "")))
+
+
+def _storm_ut(tjeneste: str) -> None:
+    nu = time.time()
+    STORM["ut"].append(nu)
+    if tjeneste == "WhoIs":
+        STORM["ut_who"].append(nu)
+
+
+def _storm_vurder(nu: Optional[float] = None) -> Dict[str, float]:
+    """The rates over the last STORM_VINDU seconds, and which of them are over their limit."""
+    nu = nu or time.time()
+    fra = nu - STORM_VINDU
+    tall = {"whois": 0, "iam": 0, "cov": 0}
+    kilder: Dict[str, Dict[str, int]] = {}
+    for t, k, kilde in reversed(STORM["inn"]):
+        if t < fra:
+            break
+        tall[k] += 1
+        kk = kilder.setdefault(k, {})
+        kk[kilde] = kk.get(kilde, 0) + 1
+    rater = {k: v / STORM_VINDU for k, v in tall.items()}
+    topp_cov = max(kilder.get("cov", {}).items(), key=lambda x: x[1], default=("", 0))
+    rater["cov-kilde"] = topp_cov[1] / STORM_VINDU
+
+    def siden(kø) -> float:
+        n = 0
+        for t in reversed(kø):
+            if t < fra:
+                break
+            n += 1
+        return n / STORM_VINDU
+    rater["ut-whois"] = siden(STORM["ut_who"])
+    rater["ut"] = siden(STORM["ut"])
+    for k, r in rater.items():
+        terskel = STORM_TERSKEL[k]
+        akt = STORM["aktiv"].get(k)
+        if k == "cov-kilde":
+            topp = [[topp_cov[0], round(topp_cov[1] / STORM_VINDU, 1)]] if topp_cov[1] else []
+        else:
+            topp = [[a, round(c / STORM_VINDU, 1)] for a, c in sorted(kilder.get(k, {}).items(), key=lambda x: -x[1])[:3]]
+        if r >= terskel:
+            STORM["rolig"][k] = 0
+            if not akt:
+                STORM["nr"] += 1
+                akt = {"id": STORM["nr"], "type": k, "start": round(nu, 1), "slutt": None, "rate": round(r, 1), "maks": round(r, 1),
+                       "terskel": terskel, "topp": topp}
+                STORM["aktiv"][k] = akt
+                STORM["hist"].append(akt)
+            else:
+                akt["rate"], akt["maks"], akt["topp"] = round(r, 1), max(akt["maks"], round(r, 1)), topp
+        elif akt:
+            STORM["rolig"][k] = STORM["rolig"].get(k, 0) + 1 if r < terskel * 0.5 else 0
+            if STORM["rolig"][k] >= 2:
+                akt["slutt"] = round(nu, 1)
+                del STORM["aktiv"][k]
+    STORM["rater"] = rater
+    return rater
+
+
+async def _storm_lokke() -> None:
+    while True:
+        try:
+            _storm_vurder()
+        except Exception:
+            pass
+        await asyncio.sleep(3)
+
+
+@app.on_event("startup")
+async def _start_storm() -> None:
+    BAKGRUNN.append(asyncio.get_running_loop().create_task(_storm_lokke()))
+
+
+@app.get("/api/storm")
+def storm_status():
+    return {"status": "done", "vindu_s": STORM_VINDU, "terskler": STORM_TERSKEL,
+            "rater": {k: round(v, 1) for k, v in STORM["rater"].items()},
+            "aktiv": list(STORM["aktiv"].values()), "hist": list(STORM["hist"])[-20:], "mottatt": dict(STORM["mottatt"])}
+
+
 def _trafikk_installer(bacnet_app) -> None:
-    """Wrap the application's request, the one door every service goes through.
-    Installed again whenever the stack is rebound."""
+    """Wrap the application's request, the one door every service goes through, and its
+    indication, the door everything comes in by. Installed again whenever the stack is rebound."""
+    inn = getattr(bacnet_app, "indication", None)
+    if inn is not None and not getattr(inn, "_nabe_storm", False):
+        async def indication(apdu, _orig=inn):
+            try:
+                _storm_inn(apdu)
+            except Exception:
+                pass
+            return await _orig(apdu)
+        indication._nabe_storm = True
+        bacnet_app.indication = indication
     orig = bacnet_app.request
     if getattr(orig, "_nabe_trafikk", False):
         return
@@ -5448,6 +5722,105 @@ async def trafikk(etter: int = 0):
 async def trafikk_tom():
     TRAFIKK.clear()
     return {"status": "done"}
+
+
+# ------------------------------------------------------------ own rules
+# What a technician knows about plants, written down as rules and shown with the service suggestions. The
+# file is plain JSON in the data folder, made from a template the first time it is asked for and never written
+# over after that. The page reads it and judges the rules against what has been read; nothing here runs code.
+REGLER_FIL = DATA_DIR / "regler.json"
+
+
+def _regler_mal() -> Dict[str, Any]:
+    return {
+        "versjon": 1,
+        "_hjelp": ("Egne regler for «Forslag til service». Hver regel velger ut punkter med «naar», og vises som et forslag "
+                   "når minst «minst» punkter passer. Alle reglene under står på «aktiv»: false. Slå en på ved å fjerne den "
+                   "linja eller sette true. Endringer gjelder neste gang du åpner forslagene, eller når du trykker «Last på nytt». "
+                   "Feil i fila vises som et forslag, med hvilken regel det gjelder."),
+        "felt": {
+            "id": "Kort navn på regelen, uten mellomrom",
+            "aktiv": "false hopper over regelen",
+            "tittel": "Overskrift. {n} blir antall punkter og {enheter} antall enheter. Kan være tekst eller {\"no\": \"...\", \"en\": \"...\"}",
+            "hvorfor": "Én setning om hvorfor dette er verdt å se på",
+            "sjekk": "Liste med ting å sjekke",
+            "prio": "1 = se på først, 2 = verdt å se på, 3 = når det passer",
+            "minst": "Regelen vises bare når minst så mange punkter passer (standard 1)",
+            "per_enhet": "{\"minst\": 5}: bare enheter med minst så mange treff telles",
+            "naar": {
+                "navn": "regulært uttrykk mot punktnavnet, store og små bokstaver likt",
+                "beskrivelse": "regulært uttrykk mot beskrivelsen",
+                "type": "liste, for eksempel [\"analog-input\", \"binary-output\"]",
+                "enhet": "måleenhet, for eksempel \"degrees-celsius\" eller \"°C\"",
+                "verdi": "{\"<\": 19}, {\">\": 25}, {\"<=\": 0}, {\">=\": 100}, {\"=\": 0}, {\"!=\": 0}, {\"mellom\": [18, 24]} eller {\"utenfor\": [18, 24]}",
+                "tilstand": "\"active\" eller \"inactive\" for av/på-punkter",
+                "status": "liste, punktet må ha minst ett av flaggene: in-alarm, fault, overridden, out-of-service",
+                "ikke_status": "liste, punktet må ikke ha noen av flaggene",
+                "enhetsnavn": "regulært uttrykk mot navnet på enheten",
+                "leverandor": "regulært uttrykk mot leverandøren, for eksempel \"Beckhoff\"",
+                "protokoll": "\"bacnet\", \"modbus\" eller \"knx\"",
+            },
+        },
+        "regler": [
+            {"id": "rom-kaldt", "aktiv": False, "prio": 2,
+             "tittel": {"no": "{n} romtemperaturer under 19 grader", "en": "{n} room temperatures below 19 degrees"},
+             "hvorfor": {"no": "Under 19 grader i et rom som er i bruk er det kaldt nok til at noen klager.", "en": "Under 19 degrees in a room in use is cold enough for complaints."},
+             "sjekk": ["Er varmen på og ventilen åpen?", "Står det et vindu åpent?"],
+             "naar": {"navn": "(^|[^A-Za-z0-9])RT\\d{2,4}", "type": ["analog-input"], "enhet": "degrees-celsius", "verdi": {"<": 19}}},
+            {"id": "pumpe-i-hand", "aktiv": False, "prio": 2,
+             "tittel": "{n} pumper eller vifter står overstyrt",
+             "hvorfor": "En overstyrt pumpe følger ikke reguleringen, og blir lett glemt etter en servicerunde.",
+             "sjekk": ["Spør hvem som la inn overstyringen", "Slipp den hvis den ikke trengs"],
+             "naar": {"navn": "pump|sirk|vifte|fan", "type": ["binary-output", "binary-value"], "status": ["overridden"]}},
+            {"id": "mange-ute", "aktiv": False, "prio": 3,
+             "tittel": "{enheter} enheter har mange punkter ute av drift",
+             "hvorfor": "Mange punkter ute av drift på samme enhet er som regel rester fra igangkjøring.",
+             "sjekk": ["Er kanalene i bruk?", "Sett dem i drift igjen eller fjern dem"],
+             "naar": {"status": ["out-of-service"]}, "per_enhet": {"minst": 5}},
+            {"id": "beckhoff-alarmer", "aktiv": False, "prio": 2,
+             "tittel": "{n} alarmer på Beckhoff-enheter",
+             "hvorfor": "Alarmer på Beckhoff er ofte driftsfeil som ikke er kvittert.",
+             "sjekk": ["Åpne alarmlista til enheten"],
+             "naar": {"status": ["in-alarm"], "leverandor": "Beckhoff"}, "minst": 3},
+        ],
+    }
+
+
+@app.get("/api/regler")
+def regler_les():
+    try:
+        tekst, finnes = REGLER_FIL.read_text(encoding="utf-8-sig"), True
+    except OSError:
+        tekst, finnes = "", False
+    try:
+        endret = REGLER_FIL.stat().st_mtime
+    except OSError:
+        endret = 0
+    return {"status": "done", "fil": str(REGLER_FIL), "finnes": finnes, "tekst": tekst, "endret": endret}
+
+
+@app.post("/api/regler/mal")
+def regler_lag_mal():
+    """The template, if there is no file yet. A file that is there is never touched."""
+    if REGLER_FIL.exists():
+        return {"status": "done", "fil": str(REGLER_FIL), "laget": False}
+    try:
+        REGLER_FIL.parent.mkdir(parents=True, exist_ok=True)
+        REGLER_FIL.write_text(json.dumps(_regler_mal(), ensure_ascii=False, indent=2), encoding="utf-8")
+    except OSError as e:
+        return {"status": "error", "error": str(e)}
+    return {"status": "done", "fil": str(REGLER_FIL), "laget": True}
+
+
+@app.post("/api/regler/aapne")
+def regler_aapne():
+    """Opens the file in Notepad, after making the template if there is none."""
+    r = regler_lag_mal()
+    if r.get("status") != "done":
+        return r
+    if os.name == "nt":
+        subprocess.Popen(["notepad.exe", str(REGLER_FIL)])
+    return r
 
 
 # ------------------------------------------------------------ support package

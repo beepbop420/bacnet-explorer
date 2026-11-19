@@ -44,7 +44,7 @@
   function skjelett() {
     lag.innerHTML = `<div class="gs-modal sp-modal tr-modal"><div class="gs-head"><span class="gd-tittel">${T('Trafikklogg', 'Traffic log')}</span>
       <button class="gs-close" style="margin-left:auto"><span class="lbl">${T('Lukk', 'Close')}</span> ✕</button></div>
-      <div class="sp-kropp"><div id="trSum" class="tr-sum"></div>
+      <div class="sp-kropp"><div id="trStorm">${window.nabeStorm ? window.nabeStorm.banner() : ''}</div><div id="trSum" class="tr-sum"></div>
         <div class="sp-topp"><span id="trAnt"></span><span class="tr-filter">
           <select id="trEnhet" class="field"></select><select id="trTjeneste" class="field"></select>
           <label class="tr-feil"><input type="checkbox" id="trFeil"> ${T('Bare feil', 'Errors only')}</label></span></div>

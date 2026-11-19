@@ -1,12 +1,14 @@
 /* NABE - limits on watched points, and a word when one is passed, also when the window is not in front.
 
-   A bell on each pinned point sets a lower and an upper limit. The server reads the pinned points in the
-   background whatever the page is doing (see "Se bakover"), compares each reading with its limits and keeps a short list
-   of what happened: passed, still outside after half an hour, back inside. This page asks that list every few seconds and
-   tells you: a message in the window, a desktop notification if the browser allows it, and a short tone if you want one.
-   Two readings in a row outside are needed before it is said, so one stray value is not an event.
+   A bell on each pinned point sets what must hold for it: a lower and an upper limit, and for the points that call for it
+   that it is not on for too long (a pump that runs the whole day, a door left open), that it is not unread for too long,
+   and that it does not change too fast. The server reads the pinned points in the background whatever the page is doing
+   (see "Se bakover"), judges each reading against the rules and keeps a short list of what happened: passed, still wrong
+   after half an hour, back in order. This page asks that list every few seconds and tells you: a message in the window, a
+   desktop notification if the browser allows it, and a short tone if you want one. Two readings in a row are needed before
+   it is said, so one stray value is not an event.
 
-   Nothing is written to the plant. The limits live in this browser and go to the server only so it can watch them. */
+   Nothing is written to the plant. The rules live in this browser and go to the server only so it can watch them. */
 'use strict';
 
 (function grenser() {
@@ -16,18 +18,21 @@
   const hent = (ip, objid) => alle()[nokkel(ip, objid)] || null;
   const lyd = () => { try { return loadPrefs().grenseLyd !== false; } catch { return true; } };
   const tall = (v) => (typeof v === 'number' ? fmtVal(Math.round(v * 100) / 100).t : String(v));
+  const TOM = {lav: null, hoy: null, paa: null, stille: null, fart: null};
+  const harNoe = (g) => !!g && Object.values(g).some((v) => typeof v === 'number');
 
-  function lagreGrense(ip, objid, lav, hoy) {
-    const g = {...alle()};
-    if (lav === null && hoy === null) delete g[nokkel(ip, objid)]; else g[nokkel(ip, objid)] = {lav, hoy};
-    savePrefs({grenser: g});
+  function lagreGrense(ip, objid, g) {
+    const a = {...alle()};
+    if (!harNoe(g)) delete a[nokkel(ip, objid)]; else a[nokkel(ip, objid)] = {...TOM, ...g};
+    savePrefs({grenser: a});
   }
 
-  /* ----------------------------------------------------- what is outside now, from the events */
+  /* ----------------------------------------------------- what is wrong now, from the events */
   let HENDELSER = [], antallGrenser = 0, forste = true;
+  // One rule on one point is one thing: the last word on each decides whether it is still wrong
   const aktive = (ev) => {
     const sist = new Map();
-    for (const e of ev) sist.set(e.address + '|' + e.objid, e);
+    for (const e of ev) sist.set(e.address + '|' + e.objid + '|' + (e.regel || 'grense'), e);
     return [...sist.values()].filter((e) => e.type !== 'tilbake');
   };
 
@@ -39,7 +44,15 @@
   chip.onclick = () => window.aapneGrenser();
   document.querySelector('.statusbar')?.append(chip);
 
+  const minTekst = (m) => (m < 120 ? `${tall(m)} min` : `${tall(Math.round(m / 6) / 10)} ${T('t', 'h')}`);
   function tekst(e) {
+    const regel = e.regel || 'grense', forts = e.type === 'fortsatt' ? T('Fortsatt: ', 'Still: ') : '';
+    if (regel === 'paa') return e.type === 'tilbake' ? T('Av igjen', 'Off again') : forts + T(`På i ${minTekst(e.verdi)} (grensen er ${tall(e.grense)} min)`, `On for ${minTekst(e.verdi)} (the limit is ${tall(e.grense)} min)`);
+    if (regel === 'stille') return e.type === 'tilbake' ? T('Svarer igjen', 'Answering again') : forts + T(`Ikke lest på ${minTekst(e.verdi)} (grensen er ${tall(e.grense)} min)`, `Not read for ${minTekst(e.verdi)} (the limit is ${tall(e.grense)} min)`);
+    if (regel === 'fart') {
+      const opp = e.verdi > 0, u = e.enhet || '';
+      return e.type === 'tilbake' ? T('Roligere igjen', 'Calmer again') : forts + T(`Endrer seg ${tall(Math.abs(e.verdi))} ${u} i minuttet, ${opp ? 'opp' : 'ned'} (grensen er ${tall(e.grense)})`, `Changing ${tall(Math.abs(e.verdi))} ${u} a minute, ${opp ? 'up' : 'down'} (the limit is ${tall(e.grense)})`);
+    }
     const g = e.grense !== null && e.grense !== undefined ? `${tall(e.grense)} ${e.enhet || ''}`.trim() : '';
     const v = `${tall(e.verdi)} ${e.enhet || ''}`.trim();
     if (e.type === 'tilbake') return T(`Tilbake innenfor grensene: ${v}`, `Back inside the limits: ${v}`);
@@ -87,7 +100,7 @@
     blink(navn);
     try {
       if ('Notification' in window && Notification.permission === 'granted') {
-        const n = new Notification(navn, {body: tekst(e), tag: 'nabe-grense:' + e.address + '|' + e.objid, silent: true});
+        const n = new Notification(navn, {body: tekst(e), tag: 'nabe-grense:' + e.address + '|' + e.objid + '|' + (e.regel || 'grense'), silent: true});
         n.onclick = () => { window.focus(); n.close(); };
       }
     } catch { /* the window message is there anyway */ }
@@ -129,15 +142,23 @@
   document.addEventListener('visibilitychange', () => { if (!document.hidden) sjekk(); });
 
   /* ------------------------------------------------------------------- bells */
+  function oppsummering(g) {
+    const d = [];
+    if (g.lav != null || g.hoy != null) d.push(T(`${g.lav == null ? '–' : g.lav} til ${g.hoy == null ? '–' : g.hoy}`, `${g.lav == null ? '–' : g.lav} to ${g.hoy == null ? '–' : g.hoy}`));
+    if (g.paa) d.push(T(`på over ${g.paa} min`, `on over ${g.paa} min`));
+    if (g.stille) d.push(T(`ikke lest på ${g.stille} min`, `unread for ${g.stille} min`));
+    if (g.fart) d.push(T(`endring over ${g.fart} i minuttet`, `change over ${g.fart} a minute`));
+    return d.join(' · ');
+  }
   function markerBjeller(ak = aktive(HENDELSER)) {
     const ute = new Set(ak.map((e) => nokkel(e.address, e.objid)));
     document.querySelectorAll('#watchList .watch-row').forEach((rad, i) => {
       const w = S.watch[i], b = rad.querySelector('.gr-bjelle');
       if (!w || !b) return;
       const g = hent(w.ip, w.objid);
-      b.classList.toggle('paa', !!g);
+      b.classList.toggle('paa', harNoe(g));
       b.classList.toggle('ute', ute.has(nokkel(w.ip, w.objid)));
-      b.title = g ? T(`Grenser: ${g.lav === null ? '–' : g.lav} til ${g.hoy === null ? '–' : g.hoy}`, `Limits: ${g.lav === null ? '–' : g.lav} to ${g.hoy === null ? '–' : g.hoy}`) : T('Sett grenser og få varsel', 'Set limits and get an alert');
+      b.title = harNoe(g) ? T(`Varsler: ${oppsummering(g)}`, `Alerts: ${oppsummering(g)}`) : T('Sett grenser og få varsel', 'Set limits and get an alert');
     });
   }
   const BJELLE = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2.2c-2.3 0-3.7 1.7-3.7 4v2.3L2.8 11h10.4l-1.5-2.5V6.2c0-2.3-1.4-4-3.7-4Z"/><path d="M6.6 12.6a1.5 1.5 0 0 0 2.8 0"/></svg>';
@@ -164,13 +185,24 @@
   document.body.append(pop);
   let aapenFor = null;
   const lukkPop = () => { pop.hidden = true; aapenFor = null; };
+  /* What kind of point it is decides what can be asked of it: a number has limits and a pace, a switch has a time it may stay on */
+  function slag(w) {
+    const p = (S.cache[w.ip] || []).find((q) => q.objid === w.objid);
+    if (!p) return {tall: true, binar: true};
+    const binar = /^binary-/.test(p.type || '');
+    return {tall: !binar && !/^multi-state/.test(p.type || ''), binar};
+  }
+  const felt = (id, etikett, verdi, enhet) => `<label><span>${etikett}</span><input type="number" step="any" min="0" id="${id}" value="${verdi == null ? '' : verdi}" placeholder="${esc(T('ingen', 'none'))}"><i class="gr-enhet">${esc(enhet || '')}</i></label>`;
   function aapnePop(knapp, w) {
-    const g = hent(w.ip, w.objid) || {lav: null, hoy: null};
+    const g = {...TOM, ...(hent(w.ip, w.objid) || {})}, sl = slag(w);
     const blokkert = 'Notification' in window && Notification.permission === 'denied';
+    const mer = [sl.binar ? felt('grPaa', T('På lenger enn', 'On for more than'), g.paa, 'min') : '', felt('grStille', T('Ikke lest på', 'Unread for'), g.stille, 'min'),
+      sl.tall ? felt('grFart', T('Endrer seg mer enn', 'Changes more than'), g.fart, (w.unit || '') + T('/min', '/min')) : ''].filter(Boolean).join('');
     pop.innerHTML = `<div class="gr-tittel">${esc(utenEnhet(w.name))}</div>
-      <div class="gr-felt"><label>${T('Under', 'Below')}<input type="number" step="any" id="grLav" value="${g.lav === null ? '' : g.lav}" placeholder="${esc(T('ingen', 'none'))}"></label>
-        <label>${T('Over', 'Above')}<input type="number" step="any" id="grHoy" value="${g.hoy === null ? '' : g.hoy}" placeholder="${esc(T('ingen', 'none'))}"></label>
-        <span class="gr-enhet">${esc(w.unit || '')}</span></div>
+      ${sl.tall ? `<div class="gr-felt"><label>${T('Under', 'Below')}<input type="number" step="any" id="grLav" value="${g.lav == null ? '' : g.lav}" placeholder="${esc(T('ingen', 'none'))}"></label>
+        <label>${T('Over', 'Above')}<input type="number" step="any" id="grHoy" value="${g.hoy == null ? '' : g.hoy}" placeholder="${esc(T('ingen', 'none'))}"></label>
+        <span class="gr-enhet">${esc(w.unit || '')}</span></div>` : ''}
+      <div class="gr-mer"><div class="gr-mer-h">${T('Flere varsler', 'More alerts')}</div>${mer}</div>
       <label class="gr-lyd"><input type="checkbox" id="grLyd" ${lyd() ? 'checked' : ''}> ${T('Kort lyd ved varsel', 'A short tone on an alert')}</label>
       <div class="sp-meta">${T('Du får beskjed i vinduet, og som skrivebordsvarsel hvis nettleseren tillater det, også når vinduet ikke er foran. NABE må være åpen.', 'You are told in the window, and as a desktop notification if the browser allows it, also when the window is not in front. NABE has to be open.')}
         ${blokkert ? ' ' + T('Skrivebordsvarsel er blokkert i nettleseren.', 'Desktop notifications are blocked in the browser.') : ''}</div>
@@ -179,27 +211,29 @@
     pop.hidden = false;
     const r = knapp.getBoundingClientRect(), b = pop.getBoundingClientRect();
     pop.style.left = Math.max(8, Math.min(window.innerWidth - b.width - 8, r.right - b.width)) + 'px';
-    pop.style.top = (r.bottom + 6 + b.height > window.innerHeight ? Math.max(8, r.top - b.height - 6) : r.bottom + 6) + 'px';
+    const topp = r.bottom + 6 + b.height > window.innerHeight ? r.top - b.height - 6 : r.bottom + 6;
+    pop.style.top = Math.max(8, Math.min(topp, window.innerHeight - b.height - 8)) + 'px';
     aapenFor = w;
-    $('grLav').focus();
+    (sl.tall ? $('grLav') : $('grPaa') || $('grStille')).focus();
   }
   async function lagrePop(fjern) {
     const w = aapenFor;
     if (!w) return;
-    const les = (id) => { const v = $(id).value.trim().replace(',', '.'); return v === '' || !isFinite(Number(v)) ? null : Number(v); };
-    const lav = fjern ? null : les('grLav'), hoy = fjern ? null : les('grHoy');
-    if (lav !== null && hoy !== null && lav >= hoy) { toast(T('Nedre grense må være lavere enn øvre.', 'The lower limit has to be below the upper.'), true); return; }
+    const les = (id) => { const el = $(id); if (!el) return null; const v = el.value.trim().replace(',', '.'); return v === '' || !isFinite(Number(v)) ? null : Number(v); };
+    const g = fjern ? {...TOM} : {lav: les('grLav'), hoy: les('grHoy'), paa: les('grPaa'), stille: les('grStille'), fart: les('grFart')};
+    if (g.lav !== null && g.hoy !== null && g.lav >= g.hoy) { toast(T('Nedre grense må være lavere enn øvre.', 'The lower limit has to be below the upper.'), true); return; }
+    for (const k of ['paa', 'stille', 'fart']) if (g[k] !== null && g[k] <= 0) { toast(T('Tidene og farten må være større enn null.', 'The times and the pace have to be above zero.'), true); return; }
     savePrefs({grenseLyd: $('grLyd').checked});
-    lagreGrense(w.ip, w.objid, lav, hoy);
+    lagreGrense(w.ip, w.objid, g);
     // A tap on the button is the moment a browser lets us ask about notifications and start a sound
-    if ((lav !== null || hoy !== null)) {
+    if (harNoe(g)) {
       try { if ('Notification' in window && Notification.permission === 'default') Notification.requestPermission(); } catch { /* none */ }
       if ($('grLyd').checked) { try { ctx = ctx || new (window.AudioContext || window.webkitAudioContext)(); ctx.resume(); } catch { /* none */ } }
     }
     lukkPop();
     markerBjeller();
     if (window.nabeVakt && window.nabeVakt.send) await window.nabeVakt.send();
-    toast(lav === null && hoy === null ? T('Grensene er fjernet', 'The limits are removed') : T('Grensene er satt. NABE følger punktet i bakgrunnen.', 'The limits are set. NABE follows the point in the background.'));
+    toast(!harNoe(g) ? T('Varslene er fjernet', 'The alerts are removed') : T('Varslene er satt. NABE følger punktet i bakgrunnen.', 'The alerts are set. NABE follows the point in the background.'));
     sjekk();
   }
   pop.addEventListener('click', (e) => {
@@ -228,11 +262,11 @@
   const kl = (t) => new Date(t * 1000).toLocaleTimeString(SPRAAK === 'en' ? 'en-GB' : 'no', {hour: '2-digit', minute: '2-digit'});
   function tegn() {
     const ev = HENDELSER.slice().reverse().slice(0, 60);
-    const ute = new Set(aktive(HENDELSER).map((e) => e.address + '|' + e.objid));
+    const ute = new Set(aktive(HENDELSER).map((e) => e.address + '|' + e.objid + '|' + (e.regel || 'grense')));
     lag.innerHTML = `<div class="gs-modal sp-modal"><div class="gs-head"><span class="gd-tittel">${T('Grensevarsler', 'Limit alerts')}</span>
       <button class="gs-close" style="margin-left:auto"><span class="lbl">${T('Lukk', 'Close')}</span> ✕</button></div>
       <div class="sp-kropp"><div class="sp-rull"><table class="sp-tab"><tbody>${ev.length ? ev.map((e) => `<tr data-ip="${esc(e.address)}" data-o="${esc(e.objid)}">
-        <td><div class="sp-navn">${esc(utenEnhet(e.navn))}${e.type !== 'tilbake' && ute.has(e.address + '|' + e.objid) ? ` <span class="ah-m naa">${T('ute nå', 'outside now')}</span>` : ''}</div>
+        <td><div class="sp-navn">${esc(utenEnhet(e.navn))}${e.type !== 'tilbake' && ute.has(e.address + '|' + e.objid + '|' + (e.regel || 'grense')) ? ` <span class="ah-m naa">${T('ute nå', 'outside now')}</span>` : ''}</div>
         <div class="sp-meta">${esc(tekst(e))}</div></td><td class="t">${esc(kl(e.t))}</td></tr>`).join('')
         : `<tr><td class="sp-tom">${T('Ingen varsler ennå. Sett grenser med klokka på et festet punkt.', 'No alerts yet. Set limits with the bell on a pinned point.')}</td></tr>`}</tbody></table></div></div></div>`;
   }
@@ -244,5 +278,5 @@
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !lag.hidden) { lag.hidden = true; e.stopPropagation(); } }, true);
   window.aapneGrenser = async () => { await sjekk(); tegn(); lag.hidden = false; };
 
-  window.nabeGrenser = {hent, tekst, aktive, lagre: lagreGrense, settInn, tilstand: () => ({hendelser: HENDELSER, sistId})};
+  window.nabeGrenser = {hent, tekst, aktive, lagre: lagreGrense, settInn, oppsummering, tilstand: () => ({hendelser: HENDELSER, sistId})};
 })();

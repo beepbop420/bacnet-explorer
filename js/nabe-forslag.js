@@ -11,6 +11,8 @@
   const MAKS_RADER = 6;
   const navnPaa = (d) => (d && (d.object_name || String(d.device_instance ?? ''))) || '';
   const vertAdr = (a) => String(a || '').replace(/^(mb|mr|ms|kx):/, '');
+  const utenEnhet = (n) => String(n).replace(/ \([^)]*\)$/, '');
+  const minTid = (s) => (s < 120 ? `${Math.round(s)} s` : s < 7200 ? `${Math.round(s / 60)} min` : `${(s / 3600).toFixed(1).replace('.', ',')} t`);
 
   /* data: {devices, cache, failed, varsler, avvik}
      varsler is what siteWarnings() gives, avvik what settpunktAvvik() gives. */
@@ -196,6 +198,41 @@
         ? [rad(r.nett.find((n) => n.forste) ? r.nett.find((n) => n.forste).forste : '', T(`Ruter ${r.ruter}: ${r.total} enheter bak seg`, `Router ${r.ruter}: ${r.total} devices behind it`))] : nettRad(r))
         .concat(utenTung.map((n) => rad(n.forste || '', T(`Nett ${n.nett}: ${n.mstp} MS/TP-enheter, ruteren er ikke funnet`, `Network ${n.nett}: ${n.mstp} MS/TP devices, the router was not found`))))});
 
+    // An actuator at the end of its range with nothing following: from the pinned points, or a recording
+    const vk = data.virkning || [];
+    legg({id: 'virkning', prio: 2,
+      tittel: T(`${vk.length} pådrag uten effekt`, `${vk.length} ${vk.length === 1 ? 'actuator' : 'actuators'} with no effect`),
+      hvorfor: T('Pådraget står på 100 % og målingen følger ikke etter. Da gjør reguleringen alt den kan, og feilen ligger utenfor den.', 'The output stands at 100 % and the measurement does not follow. The control is doing all it can, and the fault lies outside it.'),
+      sjekk: [T('Ventil: kjenn om røret blir varmt, og se at motoren faktisk beveger seg.', 'Valve: feel whether the pipe gets warm, and see that the actuator really moves.'),
+              T('Sjekk pumpe og tilførsel (temperatur og trykk) før du går til føleren.', 'Check the pump and the supply (temperature and pressure) before going to the sensor.'),
+              T('Sitter føleren i et rom pådraget ikke virker på?', 'Does the sensor sit in a room the output does not act on?')],
+      rader: vk.map((x) => rad(x.address || '', `${utenEnhet(x.maling)} ${String(x.verdi).replace('.', ',')}${x.settpunkt != null ? ' ' + T('mot', 'against') + ' ' + String(x.settpunkt).replace('.', ',') : ''} · ${T('pådrag fullt i', 'output full for')} ${minTid(x.siden_s)}`, x.objid))});
+    const vt = data.virkningTips || [];
+    legg({id: 'virkning-tips', prio: 3,
+      tittel: T(`${vt.length} romregulatorer kan sjekkes for pådrag uten effekt`, `${vt.length} room controllers can be checked for an actuator with no effect`),
+      hvorfor: T('NABE ser om ventilen står fullt uten at temperaturen følger. Det trenger måling og ventil festet i overvåkingslista, og settpunktet hvis det finnes.', 'NABE sees whether the valve stands full without the temperature following. It needs the measurement and the valve pinned in the watch list, and the setpoint if there is one.'),
+      sjekk: [T('Fest måling og ventil med ☆. Etter et kvarter sier NABE fra hvis det ikke virker.', 'Pin the measurement and the valve with ☆. After a quarter of an hour NABE says if it does not work.')],
+      rader: vt.map((x) => rad(x.ip, x.navn, x.objid))});
+
+    // A storm: what comes in and what NABE itself sends
+    const sm = data.storm || {aktiv: [], ferdige: []};
+    const smRader = sm.aktiv.length ? sm.aktiv : sm.ferdige;
+    legg({id: 'storm', prio: sm.aktiv.length ? 1 : 3,
+      tittel: sm.aktiv.length ? T(`Storm på nettet nå (${sm.aktiv.length})`, `Network storm now (${sm.aktiv.length})`) : T(`Storm på nettet siste døgn (${sm.ferdige.length})`, `Network storm in the last day (${sm.ferdige.length})`),
+      hvorfor: T('Mange Who-Is, I-Am eller COV-varsler i sekundet tar kapasitet fra alt annet på nettet og gjør alle enhetene tregere.', 'Many Who-Is, I-Am or COV notifications a second take capacity from everything else on the network and slow every device down.'),
+      sjekk: [T('Se hvem som sender mest, og stans den først. Ofte er det en enhet som står fast i en løkke.', 'See who sends most, and stop that one first. Often it is a device stuck in a loop.'),
+              T('Trafikkloggen viser hva NABE selv sender.', 'The traffic log shows what NABE itself sends.')],
+      rader: smRader.map((e) => rad(e.topp && e.topp[0] ? e.topp[0][0] : '', window.nabeStorm ? window.nabeStorm.tekst(e) : e.type))});
+
+    // The user's own rules, and what is wrong with the file
+    for (const p of data.egne || []) legg(p);
+    const rf = data.regelfeil || [];
+    legg({id: 'regelfeil', prio: 2,
+      tittel: T(`${rf.length} feil i regelfila`, `${rf.length} ${rf.length === 1 ? 'mistake' : 'mistakes'} in the rules file`),
+      hvorfor: T('Reglene med feil er ikke tatt med. De andre gjelder.', 'The rules with mistakes are left out. The others apply.'),
+      sjekk: [T('Åpne fila, rett det som står under og trykk «Last på nytt» nederst.', 'Open the file, fix what is listed below and press “Reload” at the bottom.')],
+      rader: rf.map((m) => ({ip: '', navn: '', tekst: m, objid: '', lang: true}))});
+
     // Equal MAC on different addresses, and devices whose ID changed between two scans
     const mac = data.sammeMac || [];
     legg({id: 'mac', prio: 3,
@@ -227,15 +264,17 @@
 
   const PUMPE = /pump|kompress|compress|sirkul|vifte|\bfan\b|kjel|boiler|motor/i;
   const verdiTekst = (p) => `${fmtVal(p.value).t}${p.unit_symbol ? ' ' + p.unit_symbol : ''}`;
-  async function vaktSykluser() {
-    try {
-      const c = new AbortController(), t = setTimeout(() => c.abort(), 2500);
-      const d = await (await fetch('/api/vakt', {cache: 'no-store', signal: c.signal})).json();
-      clearTimeout(t);
-      return d && d.status === 'done' ? d.sykluser || [] : [];
-    } catch { return []; }
+  /* What the server has counted for the pinned points, the rules file and the storm state: asked together, and
+     none of them is allowed to hold the list back for more than a moment. */
+  async function hentEkstra() {
+    const frist = (p) => Promise.race([p, new Promise((ok) => setTimeout(() => ok(null), 2500))]);
+    const vakt = async () => { try { const d = await (await fetch('/api/vakt', {cache: 'no-store'})).json(); return d && d.status === 'done' ? d : null; } catch { return null; } };
+    const [v] = await Promise.all([frist(vakt()),
+      frist(window.nabeRegler ? window.nabeRegler.last() : null), frist(window.nabeStorm ? window.nabeStorm.hent() : null)]);
+    return {sykluser: (v && v.sykluser) || [], virkning: (v && v.virkning) || []};
   }
-  function data(sykluser = []) {
+  function data(ekstra = {}) {
+    const sykluser = ekstra.sykluser || [], virkning = ekstra.virkning || [];
     let varsler = [], avvik = [];
     try { varsler = siteWarnings(); } catch { /* none */ }
     try { avvik = settpunktAvvik(S.cache); } catch { /* none */ }
@@ -247,13 +286,29 @@
         else if (/^binary-(output|value)$/.test(p.type || '') && PUMPE.test(`${p.name || ''} ${p.description || ''}`) && !fulgte.has(d.address + '|' + p.objid)) tips.push({ip: d.address, objid: p.objid, navn: p.name || p.objid});
       }
     }
+    // Room controllers with a valve behind them that nobody follows yet
+    const virkningTips = [];
+    if (!virkning.length && window.nabePendling) {
+      for (const d of S.devices || []) {
+        for (const p of S.cache[d.address] || []) {
+          if (virkningTips.length >= 25) break;
+          if (p.type !== 'analog-input' || !/(?:^|[^A-Za-z0-9])RT\d{2,4}(?!\d)/i.test(p.name || '') || fulgte.has(d.address + '|' + p.objid)) continue;
+          const par = window.nabePendling.partnere([{address: d.address, objid: p.objid, navn: p.name, enhet: ''}]);
+          if (par.some((q) => /(?:^|[^A-Za-z0-9])SB\d{2,4}(?!\d)/i.test(q.navn || '') && !fulgte.has(q.address + '|' + q.objid))) virkningTips.push({ip: d.address, objid: p.objid, navn: p.name || p.objid});
+        }
+      }
+    }
+    const R = window.nabeRegler ? window.nabeRegler.siste() : null;
+    const egne = R && R.regler.length ? window.nabeRegler.evaluer(R.regler, S.devices, S.cache, (d) => { try { return gruppeFor(d).label; } catch { return ''; } }) : [];
     const flate = [];
     if (S.activeDev && typeof flatVerdi === 'function') {
       for (const p of S.points || []) if (flatVerdi(p)) flate.push({ip: S.activeDev.address, objid: p.objid, navn: p.name || p.objid, minutter: Math.max(1, Math.round((Date.now() - p._flatEndret) / 60000))});
     }
     const N = window.nabeNett;
     const rutere = Array.isArray(S.rutere) ? S.rutere : [];
-    return {devices: S.devices, cache: S.cache, failed: PRE.failed, varsler, avvik, urimelig, flate, sykluser,
+    return {devices: S.devices, cache: S.cache, failed: PRE.failed, varsler, avvik, urimelig, flate, sykluser, virkning, virkningTips, egne,
+      regelfeil: R ? R.feil : [],
+      storm: window.nabeStorm ? {aktiv: window.nabeStorm.siste().aktiv || [], ferdige: window.nabeStorm.ferdige()} : {aktiv: [], ferdige: []},
       tips: sykluser.length ? [] : tips.slice(0, 30),
       alarmhist: window.nabeAlarmhist ? window.nabeAlarmhist.liste() : [],
       ruter: N ? N.ruterBelastning(rutere, S.devices) : {rutere: [], utenRuter: []},
@@ -264,19 +319,21 @@
   function postHtml(p) {
     const vis = p.rader.slice(0, MAKS_RADER);
     const rest = p.rader.length - vis.length;
-    return `<section class="fo-post p${p.prio}">
+    // The user's own rules and what is wrong with their file are written by them (or already in the right language): the language sweep leaves them alone
+    return `<section class="fo-post p${p.prio}${p.egen || p.id === 'regelfeil' ? ' egen' : ''}">
       <div class="fo-tittel"><span class="fo-prikk" aria-hidden="true"></span>${esc(p.tittel)}</div>
       <div class="fo-hvorfor">${esc(p.hvorfor)}</div>
       <ul class="fo-sjekk">${p.sjekk.map((s) => `<li>${esc(s)}</li>`).join('')}</ul>
-      <div class="fo-rader">${vis.map((r) => `<button type="button" class="fo-rad" data-ip="${esc(r.ip)}" data-o="${esc(r.objid)}">
+      <div class="fo-rader">${vis.map((r) => `<button type="button" class="fo-rad${r.lang ? ' lang' : ''}" data-ip="${esc(r.ip)}" data-o="${esc(r.objid)}">
         <b>${esc(r.navn)}</b>${r.tekst ? `<span>${esc(r.tekst)}</span>` : ''}</button>`).join('')}
         ${rest > 0 ? `<span class="fo-flere">${T(`og ${rest} til`, `and ${rest} more`)}</span>` : ''}</div>
     </section>`;
   }
 
-  let SISTE = null;
-  function tegn(sykluser) {
-    const r = SISTE = bygForslag(data(sykluser));
+  let SISTE = null, EKSTRA = {};
+  function tegn(ekstra) {
+    EKSTRA = ekstra || EKSTRA;
+    const r = SISTE = bygForslag(data(EKSTRA));
     let kropp;
     if (!r.totalt) kropp = `<div class="fo-tom">${T('Skann et anlegg først. Forslagene bygger på det som er lest.', 'Scan a plant first. The suggestions are built on what has been read.')}</div>`;
     else if (!r.liste.length) kropp = `<div class="fo-tom">${T('Ingenting å foreslå nå. Alt som er lest ser rolig ut.', 'Nothing to suggest now. Everything that has been read looks calm.')}</div>`;
@@ -288,9 +345,13 @@
       }).join('');
     }
     const grunnlag = r.totalt ? `<div class="fo-grunnlag">${T(`Bygger på ${r.lest} av ${r.totalt} enheter som er lest.`, `Based on ${r.lest} of ${r.totalt} devices read.`)}</div>` : '';
+    const RG = window.nabeRegler ? window.nabeRegler.siste() : null;
+    const fot = window.nabeRegler ? `<div class="fo-fot"><span>${RG && RG.finnes ? T(`Egne regler: ${RG.regler.length} av ${RG.antall} i bruk`, `Own rules: ${RG.regler.length} of ${RG.antall} in use`) : T('Egne regler: ingen fil ennå', 'Own rules: no file yet')}</span>
+      <span class="fo-fot-k"><button type="button" class="btn" data-fo="regler-aapne" title="${esc(T('Åpner fila i Notisblokk. Finnes den ikke, lages en mal med eksempler.', 'Opens the file in Notepad. If there is none, a template with examples is made.'))}">${T('Åpne regelfila', 'Open the rules file')}</button>
+      <button type="button" class="btn" data-fo="regler-last">${T('Last på nytt', 'Reload')}</button></span></div>` : '';
     lag.innerHTML = `<div class="gs-modal fo-modal"><div class="gs-head"><span class="gd-tittel">${T('Forslag til service', 'Service suggestions')}</span>
       <button class="gs-close" style="margin-left:auto"><span class="lbl">${T('Lukk', 'Close')}</span> ✕</button></div>
-      <div class="fo-kropp">${grunnlag}${kropp}</div></div>`;
+      <div class="fo-kropp">${grunnlag}${kropp}</div>${fot}</div>`;
   }
 
   async function gaaTil(ip, objid) {
@@ -305,25 +366,36 @@
     }
   }
 
-  lag.addEventListener('click', (e) => {
+  lag.addEventListener('click', async (e) => {
     if (e.target === lag || e.target.closest('.gs-close')) { lag.hidden = true; return; }
+    const k = e.target.closest('[data-fo]');
+    if (k && window.nabeRegler) {
+      if (k.dataset.fo === 'regler-aapne') { await window.nabeRegler.aapne(); return; }
+      if (k.dataset.fo === 'regler-last') {
+        const r = await window.nabeRegler.last();
+        toast(r.feil.length ? T(`${r.feil.length} feil i regelfila, se forslagene`, `${r.feil.length} mistakes in the rules file, see the suggestions`) : T(`${r.regler.length} regler i bruk`, `${r.regler.length} rules in use`), r.feil.length > 0);
+        tegn();
+        return;
+      }
+    }
     const b = e.target.closest('.fo-rad');
-    if (b) { lag.hidden = true; gaaTil(b.dataset.ip, b.dataset.o); }
+    // A row with no address (a message, not a device) does nothing: the list stays open
+    if (b && b.dataset.ip) { lag.hidden = true; gaaTil(b.dataset.ip, b.dataset.o); }
   });
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape' && !lag.hidden) { lag.hidden = true; e.stopPropagation(); }
   }, true);
 
   window.aapneForslag = async () => {
-    tegn([]);
+    tegn({});
     lag.hidden = false;
-    // What the server has counted for the pinned points comes a moment later and fills in
-    const syk = await vaktSykluser();
-    if (syk.length && !lag.hidden) tegn(syk);
+    // What the server has counted, the rules file and the storm state come a moment later and fill in
+    const ekstra = await hentEkstra();
+    if (!lag.hidden) tegn(ekstra);
   };
   /* The list as plain text, for the support package and for pasting into a message. */
   window.forslagTekst = async () => {
-    const r = bygForslag(data(await vaktSykluser()));
+    const r = bygForslag(data(await hentEkstra()));
     const linjer = [`${asNavn() || asNokkel()} · ${new Date().toLocaleDateString(T('no', 'en-GB'))}`, T(`Bygger på ${r.lest} av ${r.totalt} enheter som er lest.`, `Based on ${r.lest} of ${r.totalt} devices read.`), ''];
     for (const p of r.liste) {
       linjer.push(`[${p.prio}] ${p.tittel}`, '  ' + p.hvorfor, ...p.sjekk.map((s) => '  - ' + s), ...p.rader.slice(0, 20).map((x) => `  > ${x.navn}${x.tekst ? ' · ' + x.tekst : ''}`), '');

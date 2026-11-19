@@ -65,11 +65,14 @@
         <div class="pe-dom">${esc(PAR_TEKST[p.dom] ? PAR_TEKST[p.dom]() : p.dom)}</div>${info ? `<div class="sp-meta">${esc(info)}</div>` : ''}</div>`;
     }).join('');
     const funnet = r.serier.filter(x => x.dom !== 'nei');
+    // Starting and stopping too often, and an actuator that stands full with nothing to show for it
+    const syk = (r.sykluser || []).length ? `<div class="pe-rad"><div><b>${T('Starter ofte', 'Starts often')}</b></div>${r.sykluser.map(x => `<div class="sp-meta">${esc(utenEnhet(x.navn))} · ${esc(String(x.per_time).replace('.', ','))} ${T('starter i timen', 'starts an hour')} (${x.starter} ${T('på', 'in')} ${esc(periodeTekst(x.vindu_s))})${x.snitt_pa_s ? ` · ${T('i snitt', 'on')} ${esc(periodeTekst(x.snitt_pa_s))} ${T('på om gangen', 'at a time on average')}` : ''}</div>`).join('')}</div>` : '';
+    const virk = (r.virkning || []).length ? `<div class="pe-rad ingen"><div><b>${T('Pådrag uten effekt', 'Actuator with no effect')}</b></div>${r.virkning.map(x => `<div class="sp-meta">${esc(utenEnhet(x.maling))} ${esc(String(x.verdi).replace('.', ','))}${x.settpunkt != null ? ' ' + T('mot settpunkt', 'against setpoint') + ' ' + esc(String(x.settpunkt).replace('.', ',')) : ''} · ${esc(utenEnhet(x.padrag))} ${T('står fullt i', 'is full for')} ${esc(periodeTekst(x.siden_s))}</div>`).join('')}</div>` : '';
     const tab = funnet.length ? `<table class="sp-tab"><thead><tr><th>${T('Punkt', 'Point')}</th><th class="t">${T('Poeng', 'Score')}</th><th class="t">${T('Periode', 'Period')}</th><th class="t">${T('Amplitude', 'Amplitude')}</th></tr></thead><tbody>${
       funnet.map(x => `<tr><td>${esc(utenEnhet(x.navn))}${x.dom === 'mulig' ? ` <span class="sp-meta">${T('mulig', 'possible')}</span>` : ''}${x.siden_t ? ` <span class="sp-meta">${T('siden', 'since')} ${klokke(x.siden_t)}</span>` : ''}</td><td class="t">${x.score}</td>
         <td class="t">${esc(periodeTekst(x.periode_s))}</td><td class="t">${esc(String(x.amplitude).replace('.', ','))} ${esc(x.enhet)}</td></tr>`).join('')}</tbody></table>`
       : `<p class="op-tekst">${T('Ingen pendling funnet i dette opptaket.', 'No hunting found in this recording.')}</p>`;
-    return `${par}${tab}<div class="op-knapper"><button type="button" class="btn" data-op="tilbake">${T('Tilbake', 'Back')}</button></div>`;
+    return `${par}${syk}${virk}${tab}<div class="op-knapper"><button type="button" class="btn" data-op="tilbake">${T('Tilbake', 'Back')}</button></div>`;
   }
   const tid = (s) => (s >= 3600 ? `${Math.floor(s / 3600)} t ${Math.floor(s % 3600 / 60)} min` : `${Math.floor(s / 60)} min`);
 
