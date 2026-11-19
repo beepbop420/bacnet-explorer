@@ -33,6 +33,7 @@
     timer = setTimeout(async () => {
       if (!D) return;
       try { await api('/api/arbeidsliste', {nokkel: D.nokkel, data: D}); } catch { /* the choice still holds in this window */ }
+      if (window.nabeStatus) window.nabeStatus.send();
     }, SKRIVE_MS);
   }
 

@@ -19,8 +19,12 @@
   function bygForslag(data) {
     const devices = data.devices || [], cache = data.cache || {}, failed = data.failed || new Set();
     const ut = [];
+    if (window.nabeLaer) window.nabeLaer.nullstillTreff();
     const dev = (ip) => devices.find((d) => d.address === ip);
-    const rad = (ip, tekst, objid) => ({ip, navn: navnPaa(dev(ip)) || ip, tekst: tekst || '', objid: objid || ''});
+    // What the technician has said is not a problem on this plant (see nabe-laer.js): left out before anything is counted
+    const L = window.nabeLaer ? window.nabeLaer.skjult : () => false;
+    const P = (p) => ({o: p.objid, n: p.name || p.objid});
+    const rad = (ip, tekst, objid, pts) => ({ip, navn: navnPaa(dev(ip)) || ip, tekst: tekst || '', objid: objid || '', pts: pts || []});
     const legg = (p) => { if (p.rader.length || p.alltid) ut.push(p); };
 
     // What the plant itself already warns about: same device ID twice, silent devices, wrong clocks
@@ -51,13 +55,14 @@
     for (const d of devices) {
       const pts = cache[d.address];
       if (!pts || !pts.length) continue;
-      const t = {d, n: pts.length, feil: [], over: [], ute: [], alarm: []};
+      // feil is every faulty point (a device with most of them faulty is a device problem whatever was set aside), feilV the ones still to show
+      const t = {d, n: pts.length, feil: [], feilV: [], over: [], ute: [], alarm: []};
       for (const p of pts) {
         const s = p.status || [];
-        if (s.includes('fault')) t.feil.push(p);
-        if (s.includes('overridden')) t.over.push(p);
-        if (s.includes('out-of-service')) t.ute.push(p);
-        if (s.includes('in-alarm')) t.alarm.push(p);
+        if (s.includes('fault')) { t.feil.push(p); if (!L('feil-punkt', d.address, p.objid, p.name)) t.feilV.push(p); }
+        if (s.includes('overridden') && !L('overstyrt', d.address, p.objid, p.name)) t.over.push(p);
+        if (s.includes('out-of-service') && !L('ute', d.address, p.objid, p.name)) t.ute.push(p);
+        if (s.includes('in-alarm') && !L('alarm', d.address, p.objid, p.name)) t.alarm.push(p);
       }
       per.push(t);
     }
@@ -73,13 +78,13 @@
               T('Har flere enheter samme leverandør i listen: sjekk det de har felles før du går til hver enkelt.', 'If several devices share a vendor in the list: check what they have in common before going to each one.')],
       rader: hel.map((t) => rad(t.d.address, T(`${t.feil.length} av ${t.n} med feil`, `${t.feil.length} of ${t.n} faulty`)))});
 
-    const enkelt = sorter('feil').filter((t) => !hel.includes(t));
-    const nFeil = enkelt.reduce((n, t) => n + t.feil.length, 0);
+    const enkelt = sorter('feilV').filter((t) => !hel.includes(t));
+    const nFeil = enkelt.reduce((n, t) => n + t.feilV.length, 0);
     legg({id: 'feil-punkt', prio: 2,
       tittel: T(`${nFeil} ${nFeil === 1 ? "punkt" : "punkter"} med feil`, `${nFeil} faulty ${nFeil === 1 ? 'point' : 'points'}`),
       hvorfor: T('Enkeltpunkter med feil er som regel følere: ledningsbrudd, kortslutning eller verdi utenfor området.', 'Single faulty points are usually sensors: a broken wire, a short or a value out of range.'),
       sjekk: [T('Mål ved inngangen på regulatoren før du bytter føler. Åpen krets og kortslutning gir ulikt utslag.', 'Measure at the controller input before replacing the sensor. An open circuit and a short give different readings.')],
-      rader: enkelt.map((t) => rad(t.d.address, T(`${t.feil.length} med feil, for eksempel ${eks(t, 'feil')}`, `${t.feil.length} faulty, for example ${eks(t, 'feil')}`), t.feil[0].objid))});
+      rader: enkelt.map((t) => rad(t.d.address, T(`${t.feilV.length} med feil, for eksempel ${eks(t, 'feilV')}`, `${t.feilV.length} faulty, for example ${eks(t, 'feilV')}`), t.feilV[0].objid, t.feilV.map(P)))});
 
     const al = sorter('alarm');
     const nAl = al.reduce((n, t) => n + t.alarm.length, 0);
@@ -87,25 +92,32 @@
       tittel: T(`${nAl} ${nAl === 1 ? "punkt" : "punkter"} i alarm`, `${nAl} ${nAl === 1 ? 'point' : 'points'} in alarm`),
       hvorfor: T('Start med dem som ikke hører til en feil du allerede kjenner.', 'Start with the ones that do not belong to a fault you already know.'),
       sjekk: [T('Åpne enhetens alarmliste for tidspunkt og årsak. En alarm som står igjen er ofte kvittert, men ikke rettet.', 'Open the device’s alarm list for time and cause. An alarm that stays is often acknowledged but not fixed.')],
-      rader: al.map((t) => rad(t.d.address, T(`${t.alarm.length} i alarm, for eksempel ${eks(t, 'alarm')}`, `${t.alarm.length} in alarm, for example ${eks(t, 'alarm')}`), t.alarm[0].objid))});
+      rader: al.map((t) => rad(t.d.address, T(`${t.alarm.length} i alarm, for eksempel ${eks(t, 'alarm')}`, `${t.alarm.length} in alarm, for example ${eks(t, 'alarm')}`), t.alarm[0].objid, t.alarm.map(P)))});
 
     // A measurement far from its setpoint: the numbers say what is missing, the list says where to look
-    const avvik = (data.avvik || []).filter((a) => a.rel >= 0.1).sort((a, b) => b.rel - a.rel);
+    const avvik = (data.avvik || []).filter((a) => a.rel >= 0.1 && !L('avvik', a.ip, a.p.objid, a.p.name)).sort((a, b) => b.rel - a.rel);
     legg({id: 'avvik', prio: 2,
       tittel: T(`${avvik.length} ${avvik.length === 1 ? "måling" : "målinger"} langt fra settpunktet`, `${avvik.length} ${avvik.length === 1 ? 'measurement' : 'measurements'} far from the setpoint`),
       hvorfor: T('Måling og settpunkt skal møtes. Når de ikke gjør det, når ikke reguleringen fram.', 'Measurement and setpoint should meet. When they do not, the control is not getting through.'),
       sjekk: [T('Er pådraget på 0 eller 100 %: aktuator, ventil eller spjeld gjør ikke jobben, eller kapasiteten er for liten.', 'If the output is at 0 or 100 %: the actuator, valve or damper is not doing the job, or the capacity is too small.'),
               T('Er pådraget midt i: se etter overstyring og om føleren sitter riktig.', 'If the output is somewhere in between: look for an override and whether the sensor sits right.')],
-      rader: avvik.slice(0, 30).map((a) => rad(a.ip, (a.p.name || a.p.objid) + ' · ' + Math.round(a.rel * 100) + ' %', a.p.objid))});
+      rader: avvik.slice(0, 30).map((a) => rad(a.ip, (a.p.name || a.p.objid) + ' · ' + Math.round(a.rel * 100) + ' %', a.p.objid, [P(a.p)]))});
 
     // Overrides: someone put the plant in hand, and it is easy to leave it there
-    const ov = sorter('over');
+    // BACnet does not say when an override was set. The visits NABE kept say the earliest they saw it, which is "at least this long"
+    const alder = data.overAlder || {}, nuS = Date.now() / 1000;
+    const dagerOver = (ip, p) => { const x = alder[ip + '|' + p.objid]; return x ? Math.floor((nuS - x.siden) / 86400) : null; };
+    const ov = sorter('over').map((t) => ({...t, lengst: Math.max(-1, ...t.over.map((p) => dagerOver(t.d.address, p) ?? -1))}));
+    ov.sort((a, b) => b.lengst - a.lengst || b.over.length - a.over.length);
     const nOv = ov.reduce((n, t) => n + t.over.length, 0);
-    legg({id: 'overstyrt', prio: nOv >= 10 ? 2 : 3,
-      tittel: T(`${nOv} ${nOv === 1 ? "overstyrt punkt" : "overstyrte punkter"}`, `${nOv} overridden ${nOv === 1 ? 'point' : 'points'}`),
-      hvorfor: T('Et overstyrt punkt følger ikke reguleringen. Det er lett å glemme etter en servicerunde.', 'An overridden point does not follow the control. It is easy to forget after a service round.'),
+    const nGamle = ov.reduce((n, t) => n + t.over.filter((p) => (dagerOver(t.d.address, p) ?? 0) >= 14).length, 0);
+    const eldst = (t) => (t.lengst >= 2 ? T(` · lengst ${t.lengst} d`, ` · longest ${t.lengst} d`) : '');
+    legg({id: 'overstyrt', prio: nOv >= 10 || nGamle ? 2 : 3,
+      tittel: T(`${nOv} ${nOv === 1 ? "overstyrt punkt" : "overstyrte punkter"}${nGamle ? `, ${nGamle} i over to uker` : ''}`, `${nOv} overridden ${nOv === 1 ? 'point' : 'points'}${nGamle ? `, ${nGamle} for over two weeks` : ''}`),
+      hvorfor: nGamle ? T('Et overstyrt punkt følger ikke reguleringen. Etter to uker er det sjelden med vilje: det ble glemt etter en servicerunde. Tiden er fra første besøk NABE så det overstyrt, så den er minst så lang.', 'An overridden point does not follow the control. After two weeks it is seldom on purpose: it was forgotten after a service round. The time runs from the first visit NABE saw it overridden, so it is at least that long.')
+        : T('Et overstyrt punkt følger ikke reguleringen. Det er lett å glemme etter en servicerunde.', 'An overridden point does not follow the control. It is easy to forget after a service round.'),
       sjekk: [T('Spør hvem som la inn dem, og slipp dem som ikke trengs. Prioritet 8 er den manuelle.', 'Ask who set them, and release the ones that are not needed. Priority 8 is the manual one.')],
-      rader: ov.map((t) => rad(t.d.address, T(`${t.over.length} overstyrt, for eksempel ${eks(t, 'over')}`, `${t.over.length} overridden, for example ${eks(t, 'over')}`), t.over[0].objid))});
+      rader: ov.map((t) => rad(t.d.address, T(`${t.over.length} overstyrt, for eksempel ${eks(t, 'over')}`, `${t.over.length} overridden, for example ${eks(t, 'over')}`) + eldst(t), t.over[0].objid, t.over.map(P)))});
 
     const ue = sorter('ute');
     const nUe = ue.reduce((n, t) => n + t.ute.length, 0);
@@ -113,7 +125,7 @@
       tittel: T(`${nUe} ${nUe === 1 ? "punkt" : "punkter"} ute av drift`, `${nUe} ${nUe === 1 ? 'point' : 'points'} out of service`),
       hvorfor: T('Et punkt ute av drift viser ikke lenger det som måles. Er det med vilje?', 'A point out of service no longer shows what is measured. Is that on purpose?'),
       sjekk: [T('Er det en kanal som ikke er i bruk, er det greit. Ellers er det en rest fra igangkjøring.', 'If it is a channel not in use, that is fine. Otherwise it is left over from commissioning.')],
-      rader: ue.map((t) => rad(t.d.address, T(`${t.ute.length} ute av drift, for eksempel ${eks(t, 'ute')}`, `${t.ute.length} out of service, for example ${eks(t, 'ute')}`), t.ute[0].objid))});
+      rader: ue.map((t) => rad(t.d.address, T(`${t.ute.length} ute av drift, for eksempel ${eks(t, 'ute')}`, `${t.ute.length} out of service, for example ${eks(t, 'ute')}`), t.ute[0].objid, t.ute.map(P)))});
 
     // Devices that answer, but could not be read
     const feilet = devices.filter((d) => failed.has(d.address));
@@ -134,7 +146,7 @@
       rader: dubl.map(([n, l]) => rad(l[0].address, `«${n}» ×${l.length}`))});
 
     // Values that cannot be right: -50 degrees, 0 ppm CO2, humidity over 100
-    const urimelig = data.urimelig || [];
+    const urimelig = (data.urimelig || []).filter((u) => !L('urimelig', u.ip, u.objid, u.navn));
     const perUr = new Map();
     for (const u of urimelig) (perUr.get(u.ip) || perUr.set(u.ip, []).get(u.ip)).push(u);
     legg({id: 'urimelig', prio: 2,
@@ -142,36 +154,36 @@
       hvorfor: T('-50 grader, 0 ppm CO2 eller 120 % fuktighet er sjelden en måling. Som regel er det en føler som ikke er koblet til.', '-50 degrees, 0 ppm CO2 or 120 % humidity is seldom a measurement. Usually it is a sensor that is not connected.'),
       sjekk: [T('Mål ved inngangen. Åpen krets og kortslutning gir hver sin verdi, og feilkoden sier hvilken.', 'Measure at the input. An open circuit and a short give different values, and the error value says which.'),
               T('Står flere på samme modul, sjekk forsyningen til modulen før du går til hver føler.', 'If several sit on one module, check the module’s supply before going to each sensor.')],
-      rader: [...perUr].map(([ip, l]) => rad(ip, T(`${l.length} ${l.length === 1 ? 'urimelig' : 'urimelige'}, for eksempel ${l[0].navn} = ${l[0].verdi}`, `${l.length} impossible, for example ${l[0].navn} = ${l[0].verdi}`), l[0].objid))});
+      rader: [...perUr].map(([ip, l]) => rad(ip, T(`${l.length} ${l.length === 1 ? 'urimelig' : 'urimelige'}, for eksempel ${l[0].navn} = ${l[0].verdi}`, `${l.length} impossible, for example ${l[0].navn} = ${l[0].verdi}`), l[0].objid, l.map((u) => ({o: u.objid, n: u.navn}))))});
 
     // An analog input that has not moved at all: the wire, or a value left fixed
-    const flate = data.flate || [];
+    const flate = (data.flate || []).filter((f) => !L('flat', f.ip, f.objid, f.navn));
     legg({id: 'flat', prio: 3,
       tittel: T(`${flate.length} ${flate.length === 1 ? 'måling står' : 'målinger står'} helt stille`, `${flate.length} ${flate.length === 1 ? 'measurement stands' : 'measurements stand'} perfectly still`),
       hvorfor: T('En levende føler flytter seg litt. En som står helt stille har ofte mistet ledningen, eller er satt til en fast verdi.', 'A live sensor moves a little. One that stands perfectly still has often lost its wire, or been set to a fixed value.'),
       sjekk: [T('Se først om punktet er overstyrt eller ute av drift.', 'First see whether the point is overridden or out of service.'),
               T('Ellers: ledning og føler. Dette sees bare for enheten som er åpen mens Live går.', 'Otherwise: the wire and the sensor. This is seen only for the device that is open while Live runs.')],
-      rader: flate.map((f) => rad(f.ip, T(`${f.navn} uendret i ${f.minutter} min`, `${f.navn} unchanged for ${f.minutter} min`), f.objid))});
+      rader: flate.map((f) => rad(f.ip, T(`${f.navn} uendret i ${f.minutter} min`, `${f.navn} unchanged for ${f.minutter} min`), f.objid, [{o: f.objid, n: f.navn}]))});
 
     // Starting and stopping too often, counted from the points NABE follows in the background
-    const syk = data.sykluser || [];
+    const syk = (data.sykluser || []).filter((x) => !L('sykluser', x.address, x.objid, x.navn));
     const sykMange = syk.filter((x) => x.dom === 'mange');
     legg({id: 'sykluser', prio: sykMange.length ? 2 : 3,
       tittel: T(`${syk.length} ${syk.length === 1 ? 'utstyr starter' : 'utstyr starter'} ofte`, `${syk.length} ${syk.length === 1 ? 'item starts' : 'items start'} often`),
       hvorfor: T('Hyppig av og på sliter motor og kontaktor lenge før noe alarmerer. Seks starter i timen er der mange produsenter setter grensen for en kompressor.', 'Frequent on and off wears out a motor and contactor long before anything alarms. Six starts an hour is where many makers draw the line for a compressor.'),
       sjekk: [T('Se på reguleringen: for smalt dødbånd, for kort minste gangtid eller en føler som svinger gir ofte dette.', 'Look at the control: too narrow a dead band, too short a minimum run time or a sensor that swings often gives this.'),
               T('Er det bare noen få minutter mellom starter, mangler det trolig en minste av-tid.', 'If there are only a few minutes between starts, a minimum off time is probably missing.')],
-      rader: syk.map((x) => rad(x.address, `${String(x.navn).replace(/ \([^)]*\)$/, '')} · ${String(x.per_time).replace('.', ',')} ${T('i timen', 'an hour')}`, x.objid))});
-    const tips = data.tips || [];
+      rader: syk.map((x) => rad(x.address, `${String(x.navn).replace(/ \([^)]*\)$/, '')} · ${String(x.per_time).replace('.', ',')} ${T('i timen', 'an hour')}`, x.objid, [{o: x.objid, n: x.navn}]))});
+    const tips = (data.tips || []).filter((x) => !L('syk-tips', x.ip, x.objid, x.navn));
     legg({id: 'syk-tips', prio: 3,
       tittel: T(`${tips.length} ${tips.length === 1 ? 'punkt' : 'punkter'} kan sjekkes for hyppige starter`, `${tips.length} ${tips.length === 1 ? 'point' : 'points'} can be checked for frequent starts`),
       hvorfor: T('NABE teller starter per time for festede punkter. Ingen av disse følges nå.', 'NABE counts starts an hour for pinned points. None of these is followed now.'),
       sjekk: [T('Fest dem med ☆, la det gå en halvtime, og se i «Se bakover».', 'Pin them with ☆, let half an hour pass, and look in “Look back”.')],
-      rader: tips.map((x) => rad(x.ip, x.navn, x.objid))});
+      rader: tips.map((x) => rad(x.ip, x.navn, x.objid, [{o: x.objid, n: x.navn}]))});
 
     // Alarms: what is new first, and what shouts all the time after it
     const ah = data.alarmhist || [];
-    const ahNye = ah.filter((x) => x.ny && !x.kjent), ahOfte = ah.filter((x) => x.kronisk && !x.kjent);
+    const ahNye = ah.filter((x) => x.ny && !x.kjent), ahOfte = ah.filter((x) => x.kronisk && !x.kjent && !L('alarm-ofte', x.ip, x.objid, x.navn));
     legg({id: 'alarm-nye', prio: 2,
       tittel: T(`${ahNye.length} ${ahNye.length === 1 ? 'ny alarm' : 'nye alarmer'} siste døgn`, `${ahNye.length} new ${ahNye.length === 1 ? 'alarm' : 'alarms'} in the last day`),
       hvorfor: T('Disse har ikke stått i alarm før, så ingen har sett dem ennå.', 'These have not been in alarm before, so nobody has seen them yet.'),
@@ -181,7 +193,7 @@
       tittel: T(`${ahOfte.length} ${ahOfte.length === 1 ? 'punkt alarmerer' : 'punkter alarmerer'} nesten hver gang`, `${ahOfte.length} ${ahOfte.length === 1 ? 'point alarms' : 'points alarm'} nearly every time`),
       hvorfor: T('Det som alltid roper skjuler det nye. Enten er det en feil som ikke blir rettet, eller en grense som er satt for stramt.', 'What always shouts hides what is new. Either it is a fault that is not fixed, or a limit set too tight.'),
       sjekk: [T('Rett feilen eller løsne grensen, så alarmlista igjen forteller noe. Marker dem som «kjent» i «Mest alarmerende» i mellomtiden.', 'Fix the fault or loosen the limit, so the alarm list says something again. Mark them “known” in “Most alarming” meanwhile.')],
-      rader: ahOfte.map((x) => rad(x.ip, T(`${x.navn} · ${x.dager.length} dager`, `${x.navn} · ${x.dager.length} days`), x.objid))});
+      rader: ahOfte.map((x) => rad(x.ip, T(`${x.navn} · ${x.dager.length} dager`, `${x.navn} · ${x.dager.length} days`), x.objid, [{o: x.objid, n: x.navn}]))});
 
     // Routers and MS/TP: 32 devices is what one trunk takes without a repeater
     const rb = data.ruter || {rutere: [], utenRuter: []};
@@ -199,20 +211,20 @@
         .concat(utenTung.map((n) => rad(n.forste || '', T(`Nett ${n.nett}: ${n.mstp} MS/TP-enheter, ruteren er ikke funnet`, `Network ${n.nett}: ${n.mstp} MS/TP devices, the router was not found`))))});
 
     // An actuator at the end of its range with nothing following: from the pinned points, or a recording
-    const vk = data.virkning || [];
+    const vk = (data.virkning || []).filter((x) => !L('virkning', x.address || '', x.objid, x.maling));
     legg({id: 'virkning', prio: 2,
       tittel: T(`${vk.length} pådrag uten effekt`, `${vk.length} ${vk.length === 1 ? 'actuator' : 'actuators'} with no effect`),
       hvorfor: T('Pådraget står på 100 % og målingen følger ikke etter. Da gjør reguleringen alt den kan, og feilen ligger utenfor den.', 'The output stands at 100 % and the measurement does not follow. The control is doing all it can, and the fault lies outside it.'),
       sjekk: [T('Ventil: kjenn om røret blir varmt, og se at motoren faktisk beveger seg.', 'Valve: feel whether the pipe gets warm, and see that the actuator really moves.'),
               T('Sjekk pumpe og tilførsel (temperatur og trykk) før du går til føleren.', 'Check the pump and the supply (temperature and pressure) before going to the sensor.'),
               T('Sitter føleren i et rom pådraget ikke virker på?', 'Does the sensor sit in a room the output does not act on?')],
-      rader: vk.map((x) => rad(x.address || '', `${utenEnhet(x.maling)} ${String(x.verdi).replace('.', ',')}${x.settpunkt != null ? ' ' + T('mot', 'against') + ' ' + String(x.settpunkt).replace('.', ',') : ''} · ${T('pådrag fullt i', 'output full for')} ${minTid(x.siden_s)}`, x.objid))});
-    const vt = data.virkningTips || [];
+      rader: vk.map((x) => rad(x.address || '', `${utenEnhet(x.maling)} ${String(x.verdi).replace('.', ',')}${x.settpunkt != null ? ' ' + T('mot', 'against') + ' ' + String(x.settpunkt).replace('.', ',') : ''} · ${T('pådrag fullt i', 'output full for')} ${minTid(x.siden_s)}`, x.objid, [{o: x.objid, n: utenEnhet(x.maling)}]))});
+    const vt = (data.virkningTips || []).filter((x) => !L('virkning-tips', x.ip, x.objid, x.navn));
     legg({id: 'virkning-tips', prio: 3,
       tittel: T(`${vt.length} romregulatorer kan sjekkes for pådrag uten effekt`, `${vt.length} room controllers can be checked for an actuator with no effect`),
       hvorfor: T('NABE ser om ventilen står fullt uten at temperaturen følger. Det trenger måling og ventil festet i overvåkingslista, og settpunktet hvis det finnes.', 'NABE sees whether the valve stands full without the temperature following. It needs the measurement and the valve pinned in the watch list, and the setpoint if there is one.'),
       sjekk: [T('Fest måling og ventil med ☆. Etter et kvarter sier NABE fra hvis det ikke virker.', 'Pin the measurement and the valve with ☆. After a quarter of an hour NABE says if it does not work.')],
-      rader: vt.map((x) => rad(x.ip, x.navn, x.objid))});
+      rader: vt.map((x) => rad(x.ip, x.navn, x.objid, [{o: x.objid, n: x.navn}]))});
 
     // A storm: what comes in and what NABE itself sends
     const sm = data.storm || {aktiv: [], ferdige: []};
@@ -234,17 +246,19 @@
       rader: rf.map((m) => ({ip: '', navn: '', tekst: m, objid: '', lang: true}))});
 
     // Running while the schedule says off
-    const dt = data.driftstid || {liste: [], urLest: 0, urTotalt: 0};
+    const dt0 = data.driftstid || {liste: [], urLest: 0, urTotalt: 0};
+    const dt = {...dt0, liste: dt0.liste.filter((x) => !L('driftstid', x.ip, x.objid, x.punkt))};
     legg({id: 'driftstid', prio: 2,
       tittel: T(`${dt.liste.length} ${dt.liste.length === 1 ? 'aggregat går' : 'aggregater går'} utenfor driftstid`, `${dt.liste.length} ${dt.liste.length === 1 ? 'unit runs' : 'units run'} outside the schedule`),
       hvorfor: T('Ukeprogrammet sier av, men utstyret går. Det koster energi og slitasje, og ingen alarm sier fra.', 'The schedule says off, but the equipment runs. It costs energy and wear, and no alarm says so.'),
       sjekk: [T('Er punktet overstyrt? Flagget står i tabellen.', 'Is the point overridden? The flag is in the table.'),
               T('Er programmet koblet til aggregatet i logikken, eller er det noe annet som styrer det?', 'Is the schedule tied to the unit in the logic, or is something else driving it?'),
               T('Nattkjøling, frostvern og ettergang er med vilje.', 'Night cooling, frost protection and run-on are on purpose.')],
-      rader: dt.liste.map((x) => rad(x.ip, `${x.punkt} ${T('går', 'runs')} · ${x.program} ${T('sier av', 'says off')}${x.siden != null ? ' ' + minTid(x.siden * 60) : ''}${x.overstyrt ? ' · ' + T('overstyrt', 'overridden') : ''}`, x.objid))});
+      rader: dt.liste.map((x) => rad(x.ip, `${x.punkt} ${T('går', 'runs')} · ${x.program} ${T('sier av', 'says off')}${x.siden != null ? ' ' + minTid(x.siden * 60) : ''}${x.overstyrt ? ' · ' + T('overstyrt', 'overridden') : ''}`, x.objid, [{o: x.objid, n: x.punkt}]))});
 
     // Sensors that show the same on every visit, and devices that do not update at all
-    const dd = data.dode || {punkter: [], enheter: [], analoge: 0, besok: 0};
+    const dd0 = data.dode || {punkter: [], enheter: [], analoge: 0, besok: 0};
+    const dd = {...dd0, punkter: dd0.punkter.filter((x) => !L('dode', x.ip, x.objid, x.navn)), enheter: dd0.enheter.filter((e) => !L('dode-enhet', e.ip, ''))};
     const tallTekst = (x) => `${String(Number(Number(x.v).toPrecision(6))).replace('.', ',')}${x.symbol ? ' ' + x.symbol : ''}`.trim();
     const dato = (d) => new Date(d + 'T12:00:00').toLocaleDateString(SPRAAK === 'en' ? 'en-GB' : 'nb-NO', {day: 'numeric', month: 'short'});
     legg({id: 'dode', prio: 3,
@@ -253,7 +267,7 @@
       sjekk: [T('Mål ved inngangen. Åpen krets og kortslutning gir hver sin verdi.', 'Measure at the input. An open circuit and a short give different values.'),
               T('Er verdien en kjent feilverdi, som -50 eller 3276,7? Da er den ikke koblet til.', 'Is the value a known error value, like -50 or 3276.7? Then it is not connected.'),
               T('Står den i et rom som ikke er i bruk? Da kan den være riktig.', 'Does it sit in a room that is not in use? Then it may be right.')],
-      rader: dd.punkter.slice(0, 60).map((x) => rad(x.ip, `${x.navn} = ${tallTekst(x)} · ${x.dager} ${T('besøk siden', 'visits since')} ${dato(x.forste)}`, x.objid))});
+      rader: dd.punkter.slice(0, 60).map((x) => rad(x.ip, `${x.navn} = ${tallTekst(x)} · ${x.dager} ${T('besøk siden', 'visits since')} ${dato(x.forste)}`, x.objid, [{o: x.objid, n: x.navn}]))});
     legg({id: 'dode-enhet', prio: 2,
       tittel: T(`${dd.enheter.length} ${dd.enheter.length === 1 ? 'enhet oppdaterer' : 'enheter oppdaterer'} ikke verdiene sine`, `${dd.enheter.length} ${dd.enheter.length === 1 ? 'device does' : 'devices do'} not update their values`),
       hvorfor: T('Nesten alle følerne på enheten viser det samme som ved forrige besøk. Da er det enheten og ikke følerne: logikken står, eller verdiene er frosset.', 'Nearly every sensor on the device shows what it did on the previous visit. Then it is the device and not the sensors: the logic is stopped, or the values are frozen.'),
@@ -272,7 +286,7 @@
       hvorfor: T('Samme MAC bak to IP-adresser er vanlig bak en ruter eller proxy, men kan også være en IP som er brukt to ganger.', 'The same MAC behind two IP addresses is usual behind a router or proxy, but can also be an IP used twice.'),
       sjekk: [T('Er det ikke en ruter eller proxy: se etter to enheter som har fått samme IP, for eksempel fra et kopiert oppsett.', 'If it is not a router or proxy: look for two devices that were given the same IP, for example from a copied setup.')],
       rader: mac.map((m) => rad(m.enheter[0].address, `${m.mac} · ${m.enheter.map((d) => vertAdr(d.address)).join(', ')}`))});
-    const endret = data.endretId || [];
+    const endret = (data.endretId || []).filter((x) => !L('endret-id', x.ip, ''));
     legg({id: 'endret-id', prio: 3,
       tittel: T(`${endret.length} ${endret.length === 1 ? 'enhet har' : 'enheter har'} skiftet enhets-ID siden forrige skann`, `${endret.length} ${endret.length === 1 ? 'device has' : 'devices have'} changed device ID since the last scan`),
       hvorfor: T('Samme adresse, nytt enhets-ID. Noen har endret det, eller en annen enhet har tatt over adressen.', 'The same address, a new device ID. Somebody changed it, or another device has taken over the address.'),
@@ -281,7 +295,7 @@
 
     ut.sort((a, b) => a.prio - b.prio);
     const lest = per.length;
-    return {liste: ut, lest, totalt: devices.length, ur: {lest: dt.urLest || 0, totalt: dt.urTotalt || 0}};
+    return {liste: ut, lest, totalt: devices.length, ur: {lest: dt.urLest || 0, totalt: dt.urTotalt || 0}, laert: window.nabeLaer ? window.nabeLaer.treff() : 0};
   }
 
   const lag = document.createElement('div');
@@ -304,10 +318,12 @@
     // The schedules take longest to read: the list is drawn again when they are in, if the window is still open
     if (window.nabeDrift && !DRIFT_LYTTER) { DRIFT_LYTTER = true; window.nabeDrift.pa(() => { if (!lag.hidden) tegn(); }); }
     const vakt = async () => { try { const d = await (await fetch('/api/vakt', {cache: 'no-store'})).json(); return d && d.status === 'done' ? d : null; } catch { return null; } };
-    const [v] = await Promise.all([frist(vakt()),
+    // How long the overridden points have been so, from the visits NABE kept
+    const alder = async () => { try { const d = await (await fetch('/api/besok/overstyrt?key=' + encodeURIComponent(asNokkel()), {cache: 'no-store'})).json(); return d && d.status === 'done' ? d : null; } catch { return null; } };
+    const [v, al] = await Promise.all([frist(vakt()), frist(alder()),
       frist(window.nabeRegler ? window.nabeRegler.last() : null), frist(window.nabeStorm ? window.nabeStorm.hent() : null),
       frist(window.nabeDrift ? window.nabeDrift.kontroller() : null, 7000)]);
-    return {sykluser: (v && v.sykluser) || [], virkning: (v && v.virkning) || []};
+    return {sykluser: (v && v.sykluser) || [], virkning: (v && v.virkning) || [], overAlder: (al && al.punkter) || {}, overBesok: (al && al.besok) || 0};
   }
   function data(ekstra = {}) {
     const sykluser = ekstra.sykluser || [], virkning = ekstra.virkning || [];
@@ -344,7 +360,7 @@
     }
     const N = window.nabeNett;
     const rutere = Array.isArray(S.rutere) ? S.rutere : [];
-    return {devices: S.devices, cache: S.cache, failed: PRE.failed, varsler, avvik, urimelig, flate, sykluser, virkning, virkningTips, egne, driftstid, dode,
+    return {overAlder: ekstra.overAlder || {}, overBesok: ekstra.overBesok || 0, devices: S.devices, cache: S.cache, failed: PRE.failed, varsler, avvik, urimelig, flate, sykluser, virkning, virkningTips, egne, driftstid, dode,
       regelfeil: R ? R.feil : [],
       storm: window.nabeStorm ? {aktiv: window.nabeStorm.siste().aktiv || [], ferdige: window.nabeStorm.ferdige()} : {aktiv: [], ferdige: []},
       tips: sykluser.length ? [] : tips.slice(0, 30),
@@ -357,21 +373,40 @@
   function postHtml(p) {
     const vis = p.rader.slice(0, MAKS_RADER);
     const rest = p.rader.length - vis.length;
+    const Lr = window.nabeLaer, kanLaere = !!Lr && Lr.laerbar(p.id) && !p.egen;
+    const GR = kanLaere ? Lr.grunner() : {};
+    const raderHtml = vis.map((r, i) => {
+      const rad = `<button type="button" class="fo-rad${r.lang ? ' lang' : ''}" data-ip="${esc(r.ip)}" data-o="${esc(r.objid)}">
+        <b>${esc(r.navn)}</b>${r.tekst ? `<span>${esc(r.tekst)}</span>` : ''}</button>`;
+      if (!kanLaere || !r.ip) return rad;
+      const n = (r.pts || []).length;
+      if (VELGER && VELGER.id === p.id && VELGER.i === i) {
+        return `<div class="fo-vrap fo-velg">${rad}<span class="fo-grunn" role="group" aria-label="${esc(T('Hvorfor er det ikke feil?', 'Why is it not a fault?'))}">
+          ${Object.entries(GR).map(([k, v]) => `<button type="button" data-fo="laer-ja" data-g="${k}" data-id="${esc(p.id)}" data-i="${i}">${esc(v)}</button>`).join('')}
+          <button type="button" data-fo="laer-nei" class="fo-angre">${T('Avbryt', 'Cancel')}</button></span></div>`;
+      }
+      return `<div class="fo-vrap">${rad}<button type="button" class="fo-laer" data-fo="laer" data-id="${esc(p.id)}" data-i="${i}"
+        title="${esc(T('Slutter å foreslå dette for dette anlegget. Du kan angre nederst i listen.', 'Stops suggesting this for this plant. You can undo it at the bottom of the list.'))}">${n > 1 ? T(`Ikke feil (${n})`, `Not a fault (${n})`) : T('Ikke feil', 'Not a fault')}</button></div>`;
+    }).join('');
+    const m = kanLaere ? Lr.monsterFor(p.id, p.rader) : null;
+    const monsterHtml = m ? `<div class="fo-monster"><span>${T(`${m.laert} du har satt til side har «${m.ord}» i navnet. Gjelder det også de ${m.flere} andre her?`, `${m.laert} you have set aside have “${m.ord}” in the name. Does that also go for the other ${m.flere} here?`)}</span>
+      <button type="button" data-fo="monster-ja" data-id="${esc(p.id)}" data-ord="${esc(m.ord)}">${T('Ja, alle med «' + m.ord + '»', 'Yes, all with “' + m.ord + '”')}</button>
+      <button type="button" data-fo="monster-nei" data-id="${esc(p.id)}" data-ord="${esc(m.ord)}">${T('Nei', 'No')}</button></div>` : '';
     // The user's own rules and what is wrong with their file are written by them (or already in the right language): the language sweep leaves them alone
     return `<section class="fo-post p${p.prio}${p.egen || p.id === 'regelfeil' ? ' egen' : ''}">
       <div class="fo-tittel"><span class="fo-prikk" aria-hidden="true"></span>${esc(p.tittel)}${p.kom ? `<span class="fo-ny">${p.kom === 'nye' ? T(`${p.nyeAntall} nye`, `${p.nyeAntall} new`) : T('tilbake', 'back')}</span>` : ''}</div>
       <div class="fo-hvorfor">${esc(p.hvorfor)}</div>
       <ul class="fo-sjekk">${p.sjekk.map((s) => `<li>${esc(s)}</li>`).join('')}</ul>
-      <div class="fo-rader">${vis.map((r) => `<button type="button" class="fo-rad${r.lang ? ' lang' : ''}" data-ip="${esc(r.ip)}" data-o="${esc(r.objid)}">
-        <b>${esc(r.navn)}</b>${r.tekst ? `<span>${esc(r.tekst)}</span>` : ''}</button>`).join('')}
+      <div class="fo-rader">${raderHtml}
         ${rest > 0 ? `<span class="fo-flere">${T(`og ${rest} til`, `and ${rest} more`)}</span>` : ''}</div>
+      ${monsterHtml}
       ${window.nabeArbeid ? `<div class="fo-hand"><button type="button" data-fo="utfort" data-id="${esc(p.id)}">${T('Utført', 'Done')}</button>
         <button type="button" data-fo="utsett" data-id="${esc(p.id)}">${T('Utsett en uke', 'Put aside a week')}</button>
         <button type="button" data-fo="kopier" data-id="${esc(p.id)}">${T('Kopier som melding', 'Copy as message')}</button></div>` : ''}
     </section>`;
   }
 
-  let SISTE = null, EKSTRA = {}, SYNLIGE = [], SKJULT_APEN = false;
+  let SISTE = null, EKSTRA = {}, SYNLIGE = [], SKJULT_APEN = false, LAERT_APEN = false, VELGER = null;
   function tegn(ekstra) {
     EKSTRA = ekstra || EKSTRA;
     const r = SISTE = bygForslag(data(EKSTRA));
@@ -395,8 +430,19 @@
         ${SKJULT_APEN ? delt.skjulte.map((p) => `<div class="fo-skjult-rad"><span>${esc(p.tittel)}</span><span class="fo-skjult-n">${p.state === 'utfort' ? T('Utført ', 'Done ') + dato(p.t) : T('Utsatt til ', 'Aside until ') + dato(p.til)}</span>
           <button type="button" data-fo="vis" data-id="${esc(p.id)}">${T('Vis igjen', 'Show again')}</button></div>`).join('') : ''}</div>`;
     }
+    const Lr = window.nabeLaer, lister = Lr ? Lr.liste() : [];
+    if (lister.length) {
+      const dato = (ms) => new Date(ms).toLocaleDateString(SPRAAK === 'en' ? 'en-GB' : 'nb-NO', {day: 'numeric', month: 'short', year: 'numeric'});
+      const GR = Lr.grunner(), TY = Lr.typer();
+      kropp += `<div class="fo-skjult fo-laert"><button type="button" class="fo-skjult-k" data-fo="laert-veksle" aria-expanded="${LAERT_APEN}">${T(`Dette har NABE lært på anlegget: ${lister.length}`, `What NABE has learned about this plant: ${lister.length}`)}</button>
+        ${LAERT_APEN ? `<div class="fo-laert-om">${T('Det du har sagt er ikke feil. Det gjelder bare dette anlegget og bare den typen forslag, og det går ut av seg selv.', 'What you said is not a fault. It holds only for this plant and only for that kind of suggestion, and it runs out by itself.')}</div>`
+          + lister.map((x) => `<div class="fo-skjult-rad"><span>${x.art === 'monster' ? T(`Alt med «${x.ord}» i navnet`, `Everything with “${x.ord}” in the name`) : `${esc(x.enhet)} · ${esc(x.navn)}`} <i>${esc(TY[x.id] || x.id)}</i></span>
+            <span class="fo-skjult-n">${esc(GR[x.g] || '')} · ${x.utlopt ? T('utløpt', 'expired') : T('til ', 'until ') + dato(x.til)}</span>
+            <button type="button" data-fo="laer-angre" data-art="${x.art}" data-nok="${esc(x.nok)}">${T('Angre', 'Undo')}</button></div>`).join('') : ''}</div>`;
+    }
     const urTekst = r.ur && r.ur.totalt ? T(` Ukeprogram lest på ${r.ur.lest} av ${r.ur.totalt} enheter som har ur.`, ` Schedules read on ${r.ur.lest} of ${r.ur.totalt} devices that have them.`) : '';
-    const grunnlag = r.totalt ? `<div class="fo-grunnlag">${T(`Bygger på ${r.lest} av ${r.totalt} enheter som er lest.`, `Based on ${r.lest} of ${r.totalt} devices read.`)}${urTekst}</div>` : '';
+    const laertTekst = r.laert ? T(` ${r.laert} ${r.laert === 1 ? 'punkt er' : 'punkter er'} holdt utenfor etter dine valg.`, ` ${r.laert} ${r.laert === 1 ? 'point is' : 'points are'} left out by your choices.`) : '';
+    const grunnlag = r.totalt ? `<div class="fo-grunnlag">${T(`Bygger på ${r.lest} av ${r.totalt} enheter som er lest.`, `Based on ${r.lest} of ${r.totalt} devices read.`)}${urTekst}${laertTekst}</div>` : '';
     const RG = window.nabeRegler ? window.nabeRegler.siste() : null;
     const fot = window.nabeRegler ? `<div class="fo-fot"><span>${RG && RG.finnes ? T(`Egne regler: ${RG.regler.length} av ${RG.antall} i bruk`, `Own rules: ${RG.regler.length} of ${RG.antall} in use`) : T('Egne regler: ingen fil ennå', 'Own rules: no file yet')}</span>
       <span class="fo-fot-k"><button type="button" class="btn" data-fo="regler-aapne" title="${esc(T('Åpner fila i Notisblokk. Finnes den ikke, lages en mal med eksempler.', 'Opens the file in Notepad. If there is none, a template with examples is made.'))}">${T('Åpne regelfila', 'Open the rules file')}</button>
@@ -421,6 +467,28 @@
   lag.addEventListener('click', async (e) => {
     if (e.target === lag || e.target.closest('.gs-close')) { lag.hidden = true; return; }
     const k = e.target.closest('[data-fo]');
+    const Lr = window.nabeLaer;
+    if (k && Lr && ['laer', 'laer-ja', 'laer-nei', 'laert-veksle', 'laer-angre', 'monster-ja', 'monster-nei'].includes(k.dataset.fo)) {
+      const rull = lag.querySelector('.fo-kropp') && lag.querySelector('.fo-kropp').scrollTop;
+      const p = SISTE && SISTE.liste.find((x) => x.id === k.dataset.id);
+      const rad = p && p.rader[Number(k.dataset.i)];
+      let ok = true;
+      if (k.dataset.fo === 'laer') VELGER = {id: k.dataset.id, i: Number(k.dataset.i)};
+      else if (k.dataset.fo === 'laer-nei') VELGER = null;
+      else if (k.dataset.fo === 'laert-veksle') LAERT_APEN = !LAERT_APEN;
+      else if (k.dataset.fo === 'laer-ja' && rad) {
+        VELGER = null;
+        ok = await Lr.laer(p.id, [rad], k.dataset.g);
+        toast(ok ? T('NABE husker det. Du kan angre nederst i listen.', 'NABE will remember. You can undo it at the bottom of the list.') : T('Fikk ikke lagret valget i fila. Det gjelder til du lukker NABE.', 'Could not save the choice to the file. It holds until you close NABE.'), !ok);
+        if (ok) LAERT_APEN = true;
+      } else if (k.dataset.fo === 'monster-ja') { ok = await Lr.taMonster(k.dataset.id, k.dataset.ord); toast(ok ? T(`Alt med «${k.dataset.ord}» settes til side på dette anlegget`, `Everything with “${k.dataset.ord}” is set aside on this plant`) : T('Fikk ikke lagret valget i fila', 'Could not save the choice to the file'), !ok); }
+      else if (k.dataset.fo === 'monster-nei') await Lr.avslaMonster(k.dataset.id, k.dataset.ord);
+      else if (k.dataset.fo === 'laer-angre') { ok = k.dataset.art === 'monster' ? await Lr.angreMonster(...k.dataset.nok.split('|')) : await Lr.angre(k.dataset.nok); if (ok) toast(T('Angret. Det kommer med i forslagene igjen.', 'Undone. It is back in the suggestions.')); }
+      tegn();
+      if (rull && lag.querySelector('.fo-kropp')) lag.querySelector('.fo-kropp').scrollTop = rull;
+      if (window.nabeStatus) window.nabeStatus.send();
+      return;
+    }
     if (k && window.nabeArbeid && ['utfort', 'utsett', 'kopier', 'vis', 'skjult-veksle'].includes(k.dataset.fo)) {
       const A = window.nabeArbeid, p = SISTE && SISTE.liste.find((x) => x.id === k.dataset.id);
       if (k.dataset.fo === 'skjult-veksle') SKJULT_APEN = !SKJULT_APEN;
@@ -454,12 +522,13 @@
   }, true);
 
   window.aapneForslag = async () => {
-    if (window.nabeArbeid) await Promise.race([window.nabeArbeid.last(), new Promise((ok) => setTimeout(ok, 1500))]);
+    await Promise.race([Promise.all([window.nabeArbeid && window.nabeArbeid.last(), window.nabeLaer && window.nabeLaer.last()]), new Promise((ok) => setTimeout(ok, 1500))]);
     tegn({});
     lag.hidden = false;
     // What the server has counted, the rules file and the storm state come a moment later and fill in
     const ekstra = await hentEkstra();
     if (!lag.hidden) tegn(ekstra);
+    if (window.nabeStatus) window.nabeStatus.send();
   };
   /* The list as plain text, for the support package and for pasting into a message. */
   window.forslagTekst = async () => {
@@ -473,9 +542,9 @@
   window.bygForslag = bygForslag;
   /* What is open and what is done, as the list stands now (the visit report uses it) */
   window.forslagNaa = () => {
-    if (!S.devices || !S.devices.length) return {synlige: [], skjulte: []};
+    if (!S.devices || !S.devices.length) return {synlige: [], skjulte: [], laert: 0, lest: 0, totalt: 0};
     const r = bygForslag(data(EKSTRA));
-    return window.nabeArbeid ? window.nabeArbeid.del(r.liste) : {synlige: r.liste, skjulte: []};
+    return {...(window.nabeArbeid ? window.nabeArbeid.del(r.liste) : {synlige: r.liste, skjulte: []}), laert: r.laert, lest: r.lest, totalt: r.totalt};
   };
   if ($('apiBtn')) $('apiBtn').onclick = () => { closeMenus(); window.open('/docs', '_blank', 'noopener'); };
   if ($('forslagBtn')) $('forslagBtn').onclick = () => { closeMenus(); window.aapneForslag(); };

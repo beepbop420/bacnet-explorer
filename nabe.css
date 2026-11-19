@@ -6005,3 +6005,27 @@ td.c-val.dod{text-decoration:underline double color-mix(in srgb,var(--warn) 70%,
 .fo-skjult-rad>span:first-child{flex:1;min-width:0}
 .fo-skjult-n{font-family:var(--mono);font-size:11px;color:var(--fg-3);white-space:nowrap}
 .fo-skjult-rad button{padding:0;border:0;background:none;font:inherit;font-size:11.5px;color:var(--fg-3);cursor:pointer;text-decoration:underline;text-underline-offset:3px}
+/* What NABE has been taught: the button shows when the row is pointed at or reached by keyboard, so the list stays calm */
+.fo-vrap{display:inline-flex;align-items:center;gap:6px;max-width:100%}
+.fo-laer{padding:0;border:0;background:none;font:inherit;font-size:11px;color:var(--fg-3);cursor:pointer;text-decoration:underline;text-decoration-color:transparent;text-underline-offset:3px;opacity:0;transition:opacity var(--mot-rask) ease,color var(--mot-rask) ease,text-decoration-color var(--mot-rask) ease}
+.fo-vrap:hover .fo-laer,.fo-vrap:focus-within .fo-laer,.fo-laer:focus-visible{opacity:1}
+.fo-laer:hover,.fo-laer:focus-visible{color:var(--fg);text-decoration-color:currentColor}
+@media (hover:none){.fo-laer{opacity:1}}
+.fo-grunn{display:inline-flex;flex-wrap:wrap;gap:4px 12px;align-items:center}
+.fo-grunn button{padding:0;border:0;background:none;font:inherit;font-size:11.5px;color:var(--fg-2);cursor:pointer;text-decoration:underline;text-underline-offset:3px}
+.fo-grunn button:hover,.fo-grunn button:focus-visible{color:var(--fg)}
+.fo-grunn .fo-angre{color:var(--fg-3)}
+.fo-monster{display:flex;flex-wrap:wrap;gap:4px 14px;align-items:baseline;margin:10px 0 0 15px;font-size:12px;color:var(--fg-2)}
+.fo-monster button{padding:0;border:0;background:none;font:inherit;font-size:11.5px;color:var(--fg);cursor:pointer;text-decoration:underline;text-underline-offset:3px}
+.fo-laert-om{margin:8px 0 4px;font-size:11.5px;color:var(--fg-3);line-height:1.5;max-width:56ch}
+.fo-skjult-rad i{font-style:normal;color:var(--fg-3);margin-left:6px}
+/* The start page: what is open at each plant, in words first and a dot second */
+.ss-funn{display:flex;flex-wrap:wrap;align-items:baseline;gap:0 8px;font-size:11px;color:var(--fg-3)}
+.ss-funn b{font-weight:500;color:var(--fg-2)}
+.ss-funn i{display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--fg-3);margin-right:5px;vertical-align:1px}
+.ss-funn.p1 i{background:var(--err)}
+.ss-funn.p2 i{background:var(--warn)}
+.ss-funn.ro i{background:var(--ok)}
+.ss-funn .ny{color:var(--accent)}
+.ss-mine{display:flex;align-items:baseline;justify-content:space-between;gap:12px}
+.ss-mine small{font-weight:400;color:var(--fg-3)}

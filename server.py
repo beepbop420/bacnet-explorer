@@ -123,7 +123,7 @@ ALLOWED_ORIGINS = {
 READ_ONLY_PATHS = {"/api/sites",
                    
     "/api/status", "/api/interfaces", "/api/readonly", "/api/mine", "/api/ny-versjon",
-    "/api/anlegg", "/api/sim", "/api/vakt", "/api/storm", "/api/regler", "/api/punktlogg", "/api/arbeidsliste", "/api/oppdatering", "/api/route", "/api/var-fasit", "/api/kabelnett", "/api/object/all",
+    "/api/anlegg", "/api/sim", "/api/vakt", "/api/storm", "/api/regler", "/api/punktlogg", "/api/arbeidsliste", "/api/laering", "/api/bevis", "/api/besok/overstyrt", "/api/oppdatering", "/api/route", "/api/var-fasit", "/api/kabelnett", "/api/object/all",
     "/api/writelog", "/api/notes", "/download", "/logo",
 }
 
@@ -235,7 +235,7 @@ def t(nb: str, en: str) -> str:
     return en if SPRAAK_VAR.get() == "en" else nb
 
 
-VERSJON = "2.30"
+VERSJON = "2.31"
 app.version = VERSJON
 app.description = ("NABE sitt eget grensesnitt. Det som leser fra anlegget (enheter, punkter, ukeprogram, trend) kan brukes fra Python, Excel eller curl mens NABE kjører. "
                    "Dokumentasjonen (Swagger) laster fra internett.")
@@ -3464,6 +3464,46 @@ async def sites_name(body: SiteNameBody):
     return {"status": "done", "site": site}
 
 
+class SiteStatusBody(BaseModel):
+    key: str
+    status: Dict[str, Any]
+
+
+@app.post("/api/sites/status")
+async def sites_status(body: SiteStatusBody):
+    """What was open at the plant when the suggestions were last counted, for the start page. A few numbers and
+    three titles: the suggestions themselves are built again from the plant at the next visit."""
+    site = SITES.get(body.key)
+    if not site:
+        return {"status": "skip"}
+    s = body.status or {}
+    def tall(x):
+        try:
+            return max(0, min(100000, int(x)))
+        except (TypeError, ValueError):
+            return 0
+    topp = [{"id": str(x.get("id", ""))[:40], "tittel": str(x.get("tittel", ""))[:120], "prio": tall(x.get("prio"))}
+            for x in (s.get("topp") or [])[:3] if isinstance(x, dict)]
+    naa = time.time()
+    siden = s.get("siden") if isinstance(s.get("siden"), dict) else None
+    site["status"] = {"t": naa, "p1": tall(s.get("p1")), "p2": tall(s.get("p2")), "p3": tall(s.get("p3")),
+                      "nye": tall(s.get("nye")), "utfort": tall(s.get("utfort")), "laert": tall(s.get("laert")),
+                      "lest": tall(s.get("lest")), "totalt": tall(s.get("totalt")), "topp": topp}
+    if siden:
+        site["status"]["siden"] = {"n": tall(siden.get("n")), "verst": tall(siden.get("verst"))}
+    # A short history, so the start page can say whether it is getting better: counts made within six hours of each
+    # other are one stretch of work and replace each other
+    hist = [h for h in site.get("hist", []) if isinstance(h, dict)]
+    ny = {"t": naa, "a": site["status"]["p1"] + site["status"]["p2"] + site["status"]["p3"], "p1": site["status"]["p1"]}
+    if hist and naa - float(hist[-1].get("t", 0)) < 6 * 3600:
+        hist[-1] = ny
+    else:
+        hist.append(ny)
+    site["hist"] = hist[-12:]
+    _save_sites()
+    return {"status": "done", "site": site}
+
+
 class SiteKeyBody(BaseModel):
     key: str
 
@@ -4194,6 +4234,37 @@ def lagre_besok(body: BesokBody):
     except OSError as e:
         return {"status": "error", "error": f"{type(e).__name__}: {e}", "forrige": forrige}
     return {"status": "done", "forrige": forrige, "antall": len(liste)}
+
+
+@app.get("/api/besok/overstyrt")
+def besok_overstyrt(key: str):
+    """How long each point that is overridden in the last kept visit has been overridden, counted back through the
+    visits NABE kept. BACnet does not say when an override was set; this is the earliest visit that saw it, so it is
+    "at least this long"."""
+    try:
+        liste = json.loads(_besok_fil(key.strip()).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        liste = []
+    if not isinstance(liste, list) or not liste:
+        return {"status": "done", "punkter": {}, "besok": 0, "sist": None}
+
+    def over(b, ip, objid):
+        g = ((b.get("enheter") or {}).get(ip) or {}).get("p", {}).get(objid)
+        return bool(g) and len(g) > 2 and "overridden" in str(g[2])
+
+    siste = liste[-1]
+    ut = {}
+    for ip, e in (siste.get("enheter") or {}).items():
+        for objid in (e.get("p") or {}):
+            if not over(siste, ip, objid):
+                continue
+            forste, n = float(siste.get("t") or 0), 1
+            for b in reversed(liste[:-1]):
+                if not over(b, ip, objid):
+                    break
+                forste, n = float(b.get("t") or forste), n + 1
+            ut[f"{ip}|{objid}"] = {"siden": forste, "besok": n}
+    return {"status": "done", "punkter": ut, "besok": len(liste), "sist": siste.get("t")}
 
 
 @app.get("/api/notes")
@@ -5727,6 +5798,46 @@ async def trafikk_tom():
     return {"status": "done"}
 
 
+# What NABE did to the plant, counted from the traffic log, for the visit report. The question a customer's IT
+# person asks is "what did you do on our network", and the answer is already in the log: reads, writes, how long
+# and how many devices. Only BACnet is logged here (Modbus and KNX are read only by construction).
+_SKRIV_TJENESTER = ("Write", "Delete", "Create", "AddListElement", "RemoveListElement", "Reinitialize", "DeviceCommunicationControl",
+                    "TimeSynchronization", "UTCTimeSynchronization", "AtomicWriteFile", "LifeSafetyOperation", "AcknowledgeAlarm",
+                    "ConfirmedPrivateTransfer", "UnconfirmedPrivateTransfer", "ConfirmedTextMessage", "UnconfirmedTextMessage")
+
+
+def _bevis_slag(tjeneste: str) -> str:
+    if tjeneste.startswith(_SKRIV_TJENESTER):
+        return "skriv"
+    if tjeneste.startswith(("Read", "Get")):
+        return "lesinger"
+    if tjeneste.startswith("Subscribe"):
+        return "abonnement"
+    if tjeneste in ("WhoIs", "WhoHas", "IAm", "IHave"):
+        return "sok"
+    return "andre"
+
+
+@app.get("/api/bevis")
+async def bevis():
+    rader = list(TRAFIKK)
+    tall = {"lesinger": 0, "skriv": 0, "abonnement": 0, "sok": 0, "andre": 0}
+    enheter, skrivMot, feil = set(), set(), 0
+    for r in rader:
+        slag = _bevis_slag(str(r.get("tjeneste", "")))
+        tall[slag] += 1
+        til = str(r.get("til", ""))
+        if til and til != "broadcast" and slag != "sok":
+            enheter.add(til.split(":")[0] if til.count(":") == 1 else til)
+        if slag == "skriv":
+            skrivMot.add(til)
+        if r.get("svar") not in ("ok", "sendt"):
+            feil += 1
+    return {"status": "done", "antall": len(rader), **tall, "feil": feil, "enheter": len(enheter),
+            "skrivMot": sorted(skrivMot)[:5], "fra": rader[0]["t"] if rader else None, "til": rader[-1]["t"] if rader else None,
+            "avkortet": _TRAFIKK_SEQ[0] > len(rader)}
+
+
 # --------------------------------------------------------- what a point has done between visits
 # A sensor that has shown exactly the same number on every visit for weeks is rarely a calm room: it is a sensor that
 # has been disconnected, or a reading frozen at its last value. To see it, the values seen on each visit have to be
@@ -5786,6 +5897,59 @@ def arbeidsliste_lagre(body: PunktloggBody):
                 g.unlink()
             except OSError:
                 pass
+    except OSError as e:
+        return {"status": "error", "error": str(e)}
+    return {"status": "done", "bytes": len(tekst)}
+
+
+# What the technician has taught NABE about one plant: "this is not a fault here". Kept apart from the worklist because
+# it is worth more: it is never pruned for age, the last version is kept beside it, and it holds nothing but the
+# technician's own choices.
+LAERING_DIR = DATA_DIR / "laering"
+LAERING_MAKS = 600_000
+LAERING_FILER = 400
+
+
+def _laering_fil(nokkel: str) -> Path:
+    return LAERING_DIR / (hashlib.sha1(nokkel.encode("utf-8")).hexdigest()[:20] + ".json")
+
+
+@app.get("/api/laering")
+def laering_les(nokkel: str):
+    if not nokkel or len(nokkel) > 2000:
+        return {"status": "error", "error": t("Ugyldig anlegg", "Invalid plant")}
+    data = None
+    for fil in (_laering_fil(nokkel), _laering_fil(nokkel).with_suffix(".bak")):
+        try:
+            data = json.loads(fil.read_text(encoding="utf-8"))
+            break
+        except (OSError, ValueError):
+            continue
+    return {"status": "done", "data": data}
+
+
+@app.post("/api/laering")
+def laering_lagre(body: PunktloggBody):
+    if not body.nokkel or len(body.nokkel) > 2000:
+        return {"status": "error", "error": t("Ugyldig anlegg", "Invalid plant")}
+    tekst = json.dumps(body.data, ensure_ascii=False, separators=(",", ":"))
+    if len(tekst.encode("utf-8")) > LAERING_MAKS:
+        return {"status": "error", "error": t("For stort", "Too large")}
+    fil = _laering_fil(body.nokkel)
+    try:
+        LAERING_DIR.mkdir(parents=True, exist_ok=True)
+        if fil.exists():
+            shutil.copyfile(fil, fil.with_suffix(".bak"))
+        tmp = fil.with_suffix(".tmp")
+        tmp.write_text(tekst, encoding="utf-8")
+        os.replace(tmp, fil)
+        alle = sorted(LAERING_DIR.glob("*.json"), key=lambda f: f.stat().st_mtime)
+        for g in alle[:-LAERING_FILER]:
+            for h in (g, g.with_suffix(".bak")):
+                try:
+                    h.unlink()
+                except OSError:
+                    pass
     except OSError as e:
         return {"status": "error", "error": str(e)}
     return {"status": "done", "bytes": len(tekst)}

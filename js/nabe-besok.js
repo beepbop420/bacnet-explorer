@@ -110,6 +110,7 @@
         const diff = besokDiff(d.forrige, naa, false);
         const n = antall(diff);
         const verst = diff.alarmNy.length + diff.feilNy.length + diff.borte.length;
+        if (window.nabeStatus) window.nabeStatus.siden(n, verst);
         if (n && typeof nabeSier === 'function') {
           nabeSier(T(`Siden sist: ${n} ${n === 1 ? 'ting er' : 'ting er'} annerledes. Se «Siden sist» i menyen.`,
                      `Since last visit: ${n} ${n === 1 ? 'thing is' : 'things are'} different. See "Since last visit" in the menu.`),
@@ -244,7 +245,26 @@
     deler.push([T('Feil klokke', 'Wrong clock'), r.klokker]);
     deler.push([T('Størst avvik fra settpunkt', 'Largest deviations from setpoint'), r.avvik]);
     deler.push([T('Notater', 'Notes'), r.notater]);
+    deler.push([T('Hva NABE gjorde mot anlegget', 'What NABE did to the plant'), bevisRader(BEVIS)]);
     return {r, deler: deler.filter(([, rader]) => rader.length)};
+  }
+  /* What NABE sent, from the traffic log: the answer to "what did you do on our network" */
+  let BEVIS = null;
+  function bevisRader(b) {
+    if (!b || !b.antall) return [];
+    const hm = (t) => new Date(t * 1000).toLocaleTimeString(T('no', 'en-GB'), {hour: '2-digit', minute: '2-digit'});
+    const dag = (t) => new Date(t * 1000).toLocaleDateString(T('no', 'en-GB'), {day: 'numeric', month: 'short'});
+    const n = (x) => Number(x).toLocaleString(T('nb-NO', 'en-GB'));
+    const lik = dag(b.fra) === dag(b.til);
+    return [
+      [T('Lesinger', 'Reads'), n(b.lesinger), ''],
+      [T('Skriv til anlegget', 'Writes to the plant'), n(b.skriv), b.skriv ? T('mot ', 'to ') + b.skrivMot.join(', ') : T('ingenting er endret', 'nothing was changed')],
+      ...(b.abonnement ? [[T('Abonnement på endringer (COV)', 'Subscriptions to changes (COV)'), n(b.abonnement), T('slutter av seg selv', 'end by themselves')]] : []),
+      [T('Enheter spurt', 'Devices asked'), n(b.enheter), ''],
+      [T('Tidsrom', 'Period'), lik ? `${hm(b.fra)} ${T('til', 'to')} ${hm(b.til)}` : `${dag(b.fra)} ${hm(b.fra)} ${T('til', 'to')} ${dag(b.til)} ${hm(b.til)}`, ''],
+      ...(b.feil ? [[T('Forespørsler som ikke ble besvart', 'Requests not answered'), n(b.feil), '']] : []),
+      ...(b.avkortet ? [[T('Merk', 'Note'), T('Bare de siste forespørslene er med', 'Only the latest requests are included'), '']] : []),
+    ];
   }
   function rapportTekst() {
     const {r, deler} = rapportDeler();
@@ -319,8 +339,13 @@
     toast(T('Rapporten er lagret som fil', 'The report is saved as a file'));
   }
   window.rapportHtml = rapportHtml;
-  window.aapneRapport = function () {
+  window.aapneRapport = async function () {
     if (!S.devices.length) { toast(T('Skann et anlegg først', 'Scan a plant first')); return; }
+    BEVIS = null;
+    try {
+      const d = await Promise.race([fetch('/api/bevis', {cache: 'no-store'}).then((r) => r.json()), new Promise((ok) => setTimeout(() => ok(null), 2000))]);
+      if (d && d.status === 'done') BEVIS = d;
+    } catch { /* the report stands without it */ }
     tegnRapport();
     rap.hidden = false;
   };

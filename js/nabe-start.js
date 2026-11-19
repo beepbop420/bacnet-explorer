@@ -206,6 +206,14 @@ const FAKTA = [
   ['COV betyr at regulatoren sier fra selv. Mindre spørring, mer ro.', 'COV means the controller speaks up itself. Less asking, more peace.'],
 ];
 const NYTT = {
+  '2.31': [
+    ['Mine anlegg: startsiden viser for hvert anlegg hvor mange forslag som er åpne, hvor mange du bør se på først og hvor mange som er nye, med tid for siste besøk. Overskriften sier hvor mange anlegg som har noe å se på', 'My sites: the start page shows for each site how many suggestions are open, how many to look at first and how many are new, with the time of the last visit. The heading says how many sites have something to look at'],
+    ['Lær av meg: «Ikke feil» på en rad i forslagene gjør at NABE slutter å foreslå akkurat det punktet, på akkurat det anlegget. Du velger hvorfor, og det står en liste nederst der hvert valg kan angres. Valgene går ut av seg selv, og følger enheten selv om IP-adressen endres', 'Learn from me: “Not a fault” on a row in the suggestions makes NABE stop suggesting exactly that point, at exactly that site. You choose why, and a list at the bottom lets every choice be undone. The choices run out by themselves, and follow the device even if its IP address changes'],
+    ['Besøksrapporten sier til slutt hva NABE gjorde mot anlegget: antall lesinger, skriv (som regel null), hvor mange enheter som ble spurt og i hvilket tidsrom. Det er svaret kundens IT-ansvarlige ellers må spørre om', 'The visit report ends by saying what NABE did to the plant: the number of reads, writes (usually none), how many devices were asked and over what period. It is the answer the IT contact at the customer would otherwise have to ask for'],
+    ['Glemte overstyringer: forslaget om overstyrte punkter sier nå hvor lenge de har stått overstyrt, regnet fra første besøk NABE så det. Står noe over to uker, rykker forslaget opp og sier det', 'Forgotten overrides: the suggestion about overridden points now says how long they have been overridden, counted from the first visit NABE saw it. If something has stood for over two weeks, the suggestion moves up and says so'],
+    ['Startsiden sier også om et anlegg har fått færre eller flere åpne forslag enn forrige gang det ble talt på en annen dag', 'The start page also says whether a site has fewer or more open suggestions than the last time it was counted on another day'],
+    ['Når tre av punktene du har satt til side har samme ord i navnet, for eksempel «reserve», spør NABE om resten med det ordet også kan settes til side. Nei huskes', 'When three of the points you have set aside share a word in the name, such as “reserve”, NABE asks whether the rest with that word can be set aside too. A no is remembered'],
+  ],
   '2.30': [
     ['Forslag som arbeidsliste: hvert forslag kan merkes som utført eller settes til side i en uke, og NABE husker det per anlegg. Det kommer tilbake av seg selv hvis noe nytt dukker opp, med et lite merke som sier hvor mange nye', 'Suggestions as a worklist: each suggestion can be marked done or put aside for a week, and NABE remembers it per plant. It comes back by itself if something new turns up, with a small note on how many are new'],
     ['Kopier som melding: ett forslag blir en ferdig tekst til en kollega eller kunden, med hva det gjelder, hvorfor og hva som bør sjekkes', 'Copy as message: one suggestion becomes a ready text for a colleague or the customer, with what it concerns, why and what to check'],
@@ -994,16 +1002,19 @@ async function visStartskjerm(igjen = false) {
       : new Date(t * 1000).toLocaleDateString(SPRAAK === 'en' ? 'en-GB' : 'nb-NO', {day: 'numeric', month: 'short'});
   };
   const liste = lag.querySelector('.ss-liste');
-  let html = steder.map(([key, s], i) => {
+  const sum = window.nabeStatus ? window.nabeStatus.oppsummer(steder) : '';
+  let html = (steder.length ? `<div class="ss-liste-hode ss-mine"><span>${T('Mine anlegg', 'My sites')}</span>${sum ? `<small>${esc(sum)}</small>` : ''}</div>` : '') + steder.map(([key, s], i) => {
     const n = (s.enheter || []).length;
     const tittel = s.navn || enhetsnavn(s) || key;
     const b = sisteBesok(key);
     const naabar = !!via[key];
+    const fl = window.nabeStatus ? window.nabeStatus.linje(s) : null;
     return `<button type="button" class="ss-rad" role="option" aria-selected="false" data-k="${esc(key)}" style="--i:${i}" title="${esc(enhetsliste(s))}">
         <span class="ss-hake" role="checkbox" aria-checked="false" aria-label="${esc(T('Velg for felles skann', 'Select for a joint scan'))}"><i class="ss-dot${naabar ? ' paa' : ''}" title="${naabar ? T('Nåbar nå', 'In reach now') : T('Ingen vei dit nå', 'No route there now')}"></i></span>
         <span class="ss-rad-tekst">
           <span class="ss-rad-navn">${esc(tittel)}</span>
           <span class="ss-rad-meta"><span class="ss-ip">${esc(key)}</span> · ${n} ${n === 1 ? T('enhet', 'device') : T('enheter', 'devices')}${leverandorer(s)}${s.modus === 'bbmd' ? ' · BBMD' : ''}${naabar ? ` · via ${esc(via[key])}` : ''}</span>
+          ${fl ? `<span class="ss-funn ${fl.klasse}" title="${esc(fl.tittel)}">${fl.html}</span>` : ''}
           ${b && b.over ? `<span class="ss-over">${b.over} ${T('overstyrt da du gikk', 'overridden when you left')}</span>` : ''}
         </span>
         <span class="ss-naar">${esc(naar(s.sist))}</span>
