@@ -162,7 +162,16 @@ function anVerdi(p) {
   return p.unit && v !== '—' ? `${v} ${p.unit}` : v;
 }
 
+/* The plant status is redrawn after every list render, and a scan renders the list many times a second. It is worked out
+   at most four times a second, with the last request always carried out, so what is shown is never old. */
+let anSist = 0, anTid = 0;
 function tegnAnlegg() {
+  const na = performance.now();
+  if (na - anSist < 250) { clearTimeout(anTid); anTid = setTimeout(tegnAnleggNu, 260 - (na - anSist)); return; }
+  tegnAnleggNu();
+}
+function tegnAnleggNu() {
+  anSist = performance.now();
   let el = $('anleggStatus');
   if (!el) {
     const warn = $('dupWarn');
@@ -293,13 +302,13 @@ function anKompakt(ja) {
 async function anKlikk(e) {
   if (e.target.closest('[data-varsel]')) {
     savePrefs({warnOpen: true});
-    tegnAnlegg();
+    tegnAnleggNu();
     renderSiteWarnings();
     return;
   }
   if (e.target.closest('[data-skjul]')) {
     savePrefs({anSkjult: true});
-    tegnAnlegg();
+    tegnAnleggNu();
     toast(T('Anleggsstatus skjult. Slå den på igjen under Innstillinger.', 'Plant status hidden. Turn it back on in Settings.'));
     if (typeof syncMenuStates === 'function') syncMenuStates();
     return;
@@ -308,11 +317,11 @@ async function anKlikk(e) {
     const og = !(loadPrefs().anApen || AN.apen);
     savePrefs({anApen: og});
     if (!og) AN.apen = '';
-    tegnAnlegg();
+    tegnAnleggNu();
     return;
   }
   const b = e.target.closest('[data-f]');
-  if (b) { AN.apen = AN.apen === b.dataset.f ? '' : b.dataset.f; savePrefs({anApen: true}); tegnAnlegg(); return; }
+  if (b) { AN.apen = AN.apen === b.dataset.f ? '' : b.dataset.f; savePrefs({anApen: true}); tegnAnleggNu(); return; }
   if (e.target.closest('[data-kopier]')) { anKopier(e.target.closest('[data-kopier]')); return; }
   const apne = e.target.closest('[data-apne]');
   if (apne) {

@@ -610,7 +610,8 @@ function spill(el, k, ms) {
 
 /* ----------------------------------------------- progress in the field */
 // The count sits inside the field, so the text has to give it room.
-const feltPlass = (el) => { $('rangeInput').style.paddingRight = el.textContent ? `${el.offsetWidth + 16}px` : ''; };
+// Reading the width forces the page to be laid out, so it is only done when the text has changed length
+const feltPlass = (el) => { const n = el.textContent.length; if (el._pl === n) return; el._pl = n; $('rangeInput').style.paddingRight = n ? `${el.offsetWidth + 16}px` : ''; };
 const _skannEtt = scanOneRange;
 scanOneRange = function (subnet, mode, thorough, onProgress) {
   return _skannEtt.call(this, subnet, mode, thorough, (j) => {

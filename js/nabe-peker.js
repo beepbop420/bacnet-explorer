@@ -23,7 +23,11 @@ const PK = (function motor() {
   const c = lerret.getContext('2d');
   const farge = {fg: '#ececee', accent: '#6aa7ff', warn: '#ffc900', err: '#ff5a4d', bg: '#111113'};
   const flate = {B: 0, H: 0};
+  // The canvas covers the whole window, and sizing it costs more the bigger the screen. So it is sized when the pointer first
+  // plays on it, not at start-up, and again (once, after the window has stopped changing) if the window is resized.
+  let klar = false, malT = 0;
   function mal() {
+    klar = true;
     const d = window.devicePixelRatio || 1;
     flate.B = innerWidth; flate.H = innerHeight;
     lerret.width = flate.B * d; lerret.height = flate.H * d;
@@ -223,6 +227,7 @@ const PK = (function motor() {
 
   document.addEventListener('pointermove', (e) => {
     if (e.pointerType !== 'mouse' || id === 'vanlig') return;
+    if (!klar) mal();
     mus.x = e.clientX; mus.y = e.clientY; mus.sist = performance.now();
     mus.tekst = !!(e.target.closest && e.target.closest(TEKST));
     if (!mus.inne) {
@@ -232,10 +237,11 @@ const PK = (function motor() {
     vekk();
   }, {passive: true});
   document.documentElement.addEventListener('mouseleave', () => { mus.inne = false; vekk(); });
-  window.addEventListener('resize', mal);
+  window.addEventListener('resize', () => { if (!klar) return; clearTimeout(malT); malT = setTimeout(mal, 150); });
   etter('applyTheme', () => setTimeout(lesFarger, 60));
   document.addEventListener('pointerdown', (e) => {
     if (e.pointerType !== 'mouse' || id === 'vanlig') return;
+    if (!klar) mal();
     stil.klikk(e.clientX, e.clientY);
     if (stil.ping) pinger.push({x: e.clientX, y: e.clientY, t: 0});
     vekk();
@@ -252,7 +258,7 @@ const PK = (function motor() {
     const s = $('pekerState'), p = typeof PEKERE !== 'undefined' && PEKERE.find(x => x.id === pekerValgt());
     if (s && p) s.textContent = T(p.navn[0], p.navn[1]);
   }
-  mal(); lesFarger();
+  lesFarger();
   etter('brukBevegelse', () => bruk(pekerValgt()));
   $('pekerBtn').onclick = () => { $('temaOverlay').hidden = true; aapneGarderobe('peker'); };
   return {c, mus, farge, flate, fig, ro, fjaer, f, klem, fart, tilf, strom, spor, folger, tau, STIL, bruk, tilstand: () => ({id, gaar})};

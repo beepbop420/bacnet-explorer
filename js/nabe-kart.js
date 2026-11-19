@@ -108,6 +108,13 @@
     if (p === 'modbus') return {k: 'modul', t: T('Modbus-enhet', 'Modbus device')};
     return {k: 'regulator', t: T('Regulator', 'Controller')};
   }
+  /* Who made it, as one more level inside a bus: Beckhoff, Regin, Distech ... KNX has no vendor to speak of, and a Modbus device that has
+     not said who made it is Unknown. */
+  const levAv = (d) => {
+    if (protAv(d) === 'knx') return '';
+    const l = (gruppeFor(d).label || '').replace(/^Modbus\s*·\s*/, '');
+    return !l || /^(ukjent|unknown|modbus)$/i.test(l) ? T('Ukjent', 'Unknown') : l;
+  };
   const IK = {
     aggregat: '<circle cx="8" cy="8" r="1.5"/><path d="M8 6.5C7 3.5 8.5 2 10 2.6 11.5 3.3 10.5 5.5 8 6.5Z"/><path d="M9.3 8.7C12 10.3 12 12.4 10.4 13 8.8 13.5 8.2 11 9.3 8.7Z"/><path d="M6.7 8.7C4 10.3 3 9 3.3 7.5 3.7 6 5.8 6.4 6.7 8.7Z"/>',
     kjoler: '<path d="M8 2v12M2.8 5l10.4 6M2.8 11l10.4-6"/><path d="M6.5 2.8 8 4.3l1.5-1.5M6.5 13.2 8 11.7l1.5 1.5"/>',
@@ -178,18 +185,24 @@
   function bane(st, p) {
     const l = st.per[p];
     if (!l.length) return '';
-    const id = st.key + '|' + p, aapen = KT.utvid.has(id);
-    const vis = aapen ? l : l.slice(0, MAKS_FLIS);
-    const bad = l.filter(d => d._tp === 'alarm' || d._tp === 'feil').length;
-    const tellere = ['alarm', 'feil'].map(s => ({s, n: l.filter(d => d._tp === s).length})).filter(x => x.n)
-      .map(x => `<span class="tp-merke s-${x.s}">${glyf(x.s)}${x.n}</span>`).join('');
-    const nye = vis.map((d, i) => {
-      const ny = !KT.sett.has(d.address);
-      return flis(d, ny && !KT.forste, i);
-    }).join('');
-    return `<div class="tp-bane p-${p}${bad ? ' har-feil' : ''}"><div class="tp-bane-h"><i></i><b>${PROT_NAVN[p]}</b><span class="tp-ant">${l.length}</span>${tellere}</div>
-      <div class="tp-rutenett">${nye}</div>
-      ${l.length > MAKS_FLIS ? `<button type="button" class="tp-mer" data-tp="mer" data-id="${esc(id)}">${aapen ? T('Vis færre', 'Show fewer') : T(`Vis alle ${l.length}`, `Show all ${l.length}`)}</button>` : ''}</div>`;
+    const grp = new Map();
+    for (const d of l) { const lv = levAv(d); if (!grp.has(lv)) grp.set(lv, []); grp.get(lv).push(d); }
+    const sek = [...grp].sort((a, b) => b[1].length - a[1].length);
+    const bad = l.filter(d => d._tp === 'feil').length;
+    const merker = (lst) => {
+      const a = lst.filter(d => d._alm).length, f = lst.filter(d => d._tp === 'feil').length;
+      return (f ? `<span class="tp-merke s-feil">${glyf('feil')}${f}</span>` : '') + (a ? `<span class="tp-merke s-alarm">${glyf('alarm')}${a}</span>` : '');
+    };
+    const rut = (lst, id, maks) => {
+      const aapen = KT.utvid.has(id), vis = aapen ? lst : lst.slice(0, maks);
+      const html = vis.map((d, i) => flis(d, !KT.sett.has(d.address) && !KT.forste, i)).join('');
+      return `<div class="tp-rutenett">${html}</div>${lst.length > maks ? `<button type="button" class="tp-mer" data-tp="mer" data-id="${esc(id)}">${aapen ? T('Vis færre', 'Show fewer') : T(`Vis alle ${lst.length}`, `Show all ${lst.length}`)}</button>` : ''}`;
+    };
+    // One vendor: the tiles directly. Several: a small heading per vendor, each with its own tiles, so Beckhoff and Regin do not run together
+    const inn = sek.length === 1 ? rut(l, st.key + '|' + p, MAKS_FLIS)
+      : sek.map(([lv, lst]) => `<div class="tp-lev"><b>${esc(lv)}</b><span class="tp-ant">${lst.length}</span>${merker(lst)}</div>${rut(lst, st.key + '|' + p + '|' + lv, 6)}`).join('');
+    const levH = sek.length === 1 && sek[0][0] ? `<span class="tp-levh">· ${esc(sek[0][0])}</span>` : '';
+    return `<div class="tp-bane p-${p}${bad ? ' har-feil' : ''}"><div class="tp-bane-h"><i></i><b>${PROT_NAVN[p]}</b>${levH}<span class="tp-ant">${l.length}</span>${merker(l)}</div>${inn}</div>`;
   }
 
   function stedKort(st) {
@@ -285,7 +298,8 @@
     KT.forste = false;
     rail();
     detalj();
-    requestAnimationFrame(() => { $('tpKol').scrollTop = rotY; lenker(); });
+    requestAnimationFrame(() => { if (!KT.manuell) samletTilpass(); else samletBruk(); });
+    $('tpFot').textContent = ute ? $('tpFot').textContent : T('Dra for å flytte, rull for å zoome', 'Drag to move, scroll to zoom');
   }
 
   /* The links are measured from the boxes after they have been laid out, so they follow whatever size the text ended up with. */
@@ -293,8 +307,8 @@
     const rot = $('tpKol'), sv = $('tpLenker');
     if (!rot || !sv) return;
     const R = rot.getBoundingClientRect();
-    sv.setAttribute('width', rot.scrollWidth);
-    sv.setAttribute('height', rot.scrollHeight);
+    sv.setAttribute('width', rot.clientWidth);
+    sv.setAttribute('height', rot.clientHeight);
     const pos = (el, hoyre) => { const r = el.getBoundingClientRect(); return {x: (hoyre ? r.right : r.left) - R.left + rot.scrollLeft, y: r.top + r.height / 2 - R.top + rot.scrollTop}; };
     const bue = (a, b, dy) => { const x1 = a.x, y1 = a.y + dy, x2 = b.x, y2 = b.y + dy, m = Math.max(30, (x2 - x1) / 2); return `M${x1},${y1} C${x1 + m},${y1} ${x2 - m},${y2} ${x2},${y2}`; };
     const pc = $('tpPc');
@@ -330,7 +344,7 @@
     if (uten.length) gruppe.push({k: null, s: uten});
     const vekt = (st) => Math.max(3, st.dev.length);
     const tot = gruppe.reduce((a, g) => a + g.s.reduce((b, st) => b + vekt(st), 0), 0) || 1;
-    const C = 15;                                               // spacing of the dots in a cluster
+    const C = 19;                                               // spacing of the dots in a cluster
     let a0 = Math.PI - (gruppe.length ? gruppe[0].s.reduce((b, st) => b + vekt(st), 0) / tot * Math.PI : 0), noder = '', lenk = '', faste = '';
     for (const g of gruppe) {
       const gv = g.s.reduce((b, st) => b + vekt(st), 0), ga = (gv / tot) * Math.PI * 2;
@@ -339,8 +353,12 @@
       for (const st of g.s) {
         const v = (vekt(st) / gv) * ga;
         st.a = sa + v / 2; st.v = v; sa += v;
-        // Inside a site every protocol is a cluster of its own, side by side, so a technician finds BACnet, Modbus and KNX apart
-        st.sub = PROT.filter(q => st.per[q].length).map(q => ({q, n: st.per[q].length, R: C * Math.sqrt(st.per[q].length) + 12}));
+        // Inside a site every protocol, and inside it every vendor, is a cluster of its own, side by side,
+        // so a technician finds BACnet, Modbus and KNX apart, and Beckhoff from Regin
+        const grp = new Map();
+        for (const q of PROT) for (const d of st.per[q]) { const lv = levAv(d), k = q + '|' + lv; if (!grp.has(k)) grp.set(k, {q, lev: lv, list: []}); grp.get(k).list.push(d); }
+        st.sub = [...grp.values()].map(x => ({q: x.q, lev: x.lev, list: x.list, n: x.list.length, R: C * Math.sqrt(x.list.length) + 14}))
+          .sort((a, b) => PROT.indexOf(a.q) - PROT.indexOf(b.q) || b.n - a.n);
         st.W = st.sub.reduce((b, x) => b + 2 * x.R + 16, 0) || 30;
         st.mR = Math.max(0, ...st.sub.map(x => x.R));
         st.R = Math.max(st.W / 2, st.mR);
@@ -351,13 +369,13 @@
     for (const g of gruppe) {
       g.rS = 120;
       for (const st of g.s) g.rS = Math.max(g.rS, Math.min(1400, (2 * st.R + 26) / Math.max(st.v, .12) + st.R * .15));
-      g.rK = Math.max(110, g.rS * .4);
-      g.rS = Math.max(g.rS, g.rK + 150);
+      g.rK = Math.max(150, g.rS * .42);
+      g.rS = Math.max(g.rS, g.rK + 170);
     }
     let minx = -40, miny = -40, maxx = 40, maxy = 40;
     const se = (x, y, r, b) => { minx = Math.min(minx, x - r); maxx = Math.max(maxx, x + r); miny = Math.min(miny, y - r); maxy = Math.max(maxy, y + r);
       if (b) { b[0] = Math.min(b[0], x - r); b[1] = Math.min(b[1], y - r); b[2] = Math.max(b[2], x + r); b[3] = Math.max(b[3], y + r); } };
-    KT.pos = {}; KT.grenser = {};
+    KT.pos = {}; KT.grenser = {}; KT.punkter = [];
     let si = 0;
     // A node that keeps its size on the screen however far you zoom, so names stay readable (see maal())
     const fast = (kl, x, y, inn, attr = '') => `<g class="tp-k ${kl}" data-x="${x.toFixed(1)}" data-y="${y.toFixed(1)}" ${attr}>${inn}</g>`;
@@ -381,7 +399,7 @@
           const cx = bx + tx * off, cy = by + ty * off, sx = cx - ca * (x.R + 8), sy = cy - sa * (x.R + 8);
           off += x.R + 8;
           lenk += `<path class="tp-gs-l p-${x.q}" d="M${hx},${hy} L${sx.toFixed(1)},${sy.toFixed(1)}" data-s="${nr}"/><path class="tp-flyt p-${x.q}" d="M${hx},${hy} L${sx.toFixed(1)},${sy.toFixed(1)}" data-s="${nr}"/>`;
-          st.per[x.q].forEach((d, i) => {
+          x.list.forEach((d, i) => {
             const r = C * Math.sqrt(i + .5), t = i * 2.39996 + st.a;
             const px = cx + Math.cos(t) * r, py = cy + Math.sin(t) * r, sl = d._tp;
             KT.pos[d.address] = [px, py];
@@ -392,19 +410,11 @@
             else if (sl === 'feil') noder += `<polygon ${at} points="${px.toFixed(1)},${(py - 7).toFixed(1)} ${(px + 7).toFixed(1)},${py.toFixed(1)} ${px.toFixed(1)},${(py + 7).toFixed(1)} ${(px - 7).toFixed(1)},${py.toFixed(1)}"/>`;
             else noder += `<circle ${at} cx="${px.toFixed(1)}" cy="${py.toFixed(1)}" r="${sl === 'stille' ? 4 : 5.5}"/>`;
             const nm = (d.object_name || kort0(d.address)) + (dupl(d) && ipSuff(d) ? ' ' + ipSuff(d) : '');
-            noder += `<text class="tp-gt${sl === 'ok' || sl === 'stille' ? '' : ' fs'}" x="${(px + 9).toFixed(1)}" y="${(py + 3.5).toFixed(1)}">${esc(nm.length > 24 ? nm.slice(0, 23) + '…' : nm)}</text>`;
+            if (sl !== 'ok' && sl !== 'stille') noder += `<text class="tp-gt fs" x="${(px + 9).toFixed(1)}" y="${(py + 3.5).toFixed(1)}">${esc(nm.length > 24 ? nm.slice(0, 23) + '…' : nm)}</text>`;
             if (d._alm) noder += `<polygon class="tp-gb" data-s="${nr}" points="${(px + 4.5).toFixed(1)},${(py - 10).toFixed(1)} ${(px + 9.5).toFixed(1)},${(py - 2).toFixed(1)} ${(px - .5).toFixed(1)},${(py - 2).toFixed(1)}"/>`;
-            // Close up, the dot becomes the device itself: icon, name, kind, state; closer still, address, vendor and points
-            const kk = slag(d), gl = gruppeFor(d), pk = (S.cache[d.address] || []).length, tr = (t, n) => (t.length > n ? t.slice(0, n - 1) + '…' : t);
-            faste += fast(`tp-dk p-${x.q} s-${sl}`, px, py,
-              `<rect class="r1" x="-56" y="-20" width="112" height="40" rx="8"/><rect class="r2" x="-56" y="-20" width="112" height="64" rx="8"/><rect class="str" x="-56" y="-20" width="4" height="40" rx="2"/>`
-              + `<g class="ik" transform="translate(-48,-10) scale(1.25)">${IK[kk.k] || IK.regulator}</g>`
-              + `<text class="n" x="-24" y="-3">${esc(nm.length > 13 ? (dupl(d) && ipSuff(d) ? tr(nm.slice(0, nm.length - ipSuff(d).length - 1), 12 - ipSuff(d).length) + ' ' + ipSuff(d) : tr(nm, 13)) : nm)}</text><text class="k" x="-24" y="10">${esc(tr(kk.t, 20))}</text>`
-              + `<g class="tp-gl s-${sl}" transform="translate(46,-27) scale(.9)">${GLYF[sl]}</g>${d._alm ? `<g class="tp-gl s-alarm" transform="translate(35,-25) scale(.7)">${GLYF.alarm}</g>` : ''}`
-              + `<g class="d2"><text class="k" x="-48" y="32">${esc(kort0(d.address))}</text><text class="k" x="-48" y="43">${esc(tr(gl.label || '', 18))}${pk ? ' · ' + pk + ' ' + T('pkt', 'pts') : ''}</text></g>`,
-              `data-s="${nr}" data-tp="enhet" data-adr="${esc(d.address)}" data-tip="d:${esc(d.address)}"`);
+            KT.punkter.push({d, x: px, y: py, q: x.q, nr, sl});
           });
-          faste += fast('tp-gs p-' + x.q, sx, sy, `<circle r="5.5"/><text y="-12" text-anchor="middle">${PROT_NAVN[x.q]} ${x.n}</text>`, `data-s="${nr}"`);
+          faste += fast('tp-gs p-' + x.q, sx, sy, `<circle r="5.5"/><text y="-12" text-anchor="middle">${PROT_NAVN[x.q]}${x.lev ? ' · ' + esc(x.lev) : ''} ${x.n}</text>`, `data-s="${nr}"`);
           se(cx, cy, x.R + 20, gr);
         }
         const navn = st.navn || stedKey(st.key).join(', ');
@@ -417,12 +427,59 @@
     }
     faste += fast('tp-gp', 0, 0, `<circle r="24"/><text y="4" text-anchor="middle">PC</text>`);
     KT.fit = [minx - 40, miny - 40, maxx - minx + 80, maxy - miny + 80];
-    sv.innerHTML = `<g class="tp-gl-lag">${lenk}</g><g class="tp-gn-lag">${noder}</g><g class="tp-f-lag">${faste}</g>`;
-    KT.fastEls = [...sv.querySelectorAll('.tp-k')].map(g => [g, g.classList.contains('tp-dk')]);
+    sv.innerHTML = `<g class="tp-gl-lag">${lenk}</g><g class="tp-gn-lag">${noder}</g><g class="tp-dyn-lag" id="tpDyn"></g><g class="tp-f-lag">${faste}</g>`;
+    KT.fastEls = [...sv.querySelectorAll('.tp-f-lag .tp-k')].map(g => [g, false]);
+    KT.dynEls = []; KT.dynNiv = ''; KT.dynR = null;
     KT.sc0 = 0;
     if (!KT.vb || KT.vbNy) { KT.vb = tilpass(KT.fit); KT.mal = KT.vb.slice(); KT.vbNy = false; sv.classList.add('inn'); setTimeout(() => sv.classList.remove('inn'), 1400); }
     bruk();
+    dynTegn(true);
     $('tpPc').innerHTML = '';
+  }
+
+  /* The symbols and the cards of the devices are built when the zoom reaches them, and only for what is in view (and a margin around),
+     so a plant of hundreds of devices moves as lightly as one of ten. */
+  const trk = (t, n) => (t.length > n ? t.slice(0, n - 1) + '…' : t);
+  const fastT = (kl, x, y, inn, attr, sk) => `<g class="tp-k ${kl}" data-x="${x.toFixed(1)}" data-y="${y.toFixed(1)}" transform="translate(${x.toFixed(1)},${y.toFixed(1)}) scale(${sk})" ${attr}>${inn}</g>`;
+  function symHtml(pt, sk) {
+    const {d, x, y, q, nr, sl} = pt, kk = slag(d), nm = (d.object_name || kort0(d.address)) + (dupl(d) && ipSuff(d) ? ' ' + ipSuff(d) : '');
+    const adr = `data-s="${nr}" data-tp="enhet" data-adr="${esc(d.address)}" data-tip="d:${esc(d.address)}"`;
+    return fastT(`tp-gy p-${q} s-${sl}${KT.valgt === 'e:' + d.address ? ' valgt' : ''}`, x, y,
+      `<circle r="11"/><g class="ik" transform="translate(-8,-8)">${IK[kk.k] || IK.regulator}</g>${d._alm ? '<polygon class="am" points="8,-14 14,-4 2,-4"/>' : ''}<text class="gn" x="18" y="4">${esc(trk(nm, 24))}</text>`, adr, sk);
+  }
+  function kortHtml(pt, sk) {
+    const {d, x, y, q, nr, sl} = pt, kk = slag(d), gl = gruppeFor(d), pk = (S.cache[d.address] || []).length;
+    const adr = `data-s="${nr}" data-tp="enhet" data-adr="${esc(d.address)}" data-tip="d:${esc(d.address)}"`;
+    const base = d.object_name || kort0(d.address), sf = dupl(d) && ipSuff(d) ? ipSuff(d) + ' · ' : '';
+    return fastT(`tp-dk p-${q} s-${sl}${KT.valgt === 'e:' + d.address ? ' valgt' : ''}`, x, y,
+      `<rect class="r1" x="-82" y="-24" width="164" height="48" rx="10"/><rect class="r2" x="-82" y="-24" width="164" height="98" rx="10"/>`
+      + `<rect class="ib" x="-76" y="-18" width="36" height="36" rx="8"/><g class="ik" transform="translate(-66,-13) scale(1.6)">${IK[kk.k] || IK.regulator}</g>`
+      + `<text class="n" x="-32" y="-3">${esc(trk(base, 17))}</text><text class="k" x="-32" y="14">${esc(trk(sf + kk.t, 22))}</text>`
+      + `<g class="tp-gl s-${sl}" transform="translate(72,-32) scale(1)">${GLYF[sl]}</g>${d._alm ? `<g class="tp-gl s-alarm" transform="translate(58,-30) scale(.8)">${GLYF.alarm}</g>` : ''}`
+      + `<g class="d2"><text class="k" x="-76" y="42">${esc(q === 'bacnet' && d.device_instance != null ? T('Instans ', 'Instance ') + d.device_instance : trk(base, 30))}</text><text class="k" x="-76" y="56">${esc(kort0(d.address))}</text><text class="k" x="-76" y="70">${esc(trk(gl.label || '', 22))}${pk ? ' · ' + pk + ' ' + T('pkt', 'pts') : ''}</text></g>`,
+      adr, sk);
+  }
+  function dynNivaa() { const sc = KT.sc || 1; return sc > 9 ? 'kort' : (sc > 2.2 || KT.navn) ? 'sym' : ''; }
+  function dynTegn(tving, tak) {
+    const sv = $('tpGraf'), dyn = $('tpDyn');
+    if (!sv || !dyn || !KT.vb || !KT.punkter) return;
+    const niv = dynNivaa(), [x, y, w, h] = KT.vb;
+    const trengs = [x - w * .1, y - h * .1, x + w * 1.1, y + h * 1.1];
+    const inni = KT.dynR && trengs[0] >= KT.dynR[0] && trengs[1] >= KT.dynR[1] && trengs[2] <= KT.dynR[2] && trengs[3] <= KT.dynR[3];
+    if (!tving && niv === KT.dynNiv && (niv === '' || inni)) return;
+    const r = [x - w * .6, y - h * .6, x + w * 1.6, y + h * 1.6];
+    KT.dynNiv = niv; KT.dynR = r;
+    if (!niv) { dyn.innerHTML = ''; KT.dynEls = []; sv.classList.remove('n-sym', 'n-kort'); return; }
+    let lst = KT.punkter.filter(p => p.x >= r[0] && p.x <= r[2] && p.y >= r[1] && p.y <= r[3]);
+    const maks = tak || 320;
+    if (lst.length > maks) { const cx = x + w / 2, cy = y + h / 2; lst = lst.sort((a, b) => Math.hypot(a.x - cx, a.y - cy) - Math.hypot(b.x - cx, b.y - cy)).slice(0, maks); }
+    if (tak) KT.dynR = null;      // a quick first set: the whole one follows when the movement stops
+    const sc = KT.sc || 1, sk = niv === 'kort' ? (Math.min(2.2, Math.max(1, sc / 9)) / sc).toFixed(4) : (1 / sc).toFixed(4);
+    dyn.innerHTML = lst.map(p => (niv === 'kort' ? kortHtml(p, sk) : symHtml(p, sk))).join('');
+    KT.dynEls = [...dyn.querySelectorAll('.tp-k')].map(g => [g, niv === 'kort']);
+    sv.classList.add('n-sym');
+    sv.classList.toggle('n-kort', niv === 'kort');
+    kolisjon();
   }
 
   /* The view box that fits a rectangle in the window, with the window's own proportions. */
@@ -461,6 +518,9 @@
     const sv = $('tpGraf');
     if (!sv || !KT.vb) return;
     sv.setAttribute('viewBox', KT.vb.map(v => +v.toFixed(2)).join(' '));
+    sv.classList.add('beveger');
+    clearTimeout(KT.rT);
+    KT.rT = setTimeout(() => sv.classList.remove('beveger'), 140);
     maal();
   }
   function maal() {
@@ -470,18 +530,19 @@
     KT.sc = sc;
     if (Math.abs(sc - (KT.sc0 || 0)) > 1e-4 * sc) {
       KT.sc0 = sc;
-      const inv = (1 / sc).toFixed(4);
-      const kortSk = (Math.min(3, Math.max(1, sc / 8.5)) / sc).toFixed(4);
-      for (const [g, k] of KT.fastEls || []) g.setAttribute('transform', `translate(${g.dataset.x},${g.dataset.y}) scale(${k ? kortSk : inv})`);
+      const inv = (1 / sc).toFixed(4), kortSk = (Math.min(2.2, Math.max(1, sc / 9)) / sc).toFixed(4);
+      for (const [g] of KT.fastEls || []) g.setAttribute('transform', `translate(${g.dataset.x},${g.dataset.y}) scale(${inv})`);
+      for (const [g, k] of KT.dynEls || []) g.setAttribute('transform', `translate(${g.dataset.x},${g.dataset.y}) scale(${k ? kortSk : inv})`);
       sv.style.setProperty('--dl', (11 / sc).toFixed(3) + 'px');
     }
     sv.classList.toggle('n-proto', sc > .5);
     sv.classList.toggle('n-feil', sc > .9);
-    sv.classList.toggle('n-alle', !!KT.navn || sc > 4.2);
-    sv.classList.toggle('n-kort', sc > 8.5);
-    sv.classList.toggle('n-detalj', sc > 16);
+    sv.classList.toggle('n-alle', !!KT.navn || sc > 5);
+    sv.classList.toggle('n-detalj', sc > 18);
+    // A new level of detail is built at once (at most five times a second); the rest waits until the movement has stopped
+    if (dynNivaa() !== (KT.dynNiv || '') && performance.now() - (KT.dynT || 0) > 200) { KT.dynT = performance.now(); dynTegn(false, 70); }
     clearTimeout(KT.kolT);
-    KT.kolT = setTimeout(kolisjon, 110);
+    KT.kolT = setTimeout(() => { dynTegn(); kolisjon(); }, 110);
   }
   /* Names are shown by priority: sites first, then the protocol labels, then devices with an alarm or fault (worst first), then the
      rest. A name that would touch one already placed waits until you zoom in. The one under the pointer or picked is always shown. */
@@ -489,11 +550,13 @@
     const sv = $('tpGraf');
     if (!sv || sv.clientWidth < 10) return;
     const kand = [];
-    sv.querySelectorAll('.tp-gh text:not(.u), .tp-gs text, .tp-gt').forEach((el) => {
+    const alle = sv.querySelectorAll('.tp-gh text:not(.u), .tp-gs text, .tp-gt, .tp-gy text');
+    if (alle.length > 420) return;
+    alle.forEach((el) => {
       el.removeAttribute('data-skjul');
       if (!el.getClientRects().length) return;
       const pri = el.closest('.tp-gh') ? 0 : el.closest('.tp-gs') ? 1 : 2;
-      const rang = pri === 2 ? (() => { const n = el.previousElementSibling; return n ? ({'s-alarm': 0, 's-feil': 1, 's-over': 2}[[...n.classList].find(c => c.startsWith('s-'))] ?? 3) : 3; })() : 0;
+      const rang = pri === 2 ? (() => { const n = el.closest('.tp-gy') || el.previousElementSibling; return n ? ({'s-alarm': 0, 's-feil': 1, 's-over': 2}[[...n.classList].find(c => c.startsWith('s-'))] ?? 3) : 3; })() : 0;
       kand.push({el, pri, rang});
     });
     kand.sort((a, b) => a.pri - b.pri || a.rang - b.rang);
@@ -749,7 +812,7 @@
     grafInteraksjon();
     $('tpSok').addEventListener('input', (e) => { KT.filter = e.target.value; rail(); });
     $('tpKol').addEventListener('scroll', () => {}, {passive: true});
-    if (window.ResizeObserver) { const ro = new ResizeObserver(() => lenker()); ro.observe($('tpKol')); }
+    if (window.ResizeObserver) { const ro = new ResizeObserver(() => { if (KT.visning !== 'samlet' || lag.hidden) return; if (!KT.manuell) samletTilpass(); else lenker(); }); ro.observe($('tpKol')); }
   }
 
   async function tikk() {
@@ -791,31 +854,50 @@
     const sv = $('tpGraf');
     sv.querySelectorAll('.valgt').forEach(x => x.classList.remove('valgt'));
     const q = v.slice(2);
-    const el = v[0] === 'e' ? sv.querySelector(`.tp-gn[data-adr="${CSS.escape(q)}"]`) : v[0] === 's' ? sv.querySelector(`.tp-gh[data-key="${CSS.escape(q)}"]`) : sv.querySelector(`.tp-gk[data-kortid="${CSS.escape(q)}"]`);
-    if (el) el.classList.add('valgt');
+    const els = v[0] === 'e' ? sv.querySelectorAll(`[data-adr="${CSS.escape(q)}"]`) : v[0] === 's' ? sv.querySelectorAll(`.tp-gh[data-key="${CSS.escape(q)}"]`) : sv.querySelectorAll(`.tp-gk[data-kortid="${CSS.escape(q)}"]`);
+    els.forEach(el => el.classList.add('valgt'));
     detalj();
     rail();
   }
-  /* In the grouped view the same buttons zoom the whole page, so many sites fit on one screen, and the page is moved by dragging. */
-  function samletZoom(z) {
-    KT.zs = Math.max(.35, Math.min(1.5, z));
+  /* The grouped view is one canvas, like the spread one: it opens fitted so every site and line is in view, is moved by dragging,
+     zoomed with the wheel or the buttons, and has no scrollbars. Fit again brings everything back. */
+  function samletBruk(glatt) {
     const rp = lag.querySelector('.tp-rad-pc');
-    if (rp) rp.style.zoom = KT.zs === 1 ? '' : KT.zs;
-    requestAnimationFrame(lenker);
+    if (!rp) return;
+    const jevn = glatt && !rolig();
+    rp.style.transition = jevn ? 'transform .22s cubic-bezier(.2,.8,.3,1)' : 'none';
+    rp.style.transform = `translate(${(KT.tx || 0).toFixed(1)}px,${(KT.ty || 0).toFixed(1)}px) scale(${(KT.zs || 1).toFixed(4)})`;
+    cancelAnimationFrame(KT.lR);
+    if (jevn) { const t0 = performance.now(); const f = (t) => { lenker(); if (t - t0 < 280) KT.lR = requestAnimationFrame(f); }; KT.lR = requestAnimationFrame(f); }
+    else lenker();
   }
-  function samletTilpass() {
+  function samletTilpass(glatt) {
     const rp = lag.querySelector('.tp-rad-pc'), lr = $('tpKol');
-    if (!rp || !lr) return;
-    rp.style.zoom = '';
-    const w = rp.scrollWidth || 1, h = rp.scrollHeight || 1;
-    samletZoom(Math.min(1.2, (lr.clientWidth - 40) / w, (lr.clientHeight - 36) / h));
+    if (!rp || !lr || lr.clientWidth < 80) return;
+    rp.style.transition = 'none';
+    rp.style.transform = 'none';
+    const w = rp.offsetWidth || 1, h = rp.offsetHeight || 1, cw = lr.clientWidth, ch = lr.clientHeight;
+    const z = Math.max(.3, Math.min(1.1, (cw - 32) / w, (ch - 32) / h));
+    KT.zs = z; KT.tx = (cw - w * z) / 2; KT.ty = Math.max(16, (ch - h * z) / 2); KT.manuell = false;
+    samletBruk(glatt);
   }
-  function zoomKnapp(f) { if (KT.visning === 'spredt') zoomOm(f); else samletZoom((KT.zs || 1) / f); }
+  function samletZoom(f, cx, cy) {
+    const lr = $('tpKol');
+    if (!lr) return;
+    const r = lr.getBoundingClientRect();
+    const x = (cx === undefined ? r.left + r.width / 2 : cx) - r.left, y = (cy === undefined ? r.top + r.height / 2 : cy) - r.top;
+    const z0 = KT.zs || 1, z = Math.max(.25, Math.min(3, z0 * f)), k = z / z0;
+    KT.tx = x - (x - (KT.tx || 0)) * k; KT.ty = y - (y - (KT.ty || 0)) * k; KT.zs = z; KT.manuell = true;
+    samletBruk(true);
+  }
+  function zoomKnapp(f) { if (KT.visning === 'spredt') zoomOm(f); else samletZoom(1 / f); }
+  function fitKnapp() { if (KT.visning === 'spredt') { if (KT.fit) mot(tilpass(KT.fit)); } else samletTilpass(true); }
   let pd = null;
   lag.addEventListener('pointerdown', (e) => {
     if (KT.visning === 'spredt' || e.button !== 0 || !e.target.closest || e.target.closest('input,select,textarea,.tp-rail,.tp-detalj,.tp-verktoy')) return;
-    const sc = e.target.closest('.tp-status') || $('tpKol');
-    if (sc && sc.contains(e.target)) pd = {x: e.clientX, y: e.clientY, sl: sc.scrollLeft, st: sc.scrollTop, sc, f: false};
+    if (KT.visning === 'samlet') { if ($('tpKol').contains(e.target)) pd = {x: e.clientX, y: e.clientY, tx: KT.tx || 0, ty: KT.ty || 0, sc: $('tpKol'), samlet: true, f: false}; return; }
+    const sc = e.target.closest('.tp-status');
+    if (sc) pd = {x: e.clientX, y: e.clientY, sl: sc.scrollLeft, st: sc.scrollTop, sc, f: false};
   });
   lag.addEventListener('pointermove', (e) => {
     if (!pd) return;
@@ -823,16 +905,16 @@
     if (!pd.f && Math.abs(dx) + Math.abs(dy) < 6) return;
     pd.f = true;
     pd.sc.classList.add('drar');
-    pd.sc.scrollLeft = pd.sl - dx;
-    pd.sc.scrollTop = pd.st - dy;
+    if (pd.samlet) { KT.tx = pd.tx + dx; KT.ty = pd.ty + dy; KT.manuell = true; samletBruk(false); }
+    else { pd.sc.scrollLeft = pd.sl - dx; pd.sc.scrollTop = pd.st - dy; }
   });
   const slippPd = () => { if (pd) { if (pd.f) KT.drattNaa = Date.now(); pd.sc.classList.remove('drar'); } pd = null; };
   lag.addEventListener('pointerup', slippPd);
   lag.addEventListener('pointercancel', slippPd);
   lag.addEventListener('wheel', (e) => {
-    if (KT.visning !== 'samlet' || !e.ctrlKey || !e.target.closest('.tp-lerret')) return;
+    if (KT.visning !== 'samlet' || !e.target.closest('.tp-lerret')) return;
     e.preventDefault();
-    samletZoom((KT.zs || 1) * Math.exp(-e.deltaY * .002));
+    samletZoom(Math.exp(-Math.max(-120, Math.min(120, e.deltaMode === 1 ? e.deltaY * 16 : e.deltaY)) * .0015), e.clientX, e.clientY);
   }, {passive: false});
   async function kopi(t) { try { await navigator.clipboard.writeText(t); toast(T('Kopiert', 'Copied')); } catch { toast(t); } }
 
@@ -845,6 +927,7 @@
     if (t === 'v-samlet' || t === 'v-spredt' || t === 'v-status') {
       KT.visning = t === 'v-spredt' ? 'spredt' : t === 'v-status' ? 'status' : 'samlet';
       KT.vbNy = true;
+      KT.manuell = false;
       start();
       try { localStorage.setItem('nabe.topologi', KT.visning); } catch {}
       lag.querySelectorAll('.tp-visning button').forEach(b => b.classList.toggle('on', b === n));
@@ -864,7 +947,7 @@
     }
     else if (t === 'z-pluss') zoomKnapp(1 / 1.4)
     else if (t === 'z-minus') zoomKnapp(1.4)
-    else if (t === 'z-fit') { if (KT.visning === 'spredt') { if (KT.fit) mot(tilpass(KT.fit)); } else samletTilpass(); }
+    else if (t === 'z-fit') fitKnapp()
     else if (t === 'z-navn') { KT.navn = !KT.navn; n.classList.toggle('on', KT.navn); maal(); }
     else if (t === 'vis') { KT.apen.add(n.dataset.key); KT.valgt = 's:' + n.dataset.key; tegn(true); }
     else if (t === 'kort') velg('k:' + n.dataset.kortid);
@@ -904,16 +987,17 @@
   lag.addEventListener('mouseover', visTip);
   lag.addEventListener('mouseleave', () => { const t = $('tpTip'); if (t) t.hidden = true; });
   document.addEventListener('keydown', (e) => {
-    if (!lag.hidden && KT.visning === 'spredt' && !/INPUT|TEXTAREA|SELECT/.test((e.target || {}).tagName || '') && !e.ctrlKey && !e.metaKey) {
-      if (e.key === '+' || e.key === '=') { zoomOm(1 / 1.4); e.preventDefault(); return; }
-      if (e.key === '-') { zoomOm(1.4); e.preventDefault(); return; }
-      if (e.key === '0' && KT.fit) { mot(tilpass(KT.fit)); e.preventDefault(); return; }
+    if (!lag.hidden && KT.visning !== 'status' && !/INPUT|TEXTAREA|SELECT/.test((e.target || {}).tagName || '') && !e.ctrlKey && !e.metaKey) {
+      if (e.key === '+' || e.key === '=') { zoomKnapp(1 / 1.4); e.preventDefault(); return; }
+      if (e.key === '-') { zoomKnapp(1.4); e.preventDefault(); return; }
+      if (e.key === '0') { fitKnapp(); e.preventDefault(); return; }
     }
     if (e.key === 'Escape' && !lag.hidden) { if (KT.valgt) { KT.valgt = null; tegn(true); } else lukk(); e.stopPropagation(); }
   }, true);
 
   window.aapneKart = async () => {
     KT.sett = new Set(S.devices.map(d => d.address));
+    KT.manuell = false;
     KT.forste = true;
     KT.sig = '';
     KT.vbNy = true;

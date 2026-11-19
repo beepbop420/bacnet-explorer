@@ -45,7 +45,7 @@ import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from fastapi import FastAPI, Form
+from fastapi import FastAPI, Form, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
@@ -235,7 +235,7 @@ def t(nb: str, en: str) -> str:
     return en if SPRAAK_VAR.get() == "en" else nb
 
 
-VERSJON = "2.22"
+VERSJON = "2.23"
 
 state = {"app": None, "local_address": None, "read_only": False, "bbmd": None, "primary": None}
 # The simulator: a scanned site run as devices on 127.0.0.x, in a process of its own.
@@ -6632,34 +6632,60 @@ def knx_slett(body: KnxSlett):
     return {"status": "done"}
 
 
+_STATISK_GZ: Dict[str, bytes] = {}
+
+
+def _statisk(request: Request, fil: Path, media: Optional[str] = None):
+    """A file of the interface. It is always checked against the one on disk (so an update in place is never half old), but with an
+    ETag the check costs a 304 and no transfer, and the browser can keep what it has compiled of the scripts, which is most of the
+    start-up time of a page with two megabytes of JavaScript."""
+    try:
+        st = fil.stat()
+    except OSError:
+        return JSONResponse({"detail": "Not Found"}, status_code=404)
+    h = {"Cache-Control": "no-cache", "ETag": f'"{st.st_mtime_ns:x}-{st.st_size:x}"'}
+    if request.headers.get("if-none-match") == h["ETag"]:
+        return Response(status_code=304, headers=h)
+    # Packed once per version of the file and kept, instead of being packed at the highest level on every request on the event loop
+    if st.st_size > 2048 and "gzip" in request.headers.get("accept-encoding", ""):
+        gz = _STATISK_GZ.get(h["ETag"])
+        if gz is None:
+            import gzip as _gzip
+            try:
+                gz = _gzip.compress(fil.read_bytes(), 6)
+            except OSError:
+                return JSONResponse({"detail": "Not Found"}, status_code=404)
+            if len(_STATISK_GZ) > 120:
+                _STATISK_GZ.clear()
+            _STATISK_GZ[h["ETag"]] = gz
+        return Response(content=gz, media_type=media, headers={**h, "Content-Encoding": "gzip", "Vary": "Accept-Encoding"})
+    return FileResponse(fil, media_type=media, headers=h)
+
+
 @app.get("/")
-def index():
-    return FileResponse(Path(__file__).parent / "index.html", headers=NO_CACHE)
+def index(request: Request):
+    return _statisk(request, Path(__file__).parent / "index.html", "text/html")
 
 
 @app.get("/js/{navn}.js")
-def nabe_js(navn: str):
+def nabe_js(navn: str, request: Request):
     """The parts of the interface that live beside app.js. Only plain names
     from the js folder - nothing that walks out of it."""
     import re as _re
     fil = Path(__file__).parent / "js" / f"{navn}.js"
     if not _re.fullmatch(r"[a-z0-9-]+", navn) or not fil.is_file():
         return JSONResponse({"detail": "Not Found"}, status_code=404)
-    return FileResponse(fil, media_type="application/javascript", headers=NO_CACHE)
+    return _statisk(request, fil, "application/javascript")
 
 
 @app.get("/nabe.css")
-def nabe_css():
-    return FileResponse(Path(__file__).parent / "nabe.css", media_type="text/css", headers=NO_CACHE)
+def nabe_css(request: Request):
+    return _statisk(request, Path(__file__).parent / "nabe.css", "text/css")
 
 
 @app.get("/app.js")
-def app_js():
-    return FileResponse(
-        Path(__file__).parent / "app.js",
-        media_type="application/javascript",
-        headers=NO_CACHE,
-    )
+def app_js(request: Request):
+    return _statisk(request, Path(__file__).parent / "app.js", "application/javascript")
 
 
 README_TXT = """NABE - Not Another BACnet Explorer

@@ -5817,3 +5817,44 @@ body.uten-bevegelse .tp-radar{animation:tp-rot 2.2s linear infinite!important}
 .tp-lerret.drar,.tp-status.drar{cursor:grabbing;user-select:none}
 .tp-lerret.drar *,.tp-status.drar *{cursor:grabbing!important}
 .tp-spredt .tp-lerret{cursor:default}
+
+/* Topologi 2.23: vendor levels, symbols and cards, a canvas for the grouped view, a lighter picture while it moves */
+.tp-lev{display:flex;align-items:center;gap:8px;font-size:11px;color:var(--fg-2);margin-top:2px}
+.tp-lev b{font-weight:600}
+.tp-levh{color:var(--fg-3);font-weight:400;font-size:11.5px}
+.tp-graf-svg .tp-gy{display:none;cursor:pointer;--c:var(--fg-3)}
+.tp-graf-svg .tp-gy.p-bacnet{--c:var(--prot-bacnet)}.tp-graf-svg .tp-gy.p-modbus{--c:var(--prot-modbus)}.tp-graf-svg .tp-gy.p-knx{--c:var(--prot-knx)}
+.tp-graf-svg.n-sym .tp-gy{display:block}
+.tp-graf-svg.n-sym .tp-gn{opacity:0;pointer-events:none}
+.tp-graf-svg.n-kort .tp-gy{display:none}
+.tp-gy circle{fill:color-mix(in srgb,var(--c) 20%,var(--panel));stroke:var(--c);stroke-width:1.5}
+.tp-gy .ik{fill:none;stroke:var(--c);stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
+.tp-gy.s-feil circle{stroke:var(--warn);stroke-width:2.6}
+.tp-gy.s-over circle{stroke:var(--adjust);stroke-width:2.6}
+.tp-gy.s-stille{opacity:.45}
+.tp-gy:hover circle,.tp-gy.valgt circle{fill:color-mix(in srgb,var(--c) 38%,var(--panel))}
+.tp-gy.valgt circle{stroke:var(--accent);stroke-width:3}
+.tp-dk.valgt .r1,.tp-dk.valgt .r2{stroke:var(--accent);stroke-width:2.4}
+.tp-dk .ib{fill:color-mix(in srgb,var(--c) 18%,var(--panel));stroke:none}
+.tp-dk .ik{stroke-width:1.15}
+.tp-graf-svg .tp-dk text{font:600 12px var(--sans,inherit)}
+.tp-graf-svg .tp-dk text.k,.tp-graf-svg .tp-dk .d2 text{font-weight:400;font-size:10.5px;fill:var(--fg-3)}
+.tp-graf-svg .tp-dk .d2 text:first-child{fill:var(--fg);font-weight:500}
+.tp-dk .str{display:none}
+.tp-graf-svg.beveger *{animation-play-state:paused!important}
+.tp-graf-svg.beveger text{paint-order:normal;stroke:none}
+.tp-graf-svg.beveger .tp-gt{display:none}
+.tp-graf-svg.beveger{shape-rendering:optimizeSpeed;text-rendering:optimizeSpeed}
+.gs-overlay:not(.tp-spredt):not(.tp-statusvis) .tp-lerret{overflow:hidden;padding:0;cursor:grab;touch-action:none}
+.tp-rad-pc{position:absolute;left:0;top:0;width:1120px;min-height:0;transform-origin:0 0;will-change:transform}
+.tp-lerret.drar .tp-rad-pc{will-change:transform}
+
+.tp-graf-svg .tp-gy text.gn{display:none;font:500 11.5px var(--sans,inherit)}
+.tp-graf-svg.n-alle .tp-gy text.gn,.tp-graf-svg .tp-gy.s-feil text.gn,.tp-graf-svg .tp-gy.s-over text.gn,.tp-graf-svg .tp-gy:hover text.gn,.tp-graf-svg .tp-gy.valgt text.gn{display:block}
+.tp-graf-svg.n-sym .tp-gt{display:none!important}
+.tp-gy .am{fill:var(--err);stroke:var(--panel);stroke-width:1}
+.tp-gy circle{stroke-width:1.6}
+.tp-gy .ik{stroke-width:1.4}
+.tp-gy:hover circle{stroke-width:2.4}
+.tp-graf-svg.n-kort .tp-gy{display:none}
+.tp-graf-svg.n-sym .tp-gb{display:none}
