@@ -5223,9 +5223,11 @@ const COLS = [
   {k: 'value', label: 'Verdi', menu: 'Verdi', cls: 'c-val', col: 'w-val',
    extraCls: p => fmtVal(p.value).c + (p.unread ? ' unread' : '') + (p.sist && Date.now() / 1000 - p.sist > 3600 ? ' gammel' : '')
      + (typeof rarVerdi === 'function' && rarVerdi(p) ? ' rar' : '')
-     + (typeof flatVerdi === 'function' && flatVerdi(p) ? ' flat' : ''),
+     + (typeof flatVerdi === 'function' && flatVerdi(p) ? ' flat' : '')
+     + (typeof dodTittel === 'function' && dodTittel(p) ? ' dod' : ''),
    attrs: p => p.unread ? ` title="${T('Ingen svar fra enheten på dette punktet', 'No answer from the device for this point')}"`
      : (typeof rarGrunn === 'function' && rarGrunn(p)) ? ` title="${esc(rarGrunn(p))}"`
+     : (typeof dodTittel === 'function' && dodTittel(p)) ? ` title="${esc(dodTittel(p))}"`
      : p.sist ? ` title="${esc(alderTekst(p.sist))}"`
      : (typeof flatVerdi === 'function' && flatVerdi(p) ? ` title="${esc(flatTittel(p))}"` : ''),
    cell: p => {

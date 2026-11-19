@@ -123,7 +123,7 @@ ALLOWED_ORIGINS = {
 READ_ONLY_PATHS = {"/api/sites",
                    
     "/api/status", "/api/interfaces", "/api/readonly", "/api/mine", "/api/ny-versjon",
-    "/api/anlegg", "/api/sim", "/api/vakt", "/api/storm", "/api/regler", "/api/oppdatering", "/api/route", "/api/var-fasit", "/api/kabelnett", "/api/object/all",
+    "/api/anlegg", "/api/sim", "/api/vakt", "/api/storm", "/api/regler", "/api/punktlogg", "/api/oppdatering", "/api/route", "/api/var-fasit", "/api/kabelnett", "/api/object/all",
     "/api/writelog", "/api/notes", "/download", "/logo",
 }
 
@@ -235,7 +235,7 @@ def t(nb: str, en: str) -> str:
     return en if SPRAAK_VAR.get() == "en" else nb
 
 
-VERSJON = "2.28"
+VERSJON = "2.29"
 
 state = {"app": None, "local_address": None, "read_only": False, "bbmd": None, "primary": None}
 # The simulator: a scanned site run as devices on 127.0.0.x, in a process of its own.
@@ -5722,6 +5722,61 @@ async def trafikk(etter: int = 0):
 async def trafikk_tom():
     TRAFIKK.clear()
     return {"status": "done"}
+
+
+# --------------------------------------------------------- what a point has done between visits
+# A sensor that has shown exactly the same number on every visit for weeks is rarely a calm room: it is a sensor that
+# has been disconnected, or a reading frozen at its last value. To see it, the values seen on each visit have to be
+# remembered, and in a file rather than in the browser: a cleared browser profile or a new PC must not take weeks of
+# visits with it. The page keeps the picture and sends it here; one file per plant, in the data folder.
+PUNKTLOGG_DIR = DATA_DIR / "punktlogg"
+PUNKTLOGG_MAKS = 4_000_000          # bytes in one plant's file
+PUNKTLOGG_FILER = 16                # plants kept
+
+
+def _punktlogg_fil(nokkel: str) -> Path:
+    return PUNKTLOGG_DIR / (hashlib.sha1(nokkel.encode("utf-8")).hexdigest()[:20] + ".json")
+
+
+class PunktloggBody(BaseModel):
+    nokkel: str
+    data: Dict[str, Any]
+
+
+@app.get("/api/punktlogg")
+def punktlogg_les(nokkel: str):
+    if not nokkel or len(nokkel) > 2000:
+        return {"status": "error", "error": t("Ugyldig anlegg", "Invalid plant")}
+    try:
+        data = json.loads(_punktlogg_fil(nokkel).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        data = None
+    return {"status": "done", "data": data}
+
+
+@app.post("/api/punktlogg")
+def punktlogg_lagre(body: PunktloggBody):
+    if not body.nokkel or len(body.nokkel) > 2000:
+        return {"status": "error", "error": t("Ugyldig anlegg", "Invalid plant")}
+    tekst = json.dumps(body.data, ensure_ascii=False, separators=(",", ":"))
+    if len(tekst.encode("utf-8")) > PUNKTLOGG_MAKS:
+        return {"status": "error", "error": t("For stort", "Too large")}
+    fil = _punktlogg_fil(body.nokkel)
+    try:
+        PUNKTLOGG_DIR.mkdir(parents=True, exist_ok=True)
+        tmp = fil.with_suffix(".tmp")
+        tmp.write_text(tekst, encoding="utf-8")
+        os.replace(tmp, fil)
+        # The oldest plants go when there are too many, so the folder does not grow without end
+        alle = sorted(PUNKTLOGG_DIR.glob("*.json"), key=lambda f: f.stat().st_mtime)
+        for g in alle[:-PUNKTLOGG_FILER]:
+            try:
+                g.unlink()
+            except OSError:
+                pass
+    except OSError as e:
+        return {"status": "error", "error": str(e)}
+    return {"status": "done", "bytes": len(tekst)}
 
 
 # ------------------------------------------------------------ own rules

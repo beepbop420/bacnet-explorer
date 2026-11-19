@@ -5989,3 +5989,6 @@ body.uten-bevegelse .tp-radar{animation:tp-rot 2.2s linear infinite!important}
 .gr-mer input{width:78px;padding:4px 8px;border:1px solid var(--line-2);border-radius:6px;background:var(--bg);color:var(--fg);font:inherit;font-size:12.5px;font-variant-numeric:tabular-nums;text-align:right}
 .gr-mer input:focus{outline:2px solid var(--accent);outline-offset:-1px}
 .gr-mer .gr-enhet{padding:0;min-width:36px;font-style:normal;color:var(--fg-3);font-size:11px}
+
+/* ---- a sensor that has never moved between visits ---- */
+td.c-val.dod{text-decoration:underline double color-mix(in srgb,var(--warn) 70%,transparent);text-underline-offset:3px}

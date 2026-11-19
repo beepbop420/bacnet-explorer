@@ -233,6 +233,38 @@
       sjekk: [T('Åpne fila, rett det som står under og trykk «Last på nytt» nederst.', 'Open the file, fix what is listed below and press “Reload” at the bottom.')],
       rader: rf.map((m) => ({ip: '', navn: '', tekst: m, objid: '', lang: true}))});
 
+    // Running while the schedule says off
+    const dt = data.driftstid || {liste: [], urLest: 0, urTotalt: 0};
+    legg({id: 'driftstid', prio: 2,
+      tittel: T(`${dt.liste.length} ${dt.liste.length === 1 ? 'aggregat går' : 'aggregater går'} utenfor driftstid`, `${dt.liste.length} ${dt.liste.length === 1 ? 'unit runs' : 'units run'} outside the schedule`),
+      hvorfor: T('Ukeprogrammet sier av, men utstyret går. Det koster energi og slitasje, og ingen alarm sier fra.', 'The schedule says off, but the equipment runs. It costs energy and wear, and no alarm says so.'),
+      sjekk: [T('Er punktet overstyrt? Flagget står i tabellen.', 'Is the point overridden? The flag is in the table.'),
+              T('Er programmet koblet til aggregatet i logikken, eller er det noe annet som styrer det?', 'Is the schedule tied to the unit in the logic, or is something else driving it?'),
+              T('Nattkjøling, frostvern og ettergang er med vilje.', 'Night cooling, frost protection and run-on are on purpose.')],
+      rader: dt.liste.map((x) => rad(x.ip, `${x.punkt} ${T('går', 'runs')} · ${x.program} ${T('sier av', 'says off')}${x.siden != null ? ' ' + minTid(x.siden * 60) : ''}${x.overstyrt ? ' · ' + T('overstyrt', 'overridden') : ''}`, x.objid))});
+
+    // Sensors that show the same on every visit, and devices that do not update at all
+    const dd = data.dode || {punkter: [], enheter: [], analoge: 0, besok: 0};
+    const tallTekst = (x) => `${String(Number(Number(x.v).toPrecision(6))).replace('.', ',')}${x.symbol ? ' ' + x.symbol : ''}`.trim();
+    const dato = (d) => new Date(d + 'T12:00:00').toLocaleDateString(SPRAAK === 'en' ? 'en-GB' : 'nb-NO', {day: 'numeric', month: 'short'});
+    legg({id: 'dode', prio: 3,
+      tittel: T(`${dd.punkter.length} ${dd.punkter.length === 1 ? 'føler har' : 'følere har'} aldri endret seg mellom besøkene`, `${dd.punkter.length} ${dd.punkter.length === 1 ? 'sensor has' : 'sensors have'} never changed between visits`),
+      hvorfor: T('En føler som viser nøyaktig samme tall ved hvert besøk er som regel frakoblet, eller frosset på siste verdi.', 'A sensor that shows exactly the same number on every visit is usually disconnected, or frozen at its last value.'),
+      sjekk: [T('Mål ved inngangen. Åpen krets og kortslutning gir hver sin verdi.', 'Measure at the input. An open circuit and a short give different values.'),
+              T('Er verdien en kjent feilverdi, som -50 eller 3276,7? Da er den ikke koblet til.', 'Is the value a known error value, like -50 or 3276.7? Then it is not connected.'),
+              T('Står den i et rom som ikke er i bruk? Da kan den være riktig.', 'Does it sit in a room that is not in use? Then it may be right.')],
+      rader: dd.punkter.slice(0, 60).map((x) => rad(x.ip, `${x.navn} = ${tallTekst(x)} · ${x.dager} ${T('besøk siden', 'visits since')} ${dato(x.forste)}`, x.objid))});
+    legg({id: 'dode-enhet', prio: 2,
+      tittel: T(`${dd.enheter.length} ${dd.enheter.length === 1 ? 'enhet oppdaterer' : 'enheter oppdaterer'} ikke verdiene sine`, `${dd.enheter.length} ${dd.enheter.length === 1 ? 'device does' : 'devices do'} not update their values`),
+      hvorfor: T('Nesten alle følerne på enheten viser det samme som ved forrige besøk. Da er det enheten og ikke følerne: logikken står, eller verdiene er frosset.', 'Nearly every sensor on the device shows what it did on the previous visit. Then it is the device and not the sensors: the logic is stopped, or the values are frozen.'),
+      sjekk: [T('Er programmet i gang? Se status og siste omstart.', 'Is the program running? Look at the status and the last restart.'),
+              T('Les enheten på nytt og se om verdiene beveger seg.', 'Read the device again and see whether the values move.')],
+      rader: dd.enheter.map((e) => rad(e.ip, T(`${e.antall} av ${e.av} følere uendret i ${e.dager} besøk`, `${e.antall} of ${e.av} sensors unchanged over ${e.dager} visits`)))});
+    legg({id: 'dode-tips', prio: 3, alltid: dd.analoge > 0 && dd.besok < 3,
+      tittel: T(`Følere som aldri beveger seg: ${dd.besok} av 3 dager sett`, `Sensors that never move: ${dd.besok} of 3 days seen`),
+      hvorfor: T('NABE husker hva hver føler viste ved forrige besøk. Etter tre ulike dager kan den si hvilke som aldri beveger seg.', 'NABE remembers what each sensor showed on the previous visit. After three different days it can say which ones never move.'),
+      sjekk: [T('Åpne anlegget en ny dag, så teller den.', 'Open the plant on another day, and it counts.')], rader: []});
+
     // Equal MAC on different addresses, and devices whose ID changed between two scans
     const mac = data.sammeMac || [];
     legg({id: 'mac', prio: 3,
@@ -249,7 +281,7 @@
 
     ut.sort((a, b) => a.prio - b.prio);
     const lest = per.length;
-    return {liste: ut, lest, totalt: devices.length};
+    return {liste: ut, lest, totalt: devices.length, ur: {lest: dt.urLest || 0, totalt: dt.urTotalt || 0}};
   }
 
   const lag = document.createElement('div');
@@ -266,11 +298,15 @@
   const verdiTekst = (p) => `${fmtVal(p.value).t}${p.unit_symbol ? ' ' + p.unit_symbol : ''}`;
   /* What the server has counted for the pinned points, the rules file and the storm state: asked together, and
      none of them is allowed to hold the list back for more than a moment. */
+  let DRIFT_LYTTER = false;
   async function hentEkstra() {
-    const frist = (p) => Promise.race([p, new Promise((ok) => setTimeout(() => ok(null), 2500))]);
+    const frist = (p, ms = 2500) => Promise.race([p, new Promise((ok) => setTimeout(() => ok(null), ms))]);
+    // The schedules take longest to read: the list is drawn again when they are in, if the window is still open
+    if (window.nabeDrift && !DRIFT_LYTTER) { DRIFT_LYTTER = true; window.nabeDrift.pa(() => { if (!lag.hidden) tegn(); }); }
     const vakt = async () => { try { const d = await (await fetch('/api/vakt', {cache: 'no-store'})).json(); return d && d.status === 'done' ? d : null; } catch { return null; } };
     const [v] = await Promise.all([frist(vakt()),
-      frist(window.nabeRegler ? window.nabeRegler.last() : null), frist(window.nabeStorm ? window.nabeStorm.hent() : null)]);
+      frist(window.nabeRegler ? window.nabeRegler.last() : null), frist(window.nabeStorm ? window.nabeStorm.hent() : null),
+      frist(window.nabeDrift ? window.nabeDrift.kontroller() : null, 7000)]);
     return {sykluser: (v && v.sykluser) || [], virkning: (v && v.virkning) || []};
   }
   function data(ekstra = {}) {
@@ -299,6 +335,8 @@
       }
     }
     const R = window.nabeRegler ? window.nabeRegler.siste() : null;
+    const driftstid = window.nabeDrift ? window.nabeDrift.siste() : null;
+    const dode = window.nabePunktlogg ? window.nabePunktlogg.dode() : null;
     const egne = R && R.regler.length ? window.nabeRegler.evaluer(R.regler, S.devices, S.cache, (d) => { try { return gruppeFor(d).label; } catch { return ''; } }) : [];
     const flate = [];
     if (S.activeDev && typeof flatVerdi === 'function') {
@@ -306,7 +344,7 @@
     }
     const N = window.nabeNett;
     const rutere = Array.isArray(S.rutere) ? S.rutere : [];
-    return {devices: S.devices, cache: S.cache, failed: PRE.failed, varsler, avvik, urimelig, flate, sykluser, virkning, virkningTips, egne,
+    return {devices: S.devices, cache: S.cache, failed: PRE.failed, varsler, avvik, urimelig, flate, sykluser, virkning, virkningTips, egne, driftstid, dode,
       regelfeil: R ? R.feil : [],
       storm: window.nabeStorm ? {aktiv: window.nabeStorm.siste().aktiv || [], ferdige: window.nabeStorm.ferdige()} : {aktiv: [], ferdige: []},
       tips: sykluser.length ? [] : tips.slice(0, 30),
@@ -344,7 +382,8 @@
         return l.length ? `<div class="fo-gruppe">${esc(grupper[n])}</div>${l.map(postHtml).join('')}` : '';
       }).join('');
     }
-    const grunnlag = r.totalt ? `<div class="fo-grunnlag">${T(`Bygger på ${r.lest} av ${r.totalt} enheter som er lest.`, `Based on ${r.lest} of ${r.totalt} devices read.`)}</div>` : '';
+    const urTekst = r.ur && r.ur.totalt ? T(` Ukeprogram lest på ${r.ur.lest} av ${r.ur.totalt} enheter som har ur.`, ` Schedules read on ${r.ur.lest} of ${r.ur.totalt} devices that have them.`) : '';
+    const grunnlag = r.totalt ? `<div class="fo-grunnlag">${T(`Bygger på ${r.lest} av ${r.totalt} enheter som er lest.`, `Based on ${r.lest} of ${r.totalt} devices read.`)}${urTekst}</div>` : '';
     const RG = window.nabeRegler ? window.nabeRegler.siste() : null;
     const fot = window.nabeRegler ? `<div class="fo-fot"><span>${RG && RG.finnes ? T(`Egne regler: ${RG.regler.length} av ${RG.antall} i bruk`, `Own rules: ${RG.regler.length} of ${RG.antall} in use`) : T('Egne regler: ingen fil ennå', 'Own rules: no file yet')}</span>
       <span class="fo-fot-k"><button type="button" class="btn" data-fo="regler-aapne" title="${esc(T('Åpner fila i Notisblokk. Finnes den ikke, lages en mal med eksempler.', 'Opens the file in Notepad. If there is none, a template with examples is made.'))}">${T('Åpne regelfila', 'Open the rules file')}</button>
