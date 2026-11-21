@@ -245,8 +245,25 @@
     deler.push([T('Feil klokke', 'Wrong clock'), r.klokker]);
     deler.push([T('Størst avvik fra settpunkt', 'Largest deviations from setpoint'), r.avvik]);
     deler.push([T('Notater', 'Notes'), r.notater]);
+    deler.push([T('Prøv og se svar', 'Try and see the response'), svarRader(SVAR)]);
+    deler.push([T('Fra telefonen', 'From the phone'), telefonRader(TELEFON)]);
     deler.push([T('Hva NABE gjorde mot anlegget', 'What NABE did to the plant'), bevisRader(BEVIS)]);
     return {r, deler: deler.filter(([, rader]) => rader.length)};
+  }
+  /* Tester kjørt det siste døgnet på enheter i dette anlegget, med tallene som ble målt. Bevis, ikke protokoll:
+     igangkjøringsprotokollen er der den alltid har vært. */
+  let SVAR = [], TELEFON = [];
+  const hmKort = (t) => new Date(t * 1000).toLocaleTimeString(T('no', 'en-GB'), {hour: '2-digit', minute: '2-digit'});
+  function svarRader(l) {
+    return (l || []).map((t) => {
+      const r = t.resultat || {};
+      const tall = r.dom === 'ingen' ? T('ingen tydelig respons', 'no clear response')
+        : [r.per_10 != null ? T('per 10 %: ', 'per 10 %: ') + Math.abs(r.per_10).toFixed(2) : '', r.dode_s != null ? T('dødtid ', 'dead time ') + r.dode_s + ' s' : '', r.t63_s != null ? '63 % ' + r.t63_s + ' s' : ''].filter(Boolean).join(' · ');
+      return [`${t.padrag_navn || t.padrag} → ${t.maaling_navn || t.maaling}`, tall, hmKort(t.t) + (t.status === 'avbrutt' ? ' · ' + T('avbrutt', 'cancelled') : '') + (t.sluppet ? '' : ' · ' + T('slipp ikke bekreftet', 'release not confirmed'))];
+    });
+  }
+  function telefonRader(l) {
+    return (l || []).map((x) => [x.navn || T('Telefon', 'Phone'), x.tekst, hmKort(x.t)]);
   }
   /* What NABE sent, from the traffic log: the answer to "what did you do on our network" */
   let BEVIS = null;
@@ -346,6 +363,16 @@
       const d = await Promise.race([fetch('/api/bevis', {cache: 'no-store'}).then((r) => r.json()), new Promise((ok) => setTimeout(() => ok(null), 2000))]);
       if (d && d.status === 'done') BEVIS = d;
     } catch { /* the report stands without it */ }
+    SVAR = []; TELEFON = [];
+    try {
+      const siden = Date.now() / 1000 - 24 * 3600;
+      const adr = new Set(S.devices.map((d) => d.address));
+      const [a, b] = await Promise.race([
+        Promise.all([fetch('/api/test/svar-historikk?siden=' + siden, {cache: 'no-store'}).then((r) => r.json()), fetch('/api/mobil/logg', {cache: 'no-store'}).then((r) => r.json())]),
+        new Promise((ok) => setTimeout(() => ok([null, null]), 2000))]);
+      if (a && a.tester) SVAR = a.tester.filter((t) => adr.has(t.address)).reverse();
+      if (b && b.logg) TELEFON = b.logg.filter((x) => x.t >= siden && ['skriv', 'slipp', 'test'].includes(x.type) && (!x.enhet || adr.has(x.enhet))).reverse();
+    } catch { /* ditto */ }
     tegnRapport();
     rap.hidden = false;
   };

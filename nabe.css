@@ -5370,7 +5370,6 @@ body.liste-smal #devList .dev.st-feil > .dev-smal,body.sk-stor #devList .dev.st-
 /* BACnet, Modbus and KNX in plain view: what a scan looks for, the filter over the list, the action on a row */
 .prot-val{display:flex;flex-basis:100%;gap:6px;margin-top:6px}
 .prot-val button{display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 10px;border:1px solid var(--line);border-radius:var(--r-pill);background:transparent;color:var(--fg-3);font:inherit;font-size:11.5px;cursor:pointer;transition:border-color .15s,color .15s}
-.prot-val button i{width:7px;height:7px;border-radius:50%;border:1px solid var(--fg-3);transition:background .15s,border-color .15s}
 .prot-val button:hover{border-color:var(--fg-3);color:var(--fg)}
 .prot-val button.on{color:var(--fg);border-color:var(--line-2)}
 .prot-val button.on i{background:var(--accent,#6aa7ff);border-color:var(--accent,#6aa7ff)}
@@ -5387,16 +5386,6 @@ body.liste-smal #devList .dev.st-feil > .dev-smal,body.sk-stor #devList .dev.st-
 .prot-plus:hover,.prot-plus[aria-expanded="true"]{border-color:var(--fg-3);color:var(--fg)}
 
 /* Each protocol has its own colour, chosen to stay apart for red-green and blue-yellow colour blindness too (Okabe and Ito); KNX is green, as its own logo is */
-.dev .dev-ip::before{content:'';display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:6px;vertical-align:1px;background:var(--prot-bacnet)}
-.dev.p-modbus .dev-ip::before{background:var(--prot-modbus)}
-.dev.p-knx .dev-ip::before{background:var(--prot-knx)}
-.prot-val button[data-val=bacnet].on i{background:var(--prot-bacnet);border-color:var(--prot-bacnet)}
-.prot-val button[data-val=modbus].on i{background:var(--prot-modbus);border-color:var(--prot-modbus)}
-.prot-val button[data-val=knx].on i{background:var(--prot-knx);border-color:var(--prot-knx)}
-.prot-filter button i{width:7px;height:7px;border-radius:50%;display:inline-block}
-.prot-filter button[data-filter=bacnet] i{background:var(--prot-bacnet)}
-.prot-filter button[data-filter=modbus] i{background:var(--prot-modbus)}
-.prot-filter button[data-filter=knx] i{background:var(--prot-knx)}
 
 /* The arrow beside Scan: what the scan looks for, and what can be added by hand */
 .scanbox-pos{position:relative}
@@ -5425,7 +5414,6 @@ body.liste-smal #devList .dev.st-feil > .dev-smal,body.sk-stor #devList .dev.st-
 
 /* A heading in the device list for each bus: BACnet, Modbus, KNX */
 .prot-skille{display:flex;align-items:center;gap:8px;padding:10px 12px 2px;font-size:11px;letter-spacing:.02em;color:var(--fg-3)}
-.prot-skille i{width:8px;height:8px;border-radius:50%;background:var(--prot-bacnet)}
 .prot-skille.p-modbus i{background:var(--prot-modbus)}
 .prot-skille.p-knx i{background:var(--prot-knx)}
 .prot-skille span{color:var(--fg-2);font-weight:500}
@@ -5452,9 +5440,6 @@ button.prot-skille[aria-expanded=false] .prot-chev{transform:rotate(180deg)}
 
 button.vsub-knapp{width:100%;background:transparent;border:0;cursor:pointer;text-align:left;font:inherit;display:flex;align-items:center;gap:8px}
 button.vsub-knapp:hover .vsub-navn{color:var(--fg)}
-.vsub-prikk{width:7px;height:7px;border-radius:50%;background:var(--prot-bacnet);flex:none}
-.vsub-prikk.p-modbus{background:var(--prot-modbus)}
-.vsub-prikk.p-knx{background:var(--prot-knx)}
 .vsub-knapp .vsub-n{margin-left:auto}
 button.vsub-knapp[aria-expanded=false] .prot-chev{transform:rotate(180deg)}
 
@@ -6241,3 +6226,19 @@ td.c-val.dod{text-decoration:underline double color-mix(in srgb,var(--warn) 70%,
 .sk-merke.drift{color:var(--ok)}
 .sk-merke.haand{color:var(--warn)}
 .sk-merke.alarm{color:var(--err)}
+
+/* Test oppsettet i mobil-dialogen: symbol og ord bærer tilstanden, fargen følger bare med. */
+.mb-sjliste{display:flex;flex-direction:column}
+.mb-sj{display:grid;grid-template-columns:18px 1fr auto;gap:10px;align-items:start;padding:8px 0;border-bottom:1px solid var(--line);font-size:13px}
+.mb-sj:last-child{border-bottom:0}
+.mb-sj .mk{font-weight:700;text-align:center;line-height:1.5}
+.mb-sj.ok .mk{color:var(--ok)}
+.mb-sj.merk .mk{color:var(--warn)}
+.mb-sj.feil .mk{color:var(--err)}
+.mb-sj.ukjent .mk{color:var(--fg-3)}
+.mb-sj b{font-weight:600}
+
+/* Protokoll uten farget prikk: navnet står i overskriften, og et valgt filter eller en valgt protokoll har hake og fet skrift. */
+.prot-val button i,.prot-filter button i,.prot-skille i,.vsub-prikk{display:none}
+.prot-val button.on::before{content:'¹3';font-size:11px;line-height:1}
+.prot-filter button.sel::before{content:'¹3';font-size:11px;line-height:1}

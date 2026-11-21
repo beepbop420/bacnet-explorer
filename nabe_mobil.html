@@ -189,6 +189,9 @@ button.celle:active{background:var(--hev)}
   background:#000;color:#fff;padding:11px 18px;border-radius:99px;font-size:14px;font-weight:600;text-align:center;line-height:1.3;
   box-shadow:0 8px 28px rgba(0,0,0,.35);border:.5px solid rgba(255,255,255,.14);opacity:0;transition:transform .5s cubic-bezier(.2,1.25,.3,1),opacity .2s;pointer-events:none}
 .hud.vis{transform:translate(-50%,0);opacity:1}
+/* Mistet kontakten: blir stående til PC-en svarer igjen, under vanlige meldinger. Tegn og ord, ikke farge alene. */
+.hud.borte{top:calc(env(safe-area-inset-top) + 58px);z-index:79;display:flex;gap:8px;align-items:center;border-color:rgba(255,184,0,.55)}
+.hud.borte b{color:var(--warn);font-weight:700}
 
 /* ---- test, graf og resultat */
 svg.graf{width:100%;height:130px;display:block;background:var(--gruppe);border-radius:12px}
@@ -360,9 +363,55 @@ function toast(t) {
 document.addEventListener('click', e => { if (e.target.closest('button') && navigator.vibrate && navigator.userActivation && navigator.userActivation.hasBeenActive) { try { navigator.vibrate(6); } catch {} } }, true);
 window.addEventListener('scroll', () => document.body.classList.toggle('skrullet', window.scrollY > 36), {passive: true});
 
+// Haptikk der telefonen kan (iOS lar ikke nettsider gjøre det). Ett mønster for hver slags utfall.
+const hapt = m => { try { if (navigator.vibrate && navigator.userActivation && navigator.userActivation.hasBeenActive) navigator.vibrate(m); } catch {} };
+
+// Kontakten med PC-en. To bom på rad og siden sier fra; første svar etterpå og den sier fra igjen. Pollingen
+// gjør at den prøver av seg selv, og alt som er skrevet slippes av PC-en uansett, så ingenting henger igjen.
+let bomTeller = 0;
+function kobling(ok) {
+  if (ok) {
+    bomTeller = 0;
+    if (S.borte) {
+      S.borte = false;
+      const e = $('borte');
+      if (e) e.classList.remove('vis');
+      toast(T('Kontakten er tilbake. Alt er som du lot det.', 'Contact is back. Everything is as you left it.'));
+      hapt(16);
+      if (S.tab === 'mine') lastMine();
+    }
+    return;
+  }
+  if (++bomTeller < 2 || S.borte) return;
+  S.borte = true;
+  let e = $('borte');
+  if (!e) { e = document.createElement('div'); e.id = 'borte'; e.className = 'hud borte'; e.setAttribute('role', 'status'); document.body.appendChild(e); }
+  e.innerHTML = `<b aria-hidden="true">▲</b><span>${T('Mistet kontakten med PC-en. Prøver igjen. Det du har satt slippes av seg selv.', 'Lost contact with the PC. Retrying. What you set is released by itself.')}</span>`;
+  requestAnimationFrame(() => e.classList.add('vis'));
+  hapt([40, 50, 40]);
+  if (S.test && !$('ark').hidden) tegTest();
+}
+window.addEventListener('offline', () => { bomTeller = 5; kobling(false); });
+
+// Skjermen holdes våken så lenge noe kjører eller står overstyrt, og slippes ellers, så batteriet ikke betaler for det.
+let vakt = null;
+async function oppdaterVaken() {
+  const trengs = !!((S.test && S.test.kjorer) || (S.mine && S.mine.length));
+  try {
+    if (trengs && !vakt && 'wakeLock' in navigator && document.visibilityState === 'visible') {
+      vakt = await navigator.wakeLock.request('screen');
+      vakt.addEventListener('release', () => { vakt = null; });
+    } else if (!trengs && vakt) { const v = vakt; vakt = null; await v.release(); }
+  } catch { vakt = null; }
+}
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') oppdaterVaken(); });
+setInterval(oppdaterVaken, 5000);
+
 async function api(sti, body) {
   const opt = body === undefined ? {headers: {'X-Sprak': H['X-Sprak']}} : {method: 'POST', headers: H, body: JSON.stringify(body)};
-  const r = await fetch(sti, opt);
+  let r;
+  try { r = await fetch(sti, opt); } catch (e) { kobling(false); throw e; }
+  kobling(true);
   if (r.status === 401) { visLogin(); throw new Error('401'); }
   let j = {};
   try { j = await r.json(); } catch {}
@@ -898,6 +947,7 @@ async function skrivVerdi(p, v) {
     chips: [T('Prioritet 8', 'Priority 8'), T('Slippes automatisk etter ' + S.maks + ' min', 'Released automatically after ' + S.maks + ' min')],
     advarsel: T('Dette endrer et anlegg i drift.', 'This changes a plant in operation.')})) return;
   const r = await api('/api/write', {address: p.address, objid: p.objid, value: v, priority: 8, auto_release_min: S.maks});
+  hapt(r.status === 'done' ? 14 : [50, 40, 50]);
   toast(r.status === 'done' ? T('Satt. Slippes om ' + (r.auto_release_min || S.maks) + ' min, selv om du glemmer det.', 'Set. Released in ' + (r.auto_release_min || S.maks) + ' min, even if you forget.') : (r.error || T('Feilet', 'Failed')));
   lastMine(); pollVerdier();
 }
@@ -912,7 +962,8 @@ async function provSvar(p) {
     under: (p.name || p.objid) + ' → ' + (m.name || maal),
     broed: `${T('Trinn', 'Steps')}: ${trinn.join(', ')} %   ·   ${T('Tid', 'Time')}: ${Math.ceil(sek / 60 * 10) / 10} min\n\n${T('Pådraget settes i manuell (prioritet 8) og slippes automatisk når testen er ferdig, avbrutt eller feiler. Anlegget kan reagere kraftig.', 'The output is put in manual (priority 8) and released automatically when the test finishes, is cancelled or fails. The plant may react strongly.')}`,
     advarsel: T('Dette endrer et anlegg i drift.', 'This changes a plant in operation.')})) return;
-  const r = await api('/api/test/svar', {address: p.address, padrag: p.objid, maaling: maal, trinn, pause_s: pause, prioritet: 8});
+  const r = await api('/api/test/svar', {address: p.address, padrag: p.objid, maaling: maal, trinn, pause_s: pause, prioritet: 8,
+    enhet_navn: p.enhet || null, padrag_navn: p.name || null, maaling_navn: m.name || null, via: 'mobil'});
   if (r.status !== 'started') return toast(r.error || T('Kunne ikke starte', 'Could not start'));
   S.test = {id: r.id, maaling: maal, maaling_address: p.address, kjorer: true, p, pause, trinn, navnMaal: m.name || maal};
   tegTest();
@@ -920,9 +971,32 @@ async function provSvar(p) {
     const j = await api('/api/test/svar/' + r.id).catch(() => null);
     if (!j || j.status !== 'done') return;
     S.test.d = j.test;
-    if (j.test.status !== 'kjorer' && j.test.fase === 'ferdig') { S.test.kjorer = false; clearInterval(S.test.lop); lastMine(); }
+    if (j.test.status !== 'kjorer' && j.test.fase === 'ferdig') {
+      S.test.kjorer = false; clearInterval(S.test.lop); lastMine(); oppdaterVaken();
+      hapt(j.test.status === 'ferdig' ? [20, 60, 20] : [60, 40, 60]);
+      // Forrige test på samme pådrag og måling, så resultatet kan sammenlignes før og etter en justering.
+      const h = await api('/api/test/svar-historikk?padrag=' + encodeURIComponent(S.test.p.objid) + '&address=' + encodeURIComponent(S.test.p.address)
+        + '&maaling=' + encodeURIComponent(S.test.maaling)).catch(() => null);
+      if (S.test && h && h.tester) S.test.forrige = h.tester.find(x => x.id !== r.id && x.resultat && x.resultat.dom !== 'ingen') || null;
+    }
     tegTest();
   }, 1000);
+}
+
+// Før og etter: samme tall fra forrige test ved siden av dette, med forskjellen.
+function forEtter(f, n) {
+  if (!f || !f.resultat || !n || n.dom === 'ingen') return '';
+  const rad = (navn, a, b, enhet) => {
+    const d = (a != null && b != null) ? Math.round((b - a) * 100) / 100 : null;
+    const pil = d === null ? '–' : d === 0 ? '=' : d > 0 ? '▲ +' + d : '▼ ' + d;
+    const v = x => x == null ? '–' : x + enhet;
+    return `<div class="test-rad"><span>${navn}</span><span>${v(a)}</span><span>${v(b)}</span><span>${pil}</span></div>`;
+  };
+  const a = f.resultat, dato = new Date(f.t * 1000);
+  const nar = dato.toDateString() === new Date().toDateString() ? dato.toTimeString().slice(0, 5) : dato.toLocaleDateString();
+  return `<div class="seksjon">${T('Før og etter', 'Before and after')} · ${T('forrige test', 'previous test')} ${esc(nar)}</div><div class="liste">
+    <div class="test-rad hode"><span></span><span>${T('Før', 'Before')}</span><span>${T('Nå', 'Now')}</span><span>${T('Endring', 'Change')}</span></div>
+    ${rad(T('Per 10 %', 'Per 10 %'), a.per_10, n.per_10, '')}${rad(T('Dødtid', 'Dead time'), a.dode_s, n.dode_s, ' s')}${rad('63 %', a.t63_s, n.t63_s, ' s')}</div>`;
 }
 
 function graf(serie, trinnT) {
@@ -971,6 +1045,8 @@ function tegTest() {
     ${d.steg.length ? `<div class="liste"><div class="test-rad hode"><span>${T('Trinn', 'Step')}</span><span>${T('Endring', 'Change')}</span><span>${T('Dødtid', 'Dead')}</span><span>63 %</span></div>${d.steg.map(s => `<div class="test-rad"><span>${s.til} %</span>
       <span>${s.reagerte ? (s.endring > 0 ? '+' : '') + s.endring : T('ingen', 'none')}</span><span>${s.dode_s != null ? s.dode_s + ' s' : '–'}</span><span>${s.t63_s != null ? s.t63_s + ' s' : '–'}</span></div>`).join('')}</div>` : ''}
     ${ferdig && d.resultat ? `<div class="liste"><div class="dom">${esc(domTekst(d.resultat, t.pause))}</div></div>` : ''}
+    ${ferdig ? forEtter(t.forrige, d.resultat) : ''}
+    ${S.borte && !ferdig ? `<div class="liste-fot">${T('Mistet kontakten. Testen går videre på PC-en og slipper pådraget selv når den er ferdig.', 'Lost contact. The test carries on on the PC and releases the output by itself when done.')}</div>` : ''}
     ${ferdig ? `<div class="liste-fot" style="margin-top:-10px">${d.sluppet ? T('Pådraget er sluppet tilbake til anlegget.', 'The output has been released back to the plant.') : T('Pådraget ble ikke bekreftet sluppet. Sjekk fanen Overstyrt.', 'The release was not confirmed. Check the Overridden tab.')}</div>` : ''}
     ${ferdig ? `<button class="knapp-stor" id="tLukk2">${T('Ferdig', 'Done')}</button>` : `<button class="knapp-stor fare" id="tAvbryt2">${T('Avbryt og slipp', 'Cancel and release')}</button>`}</div>`;
   $('arkInn').scrollTop = rull;
@@ -1196,7 +1272,7 @@ async function start() {
     S.lop = setInterval(() => { pollVerdier(); }, 2000);
     setInterval(lastMine, 15000);
     setInterval(status, 10000);
-    try { if ('wakeLock' in navigator) navigator.wakeLock.request('screen').catch(() => {}); } catch {}
+    oppdaterVaken();
   } else {
     visLogin(new URLSearchParams(location.search).get('feil') ? T('Feil kode, eller koden er utløpt.', 'Wrong code, or the code has expired.') : '');
   }

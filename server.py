@@ -235,7 +235,7 @@ def t(nb: str, en: str) -> str:
     return en if SPRAAK_VAR.get() == "en" else nb
 
 
-VERSJON = "2.32"
+VERSJON = "2.33"
 app.version = VERSJON
 app.description = ("NABE sitt eget grensesnitt. Det som leser fra anlegget (enheter, punkter, ukeprogram, trend) kan brukes fra Python, Excel eller curl mens NABE kjører. "
                    "Dokumentasjonen (Swagger) laster fra internett.")
@@ -700,6 +700,8 @@ def lokal_glem(body: LokalGlemBody):
 import nabe_mobil as nmo
 import nabe_svar as nsv
 nmo.PAR_FIL = DATA_DIR / "mobil_par.json"
+nmo.LOGG_FIL = DATA_DIR / "mobil_logg.jsonl"
+SVAR_HIST_FIL = DATA_DIR / "svar_historikk.json"
 
 
 class MobilSkrivBody(BaseModel):
@@ -740,6 +742,27 @@ def mobil_skriv(body: MobilSkrivBody):
 def mobil_maks(body: MobilMaksBody):
     nmo.M["maks_min"] = max(0.5, min(60.0, float(body.min)))
     return nmo.status()
+
+
+@app.post("/api/mobil/sjekk")
+async def mobil_sjekk():
+    """Test oppsettet: kabel, port, brannmur, hotspot og telefonoppslag, med hva du kan gjøre med hvert."""
+    return await asyncio.to_thread(nmo.oppsettsjekk)
+
+
+@app.get("/api/mobil/logg")
+def mobil_logg():
+    return {"status": "done", "logg": nmo.logg_historikk()}
+
+
+@app.post("/api/mobil/logg/tom")
+def mobil_logg_tom():
+    try:
+        nmo.LOGG_FIL.unlink()
+    except OSError:
+        pass
+    nmo.M["logg"].clear()
+    return {"status": "done"}
 
 
 @app.post("/api/mobil/ny-kode")
@@ -838,6 +861,11 @@ class SvarBody(BaseModel):
     pause_s: float = 30
     prioritet: int = 8
     baseline_s: int = 6
+    # Navn til rapporten. Bare tekst som vises igjen, aldri brukt til å velge hva som skrives.
+    enhet_navn: Optional[str] = None
+    padrag_navn: Optional[str] = None
+    maaling_navn: Optional[str] = None
+    via: Optional[str] = None
 
 
 def _tall(x: Any) -> Optional[float]:
@@ -941,6 +969,47 @@ async def _svar_kjor(sid: str, b: SvarBody) -> None:
             st["sluppet"] = True
         st["fase"] = "ferdig"
         st["slutt_t"] = time.time()
+        try:
+            _svar_lagre(st, b)
+        except Exception:
+            pass
+
+
+def _kort(x: Any, n: int = 120) -> Optional[str]:
+    return None if x is None else str(x)[:n]
+
+
+def _svar_les() -> List[Dict[str, Any]]:
+    try:
+        d = json.loads(SVAR_HIST_FIL.read_text(encoding="utf-8"))
+        return d if isinstance(d, list) else []
+    except (OSError, ValueError):
+        return []
+
+
+def _svar_lagre(st: Dict[str, Any], b: SvarBody) -> None:
+    """Husker hver ferdige eller avbrutte test med tall, så du kan sammenligne før og etter en justering
+    og legge resultatet ved rapporten. Bare det som ble målt; ingenting her styrer noe."""
+    if not st.get("steg"):
+        return
+    rad = {
+        "id": st["id"], "t": int(st["start"]), "status": st["status"], "address": b.address, "padrag": b.padrag,
+        "maaling": b.maaling, "maaling_address": b.maaling_address or b.address, "trinn": b.trinn, "pause_s": b.pause_s,
+        "enhet_navn": _kort(b.enhet_navn), "padrag_navn": _kort(b.padrag_navn), "maaling_navn": _kort(b.maaling_navn),
+        "via": _kort(b.via, 24), "stoy": st.get("stoy"), "resultat": st.get("resultat"), "sluppet": bool(st.get("sluppet")),
+        "steg": [{k: s.get(k) for k in ("til", "endring", "reagerte", "dode_s", "t63_s")} for s in st["steg"]],
+    }
+    liste = (_svar_les() + [rad])[-60:]
+    SVAR_HIST_FIL.write_text(json.dumps(liste, ensure_ascii=False), encoding="utf-8")
+
+
+@app.get("/api/test/svar-historikk")
+def svar_historikk(padrag: str = "", address: str = "", maaling: str = "", siden: float = 0):
+    """Tidligere tester, nyeste først. Filtrer på pådrag, enhet og måling, eller på tid for rapporten."""
+    ut = [r for r in _svar_les()
+          if (not padrag or r.get("padrag") == padrag) and (not address or r.get("address") == address)
+          and (not maaling or r.get("maaling") == maaling) and r.get("t", 0) >= siden]
+    return {"status": "done", "tester": ut[::-1][:30]}
 
 
 @app.post("/api/test/svar")

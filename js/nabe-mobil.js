@@ -31,6 +31,68 @@
 
   function min(s) { return Math.max(0, Math.round(s / 60)); }
 
+  /* Test oppsettet: kabel, port, brannmur, hotspot og telefonoppslag, hver med hva du kan gjøre.
+     Tilstand står med symbol og ord (✓ ▲ ✕ –), aldri med farge alene. */
+  const MERKE = {ok: '✓', merk: '▲', feil: '✕', ukjent: '–'};
+  const FIKS = {start: ['start', 'Slå på', 'Turn on'], brannmur: ['brannmur', 'Åpne', 'Open'], hotspot: ['hotspot-paa', 'Slå på', 'Turn on'], lokal: ['lokal', 'Koble direkte', 'Connect directly']};
+  const nb = (par) => (Array.isArray(par) ? T(par[0], par[1]) : '');
+
+  function sjekkHtml() {
+    const tittel = `<div class="lk-etikett">${T('Test oppsettet', 'Check the setup')}</div>`;
+    if (MB.sjekker) return `<div class="lk-blokk">${tittel}<div class="lk-dempet">${T('Sjekker kabel, port, brannmur og hotspot…', 'Checking cable, port, firewall and hotspot…')}</div></div>`;
+    const s = MB.sjekk;
+    if (!s) return '';
+    const sm = s.sammendrag || {};
+    const bra = sm.ok || 0, tot = (s.sjekk || []).length;
+    const rader = (s.sjekk || []).map(r => {
+      const f = FIKS[r.fiks];
+      return `<div class="mb-sj ${esc(r.status)}"><span class="mk" aria-hidden="true">${MERKE[r.status] || '–'}</span>
+        <span><b>${esc(nb(r.tittel))}</b>${r.detalj && r.detalj[0] ? `<span class="lk-dempet"> ${esc(nb(r.detalj))}</span>` : ''}</span>
+        ${f ? `<button class="btn" data-mb="${f[0]}">${T(f[1], f[2])}</button>` : '<span></span>'}</div>`;
+    }).join('');
+    return `<div class="lk-blokk">${tittel}<div class="lk-dempet">${T(`${bra} av ${tot} i orden`, `${bra} of ${tot} in order`)}${sm.feil ? T(`, ${sm.feil} feil`, `, ${sm.feil} failed`) : ''}${sm.merk ? T(`, ${sm.merk} å se på`, `, ${sm.merk} to look at`) : ''}</div>
+      <div class="mb-sjliste">${rader}</div>
+      <div class="lk-handling"><button class="btn" data-mb="sjekk">${T('Test på nytt', 'Check again')}</button><button class="btn" data-mb="sjekk-kopier">${T('Kopier som melding', 'Copy as a message')}</button></div></div>`;
+  }
+
+  async function kjorSjekk() {
+    MB.sjekker = true;
+    tegn();
+    const r = await post('/api/mobil/sjekk');
+    MB.sjekk = r.status === 'done' ? r : null;
+    MB.sjekker = false;
+    if (lag0()) lag0().dataset.n = '';
+    tegn();
+  }
+  const lag0 = () => $('mobilOverlay');
+
+  function sjekkTekst() {
+    const s = MB.sjekk;
+    if (!s) return '';
+    return 'NABE, oppsett ' + new Date().toLocaleString() + '\n' + (s.sjekk || []).map(r => `${MERKE[r.status] || '-'} ${nb(r.tittel)}${r.detalj && r.detalj[0] ? ' - ' + nb(r.detalj) : ''}`).join('\n');
+  }
+
+  /* Loggen: hva telefonen gjorde, med navn på telefonen. Ligger i en fil, så den overlever at porten slås av. */
+  function loggLinjer() {
+    const l = MB.loggFull || (MB.data && MB.data.logg) || [];
+    return MB.loggAapen ? l : l.slice(0, 6);
+  }
+  const loggTid = (t) => new Date(t * 1000).toTimeString().slice(0, 8);
+  function loggHtml() {
+    const alle = MB.loggFull || (MB.data && MB.data.logg) || [];
+    if (!alle.length) return '';
+    return `<div class="lk-blokk"><div class="lk-etikett">${T('Logg', 'Log')}</div>
+      ${loggLinjer().map(l => `<div class="lk-dempet">${loggTid(l.t)} · ${l.navn ? esc(l.navn) + ' · ' : ''}${esc(l.tekst)}</div>`).join('')}
+      <div class="lk-handling"><button class="btn" data-mb="logg-mer">${MB.loggAapen ? T('Færre', 'Fewer') : T('Vis alt', 'Show all')}</button>
+        <button class="btn" data-mb="logg-kopier">${T('Kopier', 'Copy')}</button><button class="btn" data-mb="logg-csv">${T('Last ned', 'Download')}</button>
+        <button class="btn" data-mb="logg-tom">${T('Tøm', 'Clear')}</button></div></div>`;
+  }
+  function loggCsv(l) {
+    const c = (x) => '"' + String(x == null ? '' : x).replace(/"/g, '""') + '"';
+    return ['tid;telefon;ip;type;enhet;punkt;verdi;ok;tekst'].concat(l.slice().reverse().map(r =>
+      [new Date(r.t * 1000).toLocaleString(), r.navn, r.ip, r.type, r.enhet, r.punkt, r.verdi, r.ok === undefined ? '' : (r.ok ? 'ja' : 'nei'), r.tekst].map(c).join(';'))).join('\n');
+  }
+
   /* Skann med kameraet: Wi-Fi først når hotspot er på, deretter siden med koden i adressen.
      Koden i adressen logger telefonen inn med en gang, så ingenting skal skrives. */
   function lagQr(d, adr) {
@@ -63,7 +125,7 @@
     if (!lag || lag.hidden) return;
     const d = MB.data || {};
     // Keep what you are typing: only redraw when the data actually changed.
-    const nokkel = JSON.stringify([d.paa, d.kode, d.skriv, d.maks_min, d.okter, d.adresser, d.brannmur, d.hotspot, d.hotspotVenter, d.hotspotFeil, d.par, (d.logg || [])[0], d.okter && d.okter.length]);
+    const nokkel = JSON.stringify([d.paa, d.kode, d.skriv, d.maks_min, d.okter, d.adresser, d.brannmur, d.hotspot, d.hotspotVenter, d.hotspotFeil, d.par, (d.logg || [])[0], d.okter && d.okter.length, MB.sjekk, MB.sjekker, MB.loggAapen, (MB.loggFull || []).length]);
     if (lag.dataset.n === nokkel && lag.querySelector('.lk-modal')) return;
     lag.dataset.n = nokkel;
     let inn;
@@ -76,7 +138,9 @@
           <li>${T('Du skriver en engangskode som vises her. Koden og tilgangen utløper av seg selv.', 'You type a one-time code shown here. The code and the access expire by themselves.')}</li>
           <li>${T('Skriving er av til du slår den på. Alt telefonen setter slippes av seg selv.', 'Writing is off until you turn it on. Everything the phone sets is released by itself.')}</li>
         </ul></div>
-        <div class="lk-handling"><button class="btn primary" data-mb="start">${T('Slå på mobiltilgang', 'Turn on mobile access')}</button></div>
+        <div class="lk-handling"><button class="btn primary" data-mb="start">${T('Slå på mobiltilgang', 'Turn on mobile access')}</button>
+          <button class="btn" data-mb="sjekk">${T('Test oppsettet', 'Check the setup')}</button></div>
+        ${sjekkHtml()}
         ${d.feil ? `<div class="lk-feil">${esc(d.feil)}</div>` : ''}`;
     } else {
       const hot = (d.adresser || []).filter(a => a.type === 'hotspot');
@@ -114,7 +178,8 @@
             <button class="btn" data-mb="par-glem" data-id="${esc(e.id)}">${T('Glem', 'Forget')}</button></div>`).join('') || `<div class="lk-dempet">${T('Ingen ennå. Trykk Husk ved en tilkoblet telefon.', 'None yet. Press Remember next to a connected phone.')}</div>`}
           <div class="lk-liten">${T('En husket telefon logges inn av seg selv når den er på hotspotet. Ingen kode og ingen QR. Skriving styres fortsatt herfra.', 'A remembered phone is signed in by itself when it is on the hotspot. No code and no QR. Writing is still controlled from here.')}</div>
           <label class="mb-valg"><input type="checkbox" data-mb="par-lan" ${d.par.lan ? 'checked' : ''}> <span>${T('Også på vanlig Wi-Fi (mindre trygt)', 'Also on regular Wi-Fi (less safe)')}</span></label></div>` : ''}
-        ${(d.logg || []).length ? `<div class="lk-blokk"><div class="lk-etikett">${T('Logg', 'Log')}</div>${d.logg.slice(0, 8).map(l => `<div class="lk-dempet">${new Date(l.t * 1000).toTimeString().slice(0, 8)} · ${esc(l.tekst)}</div>`).join('')}</div>` : ''}
+        ${sjekkHtml() || `<div class="lk-handling"><button class="btn" data-mb="sjekk">${T('Test oppsettet', 'Check the setup')}</button></div>`}
+        ${loggHtml()}
         <div class="lk-handling"><button class="btn" data-mb="stopp">${T('Slå av mobiltilgang', 'Turn off mobile access')}</button></div>
         <div class="lk-liten">${T('Slår seg av av seg selv om ' + Math.floor(d.av_rest_s / 3600) + ' t ' + (Math.floor(d.av_rest_s / 60) % 60) + ' min.', 'Turns itself off in ' + Math.floor(d.av_rest_s / 3600) + ' h ' + (Math.floor(d.av_rest_s / 60) % 60) + ' min.')}</div>`;
     }
@@ -154,11 +219,35 @@
       else if (k === 'par') { r = await post('/api/mobil/par', {id: b.dataset.id}); if (r.status === 'error') { toast(r.error); r = null; } else dia('mobilPar'); }
       else if (k === 'par-glem') r = await post('/api/mobil/par/glem', {id: b.dataset.id});
       else if (k === 'kast') r = await post('/api/mobil/kast', {id: b.dataset.id});
+      else if (k === 'sjekk') { MB.opptatt = false; await kjorSjekk(); return; }
+      else if (k === 'sjekk-kopier') {
+        try { await navigator.clipboard.writeText(sjekkTekst()); toast(T('Kopiert. Lim den inn i en melding.', 'Copied. Paste it into a message.')); } catch { toast(T('Kunne ikke kopiere', 'Could not copy')); }
+        r = null;
+      }
+      else if (k === 'lokal') { if (window.nabeLokal) { lukk(); window.nabeLokal.apne(); } r = null; }
+      else if (k === 'logg-mer') {
+        MB.loggAapen = !MB.loggAapen;
+        if (MB.loggAapen) { const j = await fetch('/api/mobil/logg', {cache: 'no-store'}).then(x => x.json()).catch(() => null); if (j && j.logg) MB.loggFull = j.logg; }
+        r = null;
+      }
+      else if (k === 'logg-kopier' || k === 'logg-csv') {
+        const j = await fetch('/api/mobil/logg', {cache: 'no-store'}).then(x => x.json()).catch(() => null);
+        const l = (j && j.logg) || [];
+        if (k === 'logg-csv') downloadText(loggCsv(l), 'nabe-mobil-logg.csv');
+        else { try { await navigator.clipboard.writeText(l.slice().reverse().map(x => `${new Date(x.t * 1000).toLocaleString()} ${x.navn ? x.navn + ' ' : ''}${x.tekst}`).join('\n')); toast(T('Loggen er kopiert', 'The log is copied')); } catch { toast(T('Kunne ikke kopiere', 'Could not copy')); } }
+        r = null;
+      }
+      else if (k === 'logg-tom') {
+        if (await nabeBekreft(T('Tømme loggen over hva telefonen har gjort? Det kan ikke angres.', 'Clear the log of what the phone has done? This cannot be undone.'))) { await post('/api/mobil/logg/tom'); MB.loggFull = null; MB.loggAapen = false; }
+        r = null;
+      }
       else if (k === 'hotspot') r = await post('/api/mobil/hotspot');
       else if (k === 'brannmur') { r = await post('/api/mobil/brannmur'); if (r.status === 'avbrutt') toast(r.error); else if (r.paa !== undefined) dia('mobilBrannmur'); }
       if (r && r.status === 'error') { MB.data = Object.assign({}, MB.data, {feil: r.error}); }
       else if (r && r.paa !== undefined) MB.data = r;
     } finally { MB.opptatt = false; }
+    // Etter et tiltak fra sjekklisten sier listen fra seg selv om det ble bra.
+    if (MB.sjekk && ['start', 'brannmur', 'hotspot-paa', 'hotspot-av', 'stopp'].includes(k)) await kjorSjekk();
     if (lag) lag.dataset.n = '';
     tegn();
   }

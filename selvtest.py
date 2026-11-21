@@ -1353,11 +1353,58 @@ def mobil_fil():
     sjekk("par: å kaste ut en telefon fjerner alle øktene dens og bare dem", nm.kast_telefon(nm.okt_id(t2)) == 2 and list(nm.M["okter"]) == [t3] and nm.kast_telefon("finnes-ikke") == 0)
     nm.M["okter"] = {}
 
+    # Test oppsettet: ren funksjon fra fakta til en liste, hver linje med status og hva du kan gjøre.
+    kabel_ok = {"navn": "Ethernet", "kabel": True, "opp": True, "adresser": [{"ip": "10.42.12.50", "prefix": 24}]}
+    bra = nm.sjekkliste({"kort": [kabel_ok], "mobil_paa": True, "port": 8093, "nar": {"10.42.12.50": True}, "skriv": False, "brannmur": True,
+                         "hotspot": {"paa": True, "ssid": "NABE", "klienter": 1}, "arp": 3, "wifi": None})
+    sjekk("oppsett: alt i orden gir bare ok, og skriving av er ok", all(r["status"] == "ok" for r in bra) and {r["id"] for r in bra} >= {"kabel", "mobil", "nar", "brannmur", "hotspot", "arp", "skriv"}, str([(r["id"], r["status"]) for r in bra]))
+    darlig = {r["id"]: r for r in nm.sjekkliste({"kort": [dict(kabel_ok, adresser=[{"ip": "169.254.3.4", "prefix": 16}])], "mobil_paa": True, "port": 8093,
+                                                  "nar": {"10.0.0.5": False}, "skriv": True, "brannmur": False, "hotspot": {"paa": False, "kan": True}, "arp": 0, "wifi": "WLAN"})}
+    sjekk("oppsett: selvtildelt adresse gir tilbud om Koble direkte", darlig["kabel"]["status"] == "merk" and darlig["kabel"]["fiks"] == "lokal", str(darlig["kabel"]))
+    sjekk("oppsett: en port som ikke svarer er en feil, med brannmuren som tiltak", darlig["nar"]["status"] == "feil" and darlig["nar"]["fiks"] == "brannmur", str(darlig["nar"]))
+    sjekk("oppsett: manglende brannmurregel og hotspot av har hvert sitt tiltak", darlig["brannmur"]["fiks"] == "brannmur" and darlig["hotspot"]["fiks"] == "hotspot", str((darlig["brannmur"], darlig["hotspot"])))
+    sjekk("oppsett: skriving på er et merke, og et ukjent oppslag sier at det er ukjent", darlig["skriv"]["status"] == "merk" and darlig["arp"]["status"] == "ukjent")
+    av = {r["id"]: r for r in nm.sjekkliste({"kort": [], "mobil_paa": False, "port": 8093, "nar": {}, "skriv": False, "brannmur": None, "hotspot": {}, "arp": 1, "wifi": None})}
+    sjekk("oppsett: mobiltilgang av gir tiltaket Slå på, og ingen porttest", av["mobil"]["fiks"] == "start" and "nar" not in av and av["brannmur"]["status"] == "ukjent", str(list(av)))
+    sjekk("oppsett: sammendraget teller", nm.sjekk_sammendrag(bra)["ok"] == len(bra) and nm.sjekk_sammendrag(list(darlig.values()))["feil"] == 1)
+    sjekk("oppsett: titler og detaljer finnes på begge språk", all(len(r["tittel"]) == 2 and all(r["tittel"]) for r in list(darlig.values()) + bra))
+
+    # Loggen over hva telefonen gjorde: strukturert, i en fil, nyeste først, og den holder seg liten.
+    import tempfile as _tf
+    _gammel = nm.LOGG_FIL
+    with _tf.TemporaryDirectory() as _d:
+        nm.LOGG_FIL = Path(_d) / "logg.jsonl"
+        try:
+            nm.M["logg"].clear()
+            nm.logg("a1", "Satte 50 på analog-value,1 @ 10.0.0.5", type="skriv", navn="iPhone", ip="10.0.0.9", enhet="10.0.0.5", punkt="analog-value,1", verdi=50, ok=True)
+            nm.logg("a1", "Slapp analog-value,1 @ 10.0.0.5", type="slipp", navn="iPhone", ok=True)
+            h = nm.logg_historikk()
+            sjekk("mobillogg: nyeste først, med navn, enhet, punkt og verdi", [x["type"] for x in h] == ["slipp", "skriv"] and h[1]["navn"] == "iPhone" and h[1]["verdi"] == 50 and h[1]["enhet"] == "10.0.0.5", str(h))
+            nm.M["logg"].clear()
+            sjekk("mobillogg: ligger i filen, så den overlever at porten slås av", len(nm.logg_historikk()) == 2)
+            for i in range(nm.LOGG_MAKS + 300):
+                nm.logg("a1", "x" * 800 + str(i))
+            sjekk("mobillogg: filen holder seg liten og beholder de nyeste", nm.LOGG_FIL.stat().st_size < 500_000 and nm.logg_historikk(5)[0]["tekst"].endswith(str(nm.LOGG_MAKS + 299)), str(nm.LOGG_FIL.stat().st_size))
+        finally:
+            nm.LOGG_FIL = _gammel
+            nm.M["logg"].clear()
+    sjekk("mobillogg: telefonen når ikke sjekk, logg eller tømming, men kan lese testhistorikken",
+          not nm.regler("POST", "/api/mobil/sjekk", {}, True, 10)["ok"] and not nm.regler("GET", "/api/mobil/logg", None, True, 10)["ok"]
+          and not nm.regler("POST", "/api/mobil/logg/tom", {}, True, 10)["ok"] and nm.regler("GET", "/api/test/svar-historikk", None, False, 10)["ok"])
+
+    # Telefonsiden og PC-dialogen har det de skal ha for å tåle tapt kontakt, holde skjermen våken og vise før og etter.
+    _html = (HER / "nabe_mobil.html").read_text(encoding="utf-8")
+    sjekk("mobilside: tapt kontakt, våken skjerm, vibrasjon og før og etter finnes",
+          all(x in _html for x in ("function kobling(", "navigator.wakeLock.request", "const hapt =", "function forEtter(", "svar-historikk", "Mistet kontakten med PC-en")))
+    _js = (HER / "js" / "nabe-mobil.js").read_text(encoding="utf-8") + (HER / "js" / "nabe-besok.js").read_text(encoding="utf-8")
+    sjekk("mobildialog: test oppsettet, logg som kan kopieres og lastes ned, og testene i rapporten", all(x in _js for x in ("sjekkHtml", "logg-csv", "/api/mobil/sjekk", "svarRader", "telefonRader")))
+
     # Brukeren vil ikke ha statusprikker (farget ●-prikk som sier at noe er på, av eller tilkoblet). Aldri, i noe UI.
     kilder = "".join((HER / f).read_text(encoding="utf-8") for f in ("nabe.css", "nabe_mobil.html", "app.js", "index.html")) \
         + "".join(f.read_text(encoding="utf-8") for f in (HER / "js").glob("*.js"))
     forbudt = ("prot-prikk", "tp-prikk", "fo-prikk", "ss-prikk", "lk-puls", "ss-funn i{", "nabo-prikk", "kort-brikke i{", ".an-rad .prikk", "pille::before",
-               "lokal-rad.aktiv::before", "delvis::after", ".mb-ok i{", "sk-prikk", "content:'● '")
+               "lokal-rad.aktiv::before", "delvis::after", ".mb-ok i{", "sk-prikk", "content:'● '",
+               "dev-ip::before", ".vsub-prikk{width", ".prot-skille i{width", "prot-filter button i{width")
     funnet = [x for x in forbudt if x in kilder]
     sjekk("ingen statusprikker: de er fjernet og kommer ikke tilbake", not funnet, str(funnet))
     sjekk("ingen statusprikker: tilstand står med ord eller symbol", "fo-prio" in kilder and "ss-ny" in kilder and "nabo-pa" in kilder and "lk-stolpe" in kilder)
@@ -1457,6 +1504,19 @@ def mobil_fil():
         sjekk("par: etter at den er glemt er den ute igjen", ny_leser("/m/me")[0] == 401 and kall("/api/mobil")["par"]["liste"] == [])
         kall("/api/mobil/par/lan", {"tillat": False})
         sjekk("mobil: logg viser hva telefonen gjorde", any("Satte 55" in l["tekst"] for l in kall("/api/mobil")["logg"]))
+        sk = next((l for l in kall("/api/mobil/logg").get("logg", []) if l.get("type") == "skriv"), {})
+        sjekk("mobillogg: skrivingen står med telefon, enhet, punkt, verdi og at den gikk gjennom",
+              sk.get("enhet") == addr and sk.get("punkt") == PAD and sk.get("verdi") == 55 and sk.get("ok") is True and bool(sk.get("navn")) and bool(sk.get("ip")), str(sk))
+        sjekk("mobillogg: også testen og slippet står i loggen", {"test", "slipp"} <= {l.get("type") for l in kall("/api/mobil/logg").get("logg", [])})
+        sjekk("mobillogg: styringen er stengt for telefonen", g("/api/mobil/sjekk", {})[0] == 403 and g("/api/mobil/logg")[0] == 403 and g("/api/mobil/logg/tom", {})[0] == 403)
+        hi = g("/api/test/svar-historikk?padrag=" + urllib.parse.quote(PAD) + "&address=" + addr)[1].get("tester", [])
+        sjekk("svar: den ferdige testen er husket med tall, og kan hentes fra telefonen",
+              any(x["id"] == t["id"] and len(x["steg"]) == 2 and x["resultat"] and x["address"] == addr for x in hi), str(hi)[:300])
+        sjekk("svar: historikken kan filtreres bort", not kall("/api/test/svar-historikk?padrag=analog-output,99").get("tester"))
+        sj = kall("/api/mobil/sjekk", {})
+        sjekk("oppsett: sjekken svarer fra serveren med liste og sammendrag", sj.get("status") == "done" and {"kabel", "mobil", "hotspot"} <= {r["id"] for r in sj.get("sjekk", [])}
+              and sum(sj["sammendrag"].values()) == len(sj["sjekk"]), str(sj)[:300])
+        sjekk("oppsett: mobiltilgang som er på står som ok", next((r["status"] for r in sj["sjekk"] if r["id"] == "mobil"), "") == "ok")
     finally:
         kall("/api/mobil/stopp", {})
     try:

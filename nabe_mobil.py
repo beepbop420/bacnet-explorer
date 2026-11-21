@@ -27,6 +27,7 @@ import json
 import os
 import re
 import secrets
+import socket
 import subprocess
 import threading
 import time
@@ -57,7 +58,7 @@ LAAS = threading.Lock()
 ID = r"[A-Za-z0-9_-]{1,64}"
 GET_OK = [re.compile(p) for p in (
     r"^/api/status$", r"^/api/anlegg$", r"^/api/mine$", r"^/api/readonly$", r"^/api/sites$",
-    rf"^/api/job/{ID}$", r"^/api/writelog$", rf"^/api/test/svar/{ID}$",
+    rf"^/api/job/{ID}$", r"^/api/writelog$", rf"^/api/test/svar/{ID}$", r"^/api/test/svar-historikk$",
 )]
 POST_LES = [re.compile(p) for p in (
     r"^/api/poll$", r"^/api/device/points$", r"^/api/object/detail$", r"^/api/device/alarms$",
@@ -148,8 +149,50 @@ def _rens(naa: float) -> None:
         M["okter"].pop(t, None)
 
 
-def logg(okt: str, tekst: str) -> None:
-    M["logg"].append({"t": int(time.time()), "okt": okt, "tekst": tekst})
+LOGG_FIL: Optional[Path] = None   # settes av server.py; uten fil huskes loggen bare til mobiltilgangen slås av
+LOGG_MAKS = 500
+
+
+def logg(okt: str, tekst: str, **felt: Any) -> None:
+    """Én linje i loggen. Felt (type, navn, ip, enhet, punkt, verdi, ok) gjør den til noe du kan søke i og
+    legge ved en rapport. Linjene ligger også i en fil, så de overlever at mobiltilgangen slås av."""
+    rad = {"t": int(time.time()), "okt": okt, "tekst": tekst}
+    rad.update({k: v for k, v in felt.items() if v is not None})
+    M["logg"].append(rad)
+    if LOGG_FIL:
+        try:
+            with LAAS_LOGG:
+                with LOGG_FIL.open("a", encoding="utf-8") as f:
+                    f.write(json.dumps(rad, ensure_ascii=False) + "\n")
+                if LOGG_FIL.stat().st_size > 400_000:
+                    ny = LOGG_FIL.read_text(encoding="utf-8").splitlines()[-LOGG_MAKS:]
+                    LOGG_FIL.write_text("\n".join(ny) + "\n", encoding="utf-8")
+        except OSError:
+            pass
+
+
+LAAS_LOGG = threading.Lock()
+
+
+def logg_historikk(n: int = LOGG_MAKS) -> List[Dict[str, Any]]:
+    """Det som er logget, nyeste først. Fra filen hvis den finnes, ellers fra minnet."""
+    rader: List[Dict[str, Any]] = []
+    if LOGG_FIL:
+        try:
+            with LAAS_LOGG:
+                linjer = LOGG_FIL.read_text(encoding="utf-8").splitlines()[-n:]
+            for linje in linjer:
+                try:
+                    r = json.loads(linje)
+                    if isinstance(r, dict):
+                        rader.append(r)
+                except ValueError:
+                    continue
+        except OSError:
+            pass
+    if not rader:
+        rader = list(M["logg"])[-n:]
+    return rader[::-1]
 
 
 def logg_inn(kode: str, ip: str, navn: str = "", ua: str = "") -> Dict[str, Any]:
@@ -557,13 +600,22 @@ def lag_app():
         status, data, ctype = await asyncio.to_thread(_hent, request.method, sti + q, send, request.headers.get("x-sprak", "nb"))
         if request.method == "POST" and sti in ("/api/write", "/api/test/svar"):
             b = vurd["body"] or {}
+            try:
+                svar_status = json.loads(data).get("status")
+            except Exception:
+                svar_status = None
+            ok = svar_status in ("done", "started")
             if sti == "/api/write":
                 tekst = ("Slapp " if b.get("release") else f"Satte {b.get('value')} på ") + f"{b.get('objid')} @ {b.get('address')}"
                 if not b.get("release"):
                     tekst += f" (prio {b.get('priority')}, slippes etter {b.get('auto_release_min'):g} min)"
+                typ, punkt, verdi = ("slipp" if b.get("release") else "skriv"), b.get("objid"), (None if b.get("release") else b.get("value"))
             else:
                 tekst = f"Prøv-og-se-svar på {b.get('padrag')} @ {b.get('address')}, trinn {b.get('trinn')}"
-            logg(okt_id(token), tekst)
+                typ, punkt, verdi = "test", b.get("padrag"), None
+            if not ok:
+                tekst += " - avvist"
+            logg(okt_id(token), tekst, type=typ, navn=o["navn"], ip=o["ip"], enhet=b.get("address"), punkt=punkt, verdi=verdi, ok=ok)
         return hode(Response(content=data, status_code=status, media_type=ctype.split(";")[0]))
 
     return app
@@ -903,6 +955,128 @@ def brannmur_skript(port: int) -> str:
             f"Get-NetFirewallRule -DisplayName '{BRANNMUR_NAVN}' -ErrorAction SilentlyContinue | Remove-NetFirewallRule\n"
             f"New-NetFirewallRule -DisplayName '{BRANNMUR_NAVN}' -Direction Inbound -Protocol TCP -LocalPort {int(port)} "
             "-Action Allow -RemoteAddress LocalSubnet -Profile Any | Out-Null\n")
+
+
+# ------------------------------------------------------------- test oppsettet
+
+def sjekkliste(f: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Fra fakta om denne PC-en til en liste med hva som er i orden og hva som ikke er det.
+    Ren funksjon: ingen oppslag, så den kan testes uten nett. Status er ok, merk, feil eller ukjent,
+    og hver linje sier selv hva du kan gjøre (fiks: start, brannmur, hotspot, lokal)."""
+    ut: List[Dict[str, Any]] = []
+
+    def legg(id_: str, status_: str, tittel: Tuple[str, str], detalj: Tuple[str, str] = ("", ""), fiks: str = "") -> None:
+        ut.append({"id": id_, "status": status_, "tittel": list(tittel), "detalj": list(detalj), "fiks": fiks})
+
+    kabel = [k for k in f.get("kort", []) if k.get("kabel") and not re.search(r"wi-?fi|wlan|wireless", k.get("navn", ""), re.I)]
+    kabel_opp = [k for k in kabel if k.get("opp")]
+    ekte = [k for k in kabel_opp if any(not ln.er_linklokal(a["ip"]) for a in k.get("adresser", []))]
+    if ekte:
+        k = ekte[0]
+        ip = next(a["ip"] for a in k["adresser"] if not ln.er_linklokal(a["ip"]))
+        legg("kabel", "ok", ("Kabel tilkoblet", "Cable connected"), (f"{k['navn']}, {ip}", f"{k['navn']}, {ip}"))
+    elif kabel_opp:
+        legg("kabel", "merk", ("Kabelen mangler adresse", "The cable has no address"),
+             ("Kortet er oppe, men har bare en selvtildelt adresse. Bruk Koble direkte for å sette en adresse i samme område som enheten.",
+              "The adapter is up but only has a self-assigned address. Use Connect directly to set an address in the same range as the device."), "lokal")
+    else:
+        legg("kabel", "merk", ("Ingen kabel tilkoblet", "No cable connected"),
+             ("Det går fint med Wi-Fi, men på en igangkjøring er kabel til enheten tryggest.", "Wi-Fi works, but on a commissioning a cable to the device is safest."))
+
+    paa = bool(f.get("mobil_paa"))
+    if paa:
+        legg("mobil", "ok", ("Mobiltilgang er på", "Mobile access is on"), (f"Port {f.get('port')}", f"Port {f.get('port')}"))
+    else:
+        legg("mobil", "merk", ("Mobiltilgang er av", "Mobile access is off"),
+             ("Slå den på for å få kode og QR.", "Turn it on to get a code and QR."), "start")
+
+    if paa:
+        nar = f.get("nar") or {}
+        if not nar:
+            legg("nar", "merk", ("Ingen adresse å nå telefonen på", "No address to reach the phone on"),
+                 ("PC-en har ikke noe nett telefonen kan bli med i. Slå på hotspot, eller koble PC-en til samme Wi-Fi som telefonen.",
+                  "The PC has no network the phone can join. Turn on the hotspot, or put the PC on the same Wi-Fi as the phone."), "hotspot")
+        else:
+            feil = [ip for ip, ok in nar.items() if not ok]
+            if feil:
+                legg("nar", "feil", ("Porten svarer ikke", "The port does not answer"),
+                     ("Ikke nådd på " + ", ".join(feil) + ". Brannmuren eller et annet program kan stå i veien.",
+                      "Not reached on " + ", ".join(feil) + ". The firewall or another program may be in the way."), "brannmur")
+            else:
+                legg("nar", "ok", ("Porten svarer på PC-ens adresser", "The port answers on the PC's addresses"),
+                     (", ".join(nar), ", ".join(nar)))
+
+    bm = f.get("brannmur")
+    if bm is True:
+        legg("brannmur", "ok", ("Brannmuren slipper inn lokalt", "The firewall lets the local network in"))
+    elif bm is False:
+        legg("brannmur", "merk", ("Ingen brannmurregel for NABE", "No firewall rule for NABE"),
+             ("Windows kan stoppe telefonen første gang. Regelen gjelder bare det lokale nettet.", "Windows may stop the phone the first time. The rule only covers the local network."), "brannmur")
+    else:
+        legg("brannmur", "ukjent", ("Brannmuren ble ikke sjekket", "The firewall was not checked"),
+             ("Windows ga ikke svar. Det går ofte bra likevel.", "Windows gave no answer. It often works anyway."))
+
+    h = f.get("hotspot") or {}
+    if h.get("paa"):
+        n = int(h.get("klienter") or 0)
+        legg("hotspot", "ok", ("Hotspot er på", "Hotspot is on"),
+             (f"{h.get('ssid') or ''}, {n} tilkoblet", f"{h.get('ssid') or ''}, {n} connected"))
+    elif h.get("kan"):
+        legg("hotspot", "merk", ("Hotspot er av", "Hotspot is off"), ("NABE kan slå det på. Det deler PC-ens nett.", "NABE can turn it on. It shares the PC's network."), "hotspot")
+    else:
+        legg("hotspot", "merk", ("Hotspot kan ikke deles herfra", "The hotspot cannot be shared from here"),
+             ("Windows sier at det ikke finnes noe nett å dele, eller at kortet ikke kan. Samme Wi-Fi fungerer likevel.",
+              "Windows says there is no network to share, or that the adapter cannot. The same Wi-Fi works anyway."))
+
+    if f.get("wifi") and not ekte and not h.get("paa"):
+        legg("wifi", "merk", ("PC-en er på Wi-Fi", "The PC is on Wi-Fi"),
+             (f"{f['wifi']}. Hotspot på samme kort kan kutte den tilkoblingen en stund. En kabel til enheten og Wi-Fi til hotspot går bra.",
+              f"{f['wifi']}. A hotspot on the same adapter can cut that connection for a while. A cable to the device and Wi-Fi for the hotspot works fine."))
+
+    n_arp = int(f.get("arp") or 0)
+    if n_arp:
+        legg("arp", "ok", ("Telefoner kan kjennes igjen", "Phones can be recognised"), (f"{n_arp} naboer sett", f"{n_arp} neighbours seen"))
+    else:
+        legg("arp", "ukjent", ("Ingen naboer sett ennå", "No neighbours seen yet"),
+             ("Husk-funksjonen kjenner telefonen på MAC-adressen, og den vises først når telefonen har snakket med PC-en.",
+              "Remember recognises the phone by its MAC address, which shows up once the phone has talked to the PC."))
+
+    if f.get("skriv"):
+        legg("skriv", "merk", ("Skriving fra mobil er på", "Writing from the phone is on"),
+             ("Alt telefonen setter slippes av seg selv.", "Everything the phone sets is released by itself."))
+    else:
+        legg("skriv", "ok", ("Skriving fra mobil er av", "Writing from the phone is off"),
+             ("Slå den på når du skal prøve pådrag.", "Turn it on when you want to try outputs."))
+    return ut
+
+
+def sjekk_sammendrag(liste: List[Dict[str, Any]]) -> Dict[str, int]:
+    ut = {"ok": 0, "merk": 0, "feil": 0, "ukjent": 0}
+    for r in liste:
+        ut[r["status"]] = ut.get(r["status"], 0) + 1
+    return ut
+
+
+def _naa(ip: str, port: int) -> bool:
+    try:
+        with socket.create_connection((ip, port), timeout=1.5):
+            return True
+    except OSError:
+        return False
+
+
+def samle_fakta() -> Dict[str, Any]:
+    kort = ln.kort_liste()
+    paa = bool(M["server"])
+    nar = {a["ip"]: _naa(a["ip"], M["port"]) for a in adresser(M["port"])} if paa else {}
+    hot = hotspot_status() if ln.er_windows() else {}
+    return {"kort": kort, "mobil_paa": paa, "port": M["port"], "nar": nar, "skriv": bool(M["skriv"]),
+            "brannmur": brannmur_finnes() if paa else None, "hotspot": hot, "arp": len(arp_tabell()), "wifi": wifi_klient()}
+
+
+def oppsettsjekk() -> Dict[str, Any]:
+    liste = sjekkliste(samle_fakta())
+    return {"status": "done", "sjekk": liste, "sammendrag": sjekk_sammendrag(liste), "t": int(time.time())}
 
 
 def status() -> Dict[str, Any]:
