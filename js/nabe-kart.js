@@ -218,7 +218,7 @@
       : st.lastet ? `<div class="tp-protrad">${PROT.filter(p => st.per[p].length).map(p => `<span class="tp-prot p-${p}"><i></i>${PROT_NAVN[p]} ${st.per[p].length}</span>`).join('')}<button type="button" class="tp-mer" data-tp="vis" data-key="${esc(st.key)}">${T('Vis enhetene', 'Show devices')}</button></div>` : '';
     return `<div class="tp-sted ${st.lastet ? 'lastet' : 'ledig'}${sk ? ' skanner' : ''}${KT.valgt === 's:' + st.key ? ' valgt' : ''}" data-stedid="${esc(st.key)}" data-kort="${esc(st.kort || '')}" data-prots="${PROT.filter(p => st.per && st.per[p].length).join(' ')}">
       <div class="tp-sted-h" data-tp="sted" data-key="${esc(st.key)}" data-tip="t:${esc(navn)}">
-        <span class="tp-prikk"></span><span class="tp-tekst"><b>${esc(navn)}</b><small>${esc(under)}</small></span>
+        <span class="tp-tekst"><b>${esc(navn)}</b><small>${esc(under)}</small></span>
         ${sk ? '<span class="tp-radar" aria-hidden="true"></span>' : st.lastet ? `<button type="button" class="tp-x" data-tp="fjern" data-key="${esc(st.key)}" aria-label="${esc(T('Fjern fra lista', 'Remove from the list'))}" data-tip="t:${esc(T('Fjern fra lista', 'Remove from the list'))}">✕</button>`
           : `<button type="button" class="tp-pluss" data-tp="skann" data-key="${esc(st.key)}" data-modus="${esc(st.modus || '')}" data-tip="t:${esc(T('Legg til i skannet', 'Add to the scan'))}">+</button>`}
       </div>
@@ -680,7 +680,7 @@
       const navn = a.navn || a.key.split(' ').join(', ');
       const skanner = KT.skann && document.body.classList.contains('skanner') && KT.skann.key === a.key;
       return `<button type="button" class="tp-rad ${tilst}${skanner ? ' skanner' : ''}${KT.valgt === 's:' + a.key ? ' valgt' : ''}" data-tp="rad" data-key="${esc(a.key)}" data-tip="t:${esc(tilst === 'ute' ? T('Utenfor rekkevidde nå. Koble til nettet eller VPN-et for å nå det', 'Out of reach now. Connect to the network or VPN to reach it') : tilst === 'innen' ? T('Klikk for å legge det til i skannet', 'Click to add it to the scan') : T('Åpent nå', 'Open now'))}">
-        <span class="tp-prikk"></span><span class="tp-tekst"><b>${esc(navn)}</b><small>${a.enheter} ${ent(a.enheter)}${a.sist ? ' · ' + esc(siden(a.sist)) : ''}</small></span>
+        <span class="tp-tekst"><b>${esc(navn)}</b><small>${a.enheter} ${ent(a.enheter)}${a.sist ? ' · ' + esc(siden(a.sist)) : ''}</small></span>
         <span class="tp-rad-t">${skanner ? '<span class="tp-radar liten"></span>' : esc(tekst[tilst])}</span></button>`;
     }).join('') || `<div class="tp-tomt">${KT.anlegg.length ? T('Ingen treff', 'No match') : T('Ingen anlegg husket ennå. Skann et anlegg, så dukker det opp her.', 'No sites remembered yet. Scan a site and it shows up here.')}</div>`;
     ruterRail();
@@ -698,7 +698,7 @@
     if (!r.rutere.length && !r.utenRuter.length) { el.hidden = true; el.innerHTML = ''; return; }
     el.hidden = false;
     const rad = (id, tittel, under, niva) => `<button type="button" class="tp-rad ruter n-${niva}${KT.valgt === 'r:' + id ? ' valgt' : ''}" data-tp="ruter" data-ruter="${esc(id)}" data-tip="t:${esc(under)}">
-      <span class="tp-prikk"></span><span class="tp-tekst"><b>${esc(tittel)}</b><small>${esc(under)}</small></span><span class="tp-rad-t">${esc(NIVA_TXT()[niva])}</span></button>`;
+      <span class="tp-tekst"><b>${esc(tittel)}</b><small>${esc(under)}</small></span><span class="tp-rad-t">${esc(NIVA_TXT()[niva])}</span></button>`;
     el.innerHTML = `<div class="tp-rail-h"><b>${T('Rutere og MS/TP', 'Routers and MS/TP')}</b></div>`
       + r.rutere.map((x) => rad(x.ruter, x.ruter, `${x.nett.length} ${x.nett.length === 1 ? T('nett', 'network') : T('nett', 'networks')} · ${x.total} ${ent(x.total)}`, x.niva)).join('')
       + r.utenRuter.map((n) => rad('n:' + n.nett, T(`Nett ${n.nett}`, `Network ${n.nett}`), `${n.antall} ${ent(n.antall)} · ${T('ruter ikke funnet', 'router not found')}`, n.niva)).join('');

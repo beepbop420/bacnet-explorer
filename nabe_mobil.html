@@ -1,0 +1,1207 @@
+<!doctype html>
+<html lang="nb">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark light">
+<meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#f2f2f7" media="(prefers-color-scheme: light)">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="NABE">
+<meta name="format-detection" content="telephone=no">
+<link rel="apple-touch-icon" href="/m/ikon/180.png">
+<link rel="icon" href="/m/ikon/192.png">
+<link rel="manifest" href="/m/manifest.webmanifest">
+<title>NABE</title>
+<style>
+/* NABE på telefonen, i iOS sitt språk: store titler, grupperte lister, widgets, gjennomsiktig fanelinje, ark nedenfra.
+   Fargene, ansiktet, de rette tekstene og monospace på adresser er NABE sine. */
+:root{
+  color-scheme:dark light;
+  --bg:#000;--gruppe:#1c1c1e;--hev:#2c2c2e;--sep:rgba(84,84,88,.65);
+  --fg:#fff;--fg2:rgba(235,235,245,.62);--fg3:rgba(235,235,245,.32);
+  --tint:#5aa2ff;--tint-bg:rgba(90,162,255,.16);--ok:#30d158;--warn:#ffd60a;--err:#ff453a;
+  --glass:rgba(24,24,26,.74);--felt:rgba(118,118,128,.24);--seg-valgt:#636366;--skygge:0 1px 3px rgba(0,0,0,.4);
+  --ark-bg:#1c1c1e;--ark-gruppe:#2c2c2e;
+  --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+  --sans:-apple-system,BlinkMacSystemFont,"SF Pro Text","SF Pro Display","Segoe UI Variable","Segoe UI",system-ui,Roboto,sans-serif;
+}
+@media (prefers-color-scheme:light){:root{
+  --bg:#f2f2f7;--gruppe:#fff;--hev:#e5e5ea;--sep:rgba(60,60,67,.29);
+  --fg:#000;--fg2:rgba(60,60,67,.62);--fg3:rgba(60,60,67,.3);
+  --tint:#1f6fe0;--tint-bg:rgba(31,111,224,.12);--ok:#34c759;--warn:#9a6700;--err:#d70015;
+  --glass:rgba(249,249,251,.8);--felt:rgba(118,118,128,.12);--seg-valgt:#fff;--skygge:0 1px 3px rgba(0,0,0,.18);
+  --ark-bg:#f2f2f7;--ark-gruppe:#fff;
+}}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html{-webkit-text-size-adjust:100%;background:var(--bg)}
+body{margin:0;background:var(--bg);color:var(--fg);font:17px/1.3 var(--sans);-webkit-font-smoothing:antialiased;
+  padding:calc(44px + env(safe-area-inset-top)) 0 calc(86px + env(safe-area-inset-bottom));min-height:100vh;touch-action:manipulation}
+button,input,select{font:inherit;color:inherit}
+button{-webkit-user-select:none;user-select:none;cursor:pointer}
+:focus-visible{outline:2px solid var(--tint);outline-offset:2px}
+
+/* ---- navigasjonslinjen: gjennomsiktig, tittelen krymper inn når du ruller */
+.nav{position:fixed;top:0;left:0;right:0;z-index:20;height:calc(44px + env(safe-area-inset-top));padding-top:env(safe-area-inset-top);
+  display:flex;align-items:center;justify-content:space-between;gap:8px;padding-left:max(10px,env(safe-area-inset-left));padding-right:max(14px,env(safe-area-inset-right));
+  background:transparent;border-bottom:.5px solid transparent;transition:background .2s,border-color .2s;
+  -webkit-backdrop-filter:saturate(180%) blur(20px);backdrop-filter:saturate(180%) blur(20px)}
+body.skrullet .nav{background:var(--glass);border-bottom-color:var(--sep)}
+.nav-venstre,.nav-hoyre{flex:1;display:flex;align-items:center;min-width:0}
+.nav-hoyre{justify-content:flex-end}
+.nav-tittel{font-weight:600;font-size:17px;opacity:0;transition:opacity .15s;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:46%}
+body.skrullet .nav-tittel{opacity:1}
+.nav-tilbake{background:none;border:0;color:var(--tint);display:flex;align-items:center;gap:4px;padding:8px 6px;font-size:17px;max-width:100%;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.nav-tilbake svg{width:11px;height:19px;flex:none}
+.nav-tilbake[hidden]{display:none}
+.pille{font-size:12px;font-weight:600;color:var(--fg2);background:var(--felt);border-radius:99px;padding:4px 11px;white-space:nowrap;display:inline-flex;align-items:center;gap:6px}
+.pille.skriv{color:var(--warn);background:color-mix(in srgb,var(--warn) 16%,transparent)}
+
+/* ---- store titler */
+.stor-tittel{font-size:34px;line-height:1.1;font-weight:700;letter-spacing:.37px;margin:6px 20px 4px}
+.stor-under{margin:0 20px 16px;font-size:13px;color:var(--fg2);font-family:var(--mono);overflow-wrap:anywhere}
+.stor-tittel + .sok,.stor-tittel + .seg,.stor-tittel + .widgets,.stor-tittel + .liste{margin-top:14px}
+
+/* ---- varsler øverst */
+.merknad{margin:0 16px 14px;padding:12px 14px;border-radius:12px;background:color-mix(in srgb,var(--warn) 14%,transparent);color:var(--fg);font-size:14px;display:flex;gap:10px;align-items:center}
+.merknad span{color:var(--warn);font-size:16px}
+
+/* ---- søkefelt og segmentert kontroll */
+.sok{position:relative;margin:0 16px 14px}
+.sok svg{position:absolute;left:10px;top:50%;transform:translateY(-50%);width:16px;height:16px;color:var(--fg2);pointer-events:none}
+.sok input{width:100%;height:36px;border:0;border-radius:10px;background:var(--felt);padding:0 12px 0 33px;font-size:17px;-webkit-appearance:none;appearance:none}
+.sok input::placeholder{color:var(--fg2)}
+.sok input::-webkit-search-cancel-button{-webkit-appearance:none}
+.seg{display:flex;margin:0 16px 14px;background:var(--felt);border-radius:9px;padding:2px;gap:2px}
+.seg button{flex:1;height:30px;border:0;border-radius:7px;background:none;font-size:13px;font-weight:500;color:var(--fg);white-space:nowrap;transition:background .15s}
+.seg button[aria-pressed=true]{background:var(--seg-valgt);box-shadow:var(--skygge);font-weight:600}
+
+/* ---- grupperte lister */
+.liste{margin:0 16px 22px;background:var(--gruppe);border-radius:12px;overflow:hidden}
+.liste-fot{margin:-14px 20px 22px;font-size:13px;color:var(--fg2)}
+.seksjon{margin:22px 20px 7px;font-size:13px;text-transform:uppercase;letter-spacing:.02em;color:var(--fg2)}
+.celle{display:flex;align-items:center;gap:12px;min-height:54px;padding:8px 16px;width:100%;background:none;border:0;text-align:left;position:relative;color:inherit}
+.celle + .celle::before,.celle + label.celle::before,label.celle + .celle::before{content:"";position:absolute;top:0;left:16px;right:0;height:.5px;background:var(--sep)}
+.celle.med-ikon + .celle.med-ikon::before{left:58px}
+button.celle:active{background:var(--hev)}
+.ik{width:30px;height:30px;border-radius:8px;display:grid;place-items:center;background:var(--tint);color:#fff;font:700 11px var(--mono);flex:none;letter-spacing:-.3px}
+.ik.ut{background:#ff9f0a}
+.ik.enhet{background:var(--tint)}
+.ik svg{width:17px;height:17px}
+.ct{display:flex;flex-direction:column;min-width:0;flex:1}
+.ct1{font-size:17px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ct2{font-size:13px;color:var(--fg2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ct2.mono{font-family:var(--mono);font-size:12px}
+.cv{margin-left:auto;color:var(--fg2);font-variant-numeric:tabular-nums;white-space:nowrap;font-size:17px;padding-left:8px}
+.cv small{font-size:13px;color:var(--fg3);margin-left:2px}
+.chev{width:8px;height:14px;color:var(--fg3);flex:none;margin-left:2px}
+.celle input,.celle select{margin-left:auto;background:none;border:0;text-align:right;color:var(--tint);font-size:17px;max-width:62%;-webkit-appearance:none;appearance:none;padding:6px 0}
+.celle input::placeholder{color:var(--fg3)}
+.celle label,label.celle > span:first-child{white-space:nowrap}
+.tekstcelle{padding:12px 16px;font-size:15px;line-height:1.5;color:var(--fg2)}
+
+/* ---- widgets for festede punkter */
+.widgets{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:0 16px 22px}
+.widget{background:var(--gruppe);border:0;border-radius:20px;padding:14px 15px 13px;min-height:122px;display:flex;flex-direction:column;justify-content:space-between;text-align:left;
+  transition:transform .15s,opacity .2s;color:inherit;min-width:0}
+.widget:active{transform:scale(.96)}
+.w-navn{font-size:13px;font-weight:600;color:var(--fg2);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;overflow-wrap:anywhere}
+.w-verdi{font-size:36px;font-weight:700;line-height:1;letter-spacing:-.5px;font-variant-numeric:tabular-nums;margin:10px 0 8px;white-space:nowrap}
+.w-verdi small{font-size:15px;font-weight:500;color:var(--fg2);margin-left:3px;letter-spacing:0}
+.w-enhet{font-size:12px;color:var(--fg3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.widget.gammel .w-verdi{color:var(--fg3)}
+
+/* ---- tomme tilstander */
+.tom{text-align:center;padding:56px 32px 30px;color:var(--fg2)}
+.tom svg.ansikt{width:64px;height:64px;margin-bottom:14px;opacity:.9}
+.tom h2{margin:0 0 6px;font-size:21px;font-weight:700;color:var(--fg);letter-spacing:.35px}
+.tom p{margin:0 auto 18px;max-width:300px;font-size:15px;line-height:1.45}
+
+/* ---- knapper */
+.knapp-stor{display:flex;align-items:center;justify-content:center;width:calc(100% - 32px);margin:0 16px 12px;min-height:50px;border-radius:14px;border:0;background:var(--tint);color:#fff;font-size:17px;font-weight:600;transition:opacity .15s}
+.knapp-stor:active{opacity:.7}
+.knapp-stor.lys{background:var(--tint-bg);color:var(--tint)}
+.knapp-stor.fare{background:color-mix(in srgb,var(--err) 16%,transparent);color:var(--err)}
+.knapp-stor:disabled{opacity:.4}
+.tekstknapp{background:none;border:0;color:var(--tint);font-size:17px;padding:8px 4px;min-width:60px}
+.tekstknapp.fet{font-weight:600;text-align:right}
+.tekstknapp:active{opacity:.5}
+.mini{border:0;border-radius:99px;background:var(--tint-bg);color:var(--tint);font-size:14px;font-weight:600;padding:6px 14px}
+.mini:active{opacity:.6}
+
+/* ---- tabellinjen */
+.tabbar{position:fixed;left:0;right:0;bottom:0;z-index:20;display:flex;padding:6px max(8px,env(safe-area-inset-left)) calc(6px + env(safe-area-inset-bottom));
+  background:var(--glass);border-top:.5px solid var(--sep);-webkit-backdrop-filter:saturate(180%) blur(20px);backdrop-filter:saturate(180%) blur(20px)}
+.tabbar button{flex:1;background:none;border:0;display:flex;flex-direction:column;align-items:center;gap:2px;padding:4px 0 2px;color:var(--fg3);font-size:10px;font-weight:500;position:relative;letter-spacing:.1px}
+.tabbar button svg{width:26px;height:26px}
+.tabbar button[aria-selected=true]{color:var(--tint)}
+.tabbar button:active{opacity:.6}
+.tabbar .ant{position:absolute;top:0;left:calc(50% + 6px);min-width:18px;height:18px;padding:0 5px;border-radius:99px;background:var(--err);color:#fff;font-size:11px;font-weight:700;display:grid;place-items:center;line-height:1}
+.tabbar .ant[hidden]{display:none}
+
+/* ---- ark nedenfra */
+.ark{position:fixed;inset:0;z-index:40;background:rgba(0,0,0,.42);animation:blek .25s ease both}
+.ark[hidden]{display:none}
+.ark-kort{position:absolute;left:0;right:0;bottom:0;max-height:calc(100% - 28px - env(safe-area-inset-top));overflow:auto;-webkit-overflow-scrolling:touch;
+  background:var(--ark-bg);border-radius:14px 14px 0 0;padding:0 0 calc(24px + env(safe-area-inset-bottom));
+  animation:opp .36s cubic-bezier(.2,.9,.25,1) both;--gruppe:var(--ark-gruppe);--bg:var(--ark-bg);overscroll-behavior:contain}
+.grabber{width:36px;height:5px;border-radius:99px;background:var(--fg3);margin:6px auto 2px}
+.ark-hode{position:sticky;top:0;z-index:2;background:var(--ark-bg);display:grid;grid-template-columns:1fr auto 1fr;align-items:center;padding:4px 12px 6px;min-height:46px}
+.ark-tittel{font-weight:600;font-size:17px;text-align:center;max-width:56vw;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ark-tittel small{display:block;font-size:12px;font-weight:400;color:var(--fg2)}
+.ark-kropp{padding-bottom:6px}
+.verdi-stor{text-align:center;font-size:64px;line-height:1;font-weight:700;letter-spacing:-1px;font-variant-numeric:tabular-nums;margin:14px 0 6px}
+.verdi-stor small{font-size:24px;font-weight:500;color:var(--fg2);margin-left:4px;letter-spacing:0}
+.verdi-under{text-align:center;font-size:12px;color:var(--fg2);font-family:var(--mono);margin:0 24px 18px;overflow-wrap:anywhere}
+.verdi-besk{text-align:center;font-size:14px;color:var(--fg2);margin:-10px 24px 18px}
+@keyframes blek{from{opacity:0}to{opacity:1}}
+@keyframes opp{from{transform:translateY(100%)}to{transform:none}}
+
+/* ---- handlingsark: bekreftelser */
+.as{position:fixed;inset:0;z-index:60;background:rgba(0,0,0,.4);display:flex;flex-direction:column;justify-content:flex-end;padding:0 8px calc(8px + env(safe-area-inset-bottom));animation:blek .2s ease both}
+.as-kort,.as-avbryt{background:color-mix(in srgb,var(--ark-gruppe) 94%,transparent);border-radius:14px;overflow:hidden;-webkit-backdrop-filter:blur(30px);backdrop-filter:blur(30px)}
+.as-kort{animation:opp .34s cubic-bezier(.2,.9,.25,1) both}
+.as-topp{padding:18px 18px 10px;text-align:center}
+.as-topp h3{margin:0;font-size:17px;font-weight:600}
+.as-topp .under{font-size:12px;color:var(--fg2);font-family:var(--mono);margin-top:3px;overflow-wrap:anywhere}
+.as-topp .tekst{font-size:14px;color:var(--fg2);margin-top:8px;white-space:pre-line;line-height:1.45}
+.as-kort .diff{margin:6px 16px 10px}
+.as-kort .chips{justify-content:center;margin:0 16px 10px}
+.as-kort .advarsel{justify-content:center;margin:0 16px 14px}
+.as-knapp{display:block;width:100%;border:0;border-top:.5px solid var(--sep);background:none;min-height:56px;font-size:20px;color:var(--tint)}
+.as-knapp.prim{font-weight:600}
+.as-knapp:active{background:var(--hev)}
+.as-avbryt{margin-top:8px;animation:opp .34s .03s cubic-bezier(.2,.9,.25,1) both}
+.as-avbryt .as-knapp{border:0;font-weight:600}
+.diff{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:12px;padding:14px 16px;border-radius:12px;background:var(--ark-bg)}
+.diff b{display:block;font-size:26px;font-weight:700;font-variant-numeric:tabular-nums;margin-top:2px;letter-spacing:-.3px}
+.diff .merke{font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--fg2)}
+.diff .pil{color:var(--fg3);font-size:18px}
+.diff .ny{text-align:right}.diff .ny b{color:var(--tint)}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chip2{font-size:12px;color:var(--fg2);background:var(--felt);border-radius:99px;padding:4px 11px}
+.advarsel{display:flex;gap:8px;align-items:center;font-size:13px;color:var(--fg2)}.advarsel span{color:var(--warn);font-size:15px}
+
+/* ---- melding øverst, som en kapsel */
+.hud{position:fixed;top:calc(env(safe-area-inset-top) + 8px);left:50%;transform:translate(-50%,-160%);z-index:80;max-width:calc(100% - 32px);
+  background:#000;color:#fff;padding:11px 18px;border-radius:99px;font-size:14px;font-weight:600;text-align:center;line-height:1.3;
+  box-shadow:0 8px 28px rgba(0,0,0,.35);border:.5px solid rgba(255,255,255,.14);opacity:0;transition:transform .5s cubic-bezier(.2,1.25,.3,1),opacity .2s;pointer-events:none}
+.hud.vis{transform:translate(-50%,0);opacity:1}
+
+/* ---- test, graf og resultat */
+svg.graf{width:100%;height:130px;display:block;background:var(--gruppe);border-radius:12px}
+.graf-boks{margin:0 16px 14px}
+.test-rad{display:grid;grid-template-columns:1.1fr 1fr 1fr 1fr;padding:11px 16px;font-size:15px;font-variant-numeric:tabular-nums;position:relative}
+.test-rad.hode{font-size:12px;color:var(--fg2);text-transform:uppercase;letter-spacing:.04em;padding-top:12px;padding-bottom:6px}
+.test-rad + .test-rad::before{content:"";position:absolute;top:0;left:16px;right:0;height:.5px;background:var(--sep)}
+.dom{padding:14px 16px;font-size:16px;line-height:1.5}
+.fase{margin:0 20px 12px;font-size:13px;color:var(--fg2);text-align:center}
+.feil{color:var(--err);font-size:14px;margin:8px 20px}
+
+/* ---- innlogging */
+.logg{min-height:100vh;display:flex;flex-direction:column;justify-content:center;padding:32px 28px calc(32px + env(safe-area-inset-bottom));max-width:430px;margin:0 auto;text-align:center}
+.logg svg.ansikt{width:84px;height:84px;margin:0 auto 18px}
+.logg h1{font-size:34px;font-weight:700;margin:0 0 8px;letter-spacing:.4px}
+.logg p{color:var(--fg2);font-size:15px;line-height:1.45;margin:0 0 26px}
+.kode{width:100%;height:68px;border:0;border-radius:16px;background:var(--gruppe);text-align:center;font:600 32px var(--mono);letter-spacing:.35em;padding-left:.35em;color:var(--fg)}
+.kode::placeholder{color:var(--fg3);letter-spacing:.3em}
+.logg .feil{min-height:22px;margin:10px 0 14px;text-align:center}
+.logg .knapp-stor{width:100%;margin:0}
+
+.skjul-skrift{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+@media (prefers-reduced-motion:reduce){*{animation-duration:.01ms!important;transition-duration:.01ms!important}}
+
+/* ================================================================ Glass, bevegelse og sveip */
+:root{
+  --glass-kort:rgba(44,44,48,.52);--glass-kant:rgba(255,255,255,.1);--glass-lys:rgba(255,255,255,.07);
+  --glod1:rgba(90,162,255,.34);--glod2:rgba(150,90,255,.22);--glod3:rgba(48,209,88,.13);
+  --glass-filter:blur(26px) saturate(175%);
+}
+@media (prefers-color-scheme:light){:root{
+  --glass-kort:rgba(255,255,255,.62);--glass-kant:rgba(255,255,255,.7);--glass-lys:rgba(255,255,255,.9);
+  --glod1:rgba(31,111,224,.2);--glod2:rgba(180,120,255,.15);--glod3:rgba(52,199,89,.12);
+}}
+html{background:var(--bg)}
+body{background:transparent;touch-action:pan-y}
+/* Glass trenger noe å være gjennomsiktig mot: et mykt, lysende bakteppe som blir stående mens du ruller. */
+body::before,body::after{content:"";position:fixed;left:0;right:0;z-index:-1;pointer-events:none;overflow:hidden}
+body::before{top:0;height:58%;background:radial-gradient(70% 52% at 18% 26%,var(--glod1),transparent 74%),radial-gradient(60% 46% at 90% 36%,var(--glod2),transparent 74%)}
+body::after{bottom:0;height:46%;background:radial-gradient(70% 52% at 56% 84%,var(--glod3),transparent 74%)}
+
+.liste,.widget{background:var(--glass-kort);-webkit-backdrop-filter:var(--glass-filter);backdrop-filter:var(--glass-filter);border:.5px solid var(--glass-kant);box-shadow:inset 0 1px 0 var(--glass-lys)}
+.sok input,.seg{border:.5px solid var(--glass-kant)}
+.widget{-webkit-touch-callout:none;-webkit-user-select:none;user-select:none}
+
+/* ---- flytende tabellinje med en glidende glasspille */
+body{padding-bottom:calc(112px + env(safe-area-inset-bottom))}
+.tabbar{left:max(14px,env(safe-area-inset-left));right:max(14px,env(safe-area-inset-right));bottom:calc(10px + env(safe-area-inset-bottom));padding:6px;border-radius:30px;
+  border:.5px solid var(--glass-kant);box-shadow:0 14px 44px rgba(0,0,0,.34),inset 0 1px 0 var(--glass-lys)}
+.tabbar .piller{position:absolute;top:6px;bottom:6px;left:6px;width:calc((100% - 12px) / 3);border-radius:24px;background:color-mix(in srgb,var(--tint) 20%,transparent);
+  box-shadow:inset 0 0 0 .5px color-mix(in srgb,var(--tint) 35%,transparent);transition:transform .42s cubic-bezier(.3,1.35,.4,1)}
+.tabbar button{position:relative;z-index:1;padding:7px 0 5px}
+
+/* ---- segmentert kontroll med en tommel som glir */
+.seg{position:relative;isolation:isolate}
+.seg button{position:relative;z-index:1;background:none!important;box-shadow:none!important}
+.seg-tommel{position:absolute;top:2px;bottom:2px;left:2px;border-radius:7px;background:var(--seg-valgt);box-shadow:var(--skygge);z-index:0;
+  transition:transform .34s cubic-bezier(.3,1.25,.4,1),width .34s cubic-bezier(.3,1.25,.4,1)}
+
+/* ---- ark: glass, og et grep som kan dras */
+.ark-kort{background:color-mix(in srgb,var(--ark-bg) 74%,transparent);-webkit-backdrop-filter:blur(44px) saturate(185%);backdrop-filter:blur(44px) saturate(185%);
+  border-top:.5px solid var(--glass-kant);box-shadow:0 -10px 50px rgba(0,0,0,.3)}
+.ark-hode{background:color-mix(in srgb,var(--ark-bg) 55%,transparent);-webkit-backdrop-filter:blur(30px);backdrop-filter:blur(30px);touch-action:none}
+.grabber{touch-action:none;width:64px;height:21px;margin:0 auto;border-radius:0;background:none;position:relative}
+.grabber::after{content:"";position:absolute;left:14px;right:14px;top:8px;height:5px;border-radius:99px;background:var(--fg3)}
+.ark-kort .liste{background:color-mix(in srgb,var(--ark-gruppe) 62%,transparent)}
+.as-kort,.as-avbryt{border:.5px solid var(--glass-kant)}
+
+/* ---- sveip på rader */
+.sveip{position:relative;overflow:hidden}
+.sveip + .sveip::before{content:"";position:absolute;top:0;left:58px;right:0;height:.5px;background:var(--sep);z-index:2}
+.sveip-inn{position:relative;z-index:1;touch-action:pan-y;transition:transform .34s cubic-bezier(.2,.9,.25,1);will-change:transform}
+.sveip-inn.drar{transition:none}
+.sveip-inn .celle{background:none}
+.sveip-hand{position:absolute;top:0;bottom:0;right:0;display:flex;opacity:0;transition:opacity .15s;z-index:0}
+.sveip.aapen .sveip-hand,.sveip.drar .sveip-hand{opacity:1}
+.sveip-hand button{border:0;min-width:92px;padding:0 18px;color:#fff;font-size:16px;font-weight:600}
+.sveip-hand .slipp{background:#ff9f0a}
+.sveip-hand .fest{background:var(--tint)}
+.sveip-hand .losne{background:#8e8e93}
+.sveip-hand button:active{filter:brightness(.88)}
+
+/* ---- trekk for å oppdatere */
+.ptr{position:fixed;top:calc(env(safe-area-inset-top) + 46px);left:50%;width:36px;height:36px;margin-left:-18px;z-index:15;opacity:0;pointer-events:none;
+  display:grid;place-items:center;border-radius:50%;background:var(--glass);-webkit-backdrop-filter:blur(20px);backdrop-filter:blur(20px);border:.5px solid var(--glass-kant)}
+.ptr svg{width:20px;height:20px;color:var(--tint)}
+.ptr.snurr svg{animation:snurr .8s linear infinite}
+@keyframes snurr{to{transform:rotate(360deg)}}
+
+/* ---- meny ved langt trykk */
+.ctx{position:fixed;inset:0;z-index:70;background:rgba(0,0,0,.28);-webkit-backdrop-filter:blur(16px);backdrop-filter:blur(16px);animation:blek .2s ease both}
+.ctx.ctx-lukker{animation:blekut .15s ease both}
+.ctx-klone{position:fixed;margin:0;z-index:71;animation:loft .26s cubic-bezier(.2,1.3,.4,1) both;box-shadow:0 20px 50px rgba(0,0,0,.4)}
+.ctx-meny{position:fixed;z-index:72;min-width:230px;border-radius:16px;overflow:hidden;background:var(--glass);-webkit-backdrop-filter:blur(40px) saturate(185%);backdrop-filter:blur(40px) saturate(185%);
+  border:.5px solid var(--glass-kant);box-shadow:0 18px 50px rgba(0,0,0,.4);animation:pop .26s cubic-bezier(.2,1.3,.4,1) both}
+.ctx-meny button{display:flex;align-items:center;justify-content:space-between;gap:16px;width:100%;padding:13px 16px;border:0;background:none;font-size:17px;text-align:left;color:var(--fg)}
+.ctx-meny button + button{border-top:.5px solid var(--sep)}
+.ctx-meny button:active{background:var(--hev)}
+.ctx-meny svg{width:18px;height:18px;flex:none;color:var(--fg2)}
+@keyframes loft{from{transform:scale(1)}to{transform:scale(1.045)}}
+@keyframes pop{from{opacity:0;transform:scale(.82)}to{opacity:1;transform:none}}
+@keyframes blekut{from{opacity:1}to{opacity:0}}
+
+/* ---- innlasting og inngang */
+.skjelett{display:block;height:54px;background:linear-gradient(100deg,transparent 20%,var(--felt) 45%,transparent 70%);background-size:220% 100%;animation:skim 1.25s ease-in-out infinite}
+.skjelett + .skjelett{border-top:.5px solid var(--sep)}
+@keyframes skim{from{background-position:130% 0}to{background-position:-90% 0}}
+.liste.ny > *,.widgets.ny > *{animation:rad-inn .46s cubic-bezier(.2,.9,.25,1) both;animation-delay:calc(var(--i,0) * 32ms)}
+@keyframes rad-inn{from{opacity:0;transform:translateY(14px) scale(.985)}to{opacity:1;transform:none}}
+</style>
+</head>
+<body>
+<div id="rot"></div>
+<script>
+'use strict';
+const NO = /^(nb|no|nn)/i.test(navigator.language || 'nb');
+const T = (n, e) => NO ? n : e;
+const $ = id => document.getElementById(id);
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const H = {'Content-Type': 'application/json', 'X-Nabe': '1', 'X-Sprak': NO ? 'nb' : 'en'};
+const LS = {
+  les(k, d) { try { return JSON.parse(localStorage.getItem('nm_' + k)) ?? d; } catch { return d; } },
+  skriv(k, v) { try { localStorage.setItem('nm_' + k, JSON.stringify(v)); } catch {} },
+};
+
+const FANER = ['verdier', 'enheter', 'mine'];
+const S = {skriv: false, maks: 10, readonly: false, tab: 'verdier', pins: LS.les('pins', []), vals: {}, tid: 0,
+  enheter: [], sok: '', enhet: null, punkter: [], pFilter: '', typer: 'alle', apent: null, mine: [], mineSig: '', test: null, retning: null};
+
+/* ------------------------------------------------------------------ små deler */
+const SVG = (d, vb = '0 0 24 24') => `<svg viewBox="${vb}" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
+const CHEV = '<svg class="chev" viewBox="0 0 8 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 1l6 6-6 6"/></svg>';
+const SOK_IKON = SVG('<circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/>');
+const IKON_TAB = {
+  verdier: SVG('<rect x="3" y="3" width="8" height="8" rx="2"/><rect x="13" y="3" width="8" height="8" rx="2"/><rect x="3" y="13" width="8" height="8" rx="2"/><rect x="13" y="13" width="8" height="8" rx="2"/>'),
+  enheter: SVG('<rect x="3" y="4" width="18" height="6" rx="2"/><rect x="3" y="14" width="18" height="6" rx="2"/><path d="M7 7h.01M7 17h.01"/>'),
+  mine: SVG('<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>'),
+};
+const IKON_MENY = {
+  aapne: SVG('<path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>'),
+  losne: SVG('<path d="M12 17v5"/><path d="M9 3h6l-1 7 3 3v2H7v-2l3-3z"/><path d="m3 3 18 18"/>'),
+  laas: SVG('<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 7.5-2"/>'),
+};
+const IKON_OPPDATER = SVG('<path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/>');
+const ANSIKT = '<svg class="ansikt" viewBox="0 0 64 64" aria-hidden="true"><rect x="10" y="20" width="44" height="34" rx="11" fill="var(--fg)"/><circle cx="25" cy="37" r="4" fill="var(--bg)"/><circle cx="39" cy="37" r="4" fill="var(--bg)"/><path d="M26 46h12" stroke="var(--bg)" stroke-width="3" stroke-linecap="round"/><path d="M32 20v-8" stroke="var(--fg)" stroke-width="3" stroke-linecap="round"/><circle cx="32" cy="9" r="3.5" fill="var(--tint)"/></svg>';
+const TYPE_KORT = {'analog-input': 'AI', 'analog-output': 'AO', 'analog-value': 'AV', 'binary-input': 'BI', 'binary-output': 'BO', 'binary-value': 'BV',
+  'multi-state-input': 'MI', 'multi-state-output': 'MO', 'multi-state-value': 'MV'};
+const typeKort = t => TYPE_KORT[t] || String(t || '?').slice(0, 2).toUpperCase();
+const erUt = t => /output|value/.test(String(t || ''));
+
+function tom(tittel, tekst, knapp) {
+  return `<div class="tom">${ANSIKT}<h2>${esc(tittel)}</h2><p>${tekst}</p>${knapp ? `<button class="mini" data-gaa="${esc(knapp[0])}">${esc(knapp[1])}</button>` : ''}</div>`;
+}
+
+// En rad du kan sveipe: handlingene ligger bak innholdet og kommer til syne når du drar.
+const sveipRad = (attrs, inn, handlinger) => `<div class="sveip" ${attrs}><div class="sveip-hand">${handlinger.map(([id, tekst, kl]) => `<button class="${kl}" data-h="${id}">${esc(tekst)}</button>`).join('')}</div><div class="sveip-inn">${inn}</div></div>`;
+const stagger = (el) => el.querySelectorAll(':scope > *').forEach((x, i) => x.style.setProperty('--i', Math.min(i, 14)));
+
+let hudT;
+function toast(t) {
+  let e = $('hud');
+  if (!e) { e = document.createElement('div'); e.id = 'hud'; e.className = 'hud'; e.setAttribute('role', 'status'); e.setAttribute('aria-live', 'polite'); document.body.appendChild(e); }
+  e.textContent = t;
+  requestAnimationFrame(() => e.classList.add('vis'));
+  clearTimeout(hudT);
+  hudT = setTimeout(() => e.classList.remove('vis'), 3300);
+}
+// En liten tikk i fingeren der telefonen kan (iOS lar ikke nettsider gjøre det).
+document.addEventListener('click', e => { if (e.target.closest('button') && navigator.vibrate && navigator.userActivation && navigator.userActivation.hasBeenActive) { try { navigator.vibrate(6); } catch {} } }, true);
+window.addEventListener('scroll', () => document.body.classList.toggle('skrullet', window.scrollY > 36), {passive: true});
+
+async function api(sti, body) {
+  const opt = body === undefined ? {headers: {'X-Sprak': H['X-Sprak']}} : {method: 'POST', headers: H, body: JSON.stringify(body)};
+  const r = await fetch(sti, opt);
+  if (r.status === 401) { visLogin(); throw new Error('401'); }
+  let j = {};
+  try { j = await r.json(); } catch {}
+  if (!r.ok && !j.error) j.error = 'Feil ' + r.status;
+  return j;
+}
+
+/* ------------------------------------------------------------- bevegelse */
+function animer(retning) {
+  const el = $('innhold');
+  if (!el || !retning || !el.animate) return;
+  const fra = retning === 'fram' ? 38 : -28;
+  el.animate([{transform: `translateX(${fra}px)`, opacity: 0}, {transform: 'none', opacity: 1}], {duration: 360, easing: 'cubic-bezier(.2,.9,.25,1)'});
+}
+
+// Den glidende tommelen i en segmentert kontroll.
+function segTommel(seg, glid = true) {
+  if (!seg) return;
+  let t = seg.querySelector('.seg-tommel');
+  if (!t) { t = document.createElement('span'); t.className = 'seg-tommel'; seg.prepend(t); }
+  const b = seg.querySelector('button[aria-pressed=true]');
+  if (!b) { t.style.opacity = '0'; return; }
+  t.style.opacity = '1';
+  if (!glid) t.style.transition = 'none';
+  t.style.width = b.offsetWidth + 'px';
+  t.style.transform = `translateX(${b.offsetLeft - 2}px)`;
+  if (!glid) requestAnimationFrame(() => { t.style.transition = ''; });
+}
+
+function oppdaterPiller() {
+  const p = $('piller');
+  if (p) p.style.transform = `translateX(${Math.max(0, FANER.indexOf(S.tab)) * 100}%)`;
+}
+
+function bytteTab(ny, retning) {
+  if (ny === S.tab) return;
+  S.retning = retning || (FANER.indexOf(ny) > FANER.indexOf(S.tab) ? 'fram' : 'tilbake');
+  S.tab = ny;
+  window.scrollTo(0, 0);
+  teg();
+}
+
+function tilbakeTilEnheter() {
+  S.enhet = null;
+  window.scrollTo(0, 0);
+  tegEnheter();
+  animer('tilbake');
+}
+
+async function oppdaterSide() {
+  try {
+    if (S.tab === 'verdier') await pollVerdier();
+    else if (S.tab === 'enheter' && !S.enhet) { await lastEnheter(); tegEnhetListe(false); }
+    else if (S.tab === 'mine') { await lastMine(); tegMine(); }
+  } catch {}
+}
+
+/* ------------------------------------------------------------- innlogging */
+function visLogin(feil) {
+  clearInterval(S.lop);
+  document.body.classList.remove('skrullet');
+  $('rot').innerHTML = `<div class="logg">${ANSIKT}<h1>NABE</h1>
+    <p>${T('Skriv koden som står i NABE på PC-en, under «Mobil». Eller skann QR-koden, så slipper du.', 'Type the code shown in NABE on the PC, under “Mobile”. Or scan the QR code and skip this.')}</p>
+    <input id="kode" class="kode" type="tel" inputmode="numeric" maxlength="6" autocomplete="one-time-code" placeholder="••••••" aria-label="${T('Kode', 'Code')}">
+    <div class="feil" id="lFeil" role="alert">${esc(feil || '')}</div>
+    <button class="knapp-stor" id="lKnapp">${T('Koble til', 'Connect')}</button></div>`;
+  let sender = false;
+  const gaa = async () => {
+    if (sender) return;
+    sender = true;
+    try {
+      const r = await fetch('/m/logginn', {method: 'POST', headers: H, body: JSON.stringify({kode: $('kode').value})});
+      const j = await r.json().catch(() => ({}));
+      if (j.ok) start(); else { $('lFeil').textContent = j.feil || T('Feil kode.', 'Wrong code.'); $('kode').select(); }
+    } finally { sender = false; }
+  };
+  $('lKnapp').onclick = gaa;
+  $('kode').addEventListener('keydown', e => { if (e.key === 'Enter') gaa(); });
+  // Seks siffer er hele koden: da er det ingenting mer å vente på.
+  $('kode').addEventListener('input', e => { e.target.value = e.target.value.replace(/\D/g, '').slice(0, 6); if (e.target.value.length === 6) gaa(); });
+  $('kode').focus();
+}
+
+/* ------------------------------------------------------------------ rammen */
+const TITLER = () => ({verdier: T('Verdier', 'Values'), enheter: T('Enheter', 'Devices'), mine: T('Overstyrt', 'Overridden')});
+
+function ramme() {
+  $('rot').innerHTML = `<header class="nav" id="navbar">
+      <div class="nav-venstre"><button class="nav-tilbake" id="navTilbake" hidden><svg viewBox="0 0 11 19" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.5 1.5 2 9.5l7.5 8"/></svg><span id="navTilbakeTekst"></span></button></div>
+      <div class="nav-tittel" id="navTittel"></div>
+      <div class="nav-hoyre"><span class="pille" id="pille"></span></div></header>
+    <div class="ptr" id="ptr" aria-hidden="true">${IKON_OPPDATER}</div>
+    <div id="banner"></div><main id="innhold"></main>
+    <nav class="tabbar" id="nav"><span class="piller" id="piller"></span>
+      ${FANER.map(k => `<button data-t="${k}">${IKON_TAB[k]}<span>${TITLER()[k]}</span>${k === 'mine' ? '<span class="ant" id="ant" hidden></span>' : ''}</button>`).join('')}
+    </nav><div class="ark" id="ark" hidden><div class="ark-kort" id="arkInn"></div></div>`;
+  $('nav').onclick = e => { const b = e.target.closest('button'); if (b) bytteTab(b.dataset.t); };
+  $('ark').onclick = e => { if (e.target === $('ark')) lukkArk(); };
+  $('navTilbake').onclick = tilbakeTilEnheter;
+  document.addEventListener('click', e => { const g = e.target.closest('[data-gaa]'); if (g) bytteTab(g.dataset.gaa); });
+  gester();
+}
+
+function navTilstand(tittel, tilbake) {
+  $('navTittel').textContent = tittel;
+  const b = $('navTilbake');
+  b.hidden = !tilbake;
+  $('navTilbakeTekst').textContent = tilbake || '';
+}
+
+function pille() {
+  const p = $('pille');
+  if (!p) return;
+  p.textContent = S.skriv ? T('Skriving på', 'Writing on') : T('Bare lesing', 'Read only');
+  p.className = 'pille' + (S.skriv ? ' skriv' : '');
+  $('banner').innerHTML = S.readonly ? `<div class="merknad"><span aria-hidden="true">⚠</span>${T('NABE står i lesemodus på PC-en. Ingenting kan skrives.', 'NABE is in read-only mode on the PC. Nothing can be written.')}</div>` : '';
+}
+
+function teg() {
+  document.querySelectorAll('#nav button').forEach(b => b.setAttribute('aria-selected', String(b.dataset.t === S.tab)));
+  oppdaterPiller();
+  ({verdier: tegVerdier, enheter: tegEnheter, mine: tegMine})[S.tab]();
+  animer(S.retning);
+  S.retning = null;
+}
+
+/* ------------------------------------------------------------------ verdier */
+function fmt(v) {
+  if (v === 'active') return T('På', 'On');
+  if (v === 'inactive') return T('Av', 'Off');
+  if (typeof v === 'number') return Number.isInteger(v) ? String(v) : (Math.abs(v) >= 100 ? v.toFixed(0) : v.toFixed(1));
+  if (v == null || v === '') return '–';
+  if (typeof v === 'object') return '?';
+  return String(v);
+}
+const sym = p => ({'degrees-celsius': '°C', 'percent': '%', 'pascals': 'Pa', 'kilopascals': 'kPa', 'bars': 'bar', 'cubic-meters-per-hour': 'm³/h',
+  'liters-per-second': 'l/s', 'kilowatts': 'kW', 'kilowatt-hours': 'kWh', 'volts': 'V', 'amperes': 'A', 'hertz': 'Hz', 'revolutions-per-minute': 'rpm'}[p.units] || p.unit_symbol || '');
+const pinNokkel = p => p.address + '|' + p.objid;
+const erFestet = p => S.pins.some(x => pinNokkel(x) === pinNokkel(p));
+
+function festPunkt(p) {
+  const i = S.pins.findIndex(x => pinNokkel(x) === pinNokkel(p));
+  if (i >= 0) S.pins.splice(i, 1);
+  else S.pins.push({address: p.address, enhet: p.enhet, instans: p.instans, objid: p.objid, type: p.type, skrivbar: p.skrivbar, name: p.name, sym: p.sym, beskrivelse: p.beskrivelse});
+  LS.skriv('pins', S.pins);
+  return i < 0;
+}
+
+function widget(p, i) {
+  const v = (S.vals[p.address] || {})[p.objid];
+  return `<button class="widget" data-k="${i}" style="--i:${Math.min(i, 14)}"><span class="w-navn">${esc(p.name || p.objid)}</span>
+    <span class="w-verdi">${esc(fmt(v))}<small>${esc(p.sym || '')}</small></span><span class="w-enhet">${esc(p.enhet || p.address)}</span></button>`;
+}
+
+function tegVerdier() {
+  const m = $('innhold');
+  navTilstand(TITLER().verdier, null);
+  if (!S.pins.length) {
+    m.innerHTML = `<h1 class="stor-tittel">${TITLER().verdier}</h1>` + tom(T('Ingen festede punkter', 'No pinned points'),
+      T('Åpne et punkt under Enheter og trykk Fest, eller sveip et punkt til venstre. Ellers blir dette en veldig rolig skjerm.', 'Open a point under Devices and press Pin, or swipe a point to the left. Otherwise this is a very quiet screen.'), ['enheter', T('Gå til Enheter', 'Go to Devices')]);
+    m.onclick = null;
+    return;
+  }
+  m.innerHTML = `<h1 class="stor-tittel">${TITLER().verdier}</h1><div class="widgets ny" id="widgets">${S.pins.map(widget).join('')}</div>
+    <div class="liste-fot" style="margin-top:-8px;text-align:center">${T('Hold inne på en widget for flere valg', 'Press and hold a widget for more options')}</div>`;
+  m.onclick = e => { const b = e.target.closest('[data-k]'); if (b) apneArk(S.pins[+b.dataset.k]); };
+}
+
+// Verdiene byttes på stedet. Tegnes widgetene på nytt hvert andre sekund, kan et trykk gå tapt midt i bevegelsen.
+function oppdaterVerdier() {
+  const g = $('widgets');
+  if (!g) return;
+  const gammel = S.tid && Date.now() - S.tid > 8000;
+  g.querySelectorAll('.widget').forEach(w => {
+    const p = S.pins[+w.dataset.k];
+    if (!p) return;
+    const v = (S.vals[p.address] || {})[p.objid];
+    const el = w.querySelector('.w-verdi');
+    const ny = esc(fmt(v)) + `<small>${esc(p.sym || '')}</small>`;
+    if (el.innerHTML !== ny) el.innerHTML = ny;
+    w.classList.toggle('gammel', !!gammel);
+  });
+}
+
+async function pollVerdier() {
+  const mal = {};
+  S.pins.forEach(p => { (mal[p.address] = mal[p.address] || []).push(p.objid); });
+  if (S.apent) { (mal[S.apent.address] = mal[S.apent.address] || []).push(S.apent.objid); }
+  if (S.test && S.test.maaling) { const t = S.test; (mal[t.maaling_address] = mal[t.maaling_address] || []).push(t.maaling); }
+  const adr = Object.keys(mal);
+  if (!adr.length) return;
+  try {
+    const r = await api('/api/poll', {targets: Object.fromEntries(adr.map(a => [a, [...new Set(mal[a])]])), cov: false});
+    if (r.status === 'done') {
+      for (const a of Object.keys(r.values || {})) S.vals[a] = Object.assign(S.vals[a] || {}, r.values[a]);
+      S.tid = Date.now();
+      if (S.tab === 'verdier') oppdaterVerdier();
+      if (S.apent) oppdaterArkVerdi();
+    }
+  } catch {}
+}
+
+/* ------------------------------------------------------------------ enheter */
+async function lastEnheter() {
+  const r = await api('/api/sites');
+  const ut = [];
+  const sett = new Set();
+  for (const [n, s] of Object.entries(r.sites || {})) {
+    for (const d of (s.enheter || [])) {
+      if (!d.address || sett.has(d.address + d.device_instance)) continue;
+      sett.add(d.address + d.device_instance);
+      ut.push({address: d.address, instans: d.device_instance, navn: d.object_name || ('Device ' + d.device_instance), vendor: d.vendor || '', anlegg: s.name || n});
+    }
+  }
+  ut.sort((a, b) => a.address.localeCompare(b.address, undefined, {numeric: true}));
+  S.enheter = ut;
+}
+
+function tegEnheter() {
+  const m = $('innhold');
+  if (S.enhet) { tegPunkter(); return; }
+  navTilstand(TITLER().enheter, null);
+  m.innerHTML = `<h1 class="stor-tittel">${TITLER().enheter}</h1>
+    <div class="sok">${SOK_IKON}<input type="search" id="sok" placeholder="${T('Søk', 'Search')}" value="${esc(S.sok)}" autocomplete="off" autocapitalize="off" spellcheck="false" aria-label="${T('Søk enhet, IP eller anlegg', 'Search device, IP or site')}"></div>
+    <div id="enhetListe"></div>`;
+  $('sok').oninput = e => { S.sok = e.target.value; tegEnhetListe(false); };
+  m.onclick = null;
+  tegEnhetListe(true);
+}
+
+function tegEnhetListe(ny) {
+  const q = S.sok.toLowerCase();
+  const l = S.enheter.filter(d => !q || (d.navn + d.address + d.vendor + d.anlegg).toLowerCase().includes(q));
+  const el = $('enhetListe');
+  if (!el) return;
+  el.innerHTML = l.length ? `<div class="liste${ny ? ' ny' : ''}">${l.map(d => `<button class="celle med-ikon" data-i="${S.enheter.indexOf(d)}"><span class="ik enhet">${SVG('<rect x="6" y="6" width="12" height="12" rx="2"/><path d="M9 2v4M15 2v4M9 18v4M15 18v4M2 9h4M2 15h4M18 9h4M18 15h4"/>')}</span>
+      <span class="ct"><span class="ct1">${esc(d.navn)}</span><span class="ct2 mono">${esc(d.address)} · ${T('enhet', 'device')} ${esc(d.instans)}${d.vendor ? ' · ' + esc(d.vendor) : ''}</span></span>${CHEV}</button>`).join('')}</div>`
+    : tom(q ? T('Ingen treff', 'No match') : T('Ingen enheter ennå', 'No devices yet'),
+      q ? T('Prøv et annet ord, eller en del av IP-en.', 'Try another word, or part of the IP.') : T('La PC-en skanne et område først. Jeg er bare telefonen.', 'Let the PC scan a range first. I am only the phone.'));
+  if (ny && l.length) stagger(el.firstElementChild);
+  el.onclick = e => { const b = e.target.closest('[data-i]'); if (b) apneEnhet(S.enheter[+b.dataset.i]); };
+}
+
+async function apneEnhet(d) {
+  S.enhet = d; S.punkter = []; S.pFilter = ''; S.typer = 'alle';
+  window.scrollTo(0, 0);
+  const tilbake = (melding) => { if (melding) toast(melding); if (S.enhet === d) { S.enhet = null; if (S.tab === 'enheter') { tegEnheter(); animer('tilbake'); } } };
+  navTilstand(d.navn, TITLER().enheter);
+  $('innhold').innerHTML = `<h1 class="stor-tittel">${esc(d.navn)}</h1><div class="stor-under">${esc(d.address)}</div>
+    <div class="liste" aria-busy="true">${'<span class="skjelett"></span>'.repeat(6)}</div>
+    <div style="text-align:center"><div id="lest" class="liste-fot" style="margin:0 0 12px">${T('Leser punkter…', 'Reading points…')}</div><button class="mini" id="lestAvbryt">${T('Avbryt', 'Cancel')}</button></div>`;
+  animer('fram');
+  let jobb = null, avbrutt = false;
+  $('lestAvbryt').onclick = async () => { avbrutt = true; if (jobb) api('/api/job/' + jobb + '/cancel', {}).catch(() => {}); tilbake(); };
+  const r = await api('/api/device/points', {address: d.address, device_instance: d.instans});
+  if (r.status !== 'started') return tilbake(r.error || T('Klarte ikke lese punkter', 'Could not read points'));
+  jobb = r.job_id;
+  const slutt = Date.now() + 75000;
+  while (!avbrutt && S.enhet === d) {
+    if (Date.now() > slutt) {
+      api('/api/job/' + jobb + '/cancel', {}).catch(() => {});
+      return tilbake(T('Enheten svarer ikke. Sjekk at PC-en når anlegget, telefonen er bare tilskuer.', 'The device is not answering. Check that the PC reaches the plant, the phone is just a spectator.'));
+    }
+    await new Promise(res => setTimeout(res, 700));
+    if (avbrutt || S.enhet !== d) return;
+    const j = await api('/api/job/' + jobb);
+    if (j.status === 'done') {
+      S.punkter = ((j.result || {}).points || []);
+      if (!S.punkter.length) return tilbake(T('Fant ingen punkter i enheten.', 'No points found in the device.'));
+      break;
+    }
+    if (j.status === 'error' || j.status === 'cancelled') return tilbake(j.error || T('Avbrutt', 'Cancelled'));
+    const el = $('lest');
+    if (el && j.progress != null && j.progress.done != null) el.textContent = T('Leser punkter… ', 'Reading points… ') + j.progress.done + '/' + j.progress.total;
+  }
+  if (S.enhet === d && S.tab === 'enheter') tegPunkter();
+}
+
+const TYPEGRUPPE = {pad: ['analog-output', 'analog-value', 'binary-output', 'binary-value', 'multi-state-output', 'multi-state-value'],
+  mal: ['analog-input', 'binary-input', 'multi-state-input']};
+
+function tegPunkter() {
+  const m = $('innhold');
+  const d = S.enhet;
+  navTilstand(d.navn, TITLER().enheter);
+  m.innerHTML = `<h1 class="stor-tittel">${esc(d.navn)}</h1><div class="stor-under">${esc(d.address)} · ${T('enhet', 'device')} ${esc(d.instans)}${d.vendor ? ' · ' + esc(d.vendor) : ''}</div>
+    <div class="seg" id="seg">${[['alle', T('Alle', 'All')], ['pad', T('Pådrag', 'Outputs')], ['mal', T('Målinger', 'Inputs')]].map(([k, t]) => `<button data-ty="${k}" aria-pressed="${S.typer === k}">${t}</button>`).join('')}</div>
+    <div class="sok">${SOK_IKON}<input type="search" id="pq" placeholder="${T('Søk punkt', 'Search point')}" value="${esc(S.pFilter)}" autocomplete="off" autocapitalize="off" spellcheck="false" aria-label="${T('Søk punkt', 'Search point')}"></div>
+    <div id="punktListe"></div>`;
+  $('pq').oninput = e => { S.pFilter = e.target.value; tegPunktListe(false); };
+  $('seg').onclick = e => { const ty = e.target.closest('[data-ty]'); if (!ty) return; S.typer = ty.dataset.ty; document.querySelectorAll('#seg button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.ty === S.typer))); segTommel($('seg')); tegPunktListe(false); };
+  m.onclick = null;
+  segTommel($('seg'), false);
+  requestAnimationFrame(() => segTommel($('seg'), false));
+  tegPunktListe(true);
+}
+
+function tegPunktListe(ny) {
+  const q = S.pFilter.toLowerCase();
+  const l = S.punkter.filter(p => (S.typer === 'alle' || (S.typer === 'pad' ? TYPEGRUPPE.pad.includes(p.type) : TYPEGRUPPE.mal.includes(p.type)))
+    && (!q || ((p.name || '') + ' ' + (p.description || '')).toLowerCase().includes(q)));
+  const vis = l.slice(0, 120);
+  const el = $('punktListe');
+  if (!el) return;
+  el.innerHTML = vis.length ? `<div class="liste${ny ? ' ny' : ''}">${vis.map(p => {
+      const festet = erFestet({address: S.enhet.address, objid: p.objid});
+      return sveipRad(`data-o="${esc(p.objid)}"`, `<button class="celle med-ikon" data-o="${esc(p.objid)}"><span class="ik${erUt(p.type) ? ' ut' : ''}">${typeKort(p.type)}</span>
+      <span class="ct"><span class="ct1">${esc(p.name || p.objid)}</span><span class="ct2">${festet ? T('Festet · ', 'Pinned · ') : ''}${esc(p.description || p.objid)}</span></span>
+      <span class="cv">${esc(fmt(p.value))}<small>${esc(sym(p))}</small></span>${CHEV}</button>`, [[festet ? 'losne' : 'fest', festet ? T('Løsne', 'Unpin') : T('Fest', 'Pin'), festet ? 'losne' : 'fest']]);
+    }).join('')}</div>
+      <div class="liste-fot">${l.length} ${T('punkter', 'points')}${l.length > vis.length ? T(' · viser ' + vis.length + ', søk for å snevre inn', ' · showing ' + vis.length + ', search to narrow') : ''} · ${T('sveip til venstre for å feste', 'swipe left to pin')}</div>`
+    : tom(T('Ingen treff', 'No match'), T('Ingen punkter passer. Prøv «Alle», eller et annet ord.', 'No points match. Try “All”, or another word.'));
+  if (ny && vis.length) stagger(el.firstElementChild);
+  el.onclick = e => { const b = e.target.closest('button[data-o]'); if (b) { const p = S.punkter.find(x => x.objid === b.dataset.o); apneArk(lagPunkt(p, S.enhet)); } };
+}
+
+const lagPunkt = (p, d) => ({address: d.address, enhet: d.navn, instans: d.instans, objid: p.objid, type: p.type, name: p.name, beskrivelse: p.description,
+  sym: sym(p), skrivbar: !!p.writable, verdi: p.value, enhetPunkter: d === S.enhet ? S.punkter : []});
+
+/* ---------------------------------------------------------------- overstyrt */
+async function lastMine() {
+  try {
+    const r = await api('/api/mine');
+    S.mine = r.overstyrt || [];
+  } catch { return; }
+  const a = $('ant');
+  if (a) { a.hidden = !S.mine.length; a.textContent = S.mine.length; }
+  const sig = JSON.stringify(S.mine.map(o => [o.address, o.objid, o.priority, o.value]));
+  if (S.tab === 'mine' && sig !== S.mineSig) tegMine();
+  S.mineSig = sig;
+}
+
+function tegMine() {
+  const m = $('innhold');
+  navTilstand(TITLER().mine, null);
+  S.mineSig = JSON.stringify(S.mine.map(o => [o.address, o.objid, o.priority, o.value]));
+  if (!S.mine.length) {
+    m.innerHTML = `<h1 class="stor-tittel">${TITLER().mine}</h1>` + tom(T('Ingenting er overstyrt', 'Nothing is overridden'),
+      T('Her skal det være tomt før du drar. Det er det. Gå gjerne.', 'This should be empty before you leave. It is. You may go.'));
+    m.onclick = null;
+    return;
+  }
+  m.innerHTML = `<h1 class="stor-tittel">${TITLER().mine}</h1><div class="seksjon" style="margin-top:12px">${T('Står i manuell fra NABE på PC-en', 'In manual from NABE on the PC')}</div>
+    <div class="liste ny">${S.mine.map((o, i) => sveipRad(`data-i="${i}"`, `<div class="celle med-ikon"><span class="ik ut">${SVG('<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>')}</span>
+      <span class="ct"><span class="ct1">${esc(navnFor(o))}</span><span class="ct2 mono">${esc(o.address)} · ${T('verdi', 'value')} ${esc(fmt(o.value))} · prio ${esc(o.priority)}</span></span>
+      <button class="mini" data-slipp="${i}">${T('Slipp', 'Release')}</button></div>`, [['slipp', T('Slipp', 'Release'), 'slipp']])).join('')}</div>
+    <div class="liste-fot" style="margin-top:-12px">${T('Sveip en rad til venstre for å slippe den', 'Swipe a row to the left to release it')}</div>
+    <button class="knapp-stor" id="slippAlt">${T('Slipp alt (' + S.mine.length + ')', 'Release all (' + S.mine.length + ')')}</button>`;
+  stagger(m.querySelector('.liste'));
+  m.onclick = async e => {
+    const b = e.target.closest('[data-slipp]');
+    if (b) { const o = S.mine[+b.dataset.slipp]; await slipp(o.address, o.objid, o.priority); lastMine(); return; }
+    if (e.target.id === 'slippAlt') {
+      const liste = [...S.mine];   // fanget nå: listen kan fornyes mens du leser bekreftelsen
+      if (!await bekreft('', T('Slipp alt', 'Release all'), {tittel: T('Slipper ' + liste.length + ' overstyringer', 'Releasing ' + liste.length + ' overrides'),
+        broed: T('Anlegget går tilbake til sin egen styring på alle punktene.', 'The plant goes back to its own control on all the points.')})) return;
+      for (const o of liste) await slipp(o.address, o.objid, o.priority);
+      toast(T('Alt sluppet. Anlegget er sitt eget igjen.', 'All released. The plant is its own again.'));
+      lastMine();
+    }
+  };
+}
+
+function navnFor(o) {
+  const p = S.pins.find(x => x.address === o.address && x.objid === o.objid) || (S.enhet && S.enhet.address === o.address ? S.punkter.find(x => x.objid === o.objid) : null);
+  return (p && p.name) || o.objid;
+}
+
+async function slipp(address, objid, priority) {
+  const r = await api('/api/write', {address, objid, release: true, priority: priority || 8});
+  toast(r.status === 'done' ? T('Sluppet', 'Released') : (r.error || T('Feilet', 'Failed')));
+  return r;
+}
+
+// Det sveip og langt trykk kan gjøre.
+async function utfoerHand(rot, id) {
+  if (id === 'slipp') {
+    const o = S.mine[+rot.dataset.i];
+    if (o) { await slipp(o.address, o.objid, o.priority); lastMine(); }
+  } else if (id === 'fest' || id === 'losne') {
+    const p = S.punkter.find(x => x.objid === rot.dataset.o);
+    if (!p || !S.enhet) return;
+    const ny = festPunkt(lagPunkt(p, S.enhet));
+    toast(ny ? T('Festet til Verdier', 'Pinned to Values') : T('Løsnet fra Verdier', 'Removed from Values'));
+    tegPunktListe(false);
+  }
+}
+
+function ctxMeny(w) {
+  const p = S.pins[+w.dataset.k];
+  if (!p) return;
+  const r = w.getBoundingClientRect();
+  const lag = document.createElement('div');
+  lag.className = 'ctx';
+  const klone = w.cloneNode(true);
+  klone.classList.add('ctx-klone');
+  klone.removeAttribute('data-k');
+  klone.style.cssText = `left:${r.left}px;top:${r.top}px;width:${r.width}px;height:${r.height}px`;
+  const lukk = (fn) => { lag.classList.add('ctx-lukker'); setTimeout(() => { lag.remove(); if (fn) fn(); }, 150); };
+  const punkter = [[T('Åpne', 'Open'), 'aapne', () => apneArk(p)], [T('Løsne fra Verdier', 'Unpin from Values'), 'losne', () => { festPunkt(p); tegVerdier(); }]];
+  if (S.skriv && (p.skrivbar || TYPEGRUPPE.pad.includes(p.type))) punkter.push([T('Slipp prioritet 8', 'Release priority 8'), 'laas', async () => { await slipp(p.address, p.objid, 8); lastMine(); }]);
+  const meny = document.createElement('div');
+  meny.className = 'ctx-meny';
+  meny.innerHTML = punkter.map(([tekst, ik], i) => `<button data-i="${i}">${esc(tekst)}${IKON_MENY[ik]}</button>`).join('');
+  lag.append(klone, meny);
+  document.body.appendChild(lag);
+  const mh = meny.offsetHeight || 150;
+  const under = r.bottom + 12 + mh < window.innerHeight - 16;
+  meny.style.top = (under ? r.bottom + 12 : Math.max(12, r.top - 12 - mh)) + 'px';
+  meny.style.left = Math.min(Math.max(12, r.left), window.innerWidth - 242) + 'px';
+  meny.style.transformOrigin = under ? 'top left' : 'bottom left';
+  lag.onclick = e => { const b = e.target.closest('button[data-i]'); if (b) lukk(punkter[+b.dataset.i][2]); else lukk(); };
+  try { if (navigator.vibrate && navigator.userActivation && navigator.userActivation.hasBeenActive) navigator.vibrate(12); } catch {}
+}
+
+/* --------------------------------------------------------------------- ark */
+function lukkArk() {
+  S.apent = null;
+  S.test = (S.test && S.test.kjorer) ? S.test : null;
+  $('ark').hidden = true;
+  $('ark').style.background = '';
+  const k = $('arkInn');
+  k.style.transform = ''; k.style.transition = '';
+  if (S.tab === 'verdier') oppdaterVerdier();
+  if (S.tab === 'enheter' && S.enhet) tegPunktListe(false);
+}
+
+// Et handlingsark nedenfra, som iOS: valget øverst, Avbryt for seg selv under.
+function bekreft(tekst, knapp, o = {}) {
+  return new Promise(res => {
+    const linjer = String(tekst).split(String.fromCharCode(10));
+    const tittel = o.tittel || (linjer.length > 2 && linjer[0].length <= 90 ? linjer[0] : T('Bekreft', 'Confirm'));
+    const broed = o.tittel ? (o.broed || String(tekst)) : (linjer.length > 2 && linjer[0].length <= 90 ? linjer.slice(1).join(String.fromCharCode(10)).replace(/^\s+/, '') : String(tekst));
+    const kort = o.naa !== undefined ? `<div class="diff"><div><span class="merke">${T('Nå', 'Now')}</span><b>${esc(o.naa)}</b></div><span class="pil" aria-hidden="true">→</span>
+      <div class="ny"><span class="merke">${T('Ny', 'New')}</span><b>${esc(o.ny)}</b></div></div>
+      <div class="chips">${(o.chips || []).map(c => `<span class="chip2">${esc(c)}</span>`).join('')}</div>` : '';
+    const b = document.createElement('div');
+    b.className = 'as'; b.setAttribute('role', 'alertdialog'); b.setAttribute('aria-modal', 'true');
+    b.innerHTML = `<div class="as-kort"><div class="as-topp"><h3>${esc(tittel)}</h3>${o.under ? `<div class="under">${esc(o.under)}</div>` : ''}${broed ? `<div class="tekst">${esc(broed)}</div>` : ''}</div>${kort}
+      ${o.advarsel ? `<div class="advarsel"><span aria-hidden="true">⚠</span>${esc(o.advarsel)}</div>` : ''}
+      <button class="as-knapp prim" id="bJa">${esc(knapp || 'OK')}</button></div>
+      <div class="as-avbryt"><button class="as-knapp" id="bNei">${T('Avbryt', 'Cancel')}</button></div>`;
+    document.body.appendChild(b);
+    const ferdig = v => { b.remove(); res(v); };
+    b.querySelector('#bNei').onclick = () => ferdig(false);
+    b.querySelector('#bJa').onclick = () => ferdig(true);
+    b.addEventListener('click', e => { if (e.target === b) ferdig(false); });
+  });
+}
+
+function oppdaterArkVerdi() {
+  const el = $('arkVerdi'), p = S.apent;
+  if (!el || !p) return;
+  const v = (S.vals[p.address] || {})[p.objid];
+  el.innerHTML = esc(fmt(v === undefined ? p.verdi : v)) + `<small>${esc(p.sym || '')}</small>`;
+}
+
+const erAnalog = t => t === 'analog-output' || t === 'analog-value';
+const erBinaer = t => t === 'binary-output' || t === 'binary-value';
+const arkHode = (venstre, tittel, under, hoyre) => `<div class="grabber"></div><div class="ark-hode"><div>${venstre}</div><div class="ark-tittel">${esc(tittel)}${under ? `<small>${esc(under)}</small>` : ''}</div><div style="text-align:right">${hoyre}</div></div>`;
+
+function apneArk(p) {
+  S.apent = p;
+  S.test = null;
+  const festet = erFestet(p);
+  const kanSkrive = p.skrivbar || TYPEGRUPPE.pad.includes(p.type);
+  let skriv = '';
+  if (kanSkrive && !S.skriv) {
+    skriv = `<div class="seksjon">${T('Skriving', 'Writing')}</div><div class="liste"><div class="tekstcelle">${T('Skriving fra mobil er av. Slå den på i NABE på PC-en, under «Mobil».', 'Writing from mobile is off. Turn it on in NABE on the PC, under “Mobile”.')}</div></div>
+      <div class="liste"><button class="celle" id="slippP" style="color:var(--tint)">${T('Slipp prioritet 8', 'Release priority 8')}</button></div>`;
+  } else if (kanSkrive) {
+    let inn = '';
+    if (erAnalog(p.type)) {
+      inn = `<div class="seg" id="hurtig" style="margin-top:0">${[0, 25, 50, 75, 100].map(v => `<button data-q="${v}" aria-pressed="false">${v}</button>`).join('')}</div>
+        <div class="liste"><label class="celle"><span>${T('Verdi', 'Value')}</span><input id="skrivV" type="number" inputmode="decimal" step="any" placeholder="${T('Skriv et tall', 'Enter a number')}"></label></div>
+        <button class="knapp-stor" id="settP">${T('Sett', 'Set')}</button>`;
+    } else if (erBinaer(p.type)) {
+      inn = `<div class="seg" style="margin-top:0"><button data-b="inactive" aria-pressed="false">${T('Av', 'Off')}</button><button data-b="active" aria-pressed="false">${T('På', 'On')}</button></div>`;
+    } else {
+      inn = `<div class="liste"><label class="celle"><span>${T('Verdi', 'Value')}</span><input id="skrivV" type="number" inputmode="numeric" step="1" placeholder="${T('Skriv et tall', 'Enter a number')}"></label></div>
+        <button class="knapp-stor" id="settP">${T('Sett', 'Set')}</button>`;
+    }
+    skriv = `<div class="seksjon">${T('Sett verdi', 'Set value')}</div>${inn}
+      <div class="liste-fot" style="margin-top:-6px">${T('Prioritet 8. Slippes av seg selv etter ' + S.maks + ' min, også hvis du mister dekning.', 'Priority 8. Released automatically after ' + S.maks + ' min, even if you lose coverage.')}</div>
+      <button class="knapp-stor lys" id="slippP">${T('Slipp', 'Release')}</button>`;
+    if (p.type === 'analog-output' || p.type === 'analog-value') {
+      const maal = (p.enhetPunkter || []).filter(x => ['analog-input', 'analog-value', 'analog-output'].includes(x.type) && x.objid !== p.objid);
+      if (maal.length) {
+        skriv += `<div class="seksjon">${T('Prøv og se svar', 'Try and see the response')}</div>
+          <div class="liste"><div class="tekstcelle">${T('Setter pådraget til 0, 50 og 100 % med pause imellom, og måler hvor fort og hvor mye måleverdien svarer.', 'Sets the output to 0, 50 and 100 % with a pause between, and measures how fast and how much the measurement responds.')}</div>
+            <label class="celle"><span>${T('Måling', 'Measurement')}</span><select id="maalSel">${maal.slice().sort((a, b) => likhet(p, b) - likhet(p, a)).map(x => `<option value="${esc(x.objid)}">${esc(x.name || x.objid)}</option>`).join('')}</select></label>
+            <label class="celle"><span>${T('Pause per trinn', 'Pause per step')}</span><select id="pauseSel">${[15, 30, 45, 60, 90].map(s => `<option value="${s}"${s === 30 ? ' selected' : ''}>${s} s</option>`).join('')}</select></label></div>
+          <button class="knapp-stor lys" id="provP">${T('Prøv og se svar…', 'Try and see response…')}</button>`;
+      }
+    }
+  }
+  $('arkInn').innerHTML = arkHode(`<button class="tekstknapp" id="festP">${festet ? T('Løsne', 'Unpin') : T('Fest', 'Pin')}</button>`, p.name || p.objid, p.enhet || p.address,
+      `<button class="tekstknapp fet" id="lukkP">${T('Ferdig', 'Done')}</button>`)
+    + `<div class="ark-kropp"><div class="verdi-stor" id="arkVerdi"></div><div class="verdi-under">${esc(p.objid)}</div>${p.beskrivelse ? `<div class="verdi-besk">${esc(p.beskrivelse)}</div>` : ''}${skriv}</div>`;
+  $('arkInn').scrollTop = 0;
+  $('ark').hidden = false;
+  oppdaterArkVerdi();
+  pollVerdier();
+  segTommel($('hurtig'), false);
+  $('lukkP').onclick = lukkArk;
+  $('festP').onclick = () => {
+    const ny = festPunkt(p);
+    toast(ny ? T('Festet til Verdier', 'Pinned to Values') : T('Løsnet fra Verdier', 'Removed from Values'));
+    apneArk(p);
+  };
+  if ($('slippP')) $('slippP').onclick = async () => { await slipp(p.address, p.objid, 8); lastMine(); };
+  document.querySelectorAll('[data-q]').forEach(b => b.onclick = () => {
+    $('skrivV').value = b.dataset.q;
+    document.querySelectorAll('#hurtig button').forEach(x => x.setAttribute('aria-pressed', String(x === b)));
+    segTommel($('hurtig'));
+  });
+  document.querySelectorAll('[data-b]').forEach(b => b.onclick = () => skrivVerdi(p, b.dataset.b));
+  if ($('settP')) $('settP').onclick = () => { const v = $('skrivV').value; if (v === '') return toast(T('Skriv en verdi først', 'Enter a value first')); skrivVerdi(p, erAnalog(p.type) || /^multi/.test(p.type) ? parseFloat(v) : v); };
+  if ($('provP')) $('provP').onclick = () => provSvar(p);
+}
+
+function likhet(p, q) {
+  const a = (p.name || '').toLowerCase().replace(/[^a-z0-9æøå]/g, ''), b = (q.name || '').toLowerCase().replace(/[^a-z0-9æøå]/g, '');
+  let i = 0; while (i < a.length && i < b.length && a[i] === b[i]) i++;
+  return i + (q.type === 'analog-input' ? 0.5 : 0);
+}
+
+async function skrivVerdi(p, v) {
+  const naa = (S.vals[p.address] || {})[p.objid];
+  const vtxt = typeof v === 'string' ? fmt(v) : v;
+  if (!await bekreft('', T('Skriv', 'Write'), {tittel: T('Skriver til anlegget', 'Writing to the plant'), under: (p.name || p.objid) + ' · ' + p.address,
+    naa: fmt(naa) + (p.sym ? ' ' + p.sym : ''), ny: vtxt + (p.sym ? ' ' + p.sym : ''),
+    chips: [T('Prioritet 8', 'Priority 8'), T('Slippes automatisk etter ' + S.maks + ' min', 'Released automatically after ' + S.maks + ' min')],
+    advarsel: T('Dette endrer et anlegg i drift.', 'This changes a plant in operation.')})) return;
+  const r = await api('/api/write', {address: p.address, objid: p.objid, value: v, priority: 8, auto_release_min: S.maks});
+  toast(r.status === 'done' ? T('Satt. Slippes om ' + (r.auto_release_min || S.maks) + ' min, selv om du glemmer det.', 'Set. Released in ' + (r.auto_release_min || S.maks) + ' min, even if you forget.') : (r.error || T('Feilet', 'Failed')));
+  lastMine(); pollVerdier();
+}
+
+/* ------------------------------------------------------- prøv og se svar */
+async function provSvar(p) {
+  const maal = $('maalSel').value, pause = +$('pauseSel').value;
+  const m = (p.enhetPunkter || []).find(x => x.objid === maal) || {name: maal};
+  const trinn = [0, 50, 100];
+  const sek = 6 + trinn.length * pause;
+  if (!await bekreft('', T('Start testen', 'Start the test'), {tittel: T('Prøv og se svar', 'Try and see response'),
+    under: (p.name || p.objid) + ' → ' + (m.name || maal),
+    broed: `${T('Trinn', 'Steps')}: ${trinn.join(', ')} %   ·   ${T('Tid', 'Time')}: ${Math.ceil(sek / 60 * 10) / 10} min\n\n${T('Pådraget settes i manuell (prioritet 8) og slippes automatisk når testen er ferdig, avbrutt eller feiler. Anlegget kan reagere kraftig.', 'The output is put in manual (priority 8) and released automatically when the test finishes, is cancelled or fails. The plant may react strongly.')}`,
+    advarsel: T('Dette endrer et anlegg i drift.', 'This changes a plant in operation.')})) return;
+  const r = await api('/api/test/svar', {address: p.address, padrag: p.objid, maaling: maal, trinn, pause_s: pause, prioritet: 8});
+  if (r.status !== 'started') return toast(r.error || T('Kunne ikke starte', 'Could not start'));
+  S.test = {id: r.id, maaling: maal, maaling_address: p.address, kjorer: true, p, pause, trinn, navnMaal: m.name || maal};
+  tegTest();
+  S.test.lop = setInterval(async () => {
+    const j = await api('/api/test/svar/' + r.id).catch(() => null);
+    if (!j || j.status !== 'done') return;
+    S.test.d = j.test;
+    if (j.test.status !== 'kjorer' && j.test.fase === 'ferdig') { S.test.kjorer = false; clearInterval(S.test.lop); lastMine(); }
+    tegTest();
+  }, 1000);
+}
+
+function graf(serie, trinnT) {
+  const pts = serie.filter(s => s.v != null);
+  if (pts.length < 2) return '<svg class="graf"></svg>';
+  const xs = pts.map(s => s.t), ys = pts.map(s => s.v);
+  const x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys);
+  const W = 320, Hh = 110, pad = 10;
+  const X = t => pad + (t - x0) / Math.max(1e-9, x1 - x0) * (W - 2 * pad);
+  const Y = v => Hh - pad - (v - y0) / Math.max(1e-9, y1 - y0) * (Hh - 2 * pad);
+  const linjer = (trinnT || []).map(t => `<line x1="${X(t)}" x2="${X(t)}" y1="0" y2="${Hh}" stroke="var(--sep)" stroke-width=".8" stroke-dasharray="3 3"/>`).join('');
+  return `<svg class="graf" viewBox="0 0 ${W} ${Hh}" preserveAspectRatio="none">${linjer}<polyline fill="none" stroke="var(--tint)" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round" points="${pts.map(s => X(s.t).toFixed(1) + ',' + Y(s.v).toFixed(1)).join(' ')}"/></svg>`;
+}
+
+function domTekst(r, pause) {
+  if (!r) return '';
+  if (r.dom === 'ingen') return T('Ingen tydelig respons. Måleverdien endret seg ikke mer enn støyen, så enten er pådraget ikke koblet til denne målingen, eller utstyret går ikke. Anlegget sier ingenting. Det gjør det ofte.', 'No clear response. The measurement did not move more than the noise, so either the output is not connected to this measurement or the equipment is not running. The plant says nothing. It often does.');
+  const rett = r.retning === 'opp' ? T('stiger', 'rises') : T('synker', 'falls');
+  const lin = r.lineaer === true ? T(' Svaret er jevnt (like mye per trinn).', ' The response is even (the same per step).') : r.lineaer === false ? T(' Svaret er ujevnt: trinnene gir ulik effekt.', ' The response is uneven: the steps give different effects.') : '';
+  const uten = r.uten_svar && r.uten_svar.length ? T(' ' + r.uten_svar.length + ' trinn ga ingen respons.', ' ' + r.uten_svar.length + ' step(s) gave no response.') : '';
+  const pr = r.per_10 != null ? Math.abs(r.per_10).toFixed(2) : '?';
+  return T(`Måleverdien ${rett} omtrent ${pr} per 10 % pådrag. Dødtid ${r.dode_s != null ? r.dode_s + ' s' : '?'}, 63 % av endringen etter ${r.t63_s != null ? r.t63_s + ' s' : '?'}.`,
+    `The measurement ${rett} about ${pr} per 10 % of output. Dead time ${r.dode_s != null ? r.dode_s + ' s' : '?'}, 63 % of the change after ${r.t63_s != null ? r.t63_s + ' s' : '?'}.`)
+    + lin + uten + (r.dom === 'ok' ? T(' Dette kan du skrive i protokollen uten å rødme.', ' You can put this in the protocol without blushing.') : '') + (r.dom === 'treg' ? T(' Svaret er tregt i forhold til pausen, så resultatet kan være avkortet. Prøv lengre pause. Ikke alt har det like travelt som du.', ' The response is slow compared to the pause, so the result may be cut short. Try a longer pause. Not everything is in as much of a hurry as you.') : '');
+}
+
+function tegTest() {
+  const t = S.test;
+  if (!t) return;
+  const d = t.d || {serie: [], steg: [], fase: 'hvile', status: 'kjorer', trinn: t.trinn};
+  let fase = '';
+  if (d.status === 'kjorer') fase = d.fase === 'hvile' ? T('Måler hvilenivå…', 'Measuring rest level…') : d.fase === 'trinn' ? T('Trinn ' + (d.trinn_i + 1) + ' av ' + d.trinn.length + ': pådrag ' + d.trinn[d.trinn_i] + ' %', 'Step ' + (d.trinn_i + 1) + ' of ' + d.trinn.length + ': output ' + d.trinn[d.trinn_i] + ' %') : T('Slipper…', 'Releasing…');
+  else if (d.fase !== 'ferdig') fase = T('Slipper pådraget…', 'Releasing the output…');
+  const trinnT = []; let sist = null;
+  d.serie.forEach(s => { if (s.trinn !== sist) { trinnT.push(s.t); sist = s.trinn; } });
+  const siste = d.serie.length ? d.serie[d.serie.length - 1].v : null;
+  const ferdig = d.status !== 'kjorer' && d.fase === 'ferdig';
+  const tittel = d.status === 'feil' ? T('Testen stoppet', 'The test stopped') : d.status === 'avbrutt' ? T('Avbrutt', 'Cancelled') : ferdig ? T('Ferdig', 'Done') : T('Testen går', 'Test running');
+  const rull = $('arkInn').scrollTop;
+  $('arkInn').innerHTML = arkHode(ferdig ? '' : `<button class="tekstknapp" id="tAvbryt" style="color:var(--err)">${T('Avbryt', 'Cancel')}</button>`, tittel, `${t.p.name || t.p.objid} → ${t.navnMaal}`,
+      ferdig ? `<button class="tekstknapp fet" id="tLukk">${T('Ferdig', 'Done')}</button>` : '')
+    + `<div class="ark-kropp"><div class="verdi-stor">${esc(fmt(siste))}<small>${esc(t.p.sym || '')}</small></div>
+    <div class="graf-boks">${graf(d.serie, trinnT)}</div>
+    <div class="fase">${esc(fase)}</div>
+    ${d.feil ? `<div class="feil">${esc(d.feil)}</div>` : ''}
+    ${d.steg.length ? `<div class="liste"><div class="test-rad hode"><span>${T('Trinn', 'Step')}</span><span>${T('Endring', 'Change')}</span><span>${T('Dødtid', 'Dead')}</span><span>63 %</span></div>${d.steg.map(s => `<div class="test-rad"><span>${s.til} %</span>
+      <span>${s.reagerte ? (s.endring > 0 ? '+' : '') + s.endring : T('ingen', 'none')}</span><span>${s.dode_s != null ? s.dode_s + ' s' : '–'}</span><span>${s.t63_s != null ? s.t63_s + ' s' : '–'}</span></div>`).join('')}</div>` : ''}
+    ${ferdig && d.resultat ? `<div class="liste"><div class="dom">${esc(domTekst(d.resultat, t.pause))}</div></div>` : ''}
+    ${ferdig ? `<div class="liste-fot" style="margin-top:-10px">${d.sluppet ? T('Pådraget er sluppet tilbake til anlegget.', 'The output has been released back to the plant.') : T('Pådraget ble ikke bekreftet sluppet. Sjekk fanen Overstyrt.', 'The release was not confirmed. Check the Overridden tab.')}</div>` : ''}
+    ${ferdig ? `<button class="knapp-stor" id="tLukk2">${T('Ferdig', 'Done')}</button>` : `<button class="knapp-stor fare" id="tAvbryt2">${T('Avbryt og slipp', 'Cancel and release')}</button>`}</div>`;
+  $('arkInn').scrollTop = rull;
+  const avbryt = () => api('/api/test/svar/' + t.id + '/avbryt', {});
+  const lukk = () => { S.test = null; lukkArk(); };
+  if ($('tAvbryt')) $('tAvbryt').onclick = avbryt;
+  if ($('tAvbryt2')) $('tAvbryt2').onclick = avbryt;
+  if ($('tLukk')) $('tLukk').onclick = lukk;
+  if ($('tLukk2')) $('tLukk2').onclick = lukk;
+  $('ark').hidden = false;
+}
+
+/* ------------------------------------------------------------ bevegelser */
+// Alt som føles som en vanlig app: sveip på rader, kantsveip tilbake, sveip mellom faner,
+// trekk for å oppdatere, langt trykk på en widget og ark du kan dra ned.
+function gester() {
+  if (gester.ok) return;
+  gester.ok = true;
+
+  /* ---- sveip på rader: dra til venstre for handlingene, dra langt for å utføre den første */
+  let sv = null, sistSveip = 0;
+  const lukkRad = rot => { rot.classList.remove('aapen'); rot.querySelector('.sveip-inn').style.transform = ''; };
+  const aapneRad = rot => { rot.classList.add('aapen'); rot.querySelector('.sveip-inn').style.transform = `translateX(${-rot.querySelector('.sveip-hand').offsetWidth}px)`; };
+  document.addEventListener('pointerdown', e => {
+    const inn = e.target.closest('.sveip-inn');
+    document.querySelectorAll('.sveip.aapen').forEach(r => { if (!inn || r !== inn.parentElement) lukkRad(r); });
+    if (!inn || e.target.closest('.sveip-hand')) return;
+    const rot = inn.parentElement, h = rot.querySelector('.sveip-hand');
+    sv = {inn, rot, x0: e.clientX, y0: e.clientY, off: rot.classList.contains('aapen') ? -h.offsetWidth : 0, drar: false, id: e.pointerId, bredde: rot.offsetWidth, hbr: h.offsetWidth, x: 0};
+  }, true);
+  document.addEventListener('pointermove', e => {
+    const a = sv;
+    if (!a || e.pointerId !== a.id) return;
+    const dx = e.clientX - a.x0, dy = e.clientY - a.y0;
+    if (!a.drar) {
+      if (Math.abs(dx) > 9 && Math.abs(dx) > Math.abs(dy) * 1.4) { a.drar = true; a.inn.classList.add('drar'); a.rot.classList.add('drar'); try { a.inn.setPointerCapture(e.pointerId); } catch {} }
+      else { if (Math.abs(dy) > 12) sv = null; return; }
+    }
+    let x = Math.min(0, a.off + dx);
+    if (x < -a.hbr) x = -a.hbr + (x + a.hbr) * 0.6;
+    a.x = x;
+    a.inn.style.transform = `translateX(${x}px)`;
+  }, true);
+  const sveipSlutt = () => {
+    const a = sv;
+    if (!a) return;
+    sv = null;
+    a.inn.classList.remove('drar'); a.rot.classList.remove('drar');
+    if (!a.drar) return;
+    sistSveip = Date.now();
+    if (a.x < -a.bredde * 0.6) { lukkRad(a.rot); const f = a.rot.querySelector('.sveip-hand button'); if (f) utfoerHand(a.rot, f.dataset.h); }
+    else if (a.x < -a.hbr * 0.45) aapneRad(a.rot);
+    else lukkRad(a.rot);
+  };
+  document.addEventListener('pointerup', sveipSlutt, true);
+  document.addEventListener('pointercancel', sveipSlutt, true);
+  document.addEventListener('click', e => {
+    if (Date.now() - sistSveip < 380) { e.stopPropagation(); e.preventDefault(); return; }
+    const h = e.target.closest('.sveip-hand button');
+    if (h) { const rot = h.closest('.sveip'); lukkRad(rot); utfoerHand(rot, h.dataset.h); e.stopPropagation(); return; }
+    const rot = e.target.closest('.sveip.aapen');
+    if (rot) { lukkRad(rot); e.stopPropagation(); e.preventDefault(); }
+  }, true);
+
+  /* ---- sveip fra venstre kant for å gå tilbake, og sveip sideveis for å bytte fane */
+  let sk = null;
+  document.addEventListener('pointerdown', e => {
+    if (!$('ark').hidden || document.querySelector('.as, .ctx') || e.target.closest('input, select, textarea, .seg, .tabbar, .nav')) { sk = null; return; }
+    const kant = e.clientX < 24 && S.tab === 'enheter' && !!S.enhet;
+    if (!kant && e.target.closest('.sveip-inn, .widget')) { if (!e.target.closest('.sveip-inn')) { /* widget: tillat fane-sveip */ } else { sk = null; return; } }
+    sk = {x0: e.clientX, y0: e.clientY, id: e.pointerId, kant, drar: false, dx: 0, t0: performance.now()};
+  }, true);
+  document.addEventListener('pointermove', e => {
+    const a = sk;
+    if (!a || e.pointerId !== a.id) return;
+    const dx = e.clientX - a.x0, dy = e.clientY - a.y0;
+    a.dx = dx;
+    if (!a.kant) return;
+    if (!a.drar) { if (dx > 8 && dx > Math.abs(dy)) a.drar = true; else if (Math.abs(dy) > 14) { sk = null; return; } else return; }
+    const m = $('innhold');
+    m.style.transition = 'none';
+    m.style.transform = `translateX(${Math.max(0, dx)}px)`;
+    m.style.opacity = String(1 - Math.min(0.6, dx / window.innerWidth));
+  }, true);
+  const skSlutt = e => {
+    const a = sk;
+    if (!a) return;
+    sk = null;
+    const dt = Math.max(1, performance.now() - a.t0), m = $('innhold');
+    if (a.kant && a.drar) {
+      const fort = a.dx / dt > 0.5;
+      m.style.transition = 'transform .28s cubic-bezier(.2,.9,.25,1), opacity .28s';
+      if (a.dx > window.innerWidth * 0.33 || fort) {
+        m.style.transform = `translateX(${window.innerWidth}px)`; m.style.opacity = '0';
+        setTimeout(() => { m.style.transition = 'none'; m.style.transform = ''; m.style.opacity = ''; tilbakeTilEnheter(); }, 240);
+      } else { m.style.transform = ''; m.style.opacity = ''; setTimeout(() => { m.style.transition = ''; }, 300); }
+      sistSveip = Date.now();
+      return;
+    }
+    if (!a.kant && !S.enhet) {
+      const dy = (e && e.clientY != null) ? e.clientY - a.y0 : 0;
+      if (Math.abs(a.dx) > 90 && Math.abs(a.dx) > Math.abs(dy) * 2.2) {
+        const i = FANER.indexOf(S.tab), ny = FANER[i + (a.dx < 0 ? 1 : -1)];
+        if (ny) { sistSveip = Date.now(); bytteTab(ny); }
+      }
+    }
+  };
+  document.addEventListener('pointerup', skSlutt, true);
+  document.addEventListener('pointercancel', () => { sk = null; const m = $('innhold'); if (m) { m.style.transform = ''; m.style.opacity = ''; m.style.transition = ''; } }, true);
+
+  /* ---- trekk for å oppdatere */
+  let pt = null;
+  document.addEventListener('touchstart', e => {
+    if (window.scrollY > 0 || e.touches.length !== 1 || !$('ark').hidden || (S.enhet && S.tab === 'enheter') || document.querySelector('.as, .ctx') || e.target.closest('.sveip-inn, .seg, input')) { pt = null; return; }
+    pt = {y0: e.touches[0].clientY, x0: e.touches[0].clientX, d: 0, aktiv: false};
+  }, {passive: true});
+  document.addEventListener('touchmove', e => {
+    if (!pt) return;
+    const dy = e.touches[0].clientY - pt.y0, dx = e.touches[0].clientX - pt.x0;
+    if (!pt.aktiv) {
+      if (dy > 10 && dy > Math.abs(dx) * 1.5 && window.scrollY <= 0) pt.aktiv = true;
+      else { if (dy < -4 || Math.abs(dx) > 14) pt = null; return; }
+    }
+    if (e.cancelable) e.preventDefault();
+    pt.d = Math.min(96, dy * 0.5);
+    const m = $('innhold'), p = $('ptr');
+    m.style.transition = 'none';
+    m.style.transform = `translateY(${pt.d}px)`;
+    p.style.opacity = String(Math.min(1, pt.d / 46));
+    p.style.transform = `translateY(${pt.d * 0.5}px) rotate(${pt.d * 5}deg)`;
+  }, {passive: false});
+  document.addEventListener('touchend', async () => {
+    const a = pt;
+    pt = null;
+    if (!a || !a.aktiv) return;
+    const m = $('innhold'), p = $('ptr');
+    m.style.transition = 'transform .38s cubic-bezier(.2,.9,.25,1)';
+    if (a.d >= 54) {
+      m.style.transform = 'translateY(54px)';
+      p.classList.add('snurr'); p.style.opacity = '1'; p.style.transform = 'translateY(28px)';
+      await Promise.all([oppdaterSide(), new Promise(r => setTimeout(r, 800))]);
+      p.classList.remove('snurr');
+    }
+    m.style.transform = ''; p.style.opacity = '0'; p.style.transform = '';
+    setTimeout(() => { m.style.transition = ''; }, 400);
+  });
+  document.addEventListener('touchcancel', () => { pt = null; const m = $('innhold'); if (m) { m.style.transform = ''; m.style.transition = ''; } $('ptr').style.opacity = '0'; });
+
+  /* ---- langt trykk på en widget gir en meny */
+  let lt = null, sistLangt = 0;
+  document.addEventListener('pointerdown', e => {
+    const w = e.target.closest('.widget');
+    if (!w) return;
+    lt = {w, x: e.clientX, y: e.clientY, t: setTimeout(() => { sistLangt = Date.now(); const ww = lt && lt.w; lt = null; if (ww) ctxMeny(ww); }, 430)};
+  }, true);
+  const ltAvbryt = () => { if (lt) { clearTimeout(lt.t); lt = null; } };
+  document.addEventListener('pointermove', e => { if (lt && (Math.abs(e.clientX - lt.x) > 8 || Math.abs(e.clientY - lt.y) > 8)) ltAvbryt(); }, true);
+  document.addEventListener('pointerup', ltAvbryt, true);
+  document.addEventListener('pointercancel', ltAvbryt, true);
+  document.addEventListener('click', e => { if (Date.now() - sistLangt < 600) { e.stopPropagation(); e.preventDefault(); } }, true);
+  document.addEventListener('contextmenu', e => { if (e.target.closest('.widget, .sveip-inn')) e.preventDefault(); });
+
+  /* ---- arket kan dras ned: mørket bak blekner med fingeren, og et raskt dytt lukker */
+  let ar = null;
+  document.addEventListener('pointerdown', e => {
+    const h = e.target.closest('.grabber, .ark-hode');
+    if (!h || e.target.closest('button') || $('ark').hidden) return;
+    const kort = $('arkInn');
+    ar = {id: e.pointerId, y0: e.clientY, dy: 0, t0: performance.now(), kort, h};
+    kort.style.transition = 'none';
+    try { h.setPointerCapture(e.pointerId); } catch {}
+  }, true);
+  document.addEventListener('pointermove', e => {
+    if (!ar || e.pointerId !== ar.id) return;
+    const rå = e.clientY - ar.y0;
+    ar.dy = rå > 0 ? rå : rå * 0.2;
+    ar.kort.style.transform = `translateY(${ar.dy}px)`;
+    $('ark').style.background = `rgba(0,0,0,${0.42 * (1 - Math.min(1, Math.max(0, ar.dy) / 460))})`;
+  }, true);
+  const arSlutt = () => {
+    const a = ar;
+    if (!a) return;
+    ar = null;
+    const v = a.dy / Math.max(1, performance.now() - a.t0);
+    if (a.dy > 130 || (a.dy > 36 && v > 0.55)) {
+      a.kort.style.transition = 'transform .3s cubic-bezier(.4,0,1,1)';
+      a.kort.style.transform = 'translateY(105%)';
+      $('ark').style.transition = 'background .3s';
+      $('ark').style.background = 'rgba(0,0,0,0)';
+      setTimeout(() => { $('ark').style.transition = ''; lukkArk(); }, 280);
+    } else {
+      a.kort.style.transition = 'transform .38s cubic-bezier(.2,1.1,.3,1)';
+      a.kort.style.transform = '';
+      $('ark').style.background = '';
+      setTimeout(() => { a.kort.style.transition = ''; }, 400);
+    }
+  };
+  document.addEventListener('pointerup', arSlutt, true);
+  document.addEventListener('pointercancel', arSlutt, true);
+}
+
+/* ---------------------------------------------------------------------- start */
+async function status() {
+  try {
+    const r = await api('/api/readonly');
+    S.readonly = !!r.enabled;
+    const m = await fetch('/m/me').then(x => x.json()).catch(() => ({}));
+    if (m.ok) { S.skriv = !!m.skriv; S.maks = m.maks_min || 10; }
+  } catch {}
+  pille();
+}
+
+async function start() {
+  const me = await fetch('/m/me');
+  if (me.status !== 401) {
+    ramme();
+    await status();
+    try { await lastEnheter(); } catch {}
+    teg();
+    lastMine();
+    pollVerdier();
+    clearInterval(S.lop);
+    S.lop = setInterval(() => { pollVerdier(); }, 2000);
+    setInterval(lastMine, 15000);
+    setInterval(status, 10000);
+    try { if ('wakeLock' in navigator) navigator.wakeLock.request('screen').catch(() => {}); } catch {}
+  } else {
+    visLogin(new URLSearchParams(location.search).get('feil') ? T('Feil kode, eller koden er utløpt.', 'Wrong code, or the code has expired.') : '');
+  }
+}
+start();
+</script>
+</body>
+</html>

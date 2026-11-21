@@ -3,7 +3,7 @@
    Colour vision: status is carried by colour in a lot of places, and for red-green
    colour blindness alarm, fault and warning come out as nearly the same brown. Three
    palettes that stay apart (red-green, blue-yellow, high contrast), and shapes beside
-   the colours (▲ alarm, ◆ fault, ● overridden) so nothing depends on colour alone.
+   the colours (▲ alarm, ◆ fault, ■ overridden) so nothing depends on colour alone.
    The palettes are CSS, switched by an attribute on the root element; the same
    attribute is set early from a small script in the head, so there is no flash.
 
@@ -44,7 +44,7 @@
         <small>${liten}</small><span id="${id.replace('Btn', 'State')}" class="menu-state"></span></button>`;
     const syn = gruppe(T('Fargesyn', 'Colour vision'),
       rad('fargesynBtn', T('Fargesyn', 'Colour vision'), T('Farger som holder seg adskilt også ved rød-grønn og blå-gul fargeblindhet', 'Colours that stay apart for red-green and blue-yellow colour blindness'))
-      + rad('formerBtn', T('Former i tillegg til farge', 'Shapes as well as colour'), T('▲ alarm, ◆ feil, ● overstyrt, ved siden av fargen. Følger fargesyn til du velger selv', '▲ alarm, ◆ fault, ● overridden, next to the colour. Follows colour vision until you choose'), true)
+      + rad('formerBtn', T('Former i tillegg til farge', 'Shapes as well as colour'), T('▲ alarm, ◆ feil, ■ overstyrt, ved siden av fargen. Følger fargesyn til du velger selv', '▲ alarm, ◆ fault, ● overridden, next to the colour. Follows colour vision until you choose'), true)
       + `<div class="syn-prov" id="synProv" aria-hidden="true"></div>`);
     const hum = gruppe(T('NABE og NABO', 'NABE and NABO'),
       rad('humorBtn', T('Humørnivå', 'Mood'), T('Stille: bare det som hjelper. Normal: som vanlig. Kaos: også en og annen bemerkning når det er stille', 'Quiet: only what helps. Normal: as usual. Chaos: the odd remark when it is quiet too')));

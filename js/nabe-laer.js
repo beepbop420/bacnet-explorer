@@ -19,14 +19,17 @@
   const DAG = 864e5, LANG = 180 * DAG, KORT = 90 * DAG;
   // Only the kinds of suggestion where "it is meant to be like this" is a fair answer. Duplicate IDs, silent devices,
   // storms and unreadable devices are never put aside by a click.
-  const KORT_FRIST = new Set(['feil-punkt', 'alarm', 'alarm-ofte', 'avvik']);
+  const KORT_FRIST = new Set(['feil-punkt', 'alarm', 'alarm-ofte', 'avvik', 'alarmvei-tom', 'alarmvei-mangler']);
   const LAERBAR = new Set(['dode', 'dode-enhet', 'flat', 'urimelig', 'ute', 'overstyrt', 'feil-punkt', 'alarm', 'avvik', 'alarm-ofte',
-    'syk-tips', 'virkning-tips', 'driftstid', 'sykluser', 'virkning', 'endret-id']);
+    'syk-tips', 'virkning-tips', 'driftstid', 'sykluser', 'virkning', 'endret-id',
+    'alarmvei-tom', 'alarmvei-mangler', 'alarmvei-av', 'alarmvei-ukjent', 'alarmvei-ingen']);
   const GRUNNER = () => ({vilje: T('Med vilje', 'On purpose'), ikkebruk: T('Ikke i bruk', 'Not in use'), kjent: T('Kjent og akseptert', 'Known and accepted')});
   const TYPER = () => ({dode: T('aldri endret', 'never changed'), 'dode-enhet': T('oppdaterer ikke', 'not updating'), flat: T('står stille', 'stands still'),
     urimelig: T('urimelig verdi', 'impossible value'), ute: T('ute av drift', 'out of service'), overstyrt: T('overstyrt', 'overridden'),
     'feil-punkt': T('feil', 'fault'), alarm: T('alarm', 'alarm'), avvik: T('langt fra settpunkt', 'far from setpoint'), 'alarm-ofte': T('alarmerer ofte', 'alarms often'),
     'syk-tips': T('hyppige starter', 'frequent starts'), 'virkning-tips': T('pådrag uten effekt', 'no effect'), driftstid: T('utenfor driftstid', 'outside schedule'),
+    'alarmvei-tom': T('alarm uten mottaker', 'alarm with no recipient'), 'alarmvei-mangler': T('klasse finnes ikke', 'class missing'), 'alarmvei-av': T('alarm av', 'alarms off'),
+    'alarmvei-ukjent': T('ukjent mottaker', 'unknown recipient'), 'alarmvei-ingen': T('ingen alarmoppsett', 'no alarm setup'),
     sykluser: T('starter ofte', 'starts often'), virkning: T('pådrag uten effekt', 'no effect'), 'endret-id': T('nytt enhets-ID', 'new device ID')});
 
   let D = null, nokkel = '', TREFF = new Set();

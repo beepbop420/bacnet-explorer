@@ -52,7 +52,7 @@
     if (!pop) return;
     pop.innerHTML = `<div class="scan-pop-t">${T('Skann etter', 'Scan for')}</div>
       ${PROT.map(([id]) => `<button type="button" class="menu-item scan-val${paa(id) ? ' on' : ''}" role="menuitemcheckbox" aria-checked="${paa(id)}" data-val="${id}">
-        <i class="prot-prikk p-${id}"></i><span class="scan-val-t"><b>${esc(BESKR[id][0])}</b><small>${esc(BESKR[id][1])}</small></span><span class="scan-val-av">${paa(id) ? T('på', 'on') : T('av', 'off')}</span></button>`).join('')}
+        <span class="scan-val-t"><b>${esc(BESKR[id][0])}</b><small>${esc(BESKR[id][1])}</small></span><span class="scan-val-av">${paa(id) ? T('på', 'on') : T('av', 'off')}</span></button>`).join('')}
       <div class="menu-sep"></div>
       <div class="scan-pop-t">${T('Legg til selv', 'Add by hand')}</div>
       <button type="button" class="menu-item" role="menuitem" data-add="mb-ip">${T('Modbus-enhet (IP og port)', 'Modbus device (IP and port)')}</button>

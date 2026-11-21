@@ -47,7 +47,7 @@
     const gammel = dag >= 1 ? T(` (talt for ${dag} d siden)`, ` (counted ${dag} d ago)`) : '';
     if (!apne) {
       return {klasse: 'ro', tittel: T('Ingenting å følge opp ved siste telling', 'Nothing to follow up at the last count') + gammel,
-        html: `<i></i>${st.utfort ? T('Alt utført', 'All done') : T('Rolig', 'Calm')}`};
+        html: `${st.utfort ? T('Alt utført', 'All done') : T('Rolig', 'Calm')}`};
     }
     const deler = [`<b>${apne}</b> ${apne === 1 ? T('åpent', 'open') : T('åpne', 'open')}`];
     if (st.p1) deler.push(T(`${st.p1} å se på først`, `${st.p1} to look at first`));
@@ -55,7 +55,7 @@
     const tr = trend(s);
     if (tr) deler.push(tr);
     const sid = st.siden && st.siden.n ? '\n' + T(`${st.siden.n} ${st.siden.n === 1 ? 'ting' : 'ting'} var annerledes enn forrige besøk`, `${st.siden.n} ${st.siden.n === 1 ? 'thing was' : 'things were'} different from the previous visit`) : '';
-    return {klasse: st.p1 ? 'p1' : st.p2 ? 'p2' : '', tittel: topp + sid + gammel, html: `<i></i>${deler.join(' · ')}`};
+    return {klasse: st.p1 ? 'p1' : st.p2 ? 'p2' : '', tittel: topp + sid + gammel, html: `${deler.join(' · ')}`};
   }
   /* Better or worse than the last time it was counted on another day: in words, so it reads the same to everyone */
   function trend(s) {

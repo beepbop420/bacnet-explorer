@@ -382,17 +382,84 @@ let toastTimer;
    true or false, with it there is a field and it resolves to the text, or null
    when cancelled. Enter answers yes, Escape and a click outside answer no.
    Keys are held here while it is open, so no shortcut fires behind it. */
+/* Dialogen har tre former, etter hva den spør om:
+   - Skriv og frigi viser det som faktisk skjer: hva punktet står på nå, hva det blir, hvilken prioritet
+     og hvor lenge. Det er hele beslutningen, så det er det som står først.
+   - Spørsmål med et felt er en liten skjemadialog.
+   - Alt annet er en kort tekst, der første linje er overskriften.
+   Linjen nederst er NABE (eller NABO) som kommenterer det du er i ferd med å gjøre. Den følger humornivået
+   og er borte på «stille». Resten av dialogen er den samme uansett. */
+const DLG_IKON = (d) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
+const DLG_GLYPH = {
+  skriv: DLG_IKON('<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/>'),
+  frigi: DLG_IKON('<rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 9.6-2"/>'),
+  slett: DLG_IKON('<path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/>'),
+  sporsmaal: DLG_IKON('<circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 0 1 5 0c0 1.7-2.5 2-2.5 4"/><path d="M12 17h.01"/>'),
+};
+
+function dlgKortHtml(k) {
+  const chip = (t) => `<span class="dlg-chip">${esc(t)}</span>`;
+  const enhet = k.enhet ? ' ' + esc(k.enhet) : '';
+  const prio = chip(T('Prioritet ', 'Priority ') + k.prio);
+  if (k.art === 'skriv') {
+    return `<div class="dlg-diff"><div><span class="dlg-merke">${T('Nå', 'Now')}</span><b>${esc(k.naa)}${enhet}</b></div>
+      <span class="dlg-pil" aria-hidden="true">→</span>
+      <div class="dlg-ny"><span class="dlg-merke">${T('Ny', 'New')}</span><b>${esc(k.ny)}${enhet}</b></div></div>
+      <div class="dlg-chips">${prio}${chip(k.auto ? T('Slippes automatisk etter ' + k.auto + ' min', 'Released automatically after ' + k.auto + ' min') : T('Blir stående til du frigir den', 'Stays until you release it'))}</div>`;
+  }
+  if (k.art === 'frigi') {
+    return `<div class="dlg-diff"><div><span class="dlg-merke">${T('Nå', 'Now')}</span><b>${esc(k.naa)}${enhet}</b></div>
+      <span class="dlg-pil" aria-hidden="true">→</span>
+      <div class="dlg-ny"><span class="dlg-merke">${T('Etterpå', 'Afterwards')}</span><b class="dlg-tekstverdi">${T('Anleggets eget', 'The plant’s own')}</b></div></div>
+      <div class="dlg-chips">${prio}</div>`;
+  }
+  return '';
+}
+
 function nabeDialog(tekst, o = {}) {
   return new Promise(losning => {
     const harFelt = o.standard !== undefined;
+    const kort = o.kort || null;
     const lag = document.createElement('div');
     lag.className = 'gs-overlay dlg-lag';
     lag.setAttribute('role', 'alertdialog');
     lag.setAttribute('aria-modal', 'true');
-    lag.innerHTML = `<div class="gs-modal dlg-modal"><div class="dlg-tekst"></div>${harFelt ? '<input class="field dlg-felt" type="text" autocomplete="off" spellcheck="false">' : ''}
+    // Uten kort er første linje overskriften og resten brødtekst.
+    const linjer = String(tekst).split(String.fromCharCode(10));
+    const tittel = kort ? (o.tittel || '') : (linjer.length > 2 && linjer[0].trim() && linjer[0].length <= 90 ? linjer[0].trim() : '');
+    const broed = kort ? (o.broed || '') : (tittel ? linjer.slice(1).join(String.fromCharCode(10)).replace(/^\s+/, '') : String(tekst));
+    const art = kort ? kort.art : (o.art || (/^(Skriv verdi|Write value)/i.test(linjer[0]) ? 'skriv' : /^(Frigi|Release)/i.test(linjer[0]) ? 'frigi'
+      : /(slett|delete|fjern|remove)/i.test(linjer[0]) ? 'slett' : ''));
+    // En kommentar fra NABE eller NABO, bare når det passer med humornivået.
+    let sno = null;
+    try {
+      const niva = (window.nabeSyn && nabeSyn.humorNiva && nabeSyn.humorNiva()) || 'normal';
+      const nokkel = 'popup' + art.charAt(0).toUpperCase() + art.slice(1);
+      if (art && !harFelt && niva !== 'stille' && window.nabeDialoger && typeof DIA_INNHOLD !== 'undefined' && DIA_INNHOLD[nokkel]
+          && Math.random() < (niva === 'kaos' ? 1 : 0.7)) {
+        const e = nabeDialoger.velg(nokkel, {});
+        if (e && !Array.isArray(e)) sno = nabeDialoger.linje(e);
+      }
+    } catch { /* en kommentar er aldri verdt en feil */ }
+    const okTekst = o.ok || (art === 'skriv' ? T('Skriv', 'Write') : art === 'frigi' ? T('Frigi', 'Release') : 'OK');
+    const ansikt = sno ? (sno.hvem === 'nabo' ? (typeof NABO_SVG !== 'undefined' ? NABO_SVG : '') : (typeof NABE_SVG !== 'undefined' ? NABE_SVG : '')) : '';
+    lag.innerHTML = `<div class="gs-modal dlg-modal${art ? ' dlg-' + art : ''}">
+      ${kort ? `<div class="dlg-topp"><span class="dlg-glyph">${DLG_GLYPH[art] || ''}</span><div class="dlg-titler"><div class="dlg-tittel"></div><div class="dlg-under"></div></div></div>${dlgKortHtml(kort)}`
+        : (tittel ? `<div class="dlg-topp"><span class="dlg-glyph">${DLG_GLYPH[art] || (harFelt ? DLG_GLYPH.sporsmaal : '')}</span><div class="dlg-titler"><div class="dlg-tittel"></div></div></div>` : '')}
+      <div class="dlg-tekst"></div>${harFelt ? '<input class="field dlg-felt" type="text" autocomplete="off" spellcheck="false">' : ''}
+      ${kort && kort.advarsel ? '<div class="dlg-advarsel"><span aria-hidden="true">⚠</span><span class="dlg-advarsel-tekst"></span></div>' : ''}
+      ${sno ? `<div class="dlg-sno${sno.hvem === 'nabo' ? ' nabo' : ''}"><span class="dlg-ansikt">${String(ansikt).replace(/width="\d+" height="\d+"/, 'width="20" height="20"')}</span><span class="dlg-sno-tekst"></span></div>` : ''}
       <div class="op-knapper"><button type="button" class="btn" data-d="nei">${esc(o.avbryt || T('Avbryt', 'Cancel'))}</button>
-      <button type="button" class="btn primary" data-d="ja">${esc(o.ok || 'OK')}</button></div></div>`;
-    lag.querySelector('.dlg-tekst').textContent = tekst;
+      <button type="button" class="btn primary" data-d="ja">${esc(okTekst)}</button></div></div>`;
+    lag.querySelector('.dlg-tekst').textContent = broed;
+    const tEl = lag.querySelector('.dlg-tittel');
+    if (tEl) tEl.textContent = tittel;
+    const uEl = lag.querySelector('.dlg-under');
+    if (uEl && kort) uEl.textContent = [kort.navn, kort.adresse].filter(Boolean).join(' · ');
+    const aEl = lag.querySelector('.dlg-advarsel-tekst');
+    if (aEl) aEl.textContent = kort.advarsel;
+    const sEl = lag.querySelector('.dlg-sno-tekst');
+    if (sEl) sEl.textContent = (sno.hvem === 'nabo' ? '$ ' : '') + T(sno.nb, sno.en);
     const felt = lag.querySelector('.dlg-felt');
     if (felt) felt.value = o.standard || '';
     const forrige = document.activeElement;
@@ -1210,7 +1277,7 @@ function renderSiteWarnings() {
   if (!seksjoner.length || (!apen && S._anKompakt)) { el.hidden = true; el.innerHTML = ''; return; }
   el.hidden = false;
 
-  const ikon = seksjoner.length === 1 && seksjoner[0].nokkel === 'klokke' ? '⏱' : '●';
+  const ikon = seksjoner.length === 1 && seksjoner[0].nokkel === 'klokke' ? '⏱' : '▲';
   const hode = `<button class="warn-head${alvorlige ? ' severe' : ''}" id="warnToggle"
       aria-expanded="${apen}" title="${apen ? T('Skjul detaljer', 'Hide details') : T('Vis detaljer', 'Show details')}">
     <span class="warn-ikon" aria-hidden="true">${ikon}</span>
@@ -4798,6 +4865,7 @@ function commands() {
   add('Handling', 'Spør NABE…', () => { closeCmd(); aapneSpor(); });
   add('Handling', 'Opptak av punkter…', () => { closeCmd(); aapneOpptak(); });
   add('Handling', 'Trafikklogg…', () => { closeCmd(); aapneTrafikk(); });
+  add('Handling', 'Mobil…', () => { closeCmd(); aapneMobil(); });
   add('Handling', 'Modbus…', () => { closeCmd(); aapneModbus(); });
   add('Handling', 'KNX…', () => { closeCmd(); aapneKnx(); });
   add('Handling', 'Skjema: aggregat og varmekurser', () => { closeCmd(); aapneSkjema(); }, {when: harEnhet});
@@ -6459,7 +6527,7 @@ function syncMenuStates() {
   });
   const anyFilter = f.flag || f.writable || f.diff || f.medVerdi;
   $('filtBtn').classList.toggle('has-active', !!anyFilter);
-  $('filtBtn').textContent = anyFilter ? 'Filter •' : 'Filter';
+  $('filtBtn').textContent = anyFilter ? 'Filter ✓' : 'Filter';
 
   $('roBtn').classList.toggle('on', S.readOnly);
   // Every switch shows a word now that the state sits in a pill - an empty
@@ -7627,7 +7695,10 @@ function wireWriteForm(p) {
                             : T('Blir stående til du frigir den.', 'Stays until you release it.')));
     const msg = head + NL + NL + (p.name || p.objid) + NL + S.activeDev.address
               + detail + tail + NL + NL + T('Dette endrer et anlegg i drift. Fortsette?', 'This changes a plant in operation. Continue?');
-    if (!await nabeBekreft(msg)) return;
+    const kortInfo = {art: release ? 'frigi' : 'skriv', navn: p.name || p.objid, adresse: S.activeDev.address, naa: fmtVal(p.value).t, ny: raw,
+      enhet: String(p.unit_symbol || '').trim(), prio: pri, auto: autoMin,
+      advarsel: T('Dette endrer et anlegg i drift.', 'This changes a plant in operation.')};
+    if (!await nabeBekreft(msg, {kort: kortInfo, tittel: release ? T('Frigir prioritet ' + pri, 'Releasing priority ' + pri) : T('Skriver til anlegget', 'Writing to the plant')})) return;
     const r = await api('/api/write', {
       address: S.activeDev.address, objid: p.objid,
       value, priority: pri, release, auto_release_min: autoMin,
@@ -10926,6 +10997,7 @@ const ORDBOK = {
   'Grensevarsler…': 'Limit alerts…',
   'Støttepakke…': 'Support package…',
   'Trafikklogg…': 'Traffic log…',
+  'Mobil…': 'Mobile…',
   'Bytt BACnet-port…': 'Change BACnet port…',
   'Modbus…': 'Modbus…',
   'KNX…': 'KNX…',

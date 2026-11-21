@@ -235,7 +235,7 @@ def t(nb: str, en: str) -> str:
     return en if SPRAAK_VAR.get() == "en" else nb
 
 
-VERSJON = "2.31"
+VERSJON = "2.32"
 app.version = VERSJON
 app.description = ("NABE sitt eget grensesnitt. Det som leser fra anlegget (enheter, punkter, ukeprogram, trend) kan brukes fra Python, Excel eller curl mens NABE kjører. "
                    "Dokumentasjonen (Swagger) laster fra internett.")
@@ -550,6 +550,441 @@ def route(target: str):
             return {"status": "done", "target": first, **e, **ekstra}
     return {"status": "done", "target": first, "ip": ip, "cidr": f"{ip}/32",
             "interface": None, "prefix": 32, **ekstra}
+
+
+# --- Koble direkte: finn enheten på kabelen, foreslå IP i samme nett, husk og angre.
+# Det eneste som endres er PC-ens eget kort, bare på trykk, og Windows ber selv om
+# administrator. NABE skriver ikke til anlegg her. Se lokalnett.py.
+import lokalnett as ln
+
+LOKAL_FIL = DATA_DIR / "lokal.json"
+
+
+class LokalFinnBody(BaseModel):
+    ip: Optional[str] = None
+    sek: float = 3.0
+
+
+class LokalSettBody(BaseModel):
+    kort: str
+    ip: str = ""
+    prefix: int = 24
+    torr: bool = False
+
+
+class LokalTilbakeBody(BaseModel):
+    kort: str
+    torr: bool = False
+
+
+class LokalGlemBody(BaseModel):
+    nett: str
+
+
+@app.get("/api/lokal")
+def lokal_status():
+    kort = ln.kort_liste()
+    d = ln.les(LOKAL_FIL)
+    return {
+        "status": "done", "windows": ln.er_windows(), "admin": ln.er_admin(), "kort": kort,
+        "husket": [dict(v, nett=n) for n, v in sorted(d["husket"].items(), key=lambda x: -x[1].get("sist", 0))],
+        "satt": [dict(v, kort=n) for n, v in ln.staar_fortsatt(d["satt"], kort).items()],
+    }
+
+
+@app.post("/api/lokal/finn")
+def lokal_finn(body: LokalFinnBody):
+    kort = ln.kort_liste()
+    d = ln.les(LOKAL_FIL)
+    rx = None
+    if body.ip:
+        try:
+            hort = [{"ip": str(ipaddress.IPv4Address(body.ip.strip())), "instans": None, "via": None}]
+        except ValueError:
+            return {"status": "error", "error": t("Det er ikke en gyldig IP-adresse.", "That is not a valid IP address.")}
+    else:
+        r = ln.lytt(kort, BACNET_PORT, max(1.0, min(8.0, float(body.sek))))
+        hort, rx = r["hort"], r["rx"]
+    prefix_for = {}
+    for n, v in d["husket"].items():
+        try:
+            net = ipaddress.IPv4Network(n)
+            for h in hort:
+                if ipaddress.IPv4Address(h["ip"]) in net:
+                    prefix_for[h["ip"]] = net.prefixlen
+        except ValueError:
+            continue
+    forslag = ln.lag_forslag(hort, kort, d["husket"], prefix_for, ln.naboer())
+    return {"status": "done", "hort": hort, "forslag": forslag, "rx": rx, "manuell": bool(body.ip),
+            "kort": kort, "windows": ln.er_windows(), "admin": ln.er_admin()}
+
+
+@app.post("/api/lokal/sett")
+def lokal_sett(body: LokalSettBody):
+    kort = ln.kort_liste()
+    feil = ln.valider(body.kort, body.ip, body.prefix, [k["navn"] for k in kort])
+    if feil:
+        return {"status": "error", "error": feil}
+    k = next(x for x in kort if x["navn"] == body.kort)
+    d = ln.les(LOKAL_FIL)
+    gammel = ln.staar_fortsatt(d["satt"], kort).get(body.kort)
+    dhcp = ln.kort_dhcp(body.kort) if not gammel else gammel["for"].get("dhcp")
+    modus = "legg_til" if dhcp is False else "static"
+    fjern = gammel["ip"] if gammel and gammel["ip"] != body.ip else ""
+    skript = ln.bygg_skript(modus, body.kort, body.ip, body.prefix, True, fjern)
+    kommando = ln.kommando_tekst(modus, body.kort, body.ip, body.prefix, True, fjern)
+    if body.torr:
+        return {"status": "done", "torr": True, "modus": modus, "skript": skript, "kommando": kommando, "admin": ln.er_admin()}
+    nett = str(ln.nett_for(body.ip, body.prefix))
+    if any(a["ip"] == body.ip for a in k["adresser"]):
+        return {"status": "done", "allerede": True, "nett": nett, "ip": body.ip}
+    forrige = gammel["for"] if gammel else {"dhcp": dhcp, "adresser": [a for a in k["adresser"] if not ln.er_linklokal(a["ip"])]}
+    r = ln.kjor_skript(skript, DATA_DIR)
+    ok = False
+    for _ in range(24):
+        if any(a["ip"] == body.ip for x in ln.kort_liste() if x["navn"] == body.kort for a in x["adresser"]):
+            ok = True
+            break
+        time.sleep(0.5)
+    if not ok:
+        if r.get("avbrutt"):
+            return {"status": "avbrutt", "error": t("Avbrutt. Ingenting er endret.", "Cancelled. Nothing was changed."), "kommando": kommando}
+        return {"status": "error", "kommando": kommando,
+                "error": r.get("feil") or t("Windows tok ikke imot adressen.", "Windows did not take the address.")}
+    ln.husk(d, nett, body.ip, body.prefix, body.kort)
+    d["satt"][body.kort] = {"ip": body.ip, "prefix": body.prefix, "for": forrige, "modus": modus, "tid": int(time.time())}
+    ln.skriv(LOKAL_FIL, d)
+    return {"status": "done", "nett": nett, "ip": body.ip, "kort": body.kort, "modus": modus}
+
+
+@app.post("/api/lokal/tilbake")
+def lokal_tilbake(body: LokalTilbakeBody):
+    kort = ln.kort_liste()
+    d = ln.les(LOKAL_FIL)
+    s = ln.staar_fortsatt(d["satt"], kort).get(body.kort)
+    if not s:
+        d["satt"].pop(body.kort, None)
+        ln.skriv(LOKAL_FIL, d)
+        return {"status": "done", "ingenting": True}
+    for_dhcp = s["for"].get("dhcp") is not False
+    skript = ln.bygg_skript("tilbake", body.kort, s["ip"], s.get("prefix", 24), for_dhcp)
+    kommando = ln.kommando_tekst("tilbake", body.kort, s["ip"], s.get("prefix", 24), for_dhcp)
+    if body.torr:
+        return {"status": "done", "torr": True, "skript": skript, "kommando": kommando}
+    r = ln.kjor_skript(skript, DATA_DIR)
+    borte = False
+    for _ in range(24):
+        if not any(a["ip"] == s["ip"] for x in ln.kort_liste() if x["navn"] == body.kort for a in x["adresser"]):
+            borte = True
+            break
+        time.sleep(0.5)
+    if not borte:
+        if r.get("avbrutt"):
+            return {"status": "avbrutt", "error": t("Avbrutt. Ingenting er endret.", "Cancelled. Nothing was changed."), "kommando": kommando}
+        return {"status": "error", "kommando": kommando, "error": r.get("feil") or t("Adressen ligger fortsatt på kortet.", "The address is still on the adapter.")}
+    d["satt"].pop(body.kort, None)
+    ln.skriv(LOKAL_FIL, d)
+    return {"status": "done", "kort": body.kort, "dhcp": for_dhcp}
+
+
+@app.post("/api/lokal/glem")
+def lokal_glem(body: LokalGlemBody):
+    d = ln.les(LOKAL_FIL)
+    d["husket"].pop(body.nett, None)
+    ln.skriv(LOKAL_FIL, d)
+    return {"status": "done"}
+
+
+# --- Mobiltilgang: telefonen snakker med NABE på en egen port (nabe_mobil.py).
+# Disse rutene styrer porten og er bare for denne PC-en; telefonen når dem aldri.
+import nabe_mobil as nmo
+import nabe_svar as nsv
+nmo.PAR_FIL = DATA_DIR / "mobil_par.json"
+
+
+class MobilSkrivBody(BaseModel):
+    tillat: bool
+
+
+class MobilMaksBody(BaseModel):
+    min: float
+
+
+class MobilKastBody(BaseModel):
+    id: str
+
+
+@app.get("/api/mobil")
+def mobil_status():
+    return nmo.status()
+
+
+@app.post("/api/mobil/start")
+def mobil_start(request: Request):
+    return nmo.start(request.url.port or 8092)
+
+
+@app.post("/api/mobil/stopp")
+def mobil_stopp():
+    return nmo.stopp()
+
+
+@app.post("/api/mobil/skriv")
+def mobil_skriv(body: MobilSkrivBody):
+    nmo.M["skriv"] = bool(body.tillat)
+    nmo.logg("pc", "Skriving fra mobil slått " + ("på" if body.tillat else "av"))
+    return nmo.status()
+
+
+@app.post("/api/mobil/maks")
+def mobil_maks(body: MobilMaksBody):
+    nmo.M["maks_min"] = max(0.5, min(60.0, float(body.min)))
+    return nmo.status()
+
+
+@app.post("/api/mobil/ny-kode")
+def mobil_ny_kode():
+    if nmo.M["server"]:
+        nmo.M["kode"], nmo.M["kode_til"] = nmo.ny_kode(), time.time() + nmo.KODE_LEVETID
+    return nmo.status()
+
+
+@app.post("/api/mobil/kast")
+def mobil_kast(body: MobilKastBody):
+    nmo.kast_telefon(body.id)
+    return nmo.status()
+
+
+class MobilParBody(BaseModel):
+    id: str
+
+
+@app.post("/api/mobil/par")
+def mobil_par(body: MobilParBody):
+    """Husk telefonen bak en innlogget økt, så den kjennes igjen på hotspotet neste gang."""
+    r = nmo.par_ny(body.id)
+    if not r["ok"]:
+        return {"status": "error", "error": r["feil"]}
+    return nmo.status()
+
+
+@app.post("/api/mobil/par/glem")
+def mobil_par_glem(body: MobilParBody):
+    nmo.par_glem(body.id)
+    return nmo.status()
+
+
+@app.post("/api/mobil/par/lan")
+def mobil_par_lan(body: MobilSkrivBody):
+    nmo.par_lan(bool(body.tillat))
+    return nmo.status()
+
+
+@app.post("/api/mobil/brannmur")
+def mobil_brannmur():
+    """Åpner porten i brannmuren, bare for det lokale nettet. Windows ber om administrator."""
+    r = ln.kjor_skript(nmo.brannmur_skript(nmo.M["port"]), DATA_DIR)
+    nmo.M["brannmur"] = (0.0, True if r.get("ok") else None)
+    if not r.get("ok"):
+        return {"status": "avbrutt" if r.get("avbrutt") else "error", "error": r.get("feil") or t("Avbrutt.", "Cancelled.")}
+    return nmo.status()
+
+
+@app.post("/api/mobil/hotspot")
+def mobil_hotspot():
+    """Åpner Windows' innstillinger for mobilt hotspot."""
+    try:
+        os.startfile("ms-settings:network-mobilehotspot")  # type: ignore[attr-defined]
+    except Exception as e:
+        return {"status": "error", "error": str(e)}
+    return {"status": "done"}
+
+
+class HotspotBody(BaseModel):
+    torr: bool = False
+
+
+def _hotspot_svar(r: Dict[str, Any]) -> Dict[str, Any]:
+    if r.get("ok"):
+        return {"status": "done", "torr": bool(r.get("torr")), "paa": bool(r.get("paa")), "kilde": r.get("kilde"),
+                "kandidater": r.get("kandidater"), "mobil": nmo.status()}
+    nb, en = nmo.hotspot_feiltekst(r)
+    return {"status": "error", "error": t(nb, en), "kode": r.get("status")}
+
+
+@app.post("/api/mobil/hotspot/paa")
+def mobil_hotspot_paa(body: HotspotBody):
+    """Slår på Windows' mobile hotspot, som bryteren i innstillingene. Bare PC-ens eget nett endres."""
+    return _hotspot_svar(nmo.hotspot_sett(True, body.torr))
+
+
+@app.post("/api/mobil/hotspot/av")
+def mobil_hotspot_av(body: HotspotBody):
+    return _hotspot_svar(nmo.hotspot_sett(False, body.torr))
+
+
+# --- Prøv og se svar: pådrag i trinn, måleverdi lest hvert sekund, tall ut (nabe_svar.py).
+# Skriver til anlegget, så det går alltid via write() (lesemodus, logg, automatisk slipp)
+# og pådraget slippes alltid til slutt, også ved feil og avbrudd.
+SVARTEST: Dict[str, Dict[str, Any]] = {}
+
+
+class SvarBody(BaseModel):
+    address: str
+    padrag: str
+    maaling: str
+    maaling_address: Optional[str] = None
+    trinn: List[float] = [0, 50, 100]
+    pause_s: float = 30
+    prioritet: int = 8
+    baseline_s: int = 6
+
+
+def _tall(x: Any) -> Optional[float]:
+    try:
+        return float(x)
+    except (TypeError, ValueError):
+        return None
+
+
+async def _svar_kjor(sid: str, b: SvarBody) -> None:
+    st = SVARTEST[sid]
+    start = time.time()
+    maal_adr = b.maaling_address or b.address
+
+    async def les(adresse: str, objid: str) -> Optional[float]:
+        app_ = await _app_for(adresse)
+        if app_ is None:
+            return None
+        try:
+            return _tall(bc.serialize(await asyncio.wait_for(
+                app_.read_property(device_address(adresse), objid, "present-value"), timeout=4)))
+        except Exception:
+            return None
+
+    def rel() -> float:
+        return round(time.time() - start, 1)
+
+    async def vent_til(t_mal: float) -> None:
+        d = t_mal - time.time()
+        if d > 0:
+            await asyncio.sleep(d)
+
+    skrevet = False
+    try:
+        st["fase"] = "hvile"
+        st["padrag_for"] = await les(b.address, b.padrag)
+        baseline: List[float] = []
+        for _ in range(max(0, b.baseline_s)):
+            t_neste = time.time() + 1.0
+            v = await les(maal_adr, b.maaling)
+            if v is not None:
+                baseline.append(v)
+                st["serie"].append({"t": rel(), "v": v, "trinn": -1})
+            if st["avbryt"]:
+                raise asyncio.CancelledError()
+            await vent_til(t_neste)
+        sd = nsv.stoy(baseline)
+        st["stoy"] = round(sd, 4)
+        siste_v = baseline[-3:] if baseline else []
+        v0 = nsv.snitt(siste_v) if siste_v else None
+        fra = st["padrag_for"] if st["padrag_for"] is not None else 0.0
+        samlet_min = (len(b.trinn) * (b.pause_s + 2) + 20) / 60.0 + 1.0
+        for i, trinn in enumerate(b.trinn):
+            st["fase"] = "trinn"
+            st["trinn_i"] = i
+            r = await write(WriteBody(address=b.address, objid=b.padrag, value=trinn, priority=b.prioritet,
+                                      auto_release_min=samlet_min))
+            skrevet = True
+            if r.get("status") != "done":
+                raise RuntimeError(r.get("error") or t("Skrivingen ble avvist.", "The write was refused."))
+            t0 = time.time()
+            serie: List[Any] = []
+            while time.time() - t0 < b.pause_s:
+                t_neste = time.time() + 1.0
+                v = await les(maal_adr, b.maaling)
+                serie.append((round(time.time() - t0, 1), v))
+                st["serie"].append({"t": rel(), "v": v, "trinn": i})
+                if st["avbryt"]:
+                    raise asyncio.CancelledError()
+                await vent_til(t_neste)
+            if v0 is None:
+                v0 = next((v for _, v in serie if v is not None), 0.0)
+            steg = nsv.analyser_steg(v0, serie, fra, trinn, sd)
+            steg["i"] = i
+            st["steg"].append(steg)
+            if steg["slutt"] is not None:
+                v0 = steg["slutt"]
+            fra = trinn
+        st["resultat"] = nsv.oppsummer(st["steg"], b.pause_s)
+        st["status"] = "ferdig"
+    except asyncio.CancelledError:
+        st["status"] = "avbrutt"
+        if st["steg"]:
+            st["resultat"] = nsv.oppsummer(st["steg"], b.pause_s)
+    except Exception as e:
+        st["status"] = "feil"
+        st["feil"] = str(e)
+    finally:
+        st["fase"] = "slipper"
+        if skrevet:
+            for _ in range(3):
+                try:
+                    r = await write(WriteBody(address=b.address, objid=b.padrag, release=True, priority=b.prioritet))
+                    if r.get("status") == "done":
+                        st["sluppet"] = True
+                        break
+                except Exception:
+                    pass
+                await asyncio.sleep(1)
+        else:
+            st["sluppet"] = True
+        st["fase"] = "ferdig"
+        st["slutt_t"] = time.time()
+
+
+@app.post("/api/test/svar")
+async def svar_start(body: SvarBody):
+    if state["read_only"]:
+        return {"status": "error", "error": t("Lesemodus er på - skriving er blokkert.", "Read-only is on - writing is blocked.")}
+    if not body.padrag.startswith(("analog-output,", "analog-value,")):
+        return {"status": "error", "error": t("Bare analoge pådrag kan prøves.", "Only analog outputs can be tried.")}
+    if not body.maaling.startswith(("analog-input,", "analog-value,", "analog-output,")):
+        return {"status": "error", "error": t("Måleverdien må være et analogt punkt.", "The measurement must be an analog point.")}
+    if any(s["status"] == "kjorer" for s in SVARTEST.values()):
+        return {"status": "error", "error": t("En test kjører allerede.", "A test is already running.")}
+    if not (1 <= len(body.trinn) <= 8) or not (5 <= body.pause_s <= 300):
+        return {"status": "error", "error": t("Mellom 1 og 8 trinn, og 5 til 300 s pause.", "1 to 8 steps and a 5 to 300 s pause.")}
+    for gammel in sorted(SVARTEST, key=lambda k: SVARTEST[k]["start"])[:-9]:
+        SVARTEST.pop(gammel, None)
+    sid = hashlib.sha1(f"{time.time()}{body.padrag}".encode()).hexdigest()[:10]
+    SVARTEST[sid] = {"id": sid, "status": "kjorer", "fase": "hvile", "start": time.time(), "serie": [], "steg": [],
+                     "trinn": body.trinn, "pause_s": body.pause_s, "padrag": body.padrag, "maaling": body.maaling,
+                     "address": body.address, "trinn_i": -1, "avbryt": False, "sluppet": False,
+                     "padrag_for": None, "resultat": None, "feil": None}
+    SVARTEST[sid]["task"] = asyncio.create_task(_svar_kjor(sid, body))
+    return {"status": "started", "id": sid}
+
+
+def _svar_pub(s: Dict[str, Any]) -> Dict[str, Any]:
+    return {k: v for k, v in s.items() if k not in ("task",)}
+
+
+@app.get("/api/test/svar/{sid}")
+def svar_status(sid: str):
+    s = SVARTEST.get(sid)
+    if not s:
+        return {"status": "error", "error": t("Ukjent test.", "Unknown test.")}
+    return {"status": "done", "test": _svar_pub(s), "naa": time.time()}
+
+
+@app.post("/api/test/svar/{sid}/avbryt")
+def svar_avbryt(sid: str):
+    s = SVARTEST.get(sid)
+    if not s:
+        return {"status": "error", "error": t("Ukjent test.", "Unknown test.")}
+    s["avbryt"] = True
+    return {"status": "done"}
 
 
 _RUTE_LINJE = re.compile(
@@ -3110,6 +3545,31 @@ async def device_schedules(body: SchedBody):
     return {"status": "done", "schedules": items, "trend_logs": trends}
 
 
+class AlarmveiBody(BaseModel):
+    address: str
+    device_instance: int
+    punkter: bool = True
+
+
+@app.post("/api/device/alarmvei")
+async def device_alarmvei(body: AlarmveiBody):
+    """Who an alarm in this device would reach: its notification classes and their recipients, and which points and
+    event enrollments report through which class. Read only."""
+    bacnet_app = await _app_for(body.address)
+    if bacnet_app is None:
+        return {"status": "error", "error": t("Proxy er ikke startet.", "Not connected.")}
+    addr = device_address(body.address)
+    try:
+        objids = await bc.read_object_list(bacnet_app, addr, f"device,{body.device_instance}")
+        klasser = [o for o in objids if o.startswith("notification-class,")]
+        innm = [o for o in objids if o.startswith("event-enrollment,")]
+        kilder = [o for o in objids if o.split(",")[0] in bc.ALARM_KILDER_TYPER] if body.punkter else []
+        d = await bc.read_alarmvei(bacnet_app, addr, klasser, innm, kilder)
+    except COMM_ERRORS as e:
+        return {"status": "error", "error": str(e)}
+    return {"status": "done", "punkter_lest": bool(body.punkter), "antall_objekter": len(objids), **d}
+
+
 @app.post("/api/object/trendlog")
 async def object_trendlog(body: TrendBody):
     bacnet_app = await _app_for(body.address)
@@ -5354,8 +5814,16 @@ async def sim_slett(body: SimSlett):
     f = _sim_fil(body.fil)
     if f is None or (_sim_kjorer() and SIM["fil"] == body.fil):
         return {"status": "error", "error": t("Kan ikke slette den", "Cannot delete it")}
+    # A simulator that has just stopped may still hold its log for a moment on Windows: ask again before giving up
     for ext in (".json", ".klar", ".log"):
-        f.with_suffix(ext).unlink(missing_ok=True)
+        for forsok in range(6):
+            try:
+                f.with_suffix(ext).unlink(missing_ok=True)
+                break
+            except OSError as e:
+                if forsok == 5:
+                    return {"status": "error", "error": str(e)}
+                await asyncio.sleep(0.3)
     return {"status": "done"}
 
 

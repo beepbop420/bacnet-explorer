@@ -131,7 +131,7 @@ function tegnVei() {
     const chips = vis.map(k => {
       const tips = [k.local_address, k.primary ? T('hovedkort', 'main adapter') : '', ms[k.ip] >= 300 ? T('treg lenke', 'slow link') : '', k.enheter ? `${k.enheter} ${T('enheter', 'devices')}` : '',
                     k.ip === (SK.rute && SK.rute.ip) ? T('området i feltet går hit', 'the range in the field goes here') : ''].filter(Boolean).join(' · ');
-      return `<button type="button" class="kort-brikke${k.primary ? ' hoved' : ''}${k.ip === (SK.rute && SK.rute.ip) ? ' rute' : ''}${ms[k.ip] >= 300 ? ' treg' : ''}" data-ip="${esc(k.ip)}" title="${esc(tips)}"><i></i><span>${esc(k.interface || k.ip)}</span>${ms[k.ip] ? `<em>${ms[k.ip]} ms</em>` : ''}</button>`;
+      return `<button type="button" class="kort-brikke${k.primary ? ' hoved' : ''}${k.ip === (SK.rute && SK.rute.ip) ? ' rute' : ''}${ms[k.ip] >= 300 ? ' treg' : ''}" data-ip="${esc(k.ip)}" title="${esc(tips)}"><span>${esc(k.interface || k.ip)}</span>${ms[k.ip] ? `<em>${ms[k.ip]} ms</em>` : ''}</button>`;
     }).join('');
     const rest = skjult ? `<span class="kort-rest" title="${esc(aktive.filter(k => !vis.includes(k)).map(k => k.interface || k.ip).join(', ') + ': ' + T('åpent, ingen enheter', 'open, no devices'))}">+${skjult}</span>` : '';
     el.innerHTML = `<div class="kort-rad">${chips}${rest}<span class="vei-tekst">${esc(mtekst)}${las ? ` · ${T('låst', 'locked')}` : ''}</span>
@@ -299,7 +299,7 @@ function byggRader() {
 function radHtml(r, i) {
   const valgt = i === SK.valgt ? ' valgt' : '';
   if (r.type === 'nabo') return `<button type="button" class="an-rad${valgt}" data-i="${i}" role="option">
-      <span class="prikk ok"></span><span class="an-navn"><span class="an-tittel">NABO</span>
+      <span class="an-navn"><span class="an-tittel">NABO</span>
       <span class="an-under">${T('bor ved siden av · åpner NABO', 'lives next door · opens NABO')}</span></span><span class="an-ip">127.0.0.1</span></button>`;
   if (r.type === 'tips') return `<div class="an-tips">${T(
       'Skriv en IP, et område (10.1.2.0/24, 10.1.2.10-40) eller navnet på et anlegg. ↓ velger, Enter skanner, Esc stopper, Ctrl+L hopper hit.',
@@ -308,7 +308,7 @@ function radHtml(r, i) {
       `Ingen anlegg heter «${esc(r.q)}». Skriv en IP for et nytt.`,
       `No site called "${esc(r.q)}". Type an IP for a new one.`)}</div>`;
   if (r.type === 'rute') return `<button type="button" class="an-rad${valgt}" data-i="${i}" role="option">
-      <span class="prikk ok"></span><span class="an-navn"><span class="an-tittel mono">${esc(r.r.cidr)}</span>
+      <span class="an-navn"><span class="an-tittel mono">${esc(r.r.cidr)}</span>
       <span class="an-under">${r.r.egen ? T('eget nett · ikke skannet før', 'own subnet · not scanned yet')
         : T('rute gjennom kortet · ikke skannet før', 'routed through the adapter · not scanned yet')}</span></span></button>`;
   const a = r.a;
@@ -320,7 +320,6 @@ function radHtml(r, i) {
   const tittel = n ? T(`Nåbar via ${n.interface} ${n.ip}`, `Reachable via ${n.interface} ${n.ip}`)
     : T('Ingen kabel eller VPN går dit nå', 'No cable or VPN goes there right now');
   return `<button type="button" class="an-rad${valgt}${n ? '' : ' av'}${SK.naabar.get(a.key) === 'ny' ? ' ny-naabar' : ''}" data-i="${i}" role="option" title="${esc(tittel)}">
-      <span class="prikk${n ? ' ok' : ''}"></span>
       <span class="an-navn"><span class="an-tittel">${esc(a.navn || a.key)}</span><span class="an-under">${deler.join(' · ')}</span></span>
       ${a.navn ? `<span class="an-ip">${esc(a.key.split(' ')[0])}${a.key.includes(' ') ? ' …' : ''}</span>` : ''}</button>`;
 }

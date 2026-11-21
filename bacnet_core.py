@@ -971,6 +971,66 @@ async def read_schedules(app, addr: Address, objids: Sequence[str],
     return out
 
 
+# Where an alarm goes. Everything here is read, nothing is written. A notification class is the list of who gets told;
+# a point with intrinsic reporting (or an event enrollment) names the class it reports through. The two must meet,
+# and the class must have somebody in it, or the alarm is raised and heard by no one.
+ALARM_KILDER_TYPER = ("analog-input", "analog-output", "analog-value", "binary-input", "binary-output", "binary-value",
+                      "multi-state-input", "multi-state-output", "multi-state-value")
+
+
+def _mottaker(d: Any) -> Dict[str, Any]:
+    """One entry of a recipient-list as plain values. Read defensively: devices and bacpypes3 versions differ."""
+    r = getattr(d, "recipient", None)
+    dev = getattr(r, "device", None) if r is not None else None
+    adr = getattr(r, "address", None) if r is not None else None
+    ut: Dict[str, Any] = {"enhet": None, "adresse": None, "overganger": [], "bekreftet": None}
+    if dev is not None:
+        ut["enhet"] = objid_str(dev)
+    elif adr is not None:
+        ut["adresse"] = str(adr)
+    elif r is not None:
+        ut["adresse"] = str(r)
+    ut["overganger"] = serialize(getattr(d, "transitions", None)) or []
+    ic = getattr(d, "issueConfirmedNotifications", None)
+    ut["bekreftet"] = None if ic is None else bool(ic)
+    return ut
+
+
+async def read_alarmvei(app, addr: Address, klasser: Sequence[str], innmeldinger: Sequence[str],
+                        kilder: Sequence[str], timeout: float = 8.0) -> Dict[str, Any]:
+    out: Dict[str, Any] = {"klasser": [], "innmeldinger": [], "kilder": {}}
+    for objid in klasser:
+        k: Dict[str, Any] = {"objid": objid, "navn": None, "nummer": None, "mottakere": None}
+        for prop, key in (("object-name", "navn"), ("notification-class", "nummer")):
+            try:
+                k[key] = serialize(await asyncio.wait_for(app.read_property(addr, objid, prop), timeout=timeout))
+            except COMM_ERRORS:
+                pass
+        try:
+            rl = await asyncio.wait_for(app.read_property(addr, objid, "recipient-list"), timeout=timeout)
+            k["mottakere"] = [_mottaker(d) for d in (rl or [])]
+        except COMM_ERRORS:
+            k["mottakere"] = None            # not read is not the same as empty
+        out["klasser"].append(k)
+    props = ["object-name", "notification-class", "event-enable", "event-state"]
+    if innmeldinger:
+        data = await read_objects_bulk(app, addr, list(innmeldinger), props=["object-name", "notification-class", "event-state"], use_caps=False)
+        for oid, v in data.items():
+            nr = v.get("notification-class")
+            out["innmeldinger"].append({"objid": oid, "navn": serialize(v.get("object-name")),
+                                        "nummer": None if nr is None or is_error(nr) else serialize(nr)})
+    if kilder:
+        data = await read_objects_bulk(app, addr, list(kilder), props=props, use_caps=False)
+        for oid, v in data.items():
+            nr = v.get("notification-class")
+            if nr is None or is_error(nr):
+                continue                     # no intrinsic reporting on this one
+            ee = v.get("event-enable")
+            out["kilder"][oid] = {"navn": serialize(v.get("object-name")), "nummer": serialize(nr),
+                                  "paa": None if ee is None or is_error(ee) else serialize(ee)}
+    return out
+
+
 _MND = {"jan":1,"feb":2,"mar":3,"apr":4,"may":5,"jun":6,
         "jul":7,"aug":8,"sep":9,"oct":10,"nov":11,"dec":12}
 

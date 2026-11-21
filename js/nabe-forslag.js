@@ -238,6 +238,8 @@
 
     // The user's own rules, and what is wrong with the file
     for (const p of data.egne || []) legg(p);
+    // Alarms that go nowhere: built from what the devices said about their notification classes (nabe-alarmvei.js)
+    for (const p of data.alarmvei || []) legg(p);
     const rf = data.regelfeil || [];
     legg({id: 'regelfeil', prio: 2,
       tittel: T(`${rf.length} feil i regelfila`, `${rf.length} ${rf.length === 1 ? 'mistake' : 'mistakes'} in the rules file`),
@@ -312,12 +314,17 @@
   const verdiTekst = (p) => `${fmtVal(p.value).t}${p.unit_symbol ? ' ' + p.unit_symbol : ''}`;
   /* What the server has counted for the pinned points, the rules file and the storm state: asked together, and
      none of them is allowed to hold the list back for more than a moment. */
-  let DRIFT_LYTTER = false;
+  let DRIFT_LYTTER = false, ALARM_LYTTER = false;
   async function hentEkstra() {
     const frist = (p, ms = 2500) => Promise.race([p, new Promise((ok) => setTimeout(() => ok(null), ms))]);
     // The schedules take longest to read: the list is drawn again when they are in, if the window is still open
     if (window.nabeDrift && !DRIFT_LYTTER) { DRIFT_LYTTER = true; window.nabeDrift.pa(() => { if (!lag.hidden) tegn(); }); }
     const vakt = async () => { try { const d = await (await fetch('/api/vakt', {cache: 'no-store'})).json(); return d && d.status === 'done' ? d : null; } catch { return null; } };
+    // The alarm routes are asked for in the background (the scan starts it too); the list is drawn again as the answers come in
+    if (window.nabeAlarmvei) {
+      if (!ALARM_LYTTER) { ALARM_LYTTER = true; window.nabeAlarmvei.pa(() => { if (!lag.hidden) tegn(); }); }
+      window.nabeAlarmvei.kontroller();
+    }
     // How long the overridden points have been so, from the visits NABE kept
     const alder = async () => { try { const d = await (await fetch('/api/besok/overstyrt?key=' + encodeURIComponent(asNokkel()), {cache: 'no-store'})).json(); return d && d.status === 'done' ? d : null; } catch { return null; } };
     const [v, al] = await Promise.all([frist(vakt()), frist(alder()),
@@ -360,7 +367,8 @@
     }
     const N = window.nabeNett;
     const rutere = Array.isArray(S.rutere) ? S.rutere : [];
-    return {overAlder: ekstra.overAlder || {}, overBesok: ekstra.overBesok || 0, devices: S.devices, cache: S.cache, failed: PRE.failed, varsler, avvik, urimelig, flate, sykluser, virkning, virkningTips, egne, driftstid, dode,
+    const alarmvei = window.nabeAlarmvei ? window.nabeAlarmvei.poster(S.devices, window.nabeLaer ? window.nabeLaer.skjult : null) : [];
+    return {alarmvei, overAlder: ekstra.overAlder || {}, overBesok: ekstra.overBesok || 0, devices: S.devices, cache: S.cache, failed: PRE.failed, varsler, avvik, urimelig, flate, sykluser, virkning, virkningTips, egne, driftstid, dode,
       regelfeil: R ? R.feil : [],
       storm: window.nabeStorm ? {aktiv: window.nabeStorm.siste().aktiv || [], ferdige: window.nabeStorm.ferdige()} : {aktiv: [], ferdige: []},
       tips: sykluser.length ? [] : tips.slice(0, 30),
@@ -376,7 +384,7 @@
     const Lr = window.nabeLaer, kanLaere = !!Lr && Lr.laerbar(p.id) && !p.egen;
     const GR = kanLaere ? Lr.grunner() : {};
     const raderHtml = vis.map((r, i) => {
-      const rad = `<button type="button" class="fo-rad${r.lang ? ' lang' : ''}" data-ip="${esc(r.ip)}" data-o="${esc(r.objid)}">
+      const rad = `<button type="button" class="fo-rad${r.lang ? ' lang' : ''}" data-ip="${esc(r.ip)}" data-o="${esc(r.objid)}" title="${esc(r.tekst)}">
         <b>${esc(r.navn)}</b>${r.tekst ? `<span>${esc(r.tekst)}</span>` : ''}</button>`;
       if (!kanLaere || !r.ip) return rad;
       const n = (r.pts || []).length;
@@ -394,7 +402,7 @@
       <button type="button" data-fo="monster-nei" data-id="${esc(p.id)}" data-ord="${esc(m.ord)}">${T('Nei', 'No')}</button></div>` : '';
     // The user's own rules and what is wrong with their file are written by them (or already in the right language): the language sweep leaves them alone
     return `<section class="fo-post p${p.prio}${p.egen || p.id === 'regelfeil' ? ' egen' : ''}">
-      <div class="fo-tittel"><span class="fo-prikk" aria-hidden="true"></span>${esc(p.tittel)}${p.kom ? `<span class="fo-ny">${p.kom === 'nye' ? T(`${p.nyeAntall} nye`, `${p.nyeAntall} new`) : T('tilbake', 'back')}</span>` : ''}</div>
+      <div class="fo-tittel"><span class="fo-prio">${T('Prio', 'Prio')} ${p.prio}</span>${esc(p.tittel)}${p.kom ? `<span class="fo-ny">${p.kom === 'nye' ? T(`${p.nyeAntall} nye`, `${p.nyeAntall} new`) : T('tilbake', 'back')}</span>` : ''}</div>
       <div class="fo-hvorfor">${esc(p.hvorfor)}</div>
       <ul class="fo-sjekk">${p.sjekk.map((s) => `<li>${esc(s)}</li>`).join('')}</ul>
       <div class="fo-rader">${raderHtml}
@@ -442,7 +450,7 @@
     }
     const urTekst = r.ur && r.ur.totalt ? T(` Ukeprogram lest på ${r.ur.lest} av ${r.ur.totalt} enheter som har ur.`, ` Schedules read on ${r.ur.lest} of ${r.ur.totalt} devices that have them.`) : '';
     const laertTekst = r.laert ? T(` ${r.laert} ${r.laert === 1 ? 'punkt er' : 'punkter er'} holdt utenfor etter dine valg.`, ` ${r.laert} ${r.laert === 1 ? 'point is' : 'points are'} left out by your choices.`) : '';
-    const grunnlag = r.totalt ? `<div class="fo-grunnlag">${T(`Bygger på ${r.lest} av ${r.totalt} enheter som er lest.`, `Based on ${r.lest} of ${r.totalt} devices read.`)}${urTekst}${laertTekst}</div>` : '';
+    const grunnlag = r.totalt ? `<div class="fo-grunnlag">${T(`Bygger på ${r.lest} av ${r.totalt} enheter som er lest.`, `Based on ${r.lest} of ${r.totalt} devices read.`)}${urTekst}${window.nabeAlarmvei ? window.nabeAlarmvei.grunnlag() : ''}${laertTekst}</div>` : '';
     const RG = window.nabeRegler ? window.nabeRegler.siste() : null;
     const fot = window.nabeRegler ? `<div class="fo-fot"><span>${RG && RG.finnes ? T(`Egne regler: ${RG.regler.length} av ${RG.antall} i bruk`, `Own rules: ${RG.regler.length} of ${RG.antall} in use`) : T('Egne regler: ingen fil ennå', 'Own rules: no file yet')}</span>
       <span class="fo-fot-k"><button type="button" class="btn" data-fo="regler-aapne" title="${esc(T('Åpner fila i Notisblokk. Finnes den ikke, lages en mal med eksempler.', 'Opens the file in Notepad. If there is none, a template with examples is made.'))}">${T('Åpne regelfila', 'Open the rules file')}</button>
