@@ -206,6 +206,10 @@ const FAKTA = [
   ['COV betyr at regulatoren sier fra selv. Mindre spørring, mer ro.', 'COV means the controller speaks up itself. Less asking, more peace.'],
 ];
 const NYTT = {
+  '2.34': [
+    ['Raskere start: skript og stilark hentes bare én gang per versjon i stedet for å spørres om 67 ganger ved hver åpning. En vanlig åpning er ferdig lastet på ca. 0,4 sekunder mot 0,9. Utseendet er det samme, og en oppdatering gir nye adresser, så du får aldri en blanding av gammelt og nytt', 'Faster start: scripts and style sheets are fetched once per version instead of being asked about 67 times at every opening. A normal opening is fully loaded in about 0.4 seconds instead of 0.9. The look is the same, and an update gives new addresses, so you never get a mix of old and new'],
+    ['Store punktlister fylles ca. 35 % raskere: 5000 punkter er komplette på 1,1 sekunder mot 1,7, uten at noe vises annerledes', 'Large point lists fill about 35 % faster: 5000 points are complete in 1.1 seconds instead of 1.7, without anything looking different'],
+  ],
   '2.33': [
     ['Test oppsettet: i Mobil-dialogen sjekker NABE kabel, om porten svarer på PC-ens adresser, brannmur, hotspot og telefonoppslag, og sier hva du kan gjøre med hver linje. Listen kan kopieres som melding', 'Check the setup: in the Mobile dialog NABE checks the cable, whether the port answers on the PC addresses, the firewall, the hotspot and phone lookup, and says what you can do about each line. The list can be copied as a message'],
     ['Mobilsiden tåler å miste kontakten: den sier fra, prøver igjen av seg selv og sier at det du har satt slippes uansett. Skjermen holdes våken mens en test går eller noe står overstyrt, og telefonen vibrerer ulikt for skrevet, ferdig og feil', 'The mobile page copes with losing contact: it says so, retries by itself and says that what you set is released anyway. The screen stays awake while a test runs or something is overridden, and the phone vibrates differently for written, done and failed'],

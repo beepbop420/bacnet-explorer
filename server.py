@@ -235,7 +235,7 @@ def t(nb: str, en: str) -> str:
     return en if SPRAAK_VAR.get() == "en" else nb
 
 
-VERSJON = "2.33"
+VERSJON = "2.34"
 app.version = VERSJON
 app.description = ("NABE sitt eget grensesnitt. Det som leser fra anlegget (enheter, punkter, ukeprogram, trend) kan brukes fra Python, Excel eller curl mens NABE kjører. "
                    "Dokumentasjonen (Swagger) laster fra internett.")
@@ -8104,6 +8104,12 @@ def _statisk(request: Request, fil: Path, media: Optional[str] = None):
     except OSError:
         return JSONResponse({"detail": "Not Found"}, status_code=404)
     h = {"Cache-Control": "no-cache", "ETag": f'"{st.st_mtime_ns:x}-{st.st_size:x}"'}
+    # A file asked for with the version the page was built with can never be a different file under that name: the page itself is
+    # checked on every load and carries the current version, so an update in place gives new addresses. Then the browser need not
+    # ask at all, which is 67 questions fewer at every start.
+    v = request.query_params.get("v")
+    if v and v == _asset_versjon(fil):
+        h["Cache-Control"] = "public, max-age=31536000, immutable"
     if request.headers.get("if-none-match") == h["ETag"]:
         return Response(status_code=304, headers=h)
     # Packed once per version of the file and kept, instead of being packed at the highest level on every request on the event loop
@@ -8122,9 +8128,38 @@ def _statisk(request: Request, fil: Path, media: Optional[str] = None):
     return FileResponse(fil, media_type=media, headers=h)
 
 
+_ASSET_RE = re.compile(r'((?:src|href)=")(/(?:app\.js|nabe\.css|js/[a-z0-9-]+\.js))(")')
+
+
+def _asset_versjon(fil: Path) -> str:
+    try:
+        st = fil.stat()
+    except OSError:
+        return ""
+    return hashlib.sha1(f"{st.st_mtime_ns}-{st.st_size}".encode()).hexdigest()[:10]
+
+
 @app.get("/")
 def index(request: Request):
-    return _statisk(request, Path(__file__).parent / "index.html", "text/html")
+    """The page, with the version of every script and style sheet it loads written into the addresses. The page itself is checked on
+    every load; what it points to is then fetched once per version and kept."""
+    fil = Path(__file__).parent / "index.html"
+    try:
+        tekst = fil.read_text(encoding="utf-8")
+    except OSError:
+        return JSONResponse({"detail": "Not Found"}, status_code=404)
+    rot = fil.parent
+    tekst = _ASSET_RE.sub(lambda m: f"{m.group(1)}{m.group(2)}?v={_asset_versjon(rot / m.group(2).lstrip('/'))}{m.group(3)}", tekst)
+    h = {"Cache-Control": "no-cache", "ETag": '"' + hashlib.sha1(tekst.encode()).hexdigest()[:20] + '"'}
+    if request.headers.get("if-none-match") == h["ETag"]:
+        return Response(status_code=304, headers=h)
+    if "gzip" in request.headers.get("accept-encoding", ""):
+        gz = _STATISK_GZ.get(h["ETag"])
+        if gz is None:
+            import gzip as _gzip
+            gz = _STATISK_GZ[h["ETag"]] = _gzip.compress(tekst.encode(), 6)
+        return Response(content=gz, media_type="text/html", headers={**h, "Content-Encoding": "gzip", "Vary": "Accept-Encoding"})
+    return Response(content=tekst, media_type="text/html", headers=h)
 
 
 @app.get("/js/{navn}.js")

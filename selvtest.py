@@ -2109,6 +2109,35 @@ def redigering():
     sjekk("knx: redigeringen skrev ingenting til bussen", KXSIM.writes_received == [])
 
 
+def statiske_filer():
+    """Siden sjekkes ved hver lasting, men filene den peker på hentes bare én gang per versjon: adressene bærer versjonen."""
+    import gzip
+    def hent(sti, hodet=None):
+        req = urllib.request.Request(BASE + sti, headers=dict({"Accept-Encoding": "gzip"}, **(hodet or {})))
+        try:
+            with urllib.request.urlopen(req, timeout=20) as r:
+                raa = r.read()
+                if r.headers.get("Content-Encoding") == "gzip":
+                    raa = gzip.decompress(raa)
+                return r.status, {k.title(): v for k, v in r.headers.items()}, raa
+        except urllib.error.HTTPError as e:
+            return e.code, {k.title(): v for k, v in e.headers.items()}, b""
+    c, h, raa = hent("/")
+    tekst = raa.decode("utf-8")
+    scripts = re.findall(r'src="(/(?:app\.js|js/[a-z0-9-]+\.js)\?v=[0-9a-f]{10})"', tekst)
+    n_lokale = len(re.findall(r'src="/(?:app\.js|js/[a-z0-9-]+\.js)', tekst))
+    sjekk("statiske filer: hvert skript og stilark får versjon i adressen", c == 200 and len(scripts) == n_lokale > 40 and re.search(r'href="/nabe\.css\?v=[0-9a-f]{10}"', tekst) is not None, f"{len(scripts)} av {n_lokale}")
+    sjekk("statiske filer: siden selv sjekkes hver gang, med ETag", h.get("Cache-Control") == "no-cache" and bool(h.get("Etag")), str(h.get("Cache-Control")))
+    c304, _, _ = hent("/", {"If-None-Match": h.get("Etag", "")})
+    sjekk("statiske filer: uendret side gir 304", c304 == 304)
+    c2, h2, b2 = hent(scripts[0])
+    sjekk("statiske filer: riktig versjon kan beholdes for alltid", c2 == 200 and "immutable" in h2.get("Cache-Control", "") and len(b2) > 100, str(h2.get("Cache-Control")))
+    c3, h3, _ = hent(scripts[0].split("?")[0] + "?v=0000000000")
+    sjekk("statiske filer: gammel versjon beholdes ikke", c3 == 200 and h3.get("Cache-Control") == "no-cache", str(h3.get("Cache-Control")))
+    c4, h4, _ = hent("/js/finnes-ikke.js?v=abc")
+    sjekk("statiske filer: ukjent skript gir 404", c4 == 404)
+
+
 def kjor_tester():
     s = kall("/api/start", {"local_address": "127.0.0.1/8"})
     sjekk("kobler til", s.get("status") == "done", s.get("local_address", s.get("error", "")))
@@ -2247,6 +2276,7 @@ def kjor_tester():
     royktest()
     v = kall("/api/ny-versjon")
     sjekk("versjonssjekk svarer (med eller uten nett)", v.get("status") == "done", f"her {v.get('her')}, github {v.get('github')}")
+    statiske_filer()
     mobil_fil()
 
 
