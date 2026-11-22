@@ -1753,12 +1753,12 @@ class ReconnectBody(BaseModel):
     ip: Optional[str] = None
 
 
-class SvarBody(BaseModel):
+class SvarAdresserBody(BaseModel):
     adresser: List[str]
 
 
 @app.post("/api/svar")
-async def svarer_na(body: SvarBody):
+async def svarer_na(body: SvarAdresserBody):
     """Which of these known devices answer right now. Each is asked directly, with a
     retry, out of the adapter that reads it: a fast sweep over a VPN misses one device in
     a few on any given round, and "did not answer" should not rest on that."""
