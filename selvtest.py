@@ -331,6 +331,13 @@ def royktest():
               "  if (lagret === null) localStorage.removeItem(nokkel); else localStorage.setItem(nokkel, lagret);"
               "  return lagretLagt && hentet && annet && borte; })(),"
               " trafikk: typeof aapneTrafikk === 'function' && !!document.getElementById('trafikkBtn'),"
+              " verdisok: typeof sokeOrd === 'function' && (() => {"
+              "  const p = (v) => ({value: v}), t = (q, v) => sokTreff('x', sokeOrd(q), p(v));"
+              "  return t('>20', 21) && !t('>20', 20) && t('>=20', 20) && t('<5', 4.5) && t('=0', 0) && !t('=0', 'active')"
+              "    && t('20..22', 21) && t('22..20', 21) && !t('20..22', 23) && t('verdi>=20,5', 20.5) && t('x >20', 21)"
+              "    && !t('x >20', 'inactive') && sokTreff('rt401', sokeOrd('rt401'), {}) && sokeOrd('-5') && sokeOrd('-5').nei[0] === '5'"
+              "    && sokeOrd('>20').ja.length === 0; })(),"
+              " excel: typeof exportXlsx === 'function' && !!document.getElementById('xlsxBtn'),"
               " helhet: !!window.nabeSyn && !!window.nabeRaad && typeof kobleTilPaaNytt === 'function' && typeof navngiNett === 'function'"
               "  && !!document.getElementById('devRescan') && !!document.getElementById('fargesynBtn') && !!document.getElementById('humorBtn')"
               "  && !!document.getElementById('bakoverBtn') && !document.getElementById('expPop').contains(document.getElementById('schBtn')),"
@@ -2109,6 +2116,32 @@ def redigering():
     sjekk("knx: redigeringen skrev ingenting til bussen", KXSIM.writes_received == [])
 
 
+def excel():
+    """The point list as a real Excel file: read back, the numbers are still numbers and the odd characters survive."""
+    import io, zipfile
+    import nabe_modbus as nmb
+    import nabe_xlsx
+    ark = [{"navn": "Punkter", "rader": [["Navn", "Verdi", "Beskrivelse"], ["RT401", 21.5, "Rom <nord> & \"sør\""], ["SB401", 100, "Pådrag æøå"],
+                                          ["X", None, "linje\x07"]]},
+           {"navn": "Punkter", "rader": [["a"], [True]]}, {"navn": "Bad/name:*?[]" + "x" * 40, "rader": [[]]}]
+    data = nabe_xlsx.skriv_xlsx(ark)
+    z = zipfile.ZipFile(io.BytesIO(data))
+    navn = re.findall(r'name="([^"]+)"', z.read("xl/workbook.xml").decode())
+    sjekk("excel: arkene får gyldige og ulike navn", len(set(n.lower() for n in navn)) == 3 and all(len(n) <= 31 and not re.search(r"[\[\]*?/\\:]", n) for n in navn), str(navn))
+    rader = nmb.read_xlsx(data)
+    sjekk("excel: lest tilbake er teksten uendret (æøå, <, &, anførselstegn)", rader[1][2] == 'Rom <nord> & "sør"' and rader[2][2] == "Pådrag æøå", str(rader[:3]))
+    sjekk("excel: tall er tall, ikke tekst", b'<c r="B2"><v>21.5</v></c>' in z.read("xl/worksheets/sheet1.xml") and b'<c r="B3"><v>100</v></c>' in z.read("xl/worksheets/sheet1.xml"))
+    sjekk("excel: kontrolltegn fjernes og tomme celler hoppes over", "\x07" not in z.read("xl/worksheets/sheet1.xml").decode() and b'r="B4"' not in z.read("xl/worksheets/sheet1.xml"))
+    sjekk("excel: overskriften står fast og har filter", b'state="frozen"' in z.read("xl/worksheets/sheet1.xml") and b"<autoFilter" in z.read("xl/worksheets/sheet1.xml"))
+    req = urllib.request.Request(BASE + "/api/xlsx", data=json.dumps({"filnavn": "bacnet 9001/æ", "ark": ark[:1]}).encode(), method="POST",
+                                 headers={"Content-Type": "application/json", "Origin": BASE})
+    with urllib.request.urlopen(req, timeout=20) as r:
+        hode, kropp = r.headers, r.read()
+    sjekk("excel: serveren gir en .xlsx-fil som kan lagres", kropp[:2] == b"PK" and "spreadsheetml" in hode.get("Content-Type", "")
+          and ".xlsx" in hode.get("Content-Disposition", "") and "/" not in hode.get("Content-Disposition", "").split("filename=")[1], hode.get("Content-Disposition", ""))
+    sjekk("excel: serveren leser den tilbake", nmb.read_xlsx(kropp)[1][0] == "RT401")
+
+
 def statiske_filer():
     """Siden sjekkes ved hver lasting, men filene den peker på hentes bare én gang per versjon: adressene bærer versjonen."""
     import gzip
@@ -2277,6 +2310,7 @@ def kjor_tester():
     v = kall("/api/ny-versjon")
     sjekk("versjonssjekk svarer (med eller uten nett)", v.get("status") == "done", f"her {v.get('her')}, github {v.get('github')}")
     statiske_filer()
+    excel()
     mobil_fil()
 
 

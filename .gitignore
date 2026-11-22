@@ -15,3 +15,5 @@ logo.*
 *.log
 dist/
 .selvtest.log
+vakt/
+.playwright-mcp/

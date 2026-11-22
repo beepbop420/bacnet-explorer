@@ -206,6 +206,11 @@ const FAKTA = [
   ['COV betyr at regulatoren sier fra selv. Mindre spørring, mer ro.', 'COV means the controller speaks up itself. Less asking, more peace.'],
 ];
 const NYTT = {
+  '2.35': [
+    ['Verdisøk i søkefeltet: >25, <=10, =0 eller 20..22 filtrerer på måleverdien, og kan blandes med ord, for eksempel RT401 >22. Fungerer også i søket over alle leste enheter', 'Value search in the search field: >25, <=10, =0 or 20..22 filters on the measured value and can be mixed with words, for example RT401 >22. It also works in the search across all read devices'],
+    ['Eksport til Excel (.xlsx): punktlisten med tall som tall, fast overskrift, filter og et eget ark som sier hvor filen kom fra. Under Rapport og eksport, og i paletten', 'Export to Excel (.xlsx): the point list with numbers as numbers, a fixed header, a filter and a sheet saying where the file came from. Under Report and export, and in the palette'],
+    ['Enhetslinjen bryter nå linjen på smal skjerm i stedet for at tellerne havner oppå klokkevarselet, og filtrene i paletten heter «Only in alarm» på engelsk i stedet for en blanding', 'The device bar now wraps on a narrow screen instead of the counters landing on top of the clock warning, and the palette filters read «Only in alarm» in English instead of a mixture'],
+  ],
   '2.34': [
     ['Raskere start: skript og stilark hentes bare én gang per versjon i stedet for å spørres om 67 ganger ved hver åpning. En vanlig åpning er ferdig lastet på ca. 0,4 sekunder mot 0,9. Utseendet er det samme, og en oppdatering gir nye adresser, så du får aldri en blanding av gammelt og nytt', 'Faster start: scripts and style sheets are fetched once per version instead of being asked about 67 times at every opening. A normal opening is fully loaded in about 0.4 seconds instead of 0.9. The look is the same, and an update gives new addresses, so you never get a mix of old and new'],
     ['Store punktlister fylles ca. 35 % raskere: 5000 punkter er komplette på 1,1 sekunder mot 1,7, uten at noe vises annerledes', 'Large point lists fill about 35 % faster: 5000 points are complete in 1.1 seconds instead of 1.7, without anything looking different'],

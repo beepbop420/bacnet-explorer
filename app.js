@@ -4822,7 +4822,7 @@ function commands() {
   }, {when: () => harPunkter() && (S.filters.flag || S.filters.writable || S.filters.diff || S.filters.q || S.filters.type)});
 
   for (const [f, m] of Object.entries(FLAGS)) {
-    add('Filter', 'Kun ' + m.label, () => {
+    add('Filter', T('Kun ', 'Only ') + m.label, () => {
       settFlaggfilter(S.filters.flag === f ? '' : f);
     }, {when: harPunkter,
         tilstand: () => S.filters.flag === f ? 'pa' : '',
@@ -4914,6 +4914,7 @@ function commands() {
       {when: () => !!S.snapshot});
 
   add('Eksport', 'CSV…', () => { closeCmd(); exportCSV(); }, {when: harPunkter});
+  add('Eksport', 'Excel…', () => { closeCmd(); exportXlsx(); }, {when: harPunkter});
   add('Eksport', 'EDE 2.3…', () => { closeCmd(); exportEDE(); }, {when: harPunkter});
   add('Eksport', 'Sammenlign med EDE-fil…', () => { closeCmd(); startEdeCompare(); }, {when: harPunkter});
   add('Eksport', 'Skrivelogg', () => { closeCmd(); showWriteLog(); });
@@ -5179,21 +5180,48 @@ function hayFor(p) {
    Ordene tolkes en gang per soek, ikke en gang per punkt - paa 2418 punkter er
    det forskjellen paa en tolkning og to tusen. */
 function sokeOrd(q) {
-  const ja = [], nei = [];
+  const ja = [], nei = [], tall = [];
   const re = /(-?)"([^"]*)"|(-?)(\S+)/g;
   let m;
   while ((m = re.exec(q)) !== null) {
+    const v = m[2] === undefined ? valgSok(m[0]) : null;
+    if (v) { tall.push(v); continue; }
     const negativ = (m[1] || m[3]) === '-';
     const ord = (m[2] !== undefined ? m[2] : m[4]).toLowerCase().trim();
     if (!ord) continue;
     (negativ ? nei : ja).push(ord);
   }
-  return (ja.length || nei.length) ? {ja, nei} : null;
+  return (ja.length || nei.length || tall.length) ? {ja, nei, tall} : null;
 }
 
-function sokTreff(hay, ord) {
+/* A word that is a comparison on the value instead of a word in the name:
+   >25  <10  >=0  =1  and a range, 20..22. "verdi>25" works too. Comma or point
+   as the decimal mark. */
+function valgSok(ord) {
+  const n = (s) => parseFloat(s.replace(',', '.'));
+  let m = /^(?:verdi|value|v)?(>=|<=|>|<|=)(-?\d+(?:[.,]\d+)?)$/.exec(ord);
+  if (m) return {op: m[1], a: n(m[2])};
+  m = /^(-?\d+(?:[.,]\d+)?)\.\.(-?\d+(?:[.,]\d+)?)$/.exec(ord);
+  if (m) { const a = n(m[1]), b = n(m[2]); return {op: '..', a: Math.min(a, b), b: Math.max(a, b)}; }
+  return null;
+}
+
+function valgTreff(v, k) {
+  if (typeof v !== 'number' || !isFinite(v)) return false;
+  switch (k.op) {
+    case '>': return v > k.a;
+    case '<': return v < k.a;
+    case '>=': return v >= k.a;
+    case '<=': return v <= k.a;
+    case '=': return Math.abs(v - k.a) < 1e-9;
+    default: return v >= k.a && v <= k.b;
+  }
+}
+
+function sokTreff(hay, ord, p) {
   for (const o of ord.nei) if (hay.includes(o)) return false;
   for (const o of ord.ja)  if (!hay.includes(o)) return false;
+  for (const k of ord.tall || []) if (!p || !valgTreff(p.value, k)) return false;
   return true;
 }
 
@@ -5227,7 +5255,7 @@ function beregnSynlige() {
     if (writable && !p.writable) return false;
     if (diff && !isDiff(p)) return false;
     if (medVerdi && (p.unread || p.value === null || p.value === undefined)) return false;
-    if (ord && !sokTreff(hayFor(p), ord)) return false;
+    if (ord && !sokTreff(hayFor(p), ord, p)) return false;
     return true;
   });
   /* Sortering paa flere kolonner.
@@ -6624,7 +6652,7 @@ function globalMatches(term) {
     const devHay = (' ' + (dev ? (dev.object_name || '') + ' ' + dev.device_instance : '')
                     + ' ' + ip).toLowerCase();
     for (const p of pts) {
-      if (sokTreff(hayFor(p) + devHay, ord)) {
+      if (sokTreff(hayFor(p) + devHay, ord, p)) {
         out.push({ip, dev, p});
         if (out.length >= 300) return out;
       }
@@ -8227,6 +8255,46 @@ function exportCSV() {
   toast(rows.length + ' rader eksportert' + (selectedVisible().length ? ' (kun valgte)' : ''));
 }
 
+/* ------------------------------------------------------------------ Excel
+   The same points as the CSV, in a real Excel file: numbers that are numbers,
+   a header row that stays put, a filter, and an info sheet saying where the
+   file came from. Built on the server (nabe_xlsx.py); nothing is kept there. */
+async function exportXlsx() {
+  if (!S.activeDev) return;
+  const rows = actionRows();
+  const d = S.activeDev, na = new Date();
+  const head = [T('Objekt', 'Object'), T('Type', 'Type'), T('Instans', 'Instance'), T('Navn', 'Name'), T('Verdi', 'Value'),
+                T('Enhet', 'Unit'), T('Tilstandstekst', 'State text'), T('Beskrivelse', 'Description'), T('Status', 'Status'),
+                T('Skrivbar', 'Writable')];
+  const punkter = [head].concat(rows.map(p => [
+    p.objid, p.type, p.instance, p.name || '', typeof p.value === 'number' ? p.value : (p.value ?? ''),
+    p.unit_symbol || '', stateTextFor(p) || schedTekst(p) || '', p.description || '', (p.status || []).join(' | '),
+    p.writable ? T('ja', 'yes') : '']));
+  const info = [[T('Felt', 'Field'), T('Verdi', 'Value')],
+    [T('Enhet', 'Device'), d.object_name || ''], [T('Instans', 'Instance'), d.device_instance],
+    [T('Adresse', 'Address'), d.address], [T('Leverandør', 'Vendor'), d.vendor_name || ''],
+    [T('Punkter i filen', 'Points in the file'), rows.length],
+    [T('Utvalg', 'Selection'), selectedVisible().length ? T('Valgte punkter', 'Selected points') : (S.filters.q ? T('Søk: ', 'Search: ') + S.filters.q : T('Alle viste punkter', 'All shown points'))],
+    [T('Eksportert', 'Exported'), na.toLocaleString('no')], ['NABE', ($('sbVersjon') || {}).textContent ? $('sbVersjon').textContent.trim() : '']];
+  const navn = `bacnet_${d.device_instance}_${na.toISOString().slice(0, 10)}`;
+  let r;
+  try {
+    r = await fetch('/api/xlsx', {method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({filnavn: navn, ark: [{navn: T('Punkter', 'Points'), rader: punkter}, {navn: 'Info', rader: info}]})});
+    if (!r.ok) throw new Error(r.status);
+  } catch (e) {
+    toast(T('Excel-filen ble ikke laget', 'The Excel file was not made'));
+    return;
+  }
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(await r.blob());
+  a.download = navn + '.xlsx';
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+  toast(T(`${rows.length} rader eksportert til Excel`, `${rows.length} rows exported to Excel`)
+    + (selectedVisible().length ? T(' (kun valgte)', ' (selected only)') : ''));
+}
+
 /* --------------------------------------------------------- EDE 2.3 export */
 // Numeric BACnet codes required by the EDE format. Names alone are not
 // valid EDE, so anything unmapped is left blank rather than guessed.
@@ -9658,6 +9726,7 @@ $('pollInt').onchange = () => { if (S.live) startPolling(); };
 if ($('covModus')) $('covModus').onchange = () => { savePrefs({covModus: $('covModus').value}); if (S.live) startPolling(); toast($('covModus').value === 'poll' ? T('Live leser alt med intervallet', 'Live reads everything at the interval') : T('Live bruker COV der enheten kan, og leser resten med intervallet', 'Live uses COV where the device can, and reads the rest at the interval')); };
 $('snapBtn').onclick = takeSnapshot;
 $('csvBtn').onclick = exportCSV;
+$('xlsxBtn').onclick = exportXlsx;
 $('watchClear').onclick = () => { S.watch = []; renderWatch(); renderPoints(); };
 $('edeBtn').onclick = exportEDE;
 $('varBtn').onclick = () => { closeMenus(); aapneNabo(); };
@@ -9685,7 +9754,7 @@ $('gsInput').oninput = () => {
   renderGlobal();
 };
 // Firing an action from a menu should also dismiss it.
-['snapBtn','csvBtn','edeBtn','edeCmpBtn','schBtn','wlogBtn','reconnBtn','denseBtn','roBtn']
+['snapBtn','csvBtn','xlsxBtn','edeBtn','edeCmpBtn','schBtn','wlogBtn','reconnBtn','denseBtn','roBtn']
   .forEach(id => { const el = $(id); if (el) el.addEventListener('click', () => closeMenus()); });
 $('edeCmpBtn').onclick = startEdeCompare;
 $('colsBtn').onclick = openCols;
@@ -10450,8 +10519,10 @@ function diagLukk() { const o = $('diagOverlay'); if (o) { o.hidden = true; DIAG
    out half-translated. */
 
 const ORDBOK = {
-  'Mellomrom betyr og: KG32 RT601 finner alle RT601 på KG32. -ord utelater. "to ord" søker som frase.':
-    'A space means and: KG32 RT601 finds every RT601 on KG32. -word leaves out. "two words" searches as a phrase.',
+  'Punktlisten som en Excel-fil: tall som tall, fast overskrift og filter':
+    'The point list as an Excel file: numbers as numbers, a fixed header and a filter',
+  'Mellomrom betyr og: KG32 RT601 finner alle RT601 på KG32. -ord utelater. "to ord" søker som frase. Verdi: >25, <=10, =0 eller 20..22.':
+    'A space means and: KG32 RT601 finds every RT601 on KG32. -word leaves out. "two words" searches as a phrase. Value: >25, <=10, =0 or 20..22.',
   'Søk ved oppstart': 'Search on start',
   'Lest': 'Read',
   'Søk i anlegget': 'Search the plant',

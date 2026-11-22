@@ -235,7 +235,7 @@ def t(nb: str, en: str) -> str:
     return en if SPRAAK_VAR.get() == "en" else nb
 
 
-VERSJON = "2.34"
+VERSJON = "2.35"
 app.version = VERSJON
 app.description = ("NABE sitt eget grensesnitt. Det som leser fra anlegget (enheter, punkter, ukeprogram, trend) kan brukes fra Python, Excel eller curl mens NABE kjører. "
                    "Dokumentasjonen (Swagger) laster fra internett.")
@@ -4469,6 +4469,23 @@ class PendlingBody(BaseModel):
     paa_av: Optional[Dict[str, Dict[str, List[Optional[float]]]]] = None
     trinn: bool = False        # the rows are changes (a trend log), not readings at an even pace
     alle: bool = False         # also the calm ones, with their numbers
+
+
+class XlsxBody(BaseModel):
+    filnavn: str = "nabe"
+    ark: List[Dict[str, Any]]
+
+
+@app.post("/api/xlsx")
+def lag_xlsx(body: XlsxBody):
+    """The sheets the page sends, as an Excel file. Nothing is kept here; the file goes straight back."""
+    import nabe_xlsx
+    if sum(len(a.get("rader") or []) for a in body.ark) > 400_000:
+        return JSONResponse({"status": "error", "error": "too many rows for one Excel file"}, status_code=413)
+    navn = re.sub(r"[^\w.\- ]", "_", body.filnavn or "nabe")[:80] or "nabe"
+    return Response(nabe_xlsx.skriv_xlsx(body.ark),
+                    media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    headers={"Content-Disposition": f'attachment; filename="{navn}.xlsx"'})
 
 
 @app.post("/api/pendling")

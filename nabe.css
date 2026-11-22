@@ -6242,3 +6242,7 @@ td.c-val.dod{text-decoration:underline double color-mix(in srgb,var(--warn) 70%,
 .prot-val button i,.prot-filter button i,.prot-skille i,.vsub-prikk{display:none}
 .prot-val button.on::before{content:'¹3';font-size:11px;line-height:1}
 .prot-filter button.sel::before{content:'¹3';font-size:11px;line-height:1}
+
+/* 2.35: at a narrow width the counters used to run over the clock warning, because the bar never wrapped. */
+.ctx-bar{flex-wrap:wrap;row-gap:8px}
+.ctx-tittel{max-width:100%}
