@@ -70,9 +70,11 @@
       omr.forEach(r => { if (lastet.has(r)) brukt.add(r); });
       const kortIp = (l[0] && l[0].kort) || (a.naabar && a.naabar.ip) || '';
       const inne = !!l.length;
-      // Scanned together and remembered as one, but read through different adapters:
+      // Scanned together and remembered as one, but read through different adapters, or ranges in
+      // different parts of the address space (to anlegg bak samme VPN, 10.42.x.x og 158.149.x.x):
       // each range is its own building on the map.
-      if (l.length > 1 && new Set(l.map(x => x.kort)).size > 1) {
+      const nettdel = (r) => String(r).split('.').slice(0, 2).join('.');
+      if (l.length > 1 && (new Set(l.map(x => x.kort)).size > 1 || new Set(l.map(x => nettdel(x.omr))).size > 1)) {
         for (const x of l) {
           brukt.add(x.omr);
           ut.push({key: x.omr, navn: '', antall: x.antall, lastet: true, kort: x.kort, svarer: true, overstyrt: 0, modus: a.modus});
@@ -528,8 +530,8 @@
     if (!sv || !KT.vb) return;
     const sc = Math.min((sv.clientWidth || 1) / KT.vb[2], (sv.clientHeight || 1) / KT.vb[3]) || 1;
     KT.sc = sc;
-    if (Math.abs(sc - (KT.sc0 || 0)) > 1e-4 * sc) {
-      KT.sc0 = sc;
+    if (Math.abs(sc - (KT.sc0 || 0)) > 1e-4 * sc && (!KT.raf || performance.now() - (KT.tfT || 0) > 45)) {
+      KT.sc0 = sc; KT.tfT = performance.now();
       const inv = (1 / sc).toFixed(4), kortSk = (Math.min(2.2, Math.max(1, sc / 9)) / sc).toFixed(4);
       for (const [g] of KT.fastEls || []) g.setAttribute('transform', `translate(${g.dataset.x},${g.dataset.y}) scale(${inv})`);
       for (const [g, k] of KT.dynEls || []) g.setAttribute('transform', `translate(${g.dataset.x},${g.dataset.y}) scale(${k ? kortSk : inv})`);
@@ -618,7 +620,7 @@
     sv.addEventListener('pointerdown', (e) => {
       pek.set(e.pointerId, {x: e.clientX, y: e.clientY});
       if (pek.size === 2) { const [a, b] = [...pek.values()]; klyp = Math.hypot(a.x - b.x, a.y - b.y); dra = null; return; }
-      dra = {x: e.clientX, y: e.clientY, vb: (KT.mal || KT.vb).slice(), flyttet: false};
+      dra = {x: e.clientX, y: e.clientY, lx: e.clientX, ly: e.clientY, flyttet: false};
     });
     sv.addEventListener('pointermove', (e) => {
       if (pek.has(e.pointerId)) pek.set(e.pointerId, {x: e.clientX, y: e.clientY});
@@ -629,12 +631,18 @@
         return;
       }
       if (!dra) return;
-      const r = sv.getBoundingClientRect(), dx = e.clientX - dra.x, dy = e.clientY - dra.y;
-      if (Math.abs(dx) + Math.abs(dy) > 4) { dra.flyttet = true; sv.classList.add('drar'); }
+      const r = sv.getBoundingClientRect();
+      if (!dra.flyttet && Math.abs(e.clientX - dra.x) + Math.abs(e.clientY - dra.y) > 4) { dra.flyttet = true; sv.classList.add('drar'); }
       if (!dra.flyttet) return;
-      const sc = Math.min(r.width / dra.vb[2], r.height / dra.vb[3]);
-      const nv = [dra.vb[0] - dx / sc, dra.vb[1] - dy / sc, dra.vb[2], dra.vb[3]];
-      KT.vb = nv.slice(); KT.mal = nv; bruk();
+      // Flyttingen er hvor langt pekeren gikk siden sist, lagt på både der bildet er og der det er på vei.
+      // Da kan du zoome med hjulet midt i et drag uten at neste musebevegelse setter bildet tilbake.
+      const dx = e.clientX - dra.lx, dy = e.clientY - dra.ly;
+      dra.lx = e.clientX; dra.ly = e.clientY;
+      const vb = KT.vb, mal = KT.mal || KT.vb;
+      const s0 = Math.min(r.width / vb[2], r.height / vb[3]), sm = Math.min(r.width / mal[2], r.height / mal[3]);
+      vb[0] -= dx / s0; vb[1] -= dy / s0;
+      if (mal !== vb) { mal[0] -= dx / sm; mal[1] -= dy / sm; }
+      bruk();
     });
     const slutt = (e) => {
       pek.delete(e.pointerId);

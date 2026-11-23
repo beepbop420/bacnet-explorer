@@ -82,6 +82,12 @@ body.skrullet .nav-tittel{opacity:1}
 .liste{margin:0 16px 22px;background:var(--gruppe);border-radius:12px;overflow:hidden}
 .liste-fot{margin:-14px 20px 22px;font-size:13px;color:var(--fg2)}
 .seksjon{margin:22px 20px 7px;font-size:13px;text-transform:uppercase;letter-spacing:.02em;color:var(--fg2)}
+button.seksjon.gr{display:flex;align-items:center;gap:8px;width:calc(100% - 40px);background:none;border:0;padding:0;text-align:left;font:inherit;font-size:13px;text-transform:uppercase;letter-spacing:.02em;color:var(--fg2);cursor:pointer}
+button.seksjon.gr b{font-weight:600;color:var(--fg)}
+button.seksjon.gr small{margin-left:auto;font-size:12px;color:var(--fg3);font-variant-numeric:tabular-nums}
+button.seksjon.gr i{width:7px;height:7px;border-right:1.5px solid var(--fg3);border-bottom:1.5px solid var(--fg3);transform:rotate(45deg) translate(-2px,-2px);transition:transform .15s;flex:none}
+button.seksjon.gr[aria-expanded="false"] i{transform:rotate(-45deg)}
+.grvelger{margin:-4px 16px 12px}
 .celle{display:flex;align-items:center;gap:12px;min-height:54px;padding:8px 16px;width:100%;background:none;border:0;text-align:left;position:relative;color:inherit}
 .celle + .celle::before,.celle + label.celle::before,label.celle + .celle::before{content:"";position:absolute;top:0;left:16px;right:0;height:.5px;background:var(--sep)}
 .celle.med-ikon + .celle.med-ikon::before{left:58px}
@@ -642,17 +648,33 @@ function tegEnheter() {
   tegEnhetListe(true);
 }
 
+/* Seksjonene kan lukkes og åpnes. Hva som er lukket huskes mens siden lever; et søk åpner alt. */
+S.lukket = S.lukket || new Set();
+const seksjonHode = (nokkel, tittel, n, apen) => `<button type="button" class="seksjon gr" data-gr="${esc(nokkel)}" aria-expanded="${apen}"><i></i><span>${tittel}</span><small>${n}</small></button>`;
+
 function tegEnhetListe(ny) {
   const q = S.sok.toLowerCase();
   const l = S.enheter.filter(d => !q || (d.navn + d.address + d.vendor + d.anlegg).toLowerCase().includes(q));
   const el = $('enhetListe');
   if (!el) return;
-  el.innerHTML = l.length ? `<div class="liste${ny ? ' ny' : ''}">${l.map(d => `<button class="celle med-ikon" data-i="${S.enheter.indexOf(d)}"><span class="ik enhet">${SVG('<rect x="6" y="6" width="12" height="12" rx="2"/><path d="M9 2v4M15 2v4M9 18v4M15 18v4M2 9h4M2 15h4M18 9h4M18 15h4"/>')}</span>
-      <span class="ct"><span class="ct1">${esc(d.navn)}</span><span class="ct2 mono">${esc(d.address)} · ${T('enhet', 'device')} ${esc(d.instans)}${d.vendor ? ' · ' + esc(d.vendor) : ''}</span></span>${CHEV}</button>`).join('')}</div>`
+  const celle = d => `<button class="celle med-ikon" data-i="${S.enheter.indexOf(d)}"><span class="ik enhet">${SVG('<rect x="6" y="6" width="12" height="12" rx="2"/><path d="M9 2v4M15 2v4M9 18v4M15 18v4M2 9h4M2 15h4M18 9h4M18 15h4"/>')}</span>
+      <span class="ct"><span class="ct1">${esc(d.navn)}</span><span class="ct2 mono">${esc(d.address)} · ${T('enhet', 'device')} ${esc(d.instans)}${d.vendor ? ' · ' + esc(d.vendor) : ''}</span></span>${CHEV}</button>`;
+  // Bygg først: en igangkjøring er ett bygg om gangen. Bare ett bygg gir ingen overskrifter.
+  const bygg = new Map();
+  for (const d of l) { const k = d.anlegg || '—'; if (!bygg.has(k)) bygg.set(k, []); bygg.get(k).push(d); }
+  const medBygg = bygg.size > 1;
+  el.innerHTML = l.length ? (medBygg
+      ? [...bygg].map(([k, ds]) => { const apen = !!q || !S.lukket.has('b:' + k);
+          return seksjonHode('b:' + k, esc(k), ds.length, apen) + (apen ? `<div class="liste${ny ? ' ny' : ''}">${ds.map(celle).join('')}</div>` : ''); }).join('')
+      : `<div class="liste${ny ? ' ny' : ''}">${l.map(celle).join('')}</div>`)
     : tom(q ? T('Ingen treff', 'No match') : T('Ingen enheter ennå', 'No devices yet'),
       q ? T('Prøv et annet ord, eller en del av IP-en.', 'Try another word, or part of the IP.') : T('La PC-en skanne et område først. Jeg er bare telefonen.', 'Let the PC scan a range first. I am only the phone.'));
-  if (ny && l.length) stagger(el.firstElementChild);
-  el.onclick = e => { const b = e.target.closest('[data-i]'); if (b) apneEnhet(S.enheter[+b.dataset.i]); };
+  if (ny && l.length) el.querySelectorAll('.liste').forEach(x => stagger(x));
+  el.onclick = e => {
+    const g = e.target.closest('[data-gr]');
+    if (g) { const k = g.dataset.gr; S.lukket.has(k) ? S.lukket.delete(k) : S.lukket.add(k); tegEnhetListe(false); return; }
+    const b = e.target.closest('[data-i]'); if (b) apneEnhet(S.enheter[+b.dataset.i]);
+  };
 }
 
 async function apneEnhet(d) {
@@ -700,32 +722,64 @@ function tegPunkter() {
   m.innerHTML = `<h1 class="stor-tittel">${esc(d.navn)}</h1><div class="stor-under">${esc(d.address)} · ${T('enhet', 'device')} ${esc(d.instans)}${d.vendor ? ' · ' + esc(d.vendor) : ''}</div>
     <div class="seg" id="seg">${[['alle', T('Alle', 'All')], ['pad', T('Pådrag', 'Outputs')], ['mal', T('Målinger', 'Inputs')]].map(([k, t]) => `<button data-ty="${k}" aria-pressed="${S.typer === k}">${t}</button>`).join('')}</div>
     <div class="sok">${SOK_IKON}<input type="search" id="pq" placeholder="${T('Søk punkt', 'Search point')}" value="${esc(S.pFilter)}" autocomplete="off" autocapitalize="off" spellcheck="false" aria-label="${T('Søk punkt', 'Search point')}"></div>
+    <div class="seg grvelger" id="grSeg" aria-label="${T('Grupper etter', 'Group by')}">${[['system', T('System', 'System')], ['type', T('Type', 'Type')], ['ingen', T('Ingen', 'None')]].map(([k, t]) => `<button data-gr2="${k}" aria-pressed="${(S.gruppe || (new Set(S.punkter.map(sysNr).filter(Boolean)).size > 1 ? 'system' : 'ingen')) === k}">${t}</button>`).join('')}</div>
     <div id="punktListe"></div>`;
+  $('grSeg').onclick = e => { const b = e.target.closest('[data-gr2]'); if (!b) return; S.gruppe = b.dataset.gr2; document.querySelectorAll('#grSeg button').forEach(x => x.setAttribute('aria-pressed', String(x.dataset.gr2 === S.gruppe))); segTommel($('grSeg')); tegPunktListe(false); };
   $('pq').oninput = e => { S.pFilter = e.target.value; tegPunktListe(false); };
   $('seg').onclick = e => { const ty = e.target.closest('[data-ty]'); if (!ty) return; S.typer = ty.dataset.ty; document.querySelectorAll('#seg button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.ty === S.typer))); segTommel($('seg')); tegPunktListe(false); };
   m.onclick = null;
-  segTommel($('seg'), false);
-  requestAnimationFrame(() => segTommel($('seg'), false));
+  segTommel($('seg'), false); segTommel($('grSeg'), false);
+  requestAnimationFrame(() => { segTommel($('seg'), false); segTommel($('grSeg'), false); });
   tegPunktListe(true);
 }
+
+/* Systemnummeret etter NS 3451 står i punktnavnet: A_360_001_RT401, 320.012-RT402. Uten det havner punktet under «Annet». */
+const SYSTEMTYPE = {'310': ['Sanitær', 'Plumbing'], '320': ['Varme', 'Heating'], '330': ['Brannslokking', 'Fire fighting'], '340': ['Gass og trykkluft', 'Gas and compressed air'],
+  '350': ['Prosesskjøling', 'Process cooling'], '360': ['Luftbehandling', 'Air handling'], '370': ['Kjøling', 'Cooling'], '380': ['Vannbehandling', 'Water treatment']};
+function sysNr(p) {
+  const m = /(?:^|[^0-9])(\d{3})[._-](\d{3})(?![0-9])/.exec(String(p.name || '')) || /(?:^|[^0-9])(\d{3})[._-](\d{3})(?![0-9])/.exec(String(p.description || ''));
+  return m ? m[1] + '.' + m[2] : '';
+}
+const sysTittel = (nr) => { const t = SYSTEMTYPE[nr.slice(0, 3)]; return `<b>${esc(nr)}</b>${t ? ' · ' + esc(T(t[0], t[1])) : ''}`; };
+const TYPENAVN = (t) => TYPEGRUPPE.pad.includes(t) ? T('Pådrag', 'Outputs') : T('Målinger', 'Inputs');
 
 function tegPunktListe(ny) {
   const q = S.pFilter.toLowerCase();
   const l = S.punkter.filter(p => (S.typer === 'alle' || (S.typer === 'pad' ? TYPEGRUPPE.pad.includes(p.type) : TYPEGRUPPE.mal.includes(p.type)))
     && (!q || ((p.name || '') + ' ' + (p.description || '')).toLowerCase().includes(q)));
-  const vis = l.slice(0, 120);
   const el = $('punktListe');
   if (!el) return;
-  el.innerHTML = vis.length ? `<div class="liste${ny ? ' ny' : ''}">${vis.map(p => {
+  // Gruppering: system når navnene har systemnummer, ellers ingen. Brukeren kan bytte til type eller ingen.
+  const antallSys = new Set(S.punkter.map(sysNr).filter(Boolean)).size;
+  const gr = S.gruppe || (antallSys > 1 ? 'system' : 'ingen');
+  const nokkelAv = gr === 'system' ? (p => sysNr(p) || 'zzz') : gr === 'type' ? (p => TYPEGRUPPE.pad.includes(p.type) ? '1' : '2') : null;
+  const sortert = nokkelAv ? l.slice().sort((a, b) => nokkelAv(a).localeCompare(nokkelAv(b), undefined, {numeric: true}) || String(a.name || '').localeCompare(String(b.name || ''), undefined, {numeric: true})) : l;
+  const vis = sortert.slice(0, nokkelAv ? 250 : 120);
+  const rad = p => {
       const festet = erFestet({address: S.enhet.address, objid: p.objid});
       return sveipRad(`data-o="${esc(p.objid)}"`, `<button class="celle med-ikon" data-o="${esc(p.objid)}"><span class="ik${erUt(p.type) ? ' ut' : ''}">${typeKort(p.type)}</span>
       <span class="ct"><span class="ct1">${esc(p.name || p.objid)}</span><span class="ct2">${festet ? T('Festet · ', 'Pinned · ') : ''}${esc(p.description || p.objid)}</span></span>
       <span class="cv">${esc(fmt(p.value))}<small>${esc(sym(p))}</small></span>${CHEV}</button>`, [[festet ? 'losne' : 'fest', festet ? T('Løsne', 'Unpin') : T('Fest', 'Pin'), festet ? 'losne' : 'fest']]);
-    }).join('')}</div>
+  };
+  let liste = '';
+  if (vis.length && nokkelAv) {
+    const deler = new Map();
+    for (const p of vis) { const k = nokkelAv(p); if (!deler.has(k)) deler.set(k, []); deler.get(k).push(p); }
+    liste = [...deler].map(([k, ps]) => {
+      const tittel = gr === 'system' ? (k === 'zzz' ? T('Annet', 'Other') : sysTittel(k)) : (k === '1' ? T('Pådrag', 'Outputs') : T('Målinger', 'Inputs'));
+      const apen = !!q || !S.lukket.has('p:' + gr + k);
+      return seksjonHode('p:' + gr + k, tittel, ps.length, apen) + (apen ? `<div class="liste${ny ? ' ny' : ''}">${ps.map(rad).join('')}</div>` : '');
+    }).join('');
+  } else if (vis.length) liste = `<div class="liste${ny ? ' ny' : ''}">${vis.map(rad).join('')}</div>`;
+  el.innerHTML = vis.length ? `${liste}
       <div class="liste-fot">${l.length} ${T('punkter', 'points')}${l.length > vis.length ? T(' · viser ' + vis.length + ', søk for å snevre inn', ' · showing ' + vis.length + ', search to narrow') : ''} · ${T('sveip til venstre for å feste', 'swipe left to pin')}</div>`
     : tom(T('Ingen treff', 'No match'), T('Ingen punkter passer. Prøv «Alle», eller et annet ord.', 'No points match. Try “All”, or another word.'));
-  if (ny && vis.length) stagger(el.firstElementChild);
-  el.onclick = e => { const b = e.target.closest('button[data-o]'); if (b) { const p = S.punkter.find(x => x.objid === b.dataset.o); apneArk(lagPunkt(p, S.enhet)); } };
+  if (ny && vis.length) el.querySelectorAll('.liste').forEach(x => stagger(x));
+  el.onclick = e => {
+    const g = e.target.closest('[data-gr]');
+    if (g) { const k = g.dataset.gr; S.lukket.has(k) ? S.lukket.delete(k) : S.lukket.add(k); tegPunktListe(false); return; }
+    const b = e.target.closest('button[data-o]'); if (b) { const p = S.punkter.find(x => x.objid === b.dataset.o); apneArk(lagPunkt(p, S.enhet)); }
+  };
 }
 
 const lagPunkt = (p, d) => ({address: d.address, enhet: d.navn, instans: d.instans, objid: p.objid, type: p.type, name: p.name, beskrivelse: p.description,

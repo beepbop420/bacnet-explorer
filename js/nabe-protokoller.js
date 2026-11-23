@@ -309,6 +309,22 @@
     return [...felles, ...(egne.length ? [{sep: true}, ...egne] : []), ...lev, ...slutt];
   }
   document.addEventListener('contextmenu', (e) => {
+    // Overskriften til et bygg (gruppert etter område): skann bare det på nytt, gi det navn
+    const hode = e.target.closest('#devList .vgroup-head');
+    if (hode && hode.querySelector('.vgroup-name.nett')) {
+      e.preventDefault();
+      lukkCtx();
+      const omr = hode.dataset.vendor, navn = typeof nettNavn === 'function' ? nettNavn(omr) : '';
+      const rad = (t, fn) => ({t, fn});
+      visMeny([
+        {head: navn || omr},
+        rad(T('Skann bygget på nytt', 'Scan this building again'), () => window.skannBygg && window.skannBygg(omr)),
+        rad(T('Gi navn …', 'Name it …'), () => navngiNett(omr, hode)),
+        {sep: true},
+        rad(T('Kopier området', 'Copy the range'), () => kopier(omr)),
+      ], e.clientX, e.clientY);
+      return;
+    }
     const knapp = e.target.closest('#devList .dev[data-ip]');
     if (!knapp) { lukkCtx(); return; }
     const d = S.devices.find(x => x.address === knapp.dataset.ip);
@@ -321,9 +337,9 @@
       api2('/api/knx/lesestatus?address=' + encodeURIComponent(d.address)).then(s => { ctxStatus = s; visCtx(d, x, y); }).catch(() => { ctxStatus = null; visCtx(d, x, y); });
     } else visCtx(d, x, y);
   });
-  function visCtx(d, xPos, yPos) {
+  function visCtx(d, xPos, yPos) { visMeny(ctxRader(d), xPos, yPos); }
+  function visMeny(rader, xPos, yPos) {
     lukkCtx();
-    const rader = ctxRader(d);
     ctx = document.createElement('div');
     ctx.className = 'menu-pop ctx-meny';
     ctx.setAttribute('role', 'menu');

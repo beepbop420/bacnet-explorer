@@ -6275,3 +6275,22 @@ td.c-val.dod{text-decoration:underline double color-mix(in srgb,var(--warn) 70%,
 :root[data-theme="light"] .gs-overlay{background:rgba(24,32,44,.3);backdrop-filter:blur(2px)}
 :root[data-theme="light"] .gs-modal{border-color:var(--line);box-shadow:0 20px 50px rgba(20,30,45,.2),0 2px 6px rgba(20,30,45,.08)}
 :root[data-theme="light"] .sett-gruppe,:root[data-theme="light"] .tema-gruppe{box-shadow:0 1px 2px rgba(20,30,45,.04)}
+
+/* Bak en åpen popup står animasjonene stille (se popupRo i nabe-verktoy.js) */
+body.har-popup *:not(.gs-overlay):not(.gs-overlay *):not(.menu-pop):not(.menu-pop *):not(.dlg-lag):not(.dlg-lag *):not(.toast){animation-play-state:paused!important}
+
+/* NABE puster hele tiden: på eget lag slipper hele toppen å males på nytt ved hvert bilde */
+.nabe-mark .nabe{will-change:transform}
+
+/* Innstillinger-knappen i menyen er en vanlig rad, ikke en overskrift */
+.menu-item.menu-tung{font-weight:400}
+.menu-fot .menu-tung{color:var(--fg-2)}
+.menu-fot .menu-tung .menu-hint{opacity:.7}
+
+/* Leverandørens merkeplate: ordmerket med merkets farge, blandet mot tekstfargen så det holder i lys og mørk visning */
+.lev-logo{display:inline-block;font:700 9px/1 var(--mono);letter-spacing:.08em;padding:3px 6px 2px;border-radius:4px;vertical-align:middle;white-space:nowrap;
+  color:color-mix(in srgb,var(--vc,var(--fg-2)) 68%,var(--fg));
+  background:color-mix(in srgb,var(--vc,var(--fg-2)) 10%,transparent);
+  border:1px solid color-mix(in srgb,var(--vc,var(--fg-2)) 34%,transparent)}
+.vgroup-name .lev-logo{font-size:10px;padding:3px 7px 2px}
+.dev-lev .lev-logo{font-size:8px;padding:2px 5px 1px}

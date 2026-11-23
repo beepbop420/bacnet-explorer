@@ -156,6 +156,18 @@ const VENDORS = [
   [/micro\s*matic/i,                   'Micro Matic',   VENDOR_GREY],
 ];
 
+/* Leverandørens navn som en liten merkeplate i NABE-stil: ordmerket med merkets farge, uten bilder å laste.
+   Bare leverandører NABE kjenner får den; resten står som vanlig tekst. Navnet står i aria-label og title. */
+const LEV_KORT = {'Johnson C.': 'JCI', 'Kieback&Peter': 'K&P', 'Automated Logic': 'ALC', 'Delta Controls': 'DELTA', 'Saia-Burgess': 'SAIA',
+  'Phoenix C.': 'PHOENIX', 'Reliable C.': 'RELIABLE', 'Embedded Sys.': 'EMBEDDED', 'OJ Electronics': 'OJ', 'TA Hydronics': 'TA',
+  'Babel Buster': 'BABEL', 'Micro Matic': 'MICRO MATIC', 'Trend': 'TREND', 'Delta': 'DELTA'};
+function levLogo(label, farge) {
+  const navn = String(label || '');
+  if (!Object.prototype.hasOwnProperty.call(VENDOR_COLOR, navn)) return esc(navn);
+  const tekst = (LEV_KORT[navn] || navn).toUpperCase();
+  return `<span class="lev-logo" role="img" aria-label="${esc(navn)}" title="${esc(navn)}" style="--vc:${farge || VENDOR_COLOR[navn]}">${esc(tekst)}</span>`;
+}
+
 /* Registered BACnet vendor identifiers, used only when vendor-name is missing
    or says nothing we recognise. The number comes from the device itself and is
    assigned by ASHRAE, so it is the more reliable of the two - but a wrong entry
@@ -940,7 +952,9 @@ async function runScan() {
     const nn = window.nabeNavnTilOmraade(raa);
     if (nn.byttet.length) { raa = nn.tekst; $('rangeInput').value = raa; toast(nn.byttet.join(' · ')); }
   }
-  const omraader = parseRanges(raa);
+  // Høyreklikk på et bygg skanner bare det: de andre byggene og lista over områder står som de er
+  const kun = S._kunOmraade || ''; S._kunOmraade = '';
+  const omraader = kun ? [kun] : parseRanges(raa);
   if (!omraader.length) { toast('Skriv inn et IP-område', true); return; }
   const mode = $('modeSel').value;
   const thorough = mode !== 'unicast_fast';
@@ -977,12 +991,12 @@ async function runScan() {
   const sammeOmraader = omraader.join(' ') === (S.scanRanges || []).join(' ');
   const viaLaast = kortLaast() ? String(loadPrefs().kortLast).split(/[\/:]/)[0] : '';
   const grupper = await gruppeEtterKort(omraader, viaLaast);
-  if (!sammeOmraader) {
+  if (!sammeOmraader && !kun) {
     const nye = new Set(grupper.keys());
     S.devices = nye.has('') ? [] : S.devices.filter(d =>
       omraader.includes(d._range) || !nye.has((S.via && S.via[d.address]) || ''));
   }
-  S.scanRanges = omraader.slice();
+  if (!kun) S.scanRanges = omraader.slice();
   renderDevices();
   // Modbus and KNX are looked for at the same time as BACnet, not after it: a building is scanned once, in one go
   const protLopp = (window.skannProtokoller && mode !== 'bbmd') ? window.skannProtokoller(omraader, null).catch(() => null) : null;
@@ -1001,6 +1015,9 @@ async function runScan() {
     const via = viaLaast;
     const samtidig = grupper.size > 1;
     const frak = omraader.map(() => 0);
+    const antallBac = omraader.map(() => -1);          // BACnet-treff per område, -1 til området er skannet
+    const kortFor = new Map();
+    for (const [kort, liste] of grupper) for (const [n] of liste) kortFor.set(n, kort);
     S._viaOmr = S._viaOmr || {};
 
     const skannOmraade = async (n, subnet, kort) => {
@@ -1044,21 +1061,36 @@ async function runScan() {
       renderDevices();
       rememberRange(subnet);
       perOmraade[n] = `${subnet}: ${d.count}`;
+      antallBac[n] = d.count != null ? d.count : (d.devices || []).length;
       frak[n] = 1;
       return true;
     };
 
     // BACnet is one of three things a scan looks for; with it switched off only Modbus and KNX are looked for
     if (loadPrefs().protBacnet !== false || !window.skannProtokoller) {
+      // Et område som feiler stopper ikke de neste: bare Avbryt gjør det
       await Promise.all([...grupper.entries()].map(async ([kort, liste]) => {
         for (const [n, subnet] of liste) {
-          if (!await skannOmraade(n, subnet, kort)) break;
+          if (LINJE.avbrutt) break;
+          try { await skannOmraade(n, subnet, kort); }
+          catch (e) { toast(`${subnet}: ${e.message}`, true); }
         }
       }));
     }
     await refreshStatus();
     // The same range is looked through for Modbus and KNX too, unless it was stopped or is a BBMD lookup
     if (protLopp) { try { await protLopp; } catch { /* the BACnet result stands */ } }
+    // Modbus eller KNX svarte i et område der BACnet ikke fant noe: da er anlegget der, og BACnet bommet
+    // (en tunnel som våkner mister de første pakkene). Én runde til for akkurat de områdene.
+    if (loadPrefs().protBacnet !== false && mode !== 'bbmd' && !LINJE.avbrutt) {
+      const bom = omraader.map((sn, n) => [n, sn]).filter(([n, sn]) => antallBac[n] === 0
+        && S.devices.some(d => d._range === sn && d.protocol && d.protocol !== 'bacnet'));
+      for (const [n, sn] of bom) {
+        if (LINJE.avbrutt) break;
+        status(T(`${sn}: Modbus svarer, men ingen BACnet ennå. Prøver BACnet en gang til …`, `${sn}: Modbus answers, but no BACnet yet. Trying BACnet once more …`));
+        try { await skannOmraade(n, sn, kortFor.get(n)); } catch { /* the first round stands */ }
+      }
+    }
 
     const secs = ((performance.now() - t0) / 1000).toFixed(0);
     if (omraader.length > 1) {
@@ -1068,7 +1100,7 @@ async function runScan() {
     }
     /* Hva som ble skannet, saa manglendeEnheter() vet hvilke savnede enheter
        som hoerer til - ikke enheter paa et helt annet nett. */
-    S.sisteOmraader = omraader;
+    S.sisteOmraader = kun ? (S.scanRanges || omraader) : omraader;
     // A scan you stopped found nothing because you stopped it - no advice for that.
     S.tomtSkann = S.devices.length || LINJE.avbrutt ? null : {mode, omraader};
     // A tunnel that has sat idle drops its first packets while it wakes up, so a first
@@ -1096,6 +1128,14 @@ async function runScan() {
   b.textContent = T('Skann', 'Scan'); b.onclick = () => runScan();
   if (proevIgjen) setTimeout(() => { if (!document.body.classList.contains('skanner')) S._autoNeste = true; runScan(); }, 1500);
 }
+
+/* Skann bare dette bygget på nytt (høyreklikk på overskriften i enhetslista). */
+function skannBygg(omraade) {
+  if (document.body.classList.contains('skanner')) { toast(T('Et skann pågår allerede', 'A scan is already running')); return; }
+  S._kunOmraade = omraade;
+  runScan();
+}
+window.skannBygg = skannBygg;
 
 async function cancelScan() {
   if (!S.scanJob && !S.scanJobs.size) return;
@@ -1646,7 +1686,7 @@ function renderDevices() {
       <span class="dev-l2">
         <span class="dev-ip">${esc(d.serial === true ? d.ip + ' ' + d.port + ' baud' : d.protocol === 'modbus' || d.protocol === 'knx' ? (d.object_name === d.ip ? T('port ', 'port ') + d.port : d.ip + ':' + d.port) : d.address)}</span>
         <span class="dev-id${dup ? ' dup' : ''}"${dup ? ` title="${T('Flere enheter svarer på denne ID-en', 'Several devices answer to this ID')}"` : ''}>${d.protocol === 'modbus' ? (d.serial === true ? 'RTU ' : d.address.startsWith('mr:') ? 'RTU ' : 'MB ') + d.unit : d.protocol === 'knx' ? 'KNX' : (d.device_instance ?? '?')}</span>
-        ${gruppert ? '' : `<span class="dev-lev">${esc(v.label)}</span>`}
+        ${gruppert ? '' : `<span class="dev-lev">${levLogo(v.label, v.color)}</span>`}
         ${kortChip(d)}
         ${presenceTag(d)}
         ${noteFor(d) ? `<span class="dev-note" title="${esc(noteFor(d))}">${T('notat', 'note')}</span>` : ''}
@@ -1715,7 +1755,7 @@ function renderDevices() {
         return `${skille}<div class="vgroup${av && !likt ? ' av' : ''}${likt ? ' uten-hode' : ''}" style="--vc:${g.v.color}">
           <button class="vgroup-head" data-vendor="${esc(g.v.label)}">
             <span class="vgroup-bar"></span>
-            <span class="vgroup-name${akse === 'range' ? ' nett' : ''}"${g.v.grunn ? ` title="${esc(T('Gruppert slik fordi ', 'Grouped like this because ') + g.v.grunn)}"` : ''}>${esc(akse === 'range' ? nettNavn(g.v.label) || g.v.label : (flereProt && g.prot !== 'bacnet' ? g.v.label.replace(/^Modbus · /, '') : g.v.label))}</span>
+            <span class="vgroup-name${akse === 'range' ? ' nett' : ''}"${g.v.grunn ? ` title="${esc(T('Gruppert slik fordi ', 'Grouped like this because ') + g.v.grunn)}"` : ''}>${akse === 'range' ? esc(nettNavn(g.v.label) || g.v.label) : (flereProt && g.prot !== 'bacnet' ? esc(g.v.label.replace(/^Modbus · /, '')) : levLogo(g.v.label, g.v.color))}</span>
             ${akse === 'range' ? `<span class="vgroup-edit" role="button" tabindex="0" data-navngi="${esc(g.v.label)}" title="${esc(T('Gi anlegget et navn', 'Name this site'))}" aria-label="${esc(T('Gi anlegget et navn', 'Name this site'))}">${IKON_BLYANT}</span>` : ''}
             ${akse === 'range' ? nettMeta(g) : ''}
             ${feil ? `<em class="dev-flag bad" title="${feil} enheter med feil">${feil}</em>` : ''}
@@ -1847,7 +1887,7 @@ function nettInnhold(g, kort) {
       const av = skjulte.has(nokkel);
       const navn = flereProt && u.prot !== 'bacnet' && u.v.label === PROT_NAVN[u.prot] ? PROT_NAVN[u.prot] : u.v.label.replace(/^Modbus · /, '');
       return `<button type="button" class="vsub vsub-knapp${av ? ' av' : ''}" style="--vc:${u.v.color}" data-vendor="${esc(nokkel)}" aria-expanded="${!av}"${u.v.grunn ? ` title="${esc(T('Gruppert slik fordi ', 'Grouped like this because ') + u.v.grunn)}"` : ''}>`
-        + `${flereProt ? `<i class="vsub-prikk p-${u.prot}"></i>` : ''}<span class="vsub-navn">${esc(navn)}</span><span class="vsub-n">${u.enheter.length}</span><b class="prot-chev">⌃</b></button>`
+        + `${flereProt ? `<i class="vsub-prikk p-${u.prot}"></i>` : ''}<span class="vsub-navn">${u.prot === 'bacnet' ? levLogo(u.v.label, u.v.color) : esc(navn)}</span><span class="vsub-n">${u.enheter.length}</span><b class="prot-chev">⌃</b></button>`
         + (av ? '' : u.enheter.map(kort).join(''));
     }).join('');
 }
@@ -2676,7 +2716,7 @@ function renderCtx() {
     <div class="ctx-tittel">
       <span class="ctx-name">${esc(d.object_name || String(d.device_instance ?? '?'))}</span>
       <span class="ctx-under">
-        <span class="tf"><small>${T('Leverandør', 'Vendor')}</small><span class="vendor" style="--vc:${v.color};flex:0 0 auto"><i></i><span>${esc(v.label)}</span></span></span>
+        <span class="tf"><small>${T('Leverandør', 'Vendor')}</small><span class="vendor" style="--vc:${v.color};flex:0 0 auto"><i></i><span>${levLogo(v.label, v.color)}</span></span></span>
         ${protFelt(d)}
         <span class="tf"><small>${T('Adresse', 'Address')}</small><button type="button" class="ctx-ip ctx-web" data-web="${esc(webAdr(d))}" title="${esc(T('Åpne webgrensesnittet til regulatoren', 'Open the controller’s web interface'))}">${esc(webAdr(d))}<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M5 2H2.5v7.5H10V7M7 2h3v3M10 2 5.6 6.4"/></svg></button></span>
         ${kortFelt(d)}
@@ -6990,7 +7030,7 @@ function renderDeviceSummary() {
   return `
     <div class="insp-title"><span>${esc(d.object_name || 'Enhet ' + d.device_instance)}</span></div>
     <div class="insp-sub">
-      <span class="vendor" style="--vc:${v.color}"><i></i><span>${esc(v.label)}</span></span>
+      <span class="vendor" style="--vc:${v.color}"><i></i><span>${levLogo(v.label, v.color)}</span></span>
       · <code style="font-family:var(--mono);font-size:10px">#${d.device_instance} · ${esc(d.address)}</code>
     </div>
     <div class="sect" id="alarmSect" hidden></div>
@@ -7993,6 +8033,9 @@ async function pollTick() {
    hundred rows of HTML twice a second, which blocked the main thread long
    enough to make the spinner and transitions visibly stutter. */
 function updateValueCells(objids) {
+  // Bak en åpen popup ses ikke tabellen: tegnes i stedet på en gang når den lukkes (popupRo, nabe-verktoy.js).
+  if (document.body.classList.contains('har-popup')) { window.__verdiStale = true; return; }
+  const t0 = performance.now();
   const touched = [];
   // Look the row up in a map built once per render. Querying the DOM per
   // cell scans the whole table each time, which with a few hundred live
@@ -8007,7 +8050,10 @@ function updateValueCells(objids) {
     const v = fmtVal(p.value);
     td.className = 'c-val ' + v.c + (p.unread ? ' unread' : '');
     td.textContent = p.unread ? '?' : v.t;
-    tr.classList.remove('flash');
+    // Hvert animerte felt koster en tegning per bilde. Mer enn en skjermfull blinker ingen hjelp av,
+    // og på en treg maskin er det blinkingen, ikke tallene, som får tabellen til å hakke.
+    const animer = touched.length < (window.__animMaks || 24);
+    if (animer) tr.classList.remove('flash');
     /* Which way it moved, so a wall of changing values reads as a pattern
        instead of a blink. Only for numbers - "active" has no direction. */
     const celle = tr.querySelector('td.c-val');
@@ -8015,12 +8061,12 @@ function updateValueCells(objids) {
       celle.classList.remove('opp', 'ned');
       const p = S.pointIndex.get(tr.dataset.o);
       const forrige = p && p._forrige;
-      if (typeof p?.value === 'number' && typeof forrige === 'number' && p.value !== forrige) {
+      if (animer && typeof p?.value === 'number' && typeof forrige === 'number' && p.value !== forrige) {
         celle.classList.add(p.value > forrige ? 'opp' : 'ned');
       }
       if (p) p._forrige = p.value;
     }
-    touched.push(tr);
+    if (animer) touched.push(tr);
   }
   // Restarting the flash animation needs one forced layout, not one per row:
   // reading offsetWidth inside the loop made the browser lay out the whole
@@ -8029,6 +8075,9 @@ function updateValueCells(objids) {
     void document.body.offsetWidth;
     requestAnimationFrame(() => touched.forEach(tr => tr.classList.add('flash')));
   }
+  // Tar oppdateringen lang tid er maskinen treg: da blinker færre rader, så tabellen ikke hakker.
+  const brukt = performance.now() - t0;
+  window.__animMaks = brukt > 40 ? 6 : brukt > 20 ? 12 : 24;
 }
 
 /* Start en animasjon paa nytt: klassen maa vekk, layouten tvinges fram, saa

@@ -147,3 +147,27 @@ function huskBesok() {
 function sisteBesok(k) {
   try { return (JSON.parse(localStorage.getItem('nabe_besok') || '{}'))[k] || null; } catch { return null; }
 }
+
+/* Ro bak popups.
+   Mens en popup er åpen ser du ikke tabellen, men den fortsetter å tegne seg på nytt ved hvert
+   svar fra anlegget, og alle animasjoner bak glasset går videre. På en treg maskin er det nok til
+   at popupen hakker. Bak en åpen popup står derfor animasjonene stille og verdiene tegnes ikke,
+   og når popupen lukkes tegnes de nye verdiene på en gang. */
+(function popupRo() {
+  let siste = false, t = 0;
+  const aapen = () => !!document.querySelector('.gs-overlay:not([hidden]), .menu-pop:not([hidden]), .dlg-lag');
+  function sjekk() {
+    t = 0;
+    const na = aapen();
+    if (na === siste) return;
+    siste = na;
+    document.body.classList.toggle('har-popup', na);
+    if (!na && window.__verdiStale) {
+      window.__verdiStale = false;
+      try { if (typeof updateValueCells === 'function' && S.pointIndex) updateValueCells([...S.pointIndex.keys()]); } catch { /* neste svar tegner dem */ }
+    }
+  }
+  const planlegg = () => { if (!t) t = setTimeout(sjekk, 60); };
+  new MutationObserver(planlegg).observe(document.body, {subtree: true, attributes: true, attributeFilter: ['hidden']});
+  new MutationObserver(planlegg).observe(document.body, {childList: true});
+})();
