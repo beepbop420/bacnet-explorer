@@ -452,7 +452,8 @@
     const ovF = $('tpGrafF');
     if (ovF) ovF.innerHTML = `<g class="tp-gl-lag">${lenkF}</g>`;
     KT.flyt = flyt;
-    const fl = $('tpFlyt');
+    const fl = $('tpFlytIn');
+    KT.flB = null;
     if (fl) fl.innerHTML = flyt.map((f, i) => `<div class="tp-fl ${f[4]}"${f[5] === null ? '' : ` data-s="${f[5]}"`}><i></i></div>`).join('');
     KT.flytEls = fl ? [...fl.children] : [];
     sv.innerHTML = `<g class="tp-gl-lag">${lenk}</g><g class="tp-gn-lag">${noder}</g><g class="tp-dyn-lag" id="tpDyn"></g><g class="tp-f-lag">${faste}</g>`;
@@ -550,21 +551,31 @@
     sv.setAttribute('viewBox', vbTekst);
     const ovF = $('tpGrafF');
     if (ovF) ovF.setAttribute('viewBox', vbTekst);
-    const flLag = $('tpFlyt');
-    if (flLag) flLag.classList.add('beveger');
+    flytFlytt();
     sv.classList.add('beveger');
     clearTimeout(KT.rT);
-    KT.rT = setTimeout(() => { sv.classList.remove('beveger'); flytPlass(); if (flLag) flLag.classList.remove('beveger'); }, 140);
+    KT.rT = setTimeout(() => sv.classList.remove('beveger'), 140);
     maal();
   }
   /* De rennende prikkene er HTML-elementer, ikke SVG: en CSS-animasjon på transform går på samlerlaget og koster hovedtråden nesten ingenting,
      mens en animert strek i SVG tegnes på nytt for hvert bilde. Her flyttes bare linjene når kartet flyttes. */
+  /* Når kartet bare flyttes (ingen zoom) er prikkene det samme bildet et annet sted: ett transform på hele laget, ingen omregning. Zoom regner hver linje på nytt. */
+  function flytFlytt() {
+    const vb = KT.vb, inn = $('tpFlytIn');
+    if (!inn || !KT.flytEls || !KT.flytEls.length || !vb) return;
+    const ru = rute($('tpGraf')), s = Math.min(ru.width / vb[2], ru.height / vb[3]), b = KT.flB;
+    if (b && Math.abs(s - b.s) < b.s * 1e-6 && Math.abs(vb[2] - b.w) < 1e-6 * b.w) {
+      inn.style.transform = `translate(${((b.x - vb[0]) * s).toFixed(1)}px,${((b.y - vb[1]) * s).toFixed(1)}px)`;
+    } else flytPlass();
+  }
   function flytPlass() {
     const els = KT.flytEls, lst = KT.flyt, vb = KT.vb;
     if (!els || !els.length || !vb) return;
     const ru = rute($('tpGraf')), s = Math.min(ru.width / vb[2], ru.height / vb[3]);
     if (!(s > 0)) return;
     const ox = (ru.width - vb[2] * s) / 2, oy = (ru.height - vb[3] * s) / 2;
+    KT.flB = {s, x: vb[0], y: vb[1], w: vb[2]};
+    $('tpFlytIn').style.transform = 'none';
     for (let i = 0; i < els.length; i++) {
       const f = lst[i];
       const x1 = ox + (f[0] - vb[0]) * s, y1 = oy + (f[1] - vb[1]) * s, x2 = ox + (f[2] - vb[0]) * s, y2 = oy + (f[3] - vb[1]) * s;
@@ -904,7 +915,7 @@
           <input id="tpSok" class="field" type="search" placeholder="${esc(T('Søk etter anlegg', 'Search sites'))}" aria-label="${esc(T('Søk etter anlegg', 'Search sites'))}">
           <div id="tpListe" class="tp-liste"></div><div id="tpRutere" class="tp-rutere" hidden></div></aside>
         <section id="tpKol" class="tp-lerret"><div id="tpStatus" class="tp-status"></div>
-          <div class="tp-verktoy" role="toolbar" aria-label="${esc(T('Zoom', 'Zoom'))}"><button type="button" data-tp="z-pluss" aria-label="${esc(T('Zoom inn', 'Zoom in'))}" title="${esc(T('Zoom inn (+)', 'Zoom in (+)'))}">+</button><button type="button" data-tp="z-minus" aria-label="${esc(T('Zoom ut', 'Zoom out'))}" title="${esc(T('Zoom ut (-)', 'Zoom out (-)'))}">−</button><button type="button" data-tp="z-fit" aria-label="${esc(T('Tilpass til vinduet', 'Fit to the window'))}" title="${esc(T('Tilpass til vinduet (0)', 'Fit to the window (0)'))}"><svg viewBox="0 0 16 16" class="tp-ik"><path d="M2.5 6V2.5H6M10 2.5h3.5V6M13.5 10v3.5H10M6 13.5H2.5V10"/></svg></button><button type="button" data-tp="z-navn" aria-label="${esc(T('Vis alle navn', 'Show every name'))}" title="${esc(T('Vis alle navn', 'Show every name'))}">Aa</button></div><div id="tpFlyt" class="tp-flyt-lag" aria-hidden="true"></div><svg id="tpGrafF" class="tp-graf-svg tp-graf-f" aria-hidden="true"></svg><svg id="tpGraf" class="tp-graf-svg" role="img" aria-label="${esc(T('Topologi, spredt', 'Topology, spread'))}"></svg><svg id="tpLenker" class="tp-lenker" aria-hidden="true"></svg>
+          <div class="tp-verktoy" role="toolbar" aria-label="${esc(T('Zoom', 'Zoom'))}"><button type="button" data-tp="z-pluss" aria-label="${esc(T('Zoom inn', 'Zoom in'))}" title="${esc(T('Zoom inn (+)', 'Zoom in (+)'))}">+</button><button type="button" data-tp="z-minus" aria-label="${esc(T('Zoom ut', 'Zoom out'))}" title="${esc(T('Zoom ut (-)', 'Zoom out (-)'))}">−</button><button type="button" data-tp="z-fit" aria-label="${esc(T('Tilpass til vinduet', 'Fit to the window'))}" title="${esc(T('Tilpass til vinduet (0)', 'Fit to the window (0)'))}"><svg viewBox="0 0 16 16" class="tp-ik"><path d="M2.5 6V2.5H6M10 2.5h3.5V6M13.5 10v3.5H10M6 13.5H2.5V10"/></svg></button><button type="button" data-tp="z-navn" aria-label="${esc(T('Vis alle navn', 'Show every name'))}" title="${esc(T('Vis alle navn', 'Show every name'))}">Aa</button></div><div id="tpFlyt" class="tp-flyt-lag" aria-hidden="true"><div id="tpFlytIn" class="tp-flyt-inn"></div></div><svg id="tpGrafF" class="tp-graf-svg tp-graf-f" aria-hidden="true"></svg><svg id="tpGraf" class="tp-graf-svg" role="img" aria-label="${esc(T('Topologi, spredt', 'Topology, spread'))}"></svg><svg id="tpLenker" class="tp-lenker" aria-hidden="true"></svg>
           <div class="tp-rad-pc"><div id="tpPc" class="tp-pc"></div><div id="tpInnhold" class="tp-innhold"></div></div></section>
         <aside id="tpDetalj" class="tp-detalj" hidden></aside>
       </div>

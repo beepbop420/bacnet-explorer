@@ -5722,7 +5722,7 @@ body.uten-bevegelse .tp-radar{animation:tp-rot 2.2s linear infinite!important}
 /* Rennende prikker i kartet: en rotert stripe som glir på transform (ikke SVG), så det går på samlerlaget */
 .tp-flyt-lag{display:none;position:absolute;inset:0;overflow:hidden;pointer-events:none;z-index:0}
 .tp-spredt .tp-flyt-lag{display:block}
-.tp-flyt-lag.beveger{visibility:hidden}
+.tp-flyt-inn{position:absolute;inset:0}
 .tp-fl{position:absolute;left:0;top:-1.4px;height:2.8px;transform-origin:0 50%;overflow:hidden;--c:var(--fg-3)}
 .tp-fl.p-bacnet{--c:var(--prot-bacnet)}.tp-fl.p-modbus{--c:var(--prot-modbus)}.tp-fl.p-knx{--c:var(--prot-knx)}
 .tp-fl>i{display:block;width:calc(100% + 17px);height:100%;background:repeating-linear-gradient(90deg,var(--c) 0 2.8px,transparent 2.8px 17px);animation:tp-fl-glid 1.2s linear infinite}
