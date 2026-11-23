@@ -6246,3 +6246,7 @@ td.c-val.dod{text-decoration:underline double color-mix(in srgb,var(--warn) 70%,
 /* 2.35: at a narrow width the counters used to run over the clock warning, because the bar never wrapped. */
 .ctx-bar{flex-wrap:wrap;row-gap:8px}
 .ctx-tittel{max-width:100%}
+
+/* Avvik fra settpunkt: punktnavnet får resten av bredden, tallene beholder sin egen */
+#avvikOverlay .sp-tab{table-layout:auto}
+#avvikOverlay .sp-tab td:first-child{width:100%}

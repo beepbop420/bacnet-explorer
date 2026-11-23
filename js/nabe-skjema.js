@@ -1219,7 +1219,10 @@
           const pumper = s.komp.filter(k => k.art === 'pumpe');
           if (pumper.length) tall.push([T('Pumper', 'Pumps'), `${pumper.filter(iDrift).length} ${T('av', 'of')} ${pumper.length} ${T('i drift', 'running')}`, '']);
         }
-        ut.push({ip: d.address, enhet: d.object_name || d.address, s, tall, navn: s.type === 'ventilasjon' ? T('Aggregat', 'Air handling') : (kursNavn(s) || tn({varme: ['Varme', 'Heating'], kjoling: ['Kjøling', 'Cooling']}, s.type)),
+        // Controllers often all carry the same name (Beckhoff_0): the address tells them apart.
+        const navnet = d.object_name || d.address;
+        const likt = S.devices.filter(x => (x.object_name || x.address) === navnet).length > 1;
+        ut.push({ip: d.address, enhet: likt ? `${navnet} · ${d.address}` : navnet, s, tall, navn: s.type === 'ventilasjon' ? T('Aggregat', 'Air handling') : (kursNavn(s) || tn({varme: ['Varme', 'Heating'], kjoling: ['Kjøling', 'Cooling']}, s.type)),
           alarm: s.komp.filter(iAlarm).length, haand: s.komp.filter(iHaand).length, rom: s.rom.size});
       }
     }
@@ -1236,7 +1239,7 @@
             <span class="ov-topp"><b>${esc(k.s.id || k.navn)}</b>${k.alarm ? `<em class="a">▲ ${k.alarm}</em>` : ''}${k.haand ? `<em class="h">${k.haand} ${T('i hånd', 'in hand')}</em>` : ''}</span>
             <span class="ov-navn">${esc(k.s.id ? k.navn : '')}</span>
             ${k.tall.map(([n, v, sp]) => `<span class="ov-rad"><i>${esc(n)}</i><b>${esc(v)}</b>${sp ? `<u>${esc(sp)}</u>` : ''}</span>`).join('')}
-            <span class="ov-enhet">${esc(k.enhet)}${k.rom ? ` · ${k.rom} ${T('rom', 'rooms')}` : ''}</span></button>`).join('')}</div></div>`).join('');
+            <span class="ov-enhet">${esc(k.enhet)}${k.rom ? ` · ${k.rom} ${k.rom === 1 ? T('rom', 'room') : T('rom', 'rooms')}` : ''}</span></button>`).join('')}</div></div>`).join('');
     lag.innerHTML = `<div class="gs-modal ov-modal"><div class="gs-head"><span class="gd-tittel">${T('Anleggsoversikt', 'Plant overview')}</span>
       <span class="ov-meta">${T(`${kort.length} systemer på ${lest} leste enheter av ${S.devices.length}`, `${kort.length} systems on ${lest} devices read of ${S.devices.length}`)}</span>
       <button class="gs-close" style="margin-left:auto"><span class="lbl">${T('Lukk', 'Close')}</span> ✕</button></div>

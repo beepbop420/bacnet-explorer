@@ -399,9 +399,13 @@ setInterval(() => {
     }
     return r.vist.map(x => {
       const u = esc(x.p.unit_symbol || '');
+      // Two values 20 times apart under the same name and unit are more often a wrong unit
+      // or a wrong pairing than a plant that far off. Said quietly, never hidden.
+      const a = Math.abs(x.p.value), b = Math.abs(x.sp.value);
+      const skjev = Math.max(a, b) > 20 * Math.max(Math.min(a, b), 1);
       return `<tr data-ip="${esc(x.ip)}" data-o="${esc(x.p.objid)}" title="${esc((x.p.name || x.p.objid) + ' / ' + (x.sp.name || ''))}">
         <td><div class="sp-navn">${esc(x.p.name || x.p.objid)}</div>
-            <div class="sp-meta">${esc(enhetNavn(x.ip))}${alder(x.ip) ? ' · ' + esc(alder(x.ip)) : ''}</div></td>
+            <div class="sp-meta">${esc(enhetNavn(x.ip))}${alder(x.ip) ? ' · ' + esc(alder(x.ip)) : ''}${skjev ? ' · ' + esc(T('verdiene ligger langt fra hverandre, sjekk enhet', 'values far apart, check the unit')) : ''}</div></td>
         <td class="t">${esc(tall(x.p.value))} ${u}</td>
         <td class="t">${esc(tall(x.sp.value))} ${u}</td>
         <td class="t sp-avvik${x.rel >= 0.1 ? ' stor' : ''}">${x.avvik > 0 ? '+' : ''}${esc(tall(x.avvik))} ${u}</td></tr>`;
