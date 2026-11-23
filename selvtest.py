@@ -338,6 +338,16 @@ def royktest():
               "    && !t('x >20', 'inactive') && sokTreff('rt401', sokeOrd('rt401'), {}) && sokeOrd('-5') && sokeOrd('-5').nei[0] === '5'"
               "    && sokeOrd('>20').ja.length === 0; })(),"
               " excel: typeof exportXlsx === 'function' && !!document.getElementById('xlsxBtn'),"
+              " mobilikon: !!document.getElementById('mobilTopBtn') && !!document.getElementById('mobilTopBtn').title && typeof aapneMobil === 'function',"
+              " akkordeon: typeof brukSettAkkordeon === 'function' && (() => { brukSettAkkordeon('oppsett');"
+              "    const g = [...document.getElementById('settOppsett').children].filter(x => x.classList.contains('sett-gruppe'));"
+              "    return g.length > 3 && !g[0].classList.contains('lukket') && g.slice(1).every(x => x.classList.contains('lukket')); })(),"
+              " solbriller: typeof arbeidsklaer === 'function' && (() => { const rot = document.documentElement, t0 = rot.getAttribute('data-theme');"
+              "    if ([...document.querySelectorAll('.gs-overlay')].some(o => !o.hidden && o.offsetParent !== null)) return true;"
+              "    rot.setAttribute('data-theme', 'light'); const l = arbeidsklaer().nabe.ansikt;"
+              "    rot.setAttribute('data-theme', 'dark'); const d = arbeidsklaer().nabe.ansikt;"
+              "    if (t0) rot.setAttribute('data-theme', t0); else rot.removeAttribute('data-theme');"
+              "    return l === 'solbriller' && d !== 'solbriller'; })(),"
               " helhet: !!window.nabeSyn && !!window.nabeRaad && typeof kobleTilPaaNytt === 'function' && typeof navngiNett === 'function'"
               "  && !!document.getElementById('devRescan') && !!document.getElementById('fargesynBtn') && !!document.getElementById('humorBtn')"
               "  && !!document.getElementById('bakoverBtn') && !document.getElementById('expPop').contains(document.getElementById('schBtn')),"
@@ -1375,6 +1385,15 @@ def mobil_fil():
     sjekk("oppsett: mobiltilgang av gir tiltaket Slå på, og ingen porttest", av["mobil"]["fiks"] == "start" and "nar" not in av and av["brannmur"]["status"] == "ukjent", str(list(av)))
     sjekk("oppsett: sammendraget teller", nm.sjekk_sammendrag(bra)["ok"] == len(bra) and nm.sjekk_sammendrag(list(darlig.values()))["feil"] == 1)
     sjekk("oppsett: titler og detaljer finnes på begge språk", all(len(r["tittel"]) == 2 and all(r["tittel"]) for r in list(darlig.values()) + bra))
+    # Offentlig nett uten regel er en feil, ikke et råd. Et gjestenett får en egen advarsel. Sperret hotspot sier hvorfor.
+    off = {r["id"]: r for r in nm.sjekkliste({"kort": [], "mobil_paa": True, "port": 8093, "nar": {"192.168.2.5": True}, "skriv": False, "brannmur": False,
+                                               "hotspot": {"paa": False, "kan": True}, "arp": 0, "wifi": "Wi-Fi", "hotspot_sperret": True,
+                                               "wifi_profil": {"navn": "Firma Gjest", "kat": "Public"}})}
+    sjekk("oppsett: offentlig nett uten brannmurregel er en feil med tiltaket Åpne", off["brannmur"]["status"] == "feil" and off["brannmur"]["fiks"] == "brannmur" and "Firma Gjest" in off["brannmur"]["tittel"][0] + off["brannmur"]["detalj"][0], str(off["brannmur"]))
+    sjekk("oppsett: gjestenett får egen advarsel, og sperret hotspot har ikke tiltaket Slå på", off["wifi_iso"]["status"] == "merk" and off["hotspot"]["fiks"] == "" and "sperret" in off["hotspot"]["tittel"][0], str((off.get("wifi_iso"), off["hotspot"])))
+    privat = {r["id"]: r for r in nm.sjekkliste({"kort": [], "mobil_paa": True, "port": 8093, "nar": {}, "skriv": False, "brannmur": False, "hotspot": {}, "arp": 0, "wifi": "Wi-Fi",
+                                                  "wifi_profil": {"navn": "Kontor", "kat": "Private"}})}
+    sjekk("oppsett: privat nett uten regel er bare et merke, og vanlig navn gir ingen gjestevarsel", privat["brannmur"]["status"] == "merk" and "wifi_iso" not in privat)
 
     # Loggen over hva telefonen gjorde: strukturert, i en fil, nyeste først, og den holder seg liten.
     import tempfile as _tf
@@ -2116,6 +2135,31 @@ def redigering():
     sjekk("knx: redigeringen skrev ingenting til bussen", KXSIM.writes_received == [])
 
 
+def standardregler():
+    """Reglene som følger med for varme, kjøling og ventilasjon: gyldige, på norsk og engelsk, med egne id-er."""
+    d = kall("/api/regler")
+    std = json.loads(d.get("standard") or "{}")
+    r = std.get("regler") or []
+    ider = [x.get("id") for x in r]
+    felt = {"id", "aktiv", "tittel", "hvorfor", "sjekk", "prio", "minst", "per_enhet", "naar"}
+    naar = {"navn", "beskrivelse", "type", "enhet", "verdi", "tilstand", "status", "ikke_status", "enhetsnavn", "leverandor", "protokoll"}
+    sjekk("standardregler: minst åtte, hver med egen id som starter med std-", len(r) >= 8 and len(set(ider)) == len(ider) and all(str(i).startswith("std-") for i in ider), str(ider))
+    sjekk("standardregler: bare kjente felt og krav", all(set(x) <= felt and set(x.get("naar", {})) <= naar for x in r), str([x["id"] for x in r if not set(x) <= felt or not set(x.get("naar", {})) <= naar]))
+    sjekk("standardregler: tekstene finnes på norsk og engelsk", all(isinstance(x.get("tittel"), dict) and x["tittel"].get("no") and x["tittel"].get("en") for x in r))
+    mal = []
+    for x in r:
+        for k in ("navn", "beskrivelse", "enhetsnavn", "leverandor"):
+            if k in x["naar"]:
+                try:
+                    re.compile(x["naar"][k], re.I)
+                except re.error as e:
+                    mal.append(f"{x['id']}.{k}: {e}")
+    sjekk("standardregler: alle regulære uttrykk lar seg tolke", not mal, "; ".join(mal))
+    sys320 = next((x for x in r if x["id"] == "std-overstyrt-varme"), None)
+    sjekk("standardregler: systemnummeret treffer 320.012 og G_320_014_RT41, men ikke 3200 eller 1320",
+          bool(sys320) and all(bool(re.search(sys320["naar"]["navn"], n)) == ok for n, ok in [("320.012-RT", True), ("G_320_014_RT41", True), ("A-3200-1", False), ("X1320_1", False)]))
+
+
 def excel():
     """The point list as a real Excel file: read back, the numbers are still numbers and the odd characters survive."""
     import io, zipfile
@@ -2311,6 +2355,7 @@ def kjor_tester():
     sjekk("versjonssjekk svarer (med eller uten nett)", v.get("status") == "done", f"her {v.get('her')}, github {v.get('github')}")
     statiske_filer()
     excel()
+    standardregler()
     mobil_fil()
 
 

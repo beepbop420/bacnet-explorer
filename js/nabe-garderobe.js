@@ -196,6 +196,12 @@ function arbeidsklaer() {
     || ($('naboOverlay') && !$('naboOverlay').hidden);
   const skriver = (document.activeElement && document.activeElement.id === 'wVal' && String(document.activeElement.value || '').trim())
     || Date.now() - (GARD.skrevet || 0) < 15000;
+  // Light mode is a sunlit van: sunglasses on, unless a pair was chosen by hand.
+  if (document.documentElement.getAttribute('data-theme') === 'light') {
+    const g = gardPrefs();
+    if (!(g.nabe || {}).ansikt) ut.nabe.ansikt = 'solbriller';
+    if (!(g.nabo || {}).ansikt) ut.nabo.ansikt = 'solbriller';
+  }
   if (time >= 21 || time < 6) ut.nabe.hode = 'hodelykt';
   if (S.live) ut.nabo.hode = 'hodetelefoner';
   if (skriver) ut.nabe.hode = 'hjelm';

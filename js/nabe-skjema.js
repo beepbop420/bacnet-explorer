@@ -1236,7 +1236,7 @@
       ? `<div class="gs-empty">${T('Fant ingen aggregater eller varmekurser i navnene på punktene som er lest. Åpne en enhet for å lese den.', 'Found no air handling units or heating circuits in the names of the points that have been read. Open a device to read it.')}</div>`
       : grupper.filter(([t]) => kort.some(k => k.s.type === t)).map(([t, navn]) => `<div class="ov-gruppe"><div class="ov-t">${navn}<small>${kort.filter(k => k.s.type === t).length}</small></div>
           <div class="ov-gitter">${kort.filter(k => k.s.type === t).map(k => `<button type="button" class="ov-kort${k.alarm ? ' alarm' : ''}" data-ip="${esc(k.ip)}" data-fane="${esc(t === 'ventilasjon' ? 'v:' + k.s.id : t)}">
-            <span class="ov-topp"><b>${esc(k.s.id || k.navn)}</b>${k.alarm ? `<em class="a">▲ ${k.alarm}</em>` : ''}${k.haand ? `<em class="h">${k.haand} ${T('i hånd', 'in hand')}</em>` : ''}</span>
+            <span class="ov-topp"><b>${esc(k.s.id || k.navn)}</b>${k.alarm ? `<em class="a"><i class="bjelle" aria-hidden="true"></i> ${k.alarm}</em>` : ''}${k.haand ? `<em class="h">${k.haand} ${T('i hånd', 'in hand')}</em>` : ''}</span>
             <span class="ov-navn">${esc(k.s.id ? k.navn : '')}</span>
             ${k.tall.map(([n, v, sp]) => `<span class="ov-rad"><i>${esc(n)}</i><b>${esc(v)}</b>${sp ? `<u>${esc(sp)}</u>` : ''}</span>`).join('')}
             <span class="ov-enhet">${esc(k.enhet)}${k.rom ? ` · ${k.rom} ${k.rom === 1 ? T('rom', 'room') : T('rom', 'rooms')}` : ''}</span></button>`).join('')}</div></div>`).join('');

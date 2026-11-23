@@ -778,6 +778,8 @@ HOTSPOT_FEIL = {
                    "Windows has no connection to share right now. Connect the cable or a Wi-Fi first, or turn on the hotspot on the phone and join the PC to it."),
     "EntitlementCheckTimeout": ("Windows fikk ikke svar fra operatøren om hotspot er tillatt.", "Windows got no answer from the operator on whether the hotspot is allowed."),
     "EntitlementCheckFailure": ("Hotspot er ikke tillatt på denne PC-en (operatør eller IT-regler).", "The hotspot is not allowed on this PC (operator or IT rules)."),
+    "Unknown": ("Windows sier nei uten grunn. Det er nesten alltid IT-regler på en PC styrt av organisasjonen. Slå på hotspot på telefonen og koble PC-en til det i stedet.",
+                "Windows says no without a reason. On a PC managed by an organisation that is almost always IT rules. Turn on the hotspot on the phone and join the PC to it instead."),
 }
 
 
@@ -825,7 +827,11 @@ def hotspot_sett(paa: bool, torr: bool = False) -> Dict[str, Any]:
                 os.unlink(fil)
             except OSError:
                 pass
+    if not d["ok"] and paa and not torr and str(d.get("status")) in ("Unknown", "EntitlementCheckFailure"):
+        # Windows sier nei uten en grunn man kan gjøre noe med. På en PC styrt av IT er det reglene deres.
+        M["hotspot_sperret"] = True
     if d["ok"] and not torr:
+        M["hotspot_sperret"] = False
         if paa:
             if d.get("paa") and not d.get("allerede"):
                 M["hotspot_vaar"] = True
@@ -894,6 +900,32 @@ def brannmur_finnes() -> Optional[bool]:
             v = None
     M["brannmur"] = (time.time(), v)
     return v
+
+
+def nettprofil_hent() -> Dict[str, Dict[str, str]]:
+    """Hva Windows kaller hvert nett (navn og om det er offentlig eller privat), per kort. På et offentlig nett
+    stenger brannmuren for alt utenfra uten en regel, og det er den vanligste grunnen til at telefonen ikke når PC-en."""
+    ut: Dict[str, Dict[str, str]] = {}
+    if ln.er_windows():
+        try:
+            r = subprocess.run(["powershell", "-NoProfile", "-Command",
+                                "Get-NetConnectionProfile | Select-Object Name,InterfaceAlias,@{n='kat';e={\"$($_.NetworkCategory)\"}} | ConvertTo-Json -Compress"],
+                               capture_output=True, text=True, timeout=15, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+            d = json.loads(r.stdout.strip() or "[]")
+            for p in (d if isinstance(d, list) else [d]):
+                if isinstance(p, dict) and p.get("InterfaceAlias"):
+                    ut[str(p["InterfaceAlias"])] = {"navn": str(p.get("Name") or ""), "kat": str(p.get("kat") or "")}
+        except Exception:
+            pass
+    M["nettprofil"] = (time.time(), ut)
+    return ut
+
+
+def wifi_profil() -> Optional[Dict[str, str]]:
+    """Profilen til Wi-Fi-nettet PC-en er på, fra siste oppslag (nytt hentes i bakgrunnen)."""
+    p = _ferske("nettprofil", nettprofil_hent, 30) or {}
+    k = wifi_klient()
+    return p.get(k) if k else None
 
 
 HOTSPOT_PS = r"""$ErrorActionPreference = 'Stop'
@@ -1010,14 +1042,30 @@ def sjekkliste(f: Dict[str, Any]) -> List[Dict[str, Any]]:
     if bm is True:
         legg("brannmur", "ok", ("Brannmuren slipper inn lokalt", "The firewall lets the local network in"))
     elif bm is False:
-        legg("brannmur", "merk", ("Ingen brannmurregel for NABE", "No firewall rule for NABE"),
-             ("Windows kan stoppe telefonen første gang. Regelen gjelder bare det lokale nettet.", "Windows may stop the phone the first time. The rule only covers the local network."), "brannmur")
+        wp = f.get("wifi_profil") or {}
+        if str(wp.get("kat")) == "Public":
+            legg("brannmur", "feil", ("Windows slipper ikke telefonen inn", "Windows does not let the phone in"),
+                 (f"Nettet «{wp.get('navn') or ''}» er satt som offentlig, og da stenger Windows for alt som kommer utenfra. Trykk Åpne, så lager NABE en regel bare for det lokale nettet. Windows spør om administrator.",
+                  f"The network “{wp.get('navn') or ''}” is set as public, and then Windows shuts out everything from outside. Press Open and NABE makes a rule for the local network only. Windows asks for an administrator."), "brannmur")
+        else:
+            legg("brannmur", "merk", ("Ingen brannmurregel for NABE", "No firewall rule for NABE"),
+                 ("Windows kan stoppe telefonen første gang. Regelen gjelder bare det lokale nettet.", "Windows may stop the phone the first time. The rule only covers the local network."), "brannmur")
     else:
         legg("brannmur", "ukjent", ("Brannmuren ble ikke sjekket", "The firewall was not checked"),
              ("Windows ga ikke svar. Det går ofte bra likevel.", "Windows gave no answer. It often works anyway."))
 
+    wp = f.get("wifi_profil") or {}
+    if wp.get("navn") and re.search(r"gjest|guest|iot|visitor|besøk|public|hotel|hotell|free", str(wp["navn"]), re.I):
+        legg("wifi_iso", "merk", ("Wi-Fi-et ser ut som et gjeste- eller IoT-nett", "The Wi-Fi looks like a guest or IoT network"),
+             (f"«{wp['navn']}». Slike nett skjuler ofte enhetene for hverandre, og da når ikke telefonen PC-en selv om alt her er riktig. Bruk hotspot på telefonen og koble PC-en til det.",
+              f"“{wp['navn']}”. Such networks often hide devices from each other, and then the phone cannot reach the PC even when everything here is right. Use the hotspot on the phone and join the PC to it."))
+
     h = f.get("hotspot") or {}
-    if h.get("paa"):
+    if f.get("hotspot_sperret") and not h.get("paa"):
+        legg("hotspot", "merk", ("Hotspot er sperret på denne PC-en", "The hotspot is blocked on this PC"),
+             ("Windows sa nei da NABE prøvde, og innstillingen er styrt av organisasjonen. Slå på hotspot på telefonen og koble PC-en til det, eller bruk USB-deling fra telefonen.",
+              "Windows said no when NABE tried, and the setting is managed by the organisation. Turn on the hotspot on the phone and join the PC to it, or use USB tethering from the phone."))
+    elif h.get("paa"):
         n = int(h.get("klienter") or 0)
         legg("hotspot", "ok", ("Hotspot er på", "Hotspot is on"),
              (f"{h.get('ssid') or ''}, {n} tilkoblet", f"{h.get('ssid') or ''}, {n} connected"))
@@ -1071,7 +1119,8 @@ def samle_fakta() -> Dict[str, Any]:
     nar = {a["ip"]: _naa(a["ip"], M["port"]) for a in adresser(M["port"])} if paa else {}
     hot = hotspot_status() if ln.er_windows() else {}
     return {"kort": kort, "mobil_paa": paa, "port": M["port"], "nar": nar, "skriv": bool(M["skriv"]),
-            "brannmur": brannmur_finnes() if paa else None, "hotspot": hot, "arp": len(arp_tabell()), "wifi": wifi_klient()}
+            "brannmur": brannmur_finnes() if paa else None, "hotspot": hot, "arp": len(arp_tabell()), "wifi": wifi_klient(),
+            "wifi_profil": (nettprofil_hent() or {}).get(wifi_klient() or ""), "hotspot_sperret": bool(M.get("hotspot_sperret"))}
 
 
 def oppsettsjekk() -> Dict[str, Any]:
@@ -1103,5 +1152,7 @@ def status() -> Dict[str, Any]:
         "brannmur": _ferske("brannmur", brannmur_finnes, 20) if paa else None,
         "hotspot": _ferske("hotspot", hotspot_status, 3) if paa else None,
         "hotspot_vaar": bool(M.get("hotspot_vaar")),
+        "hotspot_sperret": bool(M.get("hotspot_sperret")),
+        "wifi_profil": wifi_profil() if paa else None,
         "wifi_klient": _ferske("wifi_klient", lambda: M.__setitem__("wifi_klient", (time.time(), wifi_klient())), 8) if paa else None,
     }

@@ -65,8 +65,9 @@
     catch (e) { return {regler: [], feil: [T(`Fila er ikke gyldig JSON: ${e.message}`, `The file is not valid JSON: ${e.message}`)], antall: 0}; }
     const rå = Array.isArray(d) ? d : d && Array.isArray(d.regler) ? d.regler : null;
     if (!rå) return {regler: [], feil: [T('Fila må ha en liste som heter «regler».', 'The file needs a list called "regler".')], antall: 0};
-    const feil = [], ut = [], ider = new Set();
+    const feil = [], ut = [], ider = new Set(), alleIder = [];
     rå.forEach((r, i) => {
+      if (r && typeof r === 'object' && typeof r.id === 'string') alleIder.push(r.id);
       const hvilken = `${T('Regel', 'Rule')} ${i + 1}${r && typeof r === 'object' && r.id ? ` («${r.id}»)` : ''}`;
       const f = (m) => feil.push(`${hvilken}: ${m}`);
       if (!r || typeof r !== 'object' || Array.isArray(r)) { f(T('må være et objekt med { }.', 'has to be an object with { }.')); return; }
@@ -109,7 +110,7 @@
       if (feil.length > n0 || r.aktiv === false) return;      // a rule with a mistake is left out, and one that is off is not asked
       ut.push({id: r.id || `regel${i + 1}`, tittel: r.tittel, hvorfor: r.hvorfor, sjekk, prio: r.prio || 2, minst: r.minst || 1, perEnhet, c});
     });
-    return {regler: ut, feil, antall: rå.length};
+    return {regler: ut, feil, antall: rå.length, ider: alleIder};
   }
 
   /* The rules judged against what has been read. `lev(d)` is the vendor of a device. */
@@ -154,7 +155,14 @@
     let d;
     try { d = await (await fetch('/api/regler', {cache: 'no-store'})).json(); } catch { return SISTE; }
     if (!d || d.status !== 'done') return SISTE;
-    SISTE = d.finnes ? {...valider(d.tekst), fil: d.fil, finnes: true, lest: Date.now()} : {regler: [], feil: [], antall: 0, fil: d.fil, finnes: false, lest: Date.now()};
+    const bruker = d.finnes ? valider(d.tekst) : {regler: [], feil: [], antall: 0, ider: []};
+    // The rules that come with NABE are on from the start. A rule in the own file with the same id replaces one
+    // (or switches it off with "aktiv": false), so nothing has to be copied out to be changed.
+    let std = {regler: []};
+    try { if (d.standard) std = valider(d.standard); } catch { /* the built-in ones are never worth a broken page */ }
+    const eget = new Set(bruker.ider || []);
+    const standard = std.regler.filter((r) => !eget.has(r.id));
+    SISTE = {...bruker, egne: bruker.regler.length, standard: standard.length, regler: standard.concat(bruker.regler), fil: d.fil, finnes: !!d.finnes, lest: Date.now()};
     return SISTE;
   }
   async function aapne() {

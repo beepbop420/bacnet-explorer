@@ -6558,7 +6558,9 @@ def _regler_mal() -> Dict[str, Any]:
         "_hjelp": ("Egne regler for «Forslag til service». Hver regel velger ut punkter med «naar», og vises som et forslag "
                    "når minst «minst» punkter passer. Alle reglene under står på «aktiv»: false. Slå en på ved å fjerne den "
                    "linja eller sette true. Endringer gjelder neste gang du åpner forslagene, eller når du trykker «Last på nytt». "
-                   "Feil i fila vises som et forslag, med hvilken regel det gjelder."),
+                   "Feil i fila vises som et forslag, med hvilken regel det gjelder. NABE har også standardregler for varme, kjøling "
+                   "og ventilasjon (id-er som starter med «std-»). De er på uten at de står her. Slå en av ved å legge inn en regel "
+                   "med samme id og «aktiv»: false, eller bytt den ut ved å legge inn din egen med samme id."),
         "felt": {
             "id": "Kort navn på regelen, uten mellomrom",
             "aktiv": "false hopper over regelen",
@@ -6607,6 +6609,77 @@ def _regler_mal() -> Dict[str, Any]:
     }
 
 
+def _sys_navn(nr: str) -> str:
+    """Navn som har systemnummeret etter NS 3451 som eget tall: G_320_014_RT41, 320.012, A-360-001.
+    320 er varme, 360 luftbehandling, 370 komfortkjøling og 350 prosesskjøling. Flere nummer skilles med |."""
+    return f"(^|[^0-9])({nr})([^0-9]|$)"
+
+
+def _regler_standard() -> Dict[str, Any]:
+    """Allmenne regler for varmeanlegg, kjøleanlegg og ventilasjon. De er på fra start, og brukeren kan slå en av
+    ved å legge en regel med samme id og «aktiv»: false i egen fil, eller bytte den ut med en egen. De sier bare hva
+    som bør sees på, aldri hva som skal gjøres, og de bruker bare det punktet selv sier (navn, beskrivelse, enhet,
+    verdi og flagg). Rimelige terskler i stedet for skarpe: en regel som roper ofte blir ikke lest."""
+    def regel(id_, prio, tittel, hvorfor, sjekk, naar, minst=1):
+        r = {"id": id_, "prio": prio, "tittel": tittel, "hvorfor": hvorfor, "sjekk": sjekk, "naar": naar}
+        if minst > 1:
+            r["minst"] = minst
+        return r
+    fa = ["fault", "in-alarm"]
+    overstyrt_hvorfor = {"no": "Overstyringer fra en servicerunde blir lett stående.", "en": "Overrides from a service visit easily stay."}
+    overstyrt_sjekk = [{"no": "Spør hvem som la den inn", "en": "Ask who put it in"}, {"no": "Slipp den hvis den ikke trengs", "en": "Release it if it is not needed"}]
+    return {"versjon": 1, "regler": [
+        regel("std-vifte-feil", 1,
+              {"no": "{n} vifter eller motorer i feil eller alarm", "en": "{n} fans or motors in fault or alarm"},
+              {"no": "En vifte eller motor i feil betyr som regel at luft eller varme uteblir. Se etter motorvern, frekvensomformer og feilmelding.",
+               "en": "A fan or motor in fault usually means air or heat is missing. Look at the motor protection, the drive and the error message."},
+              [{"no": "Er motorvernet løst ut?", "en": "Has the motor protection tripped?"}, {"no": "Står frekvensomformeren i feil?", "en": "Is the drive in fault?"}],
+              {"beskrivelse": "vifte|\\bfan\\b|motor|frekvensomformer|\\bFU\\b", "status": fa}),
+        regel("std-pumpe-feil", 1,
+              {"no": "{n} pumper i feil eller alarm", "en": "{n} pumps in fault or alarm"},
+              {"no": "En pumpe i feil stopper sirkulasjonen, og det merkes først som kalde rom eller for varmt vann i returen.",
+               "en": "A pump in fault stops the circulation, and it shows first as cold rooms or hot water in the return."},
+              [{"no": "Er motorvernet løst ut?", "en": "Has the motor protection tripped?"}, {"no": "Går den i håndmodus ved tavla?", "en": "Is it running in hand mode at the panel?"}],
+              {"beskrivelse": "pumpe|\\bpump\\b|sirkulasjon|\\bsirk\\b", "status": fa}),
+        regel("std-kjoling-alarm", 1,
+              {"no": "{n} alarmer i kjøleanlegget", "en": "{n} alarms in the cooling plant"},
+              {"no": "Et kjøleanlegg som faller ut merkes ofte først når det blir varmt, og da er det sent.",
+               "en": "A cooling plant that drops out is often noticed when it gets warm, and then it is late."},
+              [{"no": "Åpne alarmlista til enheten", "en": "Open the alarm list of the device"}, {"no": "Sjekk kompressor, flyt og trykk", "en": "Check compressor, flow and pressure"}],
+              {"beskrivelse": "kompressor|kjølemaskin|kuldeanlegg|chiller|kjøle|cooling", "status": fa}),
+        regel("std-frostvakt", 1,
+              {"no": "{n} frostvakter eller glykolalarmer", "en": "{n} frost protection or glycol alarms"},
+              {"no": "Frostvakt i alarm betyr at batteriet er nær å fryse. Det er dyrt å la stå.",
+               "en": "Frost protection in alarm means the coil is close to freezing. That is expensive to leave."},
+              [{"no": "Står varmeventilen åpen?", "en": "Is the heating valve open?"}, {"no": "Går sirkulasjonspumpen?", "en": "Is the circulation pump running?"}],
+              {"beskrivelse": "frost|glykol|glycol", "status": ["in-alarm"]}),
+        regel("std-filter", 3,
+              {"no": "{n} filteralarmer", "en": "{n} filter alarms"},
+              {"no": "Et tett filter gir mindre luft og høyere strømforbruk. Det er sjelden hastverk, men det blir glemt.",
+               "en": "A clogged filter gives less air and higher power use. It is seldom urgent, but it gets forgotten."},
+              [{"no": "Bytt filteret og kvitter alarmen", "en": "Change the filter and acknowledge the alarm"}],
+              {"beskrivelse": "filter", "status": ["in-alarm"]}),
+        regel("std-vanntrykk-lavt", 2,
+              {"no": "{n} trykk under 0,5 bar", "en": "{n} pressures below 0.5 bar"},
+              {"no": "Lavt trykk i et lukket vannsystem betyr som regel lekkasje eller manglende påfylling. Et differansetrykk kan være lavt av seg selv.",
+               "en": "Low pressure in a closed water system usually means a leak or a missing top-up. A differential pressure can be low by itself."},
+              [{"no": "Les trykket ved ekspansjonskaret", "en": "Read the pressure at the expansion vessel"}, {"no": "Se etter lekkasje", "en": "Look for leaks"}],
+              {"beskrivelse": "trykk|pressure", "type": ["analog-input"], "enhet": "bars", "verdi": {"<": 0.5}}),
+        regel("std-co2-hoy", 2,
+              {"no": "{n} CO2-målinger over 1000 ppm", "en": "{n} CO2 readings above 1000 ppm"},
+              {"no": "Over 1000 ppm er luften brukt. Ofte står ventilasjonen på lav eller er stoppet.",
+               "en": "Above 1000 ppm the air is used up. Often the ventilation is on low or stopped."},
+              [{"no": "Går aggregatet, og på riktig trinn?", "en": "Is the air handling unit running, and on the right step?"}, {"no": "Er behovsstyringen i hånd?", "en": "Is the demand control in hand?"}],
+              {"type": ["analog-input"], "enhet": "parts-per-million", "verdi": {">": 1000}}, 2),
+        regel("std-overstyrt-varme", 3, {"no": "{n} overstyrte punkter i varmeanlegget", "en": "{n} overridden points in the heating plant"},
+              overstyrt_hvorfor, overstyrt_sjekk, {"navn": _sys_navn("320"), "status": ["overridden"]}),
+        regel("std-overstyrt-kjoling", 3, {"no": "{n} overstyrte punkter i kjøleanlegget", "en": "{n} overridden points in the cooling plant"},
+              overstyrt_hvorfor, overstyrt_sjekk, {"navn": _sys_navn("370|350"), "status": ["overridden"]}),
+        regel("std-overstyrt-ventilasjon", 3, {"no": "{n} overstyrte punkter i ventilasjonen", "en": "{n} overridden points in the ventilation"},
+              overstyrt_hvorfor, overstyrt_sjekk, {"navn": _sys_navn("360"), "status": ["overridden"]}),
+    ]}
+
+
 @app.get("/api/regler")
 def regler_les():
     try:
@@ -6617,7 +6690,8 @@ def regler_les():
         endret = REGLER_FIL.stat().st_mtime
     except OSError:
         endret = 0
-    return {"status": "done", "fil": str(REGLER_FIL), "finnes": finnes, "tekst": tekst, "endret": endret}
+    return {"status": "done", "fil": str(REGLER_FIL), "finnes": finnes, "tekst": tekst, "endret": endret,
+            "standard": json.dumps(_regler_standard(), ensure_ascii=False)}
 
 
 @app.post("/api/regler/mal")

@@ -44,7 +44,7 @@
         <small>${liten}</small><span id="${id.replace('Btn', 'State')}" class="menu-state"></span></button>`;
     const syn = gruppe(T('Fargesyn', 'Colour vision'),
       rad('fargesynBtn', T('Fargesyn', 'Colour vision'), T('Farger som holder seg adskilt også ved rød-grønn og blå-gul fargeblindhet', 'Colours that stay apart for red-green and blue-yellow colour blindness'))
-      + rad('formerBtn', T('Former i tillegg til farge', 'Shapes as well as colour'), T('▲ alarm, ◆ feil, ■ overstyrt, ved siden av fargen. Følger fargesyn til du velger selv', '▲ alarm, ◆ fault, ● overridden, next to the colour. Follows colour vision until you choose'), true)
+      + rad('formerBtn', T('Former i tillegg til farge', 'Shapes as well as colour'), T('Bjelle alarm, ◆ feil, ■ overstyrt, ved siden av fargen. Følger fargesyn til du velger selv', 'Bell alarm, ◆ fault, ● overridden, next to the colour. Follows colour vision until you choose'), true)
       + `<div class="syn-prov" id="synProv" aria-hidden="true"></div>`);
     const hum = gruppe(T('NABE og NABO', 'NABE and NABO'),
       rad('humorBtn', T('Humørnivå', 'Mood'), T('Stille: bare det som hjelper. Normal: som vanlig. Kaos: også en og annen bemerkning når det er stille', 'Quiet: only what helps. Normal: as usual. Chaos: the odd remark when it is quiet too')));

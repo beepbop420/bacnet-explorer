@@ -4826,7 +4826,7 @@ html.peker-egen *:not(input):not(textarea):not(select):not(.splitter):not([conte
 .pk-scene{gap:14px;justify-content:center}
 /* NABO is line art: without this his clothes inherit the outline. */
 .nabo-fig .plagg,.nabo-fig .rekv{stroke:none}
-#fullBtn svg,#sporBtn svg{width:14px;height:14px;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
+#fullBtn svg,#sporBtn svg,#mobilTopBtn svg{width:14px;height:14px;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
 #fullBtn .full-inn,#fullBtn.paa .full-ut{display:none}
 #fullBtn.paa .full-inn{display:inline}
 #pekerFig.klikkbar{pointer-events:auto;cursor:pointer}
@@ -4946,7 +4946,7 @@ html.mini .ki-gruppe,html.mini .sb-oppd{display:none !important}
 :root[data-theme="light"][data-fargesyn="kontrast"]{--ok:#0b5fd0;--warn:#9a6200;--err:#c2185b;--err-fg:#9c0f46;--adjust:#6b3fb0;--fg-2:#26262a;--fg-3:#45454d;--line:#9a9aa3;--line-2:#74747e}
 :root[data-fargesyn] .dev-flag.bad,:root[data-fargesyn] .dev-flag.warn{background:none}
 :root[data-former] .dev-st.bad::before,:root[data-former] .vgroup-head .dev-flag.bad::before,:root[data-former] .as-tall.bad::before,
-:root[data-former] .ctx-stat[data-flag="in-alarm"]::before,:root[data-former] .alarm-til.warn::before{content:'▲ '}
+:root[data-former] .alarm-til.warn::before{content:'▲ '}
 :root[data-former] .dev-st.feil::before,:root[data-former] .as-tall.feil::before,
 :root[data-former] .ctx-stat[data-flag="fault"]::before,:root[data-former] .alarm-til.bad::before{content:'◆ '}
 :root[data-former] .dev-st.warn::before,:root[data-former] .vgroup-head .dev-flag.warn::before,:root[data-former] .as-tall.warn::before,
@@ -6250,3 +6250,28 @@ td.c-val.dod{text-decoration:underline double color-mix(in srgb,var(--warn) 70%,
 /* Avvik fra settpunkt: punktnavnet får resten av bredden, tallene beholder sin egen */
 #avvikOverlay .sp-tab{table-layout:auto}
 #avvikOverlay .sp-tab td:first-child{width:100%}
+
+/* Alarm er en bjelle, ikke en trekant. Samme form som ord og tall står ved siden av, så fargen er aldri alene. */
+:root{--bjelle:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M8 1.6c-2.4 0-4 1.8-4 4.2v2.4L2.6 10.8v.9h10.8v-.9L12 8.2V5.8C12 3.4 10.4 1.6 8 1.6z'/%3E%3Cpath d='M6.4 13h3.2c0 .9-.7 1.6-1.6 1.6S6.4 13.9 6.4 13z'/%3E%3C/svg%3E")}
+.bjelle,:root[data-former] .ctx-stat[data-flag="in-alarm"]::before{display:inline-block;width:.95em;height:.95em;vertical-align:-.12em;background:currentColor;-webkit-mask:var(--bjelle) center/contain no-repeat;mask:var(--bjelle) center/contain no-repeat}
+:root[data-former] .ctx-stat[data-flag="in-alarm"]::before{content:'';margin-right:4px}
+.as-form .bjelle{width:11px;height:11px;vertical-align:-2px}
+
+/* Innstillinger: en gruppe åpen om gangen, resten er en rad hver. Luft i stedet for lange lister. */
+.sett-gruppe>.tema-tittel,.tema-gruppe>.tema-tittel{display:flex;align-items:center;justify-content:space-between;cursor:pointer;padding:8px 6px;margin:0;border-radius:6px;user-select:none}
+.sett-gruppe>.tema-tittel:hover,.tema-gruppe>.tema-tittel:hover{background:var(--hover)}
+.sett-gruppe>.tema-tittel:focus-visible,.tema-gruppe>.tema-tittel:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+.sett-gruppe>.tema-tittel::after,.tema-gruppe>.tema-tittel::after{content:'';width:6px;height:6px;border-right:1.5px solid var(--fg-3);border-bottom:1.5px solid var(--fg-3);transform:rotate(45deg) translate(-2px,-2px);transition:transform .15s}
+.sett-gruppe.lukket>.tema-tittel::after,.tema-gruppe.lukket>.tema-tittel::after{transform:rotate(-45deg)}
+.sett-gruppe.lukket>*:not(.tema-tittel),.tema-gruppe.lukket>*:not(.tema-tittel){display:none}
+.tema-gruppe{border:1px solid var(--line);border-radius:8px;background:var(--panel);padding:4px 6px 6px;margin-bottom:12px}
+.tema-gruppe.lukket{padding-bottom:4px}
+
+/* Lys visning: litt mer dybde og ro. Flatene løftes av en myk kant og skygge, ikke av mer farge. */
+:root[data-theme="light"] thead th{background:var(--bg)}
+:root[data-theme="light"] tbody tr:hover{background:color-mix(in srgb,var(--accent) 6%,#fff)}
+:root[data-theme="light"] .dev.sel{box-shadow:inset 3px 0 0 var(--accent)}
+:root[data-theme="light"] .topbar{box-shadow:0 1px 0 var(--line),0 6px 18px rgba(20,30,45,.05)}
+:root[data-theme="light"] .gs-overlay{background:rgba(24,32,44,.3);backdrop-filter:blur(2px)}
+:root[data-theme="light"] .gs-modal{border-color:var(--line);box-shadow:0 20px 50px rgba(20,30,45,.2),0 2px 6px rgba(20,30,45,.08)}
+:root[data-theme="light"] .sett-gruppe,:root[data-theme="light"] .tema-gruppe{box-shadow:0 1px 2px rgba(20,30,45,.04)}

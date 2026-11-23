@@ -9799,7 +9799,37 @@ function visSettFane(navn) {
     if (el) el.hidden = n !== valgt;
   });
   if (valgt === 'utseende') tegnTema();
+  brukSettAkkordeon(valgt);
 }
+
+/* Innstillingene er mange, så bare en gruppe står åpen om gangen fra start. Overskriften åpner og
+   lukker, og hvilke som er åpne huskes mens vinduet lever. Gruppene finnes på plass i begge
+   panelene, men utseendet tegnes på nytt ved hver endring, så oppsettet hentes fra indeksen. */
+const SETT_APEN = {oppsett: new Set([0]), utseende: new Set([0])};
+function brukSettAkkordeon(navn) {
+  const panel = $(SETT_FANER[navn]);
+  if (!panel) return;
+  [...panel.children].filter(g => g.classList.contains('sett-gruppe') || g.classList.contains('tema-gruppe')).forEach((g, i) => {
+    const apen = SETT_APEN[navn].has(i);
+    g.classList.toggle('lukket', !apen);
+    const t = g.querySelector(':scope > .tema-tittel');
+    if (t) { t.setAttribute('role', 'button'); t.tabIndex = 0; t.setAttribute('aria-expanded', String(apen)); }
+  });
+}
+function settAkkordeonKlikk(e) {
+  const t = e.target.closest && e.target.closest('.sett-gruppe > .tema-tittel, .tema-gruppe > .tema-tittel');
+  if (!t || (e.type === 'keydown' && e.key !== 'Enter' && e.key !== ' ')) return;
+  e.preventDefault();
+  const g = t.parentElement, panel = g.parentElement;
+  const navn = Object.keys(SETT_FANER).find(n => $(SETT_FANER[n]) === panel);
+  if (!navn) return;
+  const i = [...panel.children].filter(x => x.classList.contains('sett-gruppe') || x.classList.contains('tema-gruppe')).indexOf(g);
+  if (SETT_APEN[navn].has(i)) SETT_APEN[navn].delete(i); else SETT_APEN[navn].add(i);
+  brukSettAkkordeon(navn);
+}
+$('temaOverlay').addEventListener('click', settAkkordeonKlikk);
+$('temaOverlay').addEventListener('keydown', settAkkordeonKlikk);
+new MutationObserver(() => brukSettAkkordeon('utseende')).observe($('temaBody'), {childList: true});
 $('temaEksport').onclick = temaEksporter;
 $('temaImport').onclick = temaImporter;
 $('temaNullstill').onclick = async () => {
@@ -11060,6 +11090,8 @@ const ORDBOK = {
   'Enhetslista': 'The device list',
   'Bevegelse': 'Motion',
   'Spør NABE (Ctrl+J)': 'Ask NABE (Ctrl+J)',
+  'Bruk telefonen som fjernkontroll: QR, kode og hotspot': 'Use the phone as a remote control: QR, code and hotspot',
+  'Mobil': 'Mobile',
   'Spør NABE': 'Ask NABE',
   'Lokal KI': 'Local AI',
   'Spør NABE med lokal KI': 'Ask NABE with local AI',

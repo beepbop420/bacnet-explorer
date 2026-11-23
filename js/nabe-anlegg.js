@@ -263,7 +263,7 @@ function tegnAnleggNu() {
   const feilN = t.flagg['fault'].length - heleP;
   // Words while there is room for them. When the pane is narrow the words give way to
   // the shapes the device list already uses (▲ alarm, ◆ fault), and the words move to the tooltip.
-  const kort = [alarm ? `<span class="as-k bad" title="${alarm} ${T('i alarm', 'in alarm')}"><i class="as-form">▲</i><b>${alarm}</b><span class="as-ord"> ${T('i alarm', 'in alarm')}</span></span>` : '',
+  const kort = [alarm ? `<span class="as-k bad" title="${alarm} ${T('i alarm', 'in alarm')}"><i class="as-form"><i class="bjelle" aria-hidden="true"></i></i><b>${alarm}</b><span class="as-ord"> ${T('i alarm', 'in alarm')}</span></span>` : '',
                 feilN ? `<span class="as-k feil" title="${feilN} ${T('med feil', 'faulty')}"><i class="as-form">◆</i><b>${feilN}</b><span class="as-ord"> ${T('med feil', 'faulty')}</span></span>` : '',
                 heleN ? `<span class="as-k feil" title="${esc(T(`${heleP} punkter på ${heleN === 1 ? 'én enhet' : heleN + ' enheter'} der nesten alt har feil. Ofte en buss eller en modul.`, `${heleP} points on ${heleN === 1 ? 'one device' : heleN + ' devices'} where nearly everything is faulty. Often a bus or a module.`))}"><b>+${heleN}</b><span class="as-ord"> ${T(heleN === 1 ? 'enhet' : 'enheter', heleN === 1 ? 'device' : 'devices')}</span></span>` : ''].filter(Boolean).join('')
     || `<span class="as-k rolig">${t.ferdig ? T('ingen alarmer', 'no alarms') : T('leser…', 'reading…')}</span>`;

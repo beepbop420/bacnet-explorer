@@ -154,13 +154,25 @@
       inn = `${koblet}<div class="lk-blokk"><div class="lk-etikett">1 · ${T('Åpne på telefonen', 'Open on the phone')}</div>${qrHtml}${url}${andre}
         ${d.hotspot && d.hotspot.paa ? `<div class="lk-rad"><span>${T('Hotspot er på', 'Hotspot is on')}: <b>${esc(d.hotspot.ssid || '')}</b></span><span class="lk-dempet">${T('passord', 'password')} <span class="lk-mono">${esc(d.hotspot.passord || '')}</span></span></div>
             <div class="lk-handling"><button class="btn" data-mb="hotspot-av"${d.hotspotVenter ? ' disabled' : ''}>${d.hotspotVenter ? T('Slår av…', 'Turning off…') : T('Slå av hotspot', 'Turn off hotspot')}</button></div>`
-          : `<div class="lk-handling"><button class="btn primary" data-mb="hotspot-paa"${d.hotspotVenter ? ' disabled' : ''}>${d.hotspotVenter ? T('Starter hotspot…', 'Starting hotspot…') : T('Slå på hotspot', 'Turn on hotspot')}</button>
+          : (d.hotspot_sperret
+            ? `<div class="lk-feil" style="color:var(--warn)">▲ ${T('Hotspot er sperret på denne PC-en (IT-regler).', 'The hotspot is blocked on this PC (IT rules).')}</div>
+              <div class="lk-handling"><button class="btn" data-mb="hotspot">${T('Se innstillingene', 'See the settings')}</button></div>`
+            : `<div class="lk-handling"><button class="btn primary" data-mb="hotspot-paa"${d.hotspotVenter ? ' disabled' : ''}>${d.hotspotVenter ? T('Starter hotspot…', 'Starting hotspot…') : T('Slå på hotspot', 'Turn on hotspot')}</button>
             <button class="btn" data-mb="hotspot">${T('Innstillinger', 'Settings')}</button></div>
-            ${d.hotspotFeil ? `<div class="lk-feil">${esc(d.hotspotFeil)}</div>` : ''}`}
-        <div class="lk-liten">${T('Ingen felles nett? Slå på «Mobilt hotspot» i Windows og koble telefonen til det. Det virker uten internett. Eller motsatt: slå på hotspot på telefonen og koble PC-en til det.',
-          'No shared network? Turn on “Mobile hotspot” in Windows and join the phone to it. It works without internet. Or the other way round: turn on the hotspot on the phone and join the PC to it.')}</div></div>
-        ${d.brannmur === false ? `<div class="lk-blokk"><div class="lk-feil" style="color:var(--warn)">${T('Windows-brannmuren kan stoppe telefonen.', 'The Windows firewall may block the phone.')}</div>
-          <div class="lk-handling"><button class="btn" data-mb="brannmur">${T('Åpne for lokalt nett', 'Open for the local network')}</button></div></div>` : ''}
+            ${d.hotspotFeil ? `<div class="lk-feil">${esc(d.hotspotFeil)}</div>` : ''}`)}
+        <div class="lk-liten">${d.hotspot_sperret
+          ? T('Slå på hotspot på telefonen og koble PC-en til det. Det virker uten internett. Eller koble telefonen til PC-en med USB og slå på USB-deling i telefonen. Så viser adressen over seg selv.',
+            'Turn on the hotspot on the phone and join the PC to it. It works without internet. Or connect the phone to the PC with USB and turn on USB tethering in the phone. The address above then shows by itself.')
+          : T('Ingen felles nett? Slå på «Mobilt hotspot» i Windows og koble telefonen til det. Det virker uten internett. Eller motsatt: slå på hotspot på telefonen og koble PC-en til det.',
+            'No shared network? Turn on “Mobile hotspot” in Windows and join the phone to it. It works without internet. Or the other way round: turn on the hotspot on the phone and join the PC to it.')}</div></div>
+        ${d.brannmur === false ? (() => {
+          const off = d.wifi_profil && d.wifi_profil.kat === 'Public';
+          return `<div class="lk-blokk"><div class="lk-feil" style="color:var(--warn)">${off
+            ? T(`✕ Windows slipper ikke telefonen inn. Nettet «${esc(d.wifi_profil.navn)}» er offentlig, og da er alt utenfra stengt til det finnes en regel.`, `✕ Windows does not let the phone in. The network “${esc(d.wifi_profil.navn)}” is public, and then everything from outside is shut until there is a rule.`)
+            : T('▲ Windows-brannmuren kan stoppe telefonen.', '▲ The Windows firewall may block the phone.')}</div>
+          <div class="lk-handling"><button class="btn${off ? ' primary' : ''}" data-mb="brannmur">${T('Åpne for lokalt nett', 'Open for the local network')}</button></div>
+          <div class="lk-liten">${T('Regelen gjelder bare det lokale nettet og bare porten til NABE. Windows spør om administrator.', 'The rule covers only the local network and only the NABE port. Windows asks for an administrator.')}</div></div>`;
+        })() : ''}
         <div class="lk-blokk"><div class="lk-etikett">${qrHtml ? T('Får du ikke skannet? Skriv koden', 'Cannot scan? Type the code') : '2 · ' + T('Skriv koden', 'Type the code')}</div>
           ${d.kode ? `<div class="mb-kode${qrHtml ? ' liten' : ''}">${esc(d.kode)}</div><div class="lk-dempet">${T('Gyldig i ' + min(d.kode_rest_s) + ' min', 'Valid for ' + min(d.kode_rest_s) + ' min')}</div>`
             : `<div class="lk-dempet">${T('Koden er utløpt.', 'The code has expired.')}</div>`}
@@ -294,4 +306,5 @@
   };
 
   if ($('mobilBtn')) $('mobilBtn').onclick = () => { closeMenus(); window.aapneMobil(); };
+  if ($('mobilTopBtn')) $('mobilTopBtn').onclick = () => window.aapneMobil();
 })();
