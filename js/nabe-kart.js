@@ -11,7 +11,7 @@
 (function topologi() {
   const VISNING = (() => { try { return localStorage.getItem('nabe.topologi') || 'samlet'; } catch { return 'samlet'; } })();
   const RC = {t: 0, r: null};
-  const rute = (sv) => { const n = performance.now(); if (!RC.r) { RC.r = sv.getBoundingClientRect(); RC.t = n; } return RC.r; };
+  const rute = (sv) => { const n = performance.now(); if (!RC.r) { RC.r = (sv.parentElement || sv).getBoundingClientRect(); RC.t = n; } return RC.r; };
   const KT = {kort: [], anlegg: [], perKort: {}, timer: 0, valgt: null, utvid: new Set(), sett: new Set(), sig: '', filter: '', bare: false, skann: null, forste: true, apen: new Set(), visning: VISNING, vb: null};
 
   const lag = document.createElement('div');
@@ -458,6 +458,7 @@
     KT.flytEls = fl ? [...fl.children] : [];
     sv.innerHTML = `<g class="tp-gl-lag">${lenk}</g><g class="tp-gn-lag">${noder}</g><g class="tp-dyn-lag" id="tpDyn"></g><g class="tp-f-lag">${faste}</g>`;
     RC.r = null;
+    KT.vbA = null;
     KT.fastEls = [...sv.querySelectorAll('.tp-f-lag .tp-k')].map(g => [g, false]);
     KT.dynEls = []; KT.dynNiv = ''; KT.dynR = null;
     KT.sc0 = 0;
@@ -547,15 +548,30 @@
   function bruk() {
     const sv = $('tpGraf');
     if (!sv || !KT.vb) return;
-    const vbTekst = KT.vb.map(v => +v.toFixed(2)).join(' ');
-    sv.setAttribute('viewBox', vbTekst);
-    const ovF = $('tpGrafF');
-    if (ovF) ovF.setAttribute('viewBox', vbTekst);
+    /* Å flytte bildet uten å zoome er bare et annet utsnitt av samme tegning: SVG-en får et transform (går på samlerlaget, ingen layout,
+       ingen ny tegning), og viewBox settes først når bevegelsen stopper eller du zoomer. SVG-en tegner utenfor sin egen ramme
+       (overflow: visible), så kanten er aldri tom mens du drar. */
+    const ru = rute(sv), s = Math.min(ru.width / KT.vb[2], ru.height / KT.vb[3]), A = KT.vbA, ovF = $('tpGrafF');
+    if (A && Math.abs(KT.vb[2] - A.vb[2]) < 1e-6 * A.vb[2] && Math.abs(KT.vb[3] - A.vb[3]) < 1e-6 * A.vb[3] && s > 0) {
+      const tr = `translate(${((A.vb[0] - KT.vb[0]) * s).toFixed(1)}px,${((A.vb[1] - KT.vb[1]) * s).toFixed(1)}px)`;
+      sv.style.transform = tr;
+      if (ovF) ovF.style.transform = tr;
+    } else vbKomitter();
     flytFlytt();
     sv.classList.add('beveger');
     clearTimeout(KT.rT);
-    KT.rT = setTimeout(() => sv.classList.remove('beveger'), 140);
+    KT.rT = setTimeout(() => { vbKomitter(); sv.classList.remove('beveger'); }, 140);
     maal();
+  }
+  function vbKomitter() {
+    const sv = $('tpGraf'), ovF = $('tpGrafF');
+    if (!sv || !KT.vb) return;
+    const vbTekst = KT.vb.map(v => +v.toFixed(2)).join(' ');
+    sv.setAttribute('viewBox', vbTekst);
+    sv.style.transform = '';
+    if (ovF) { ovF.setAttribute('viewBox', vbTekst); ovF.style.transform = ''; }
+    const ru = rute(sv);
+    KT.vbA = {vb: KT.vb.slice(), s: Math.min(ru.width / KT.vb[2], ru.height / KT.vb[3])};
   }
   /* De rennende prikkene er HTML-elementer, ikke SVG: en CSS-animasjon på transform går på samlerlaget og koster hovedtråden nesten ingenting,
      mens en animert strek i SVG tegnes på nytt for hvert bilde. Her flyttes bare linjene når kartet flyttes. */
@@ -684,6 +700,7 @@
       pek.set(e.pointerId, {x: e.clientX, y: e.clientY});
       if (pek.size === 2) { const [a, b] = [...pek.values()]; klyp = Math.hypot(a.x - b.x, a.y - b.y); dra = null; return; }
       dra = {x: e.clientX, y: e.clientY, lx: e.clientX, ly: e.clientY, flyttet: false};
+      try { sv.setPointerCapture(e.pointerId); } catch { /* uten fangst følger draget likevel så lenge pekeren er over bildet */ }
     });
     sv.addEventListener('pointermove', (e) => {
       if (pek.has(e.pointerId)) pek.set(e.pointerId, {x: e.clientX, y: e.clientY});

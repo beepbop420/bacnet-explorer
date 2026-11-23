@@ -192,7 +192,8 @@ function arbeidsklaer() {
   if (!gardPrefs().arbeidsklaer) return {nabe: {}, nabo: {}};
   const ut = {nabe: {}, nabo: {}, rekv: {nabe: []}};
   const time = new Date().getHours();
-  const dokument = [...document.querySelectorAll('.gs-overlay')].some(o => !o.hidden && o.offsetParent !== null)
+  // hidden-attributtet er det som skjuler en popup; å spørre om offsetParent tvang frem layout hver gang
+  const dokument = [...document.querySelectorAll('.gs-overlay')].some(o => !o.hidden)
     || ($('naboOverlay') && !$('naboOverlay').hidden);
   const skriver = (document.activeElement && document.activeElement.id === 'wVal' && String(document.activeElement.value || '').trim())
     || Date.now() - (GARD.skrevet || 0) < 15000;
@@ -212,16 +213,17 @@ function arbeidsklaer() {
 }
 
 /* ---------------------------------------------------------- drawing */
+let ARB_NAA = null;     // arbeidsklærne regnes ut én gang per runde i kleAlle, ikke en gang per figur
 function antrekk(hvem) {
   const valgt = gardPrefs()[hvem] || {};
-  const arb = arbeidsklaer()[hvem] || {};
+  const arb = (ARB_NAA || arbeidsklaer())[hvem] || {};
   return Object.assign({}, valgt, arb);
 }
 
 function kle(svg, hvem, fast) {
   // fast: the outfit to draw instead of the live one (the catalog's previews).
   const sett = fast || antrekk(hvem);
-  const rekv = fast ? [] : ((arbeidsklaer().rekv || {})[hvem] || []);
+  const rekv = fast ? [] : (((ARB_NAA || arbeidsklaer()).rekv || {})[hvem] || []);
   const nokkel = JSON.stringify([sett, rekv]);
   if (svg.dataset.plagg === nokkel) return;
   svg.dataset.plagg = nokkel;
@@ -242,9 +244,14 @@ function kle(svg, hvem, fast) {
   svg.style.overflow = 'visible';
 }
 
-function kleAlle() {
-  document.querySelectorAll('svg.nabe:not(.gard-forhånd)').forEach(s => kle(s, 'nabe'));
-  document.querySelectorAll('svg.nabo-fig:not(.gard-forhånd)').forEach(s => kle(s, 'nabo'));
+function kleAlle(auto) {
+  // Bak en åpen popup ses ikke figurene, og kartet skal ikke forstyrres av klesskift: neste runde tar det igjen
+  if (auto === true && document.body.classList.contains('har-popup')) return;
+  ARB_NAA = arbeidsklaer();
+  try {
+    document.querySelectorAll('svg.nabe:not(.gard-forhånd)').forEach(s => kle(s, 'nabe'));
+    document.querySelectorAll('svg.nabo-fig:not(.gard-forhånd)').forEach(s => kle(s, 'nabo'));
+  } finally { ARB_NAA = null; }
 }
 
 /* ---------------------------------------------------------- the catalog */
@@ -501,9 +508,9 @@ function aktivitet(navn, ms) {
 
   // Draw now, and again whenever a figure appears or the moment changes.
   let ventende = 0;
-  new MutationObserver(() => { if (!ventende) ventende = setTimeout(() => { ventende = 0; kleAlle(); }, 120); })
+  new MutationObserver(() => { if (!ventende) ventende = setTimeout(() => { ventende = 0; kleAlle(true); }, 120); })
     .observe(document.body, {childList: true, subtree: true});
-  setInterval(kleAlle, 1000);
+  setInterval(() => kleAlle(true), 1000);
   setInterval(sjekkNye, 5000);
   setTimeout(sjekkNye, 3000);
   kleAlle();
