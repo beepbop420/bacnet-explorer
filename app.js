@@ -3711,6 +3711,9 @@ function avsluttLinje(el) {
 const NABE = {x: 0, y: 0, sist: Date.now(), raf: 0, snu: [], retning: 0, klikk: 0, klikkT: 0};
 
 function nabeMerke() { return document.querySelector('.nabe-mark'); }
+// Posisjonen leses høyst hver 250. ms: å lese den ved hver musebevegelse tvinger frem layout og gjør dra og zoom i kartet seigt.
+let NABE_RECT = null, NABE_RECT_T = 0;
+function nabeMerkeRect(m) { const n = performance.now(); if (!NABE_RECT || (n - NABE_RECT_T > 250 && !document.body.classList.contains('har-popup'))) { NABE_RECT = m.getBoundingClientRect(); NABE_RECT_T = n; } return NABE_RECT; }
 // After every script has run: T lives in nabe-start.js, which loads after this file.
 document.addEventListener('DOMContentLoaded', () => document.querySelectorAll('.gs-close').forEach(b => { if (!b.title) b.title = T('Lukk (Esc)', 'Close (Esc)'); }));
 
@@ -3725,7 +3728,7 @@ function nabeTegn() {
   if (document.body.classList.contains('skanner')) { dx = 0; dy = 1.8; }
   else if (har('fornoyd')) { dx = 0; dy = 0.5; }
   else if (har('ser') || har('nervos')) {
-    const r = m.getBoundingClientRect();
+    const r = nabeMerkeRect(m);
     const vx = NABE.x - (r.left + r.width / 2), vy = NABE.y - (r.top + r.height / 2);
     const len = Math.hypot(vx, vy) || 1;
     const mag = Math.min(2.2, len / 50);

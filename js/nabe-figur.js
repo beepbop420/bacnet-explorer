@@ -285,7 +285,7 @@ window.addEventListener('pointermove', (e) => {
   const naa = performance.now();
   const m = nabeMerke();
   if (m && !bevegelseAv() && !DRA.ned && DUKK.t) {
-    const r = m.getBoundingClientRect();
+    const r = nabeMerkeRect(m);
     const cx = r.left + 13, cy = r.top + 13;
     const for_ = Math.hypot(DUKK.x - cx, DUKK.y - cy), naa_ = Math.hypot(e.clientX - cx, e.clientY - cy);
     const fart = (for_ - naa_) / Math.max(1, naa - DUKK.t);      // px/ms towards him

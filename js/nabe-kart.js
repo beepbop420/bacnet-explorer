@@ -11,7 +11,7 @@
 (function topologi() {
   const VISNING = (() => { try { return localStorage.getItem('nabe.topologi') || 'samlet'; } catch { return 'samlet'; } })();
   const RC = {t: 0, r: null};
-  const rute = (sv) => { const n = performance.now(); if (!RC.r || n - RC.t > 400) { RC.r = sv.getBoundingClientRect(); RC.t = n; } return RC.r; };
+  const rute = (sv) => { const n = performance.now(); if (!RC.r) { RC.r = sv.getBoundingClientRect(); RC.t = n; } return RC.r; };
   const KT = {kort: [], anlegg: [], perKort: {}, timer: 0, valgt: null, utvid: new Set(), sett: new Set(), sig: '', filter: '', bare: false, skann: null, forste: true, apen: new Set(), visning: VISNING, vb: null};
 
   const lag = document.createElement('div');
@@ -363,7 +363,7 @@
     const vekt = (st) => Math.max(3, st.dev.length);
     const tot = gruppe.reduce((a, g) => a + g.s.reduce((b, st) => b + vekt(st), 0), 0) || 1;
     const C = 19;                                               // spacing of the dots in a cluster
-    let lenkF = '';
+    let lenkF = ''; const flyt = [];
     let a0 = Math.PI - (gruppe.length ? gruppe[0].s.reduce((b, st) => b + vekt(st), 0) / tot * Math.PI : 0), noder = '', lenk = '', faste = '';
     for (const g of gruppe) {
       const gv = g.s.reduce((b, st) => b + vekt(st), 0), ga = (gv / tot) * Math.PI * 2;
@@ -402,7 +402,8 @@
       const kx = Math.cos(g.a) * g.rK, ky = Math.sin(g.a) * g.rK;
       if (g.k) {
         const igang = aktive.has(g.k.ip);
-        lenkF += `<path class="tp-nett${igang ? ' paa' : ''}" d="M0,0 L${kx},${ky}"/>${igang ? `<path class="tp-flyt" d="M0,0 L${kx},${ky}"/>` : ''}`;
+        lenkF += `<path class="tp-nett${igang ? ' paa' : ''}" d="M0,0 L${kx},${ky}"/>`;
+        if (igang) flyt.push([0, 0, kx, ky, '', null]);
         faste += fast('tp-gk' + (igang ? '' : ' av'), kx, ky, `<rect x="-42" y="-12" width="84" height="24" rx="6"/><text y="4" text-anchor="middle">${esc(g.k.ip)}</text>`,
           `data-tp="kort" data-kortid="${esc(g.k.ip)}" data-tip="t:${esc(g.k.interface + ' · ' + g.k.cidr)}"`);
       }
@@ -410,14 +411,16 @@
       for (const st of g.s) {
         const ca = Math.cos(st.a), sa = Math.sin(st.a), hx = ca * g.rS, hy = sa * g.rS, gr = [hx, hy, hx, hy];
         const nr = si++;
-        lenkF += `<path class="tp-nett paa" d="M${g.k ? kx : 0},${g.k ? ky : 0} L${hx},${hy}" data-s="${nr}"/><path class="tp-flyt" d="M${g.k ? kx : 0},${g.k ? ky : 0} L${hx},${hy}" data-s="${nr}"/>`;
+        lenkF += `<path class="tp-nett paa" d="M${g.k ? kx : 0},${g.k ? ky : 0} L${hx},${hy}" data-s="${nr}"/>`;
+        flyt.push([g.k ? kx : 0, g.k ? ky : 0, hx, hy, '', nr]);
         const bx = ca * (g.rS + st.mR + 60), by = sa * (g.rS + st.mR + 60), tx = -sa, ty = ca;
         let off = -st.W / 2;
         for (const x of st.sub) {
           off += x.R + 8;
           const cx = bx + tx * off, cy = by + ty * off, sx = cx - ca * (x.R + 8), sy = cy - sa * (x.R + 8);
           off += x.R + 8;
-          lenkF += `<path class="tp-gs-l p-${x.q}" d="M${hx},${hy} L${sx.toFixed(1)},${sy.toFixed(1)}" data-s="${nr}"/><path class="tp-flyt p-${x.q}" d="M${hx},${hy} L${sx.toFixed(1)},${sy.toFixed(1)}" data-s="${nr}"/>`;
+          lenkF += `<path class="tp-gs-l p-${x.q}" d="M${hx},${hy} L${sx.toFixed(1)},${sy.toFixed(1)}" data-s="${nr}"/>`;
+          flyt.push([hx, hy, sx, sy, 'p-' + x.q, nr]);
           x.list.forEach((d, i) => {
             const r = C * Math.sqrt(i + .5), t = i * 2.39996 + st.a;
             const px = cx + Math.cos(t) * r, py = cy + Math.sin(t) * r, sl = d._tp;
@@ -448,6 +451,10 @@
     KT.fit = [minx - 40, miny - 40, maxx - minx + 80, maxy - miny + 80];
     const ovF = $('tpGrafF');
     if (ovF) ovF.innerHTML = `<g class="tp-gl-lag">${lenkF}</g>`;
+    KT.flyt = flyt;
+    const fl = $('tpFlyt');
+    if (fl) fl.innerHTML = flyt.map((f, i) => `<div class="tp-fl ${f[4]}"${f[5] === null ? '' : ` data-s="${f[5]}"`}><i></i></div>`).join('');
+    KT.flytEls = fl ? [...fl.children] : [];
     sv.innerHTML = `<g class="tp-gl-lag">${lenk}</g><g class="tp-gn-lag">${noder}</g><g class="tp-dyn-lag" id="tpDyn"></g><g class="tp-f-lag">${faste}</g>`;
     RC.r = null;
     KT.fastEls = [...sv.querySelectorAll('.tp-f-lag .tp-k')].map(g => [g, false]);
@@ -543,10 +550,29 @@
     sv.setAttribute('viewBox', vbTekst);
     const ovF = $('tpGrafF');
     if (ovF) ovF.setAttribute('viewBox', vbTekst);
+    const flLag = $('tpFlyt');
+    if (flLag) flLag.classList.add('beveger');
     sv.classList.add('beveger');
     clearTimeout(KT.rT);
-    KT.rT = setTimeout(() => sv.classList.remove('beveger'), 140);
+    KT.rT = setTimeout(() => { sv.classList.remove('beveger'); flytPlass(); if (flLag) flLag.classList.remove('beveger'); }, 140);
     maal();
+  }
+  /* De rennende prikkene er HTML-elementer, ikke SVG: en CSS-animasjon på transform går på samlerlaget og koster hovedtråden nesten ingenting,
+     mens en animert strek i SVG tegnes på nytt for hvert bilde. Her flyttes bare linjene når kartet flyttes. */
+  function flytPlass() {
+    const els = KT.flytEls, lst = KT.flyt, vb = KT.vb;
+    if (!els || !els.length || !vb) return;
+    const ru = rute($('tpGraf')), s = Math.min(ru.width / vb[2], ru.height / vb[3]);
+    if (!(s > 0)) return;
+    const ox = (ru.width - vb[2] * s) / 2, oy = (ru.height - vb[3] * s) / 2;
+    for (let i = 0; i < els.length; i++) {
+      const f = lst[i];
+      const x1 = ox + (f[0] - vb[0]) * s, y1 = oy + (f[1] - vb[1]) * s, x2 = ox + (f[2] - vb[0]) * s, y2 = oy + (f[3] - vb[1]) * s;
+      const L = Math.hypot(x2 - x1, y2 - y1), a = Math.atan2(y2 - y1, x2 - x1) * 57.29578;
+      const e = els[i], st = e.style;
+      st.width = L.toFixed(1) + 'px';
+      st.transform = `translate(${x1.toFixed(1)}px,${y1.toFixed(1)}px) rotate(${a.toFixed(2)}deg)`;
+    }
   }
   function maal() {
     const sv = $('tpGraf');
@@ -688,13 +714,13 @@
     sv.addEventListener('mouseover', (e) => {
       const n = e.target.closest ? e.target.closest('[data-s]') : null, v = n ? n.dataset.s : null;
       if (v === KT.fokus) return;
-      const lagene = [sv, $('tpGrafF')].filter(Boolean);
+      const lagene = [sv, $('tpGrafF'), $('tpFlyt')].filter(Boolean);
       lagene.forEach(l => l.querySelectorAll('.hel').forEach(x => x.classList.remove('hel')));
       KT.fokus = v;
       lagene.forEach(l => l.classList.toggle('fokus', v !== null));
       if (v !== null) lagene.forEach(l => l.querySelectorAll(`[data-s="${v}"]`).forEach(x => x.classList.add('hel')));
     });
-    sv.addEventListener('mouseleave', () => { KT.fokus = null; [sv, $('tpGrafF')].filter(Boolean).forEach(l => { l.classList.remove('fokus'); l.querySelectorAll('.hel').forEach(x => x.classList.remove('hel')); }); });
+    sv.addEventListener('mouseleave', () => { KT.fokus = null; [sv, $('tpGrafF'), $('tpFlyt')].filter(Boolean).forEach(l => { l.classList.remove('fokus'); l.querySelectorAll('.hel').forEach(x => x.classList.remove('hel')); }); });
     if (window.ResizeObserver) new ResizeObserver(() => { RC.r = null; if (KT.vb && KT.visning === 'spredt') maal(); }).observe(sv);
   }
 
@@ -878,7 +904,7 @@
           <input id="tpSok" class="field" type="search" placeholder="${esc(T('Søk etter anlegg', 'Search sites'))}" aria-label="${esc(T('Søk etter anlegg', 'Search sites'))}">
           <div id="tpListe" class="tp-liste"></div><div id="tpRutere" class="tp-rutere" hidden></div></aside>
         <section id="tpKol" class="tp-lerret"><div id="tpStatus" class="tp-status"></div>
-          <div class="tp-verktoy" role="toolbar" aria-label="${esc(T('Zoom', 'Zoom'))}"><button type="button" data-tp="z-pluss" aria-label="${esc(T('Zoom inn', 'Zoom in'))}" title="${esc(T('Zoom inn (+)', 'Zoom in (+)'))}">+</button><button type="button" data-tp="z-minus" aria-label="${esc(T('Zoom ut', 'Zoom out'))}" title="${esc(T('Zoom ut (-)', 'Zoom out (-)'))}">−</button><button type="button" data-tp="z-fit" aria-label="${esc(T('Tilpass til vinduet', 'Fit to the window'))}" title="${esc(T('Tilpass til vinduet (0)', 'Fit to the window (0)'))}"><svg viewBox="0 0 16 16" class="tp-ik"><path d="M2.5 6V2.5H6M10 2.5h3.5V6M13.5 10v3.5H10M6 13.5H2.5V10"/></svg></button><button type="button" data-tp="z-navn" aria-label="${esc(T('Vis alle navn', 'Show every name'))}" title="${esc(T('Vis alle navn', 'Show every name'))}">Aa</button></div><svg id="tpGrafF" class="tp-graf-svg tp-graf-f" aria-hidden="true"></svg><svg id="tpGraf" class="tp-graf-svg" role="img" aria-label="${esc(T('Topologi, spredt', 'Topology, spread'))}"></svg><svg id="tpLenker" class="tp-lenker" aria-hidden="true"></svg>
+          <div class="tp-verktoy" role="toolbar" aria-label="${esc(T('Zoom', 'Zoom'))}"><button type="button" data-tp="z-pluss" aria-label="${esc(T('Zoom inn', 'Zoom in'))}" title="${esc(T('Zoom inn (+)', 'Zoom in (+)'))}">+</button><button type="button" data-tp="z-minus" aria-label="${esc(T('Zoom ut', 'Zoom out'))}" title="${esc(T('Zoom ut (-)', 'Zoom out (-)'))}">−</button><button type="button" data-tp="z-fit" aria-label="${esc(T('Tilpass til vinduet', 'Fit to the window'))}" title="${esc(T('Tilpass til vinduet (0)', 'Fit to the window (0)'))}"><svg viewBox="0 0 16 16" class="tp-ik"><path d="M2.5 6V2.5H6M10 2.5h3.5V6M13.5 10v3.5H10M6 13.5H2.5V10"/></svg></button><button type="button" data-tp="z-navn" aria-label="${esc(T('Vis alle navn', 'Show every name'))}" title="${esc(T('Vis alle navn', 'Show every name'))}">Aa</button></div><div id="tpFlyt" class="tp-flyt-lag" aria-hidden="true"></div><svg id="tpGrafF" class="tp-graf-svg tp-graf-f" aria-hidden="true"></svg><svg id="tpGraf" class="tp-graf-svg" role="img" aria-label="${esc(T('Topologi, spredt', 'Topology, spread'))}"></svg><svg id="tpLenker" class="tp-lenker" aria-hidden="true"></svg>
           <div class="tp-rad-pc"><div id="tpPc" class="tp-pc"></div><div id="tpInnhold" class="tp-innhold"></div></div></section>
         <aside id="tpDetalj" class="tp-detalj" hidden></aside>
       </div>

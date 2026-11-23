@@ -5546,8 +5546,8 @@ button.vsub-knapp[aria-expanded=false] .prot-chev{transform:rotate(180deg)}
 .tp-nett{fill:none;stroke:var(--line-2);stroke-width:1.4}
 .tp-nett.paa{stroke:color-mix(in srgb,var(--fg-3) 65%,var(--line))}
 .tp-nett.ledig{stroke-dasharray:3 5}
-.tp-flyt{fill:none;stroke:var(--fg-3);stroke-width:2.4;stroke-linecap:round;stroke-dasharray:1 12;animation:tp-flyt 1.6s linear infinite}
-.tp-s{fill:none;stroke-width:2.2;stroke-linecap:round;stroke-dasharray:1.5 10;animation:tp-flyt 1.4s linear infinite}
+.tp-flyt{fill:none;stroke:var(--fg-3);stroke-width:2.4;stroke-linecap:round;stroke-dasharray:1 12;animation:tp-flyt 1.6s steps(16) infinite}
+.tp-s{fill:none;stroke-width:2.2;stroke-linecap:round;stroke-dasharray:1.5 10;animation:tp-flyt 1.4s steps(14) infinite}
 .tp-s.p-bacnet{stroke:var(--prot-bacnet)}.tp-s.p-modbus{stroke:var(--prot-modbus)}.tp-s.p-knx{stroke:var(--prot-knx)}
 @keyframes tp-flyt{to{stroke-dashoffset:-23}}
 .tp-skanner .tp-s,.tp-skanner .tp-flyt{animation-duration:.45s}
@@ -5719,11 +5719,22 @@ body.uten-bevegelse .tp-radar{animation:tp-rot 2.2s linear infinite!important}
 .tp-start .tp-modal .tp-status,.tp-start .tp-modal .tp-graf-svg{animation:tp-fade .35s ease both}
 .tp-start .tp-modal .tp-sted:nth-child(2),.tp-start .tp-modal .tp-srad:nth-child(2){animation-delay:.07s}.tp-start .tp-modal .tp-sted:nth-child(n+3),.tp-start .tp-modal .tp-srad:nth-child(n+3){animation-delay:.14s}
 .tp-graf-f path{vector-effect:non-scaling-stroke}
+/* Rennende prikker i kartet: en rotert stripe som glir på transform (ikke SVG), så det går på samlerlaget */
+.tp-flyt-lag{display:none;position:absolute;inset:0;overflow:hidden;pointer-events:none;z-index:0}
+.tp-spredt .tp-flyt-lag{display:block}
+.tp-flyt-lag.beveger{visibility:hidden}
+.tp-fl{position:absolute;left:0;top:-1.4px;height:2.8px;transform-origin:0 50%;overflow:hidden;--c:var(--fg-3)}
+.tp-fl.p-bacnet{--c:var(--prot-bacnet)}.tp-fl.p-modbus{--c:var(--prot-modbus)}.tp-fl.p-knx{--c:var(--prot-knx)}
+.tp-fl>i{display:block;width:calc(100% + 17px);height:100%;background:repeating-linear-gradient(90deg,var(--c) 0 2.8px,transparent 2.8px 17px);animation:tp-fl-glid 1.2s linear infinite}
+@keyframes tp-fl-glid{to{transform:translateX(-17px)}}
+.tp-skanner .tp-fl>i{animation-duration:.5s}
+.tp-stille .tp-fl>i{animation:none}
+.tp-flyt-lag.fokus [data-s]:not(.hel){opacity:.16;transition:opacity .25s}
+.tp-flyt-lag.fokus .hel{opacity:1}
 .tp-graf-f{pointer-events:none;z-index:0}
-#tpGraf{z-index:1}
-.tp-graf-f,#tpGraf{will-change:transform}
+#tpGraf{z-index:1}
 .tp-graf-svg .tp-nett{stroke-width:1.6px}
-.tp-graf-svg .tp-flyt{stroke-width:2.8px;stroke-dasharray:2 15;animation:tp-flyt-px 1.2s linear infinite;stroke:var(--fg-3)}
+.tp-graf-svg .tp-flyt{stroke-width:2.8px;stroke-dasharray:2 15;animation:tp-flyt-px 1.2s steps(12) infinite;stroke:var(--fg-3)}
 .tp-graf-svg .tp-flyt.p-bacnet{stroke:var(--prot-bacnet)}.tp-graf-svg .tp-flyt.p-modbus{stroke:var(--prot-modbus)}.tp-graf-svg .tp-flyt.p-knx{stroke:var(--prot-knx)}
 .tp-skanner .tp-graf-svg .tp-flyt{animation-duration:.5s}
 @keyframes tp-flyt-px{to{stroke-dashoffset:-34}}
