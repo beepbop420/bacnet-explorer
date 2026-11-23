@@ -801,12 +801,12 @@ def simulator():
     # A saved simulation starts again without the plant.
     r2 = kall("/api/sim/start", {"fil": lagret[0]["fil"], "fra": 30}) if lagret else {}
     j = {}
-    for _forsok in range(3 if r2.get("status") == "done" else 0):   # en simulering som nettopp er startet kan bruke et øyeblikk før den svarer
+    for _forsok in range(6 if r2.get("status") == "done" else 0):   # en simulering som nettopp er startet kan bruke et øyeblikk før den svarer
         j = vent_jobb(kall("/api/scan", {"subnet": "127.0.0.30-31", "mode": "unicast_sweep", "thorough": False,
                                          "per_host_timeout": 1.0, "concurrency": 4, "via": "127.0.0.1"})["job_id"])
         if (j.get("result") or {}).get("count") == 2:
             break
-        time.sleep(1.5)
+        time.sleep(2.5)
     sjekk("simulator: en lagret simulering starter igjen uten anlegget",
           r2.get("status") == "done" and (j.get("result") or {}).get("count") == 2, str(r2)[:150])
     kall("/api/sim/stopp", {})
