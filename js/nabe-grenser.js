@@ -86,7 +86,7 @@
     if (tittel0 === null) tittel0 = document.title;
     clearInterval(blinker);
     let paa = false;
-    blinker = setInterval(() => { document.title = (paa = !paa) ? '⚠ ' + tekst0 : tittel0; }, 900);
+    blinker = setInterval(() => { document.title = (paa = !paa) ? '🔔 ' + tekst0 : tittel0; }, 900);
     const slutt = () => { clearInterval(blinker); if (tittel0 !== null) document.title = tittel0; tittel0 = null; document.removeEventListener('visibilitychange', slutt); window.removeEventListener('focus', slutt); };
     document.addEventListener('visibilitychange', slutt);
     window.addEventListener('focus', slutt);

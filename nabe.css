@@ -4946,7 +4946,7 @@ html.mini .ki-gruppe,html.mini .sb-oppd{display:none !important}
 :root[data-theme="light"][data-fargesyn="kontrast"]{--ok:#0b5fd0;--warn:#9a6200;--err:#c2185b;--err-fg:#9c0f46;--adjust:#6b3fb0;--fg-2:#26262a;--fg-3:#45454d;--line:#9a9aa3;--line-2:#74747e}
 :root[data-fargesyn] .dev-flag.bad,:root[data-fargesyn] .dev-flag.warn{background:none}
 :root[data-former] .dev-st.bad::before,:root[data-former] .vgroup-head .dev-flag.bad::before,:root[data-former] .as-tall.bad::before,
-:root[data-former] .alarm-til.warn::before{content:'▲ '}
+:root[data-former] .alarm-til.warn::before{content:'';display:inline-block;width:.95em;height:.95em;margin-right:4px;vertical-align:-.12em;background:currentColor;-webkit-mask:var(--bjelle) center/contain no-repeat;mask:var(--bjelle) center/contain no-repeat}
 :root[data-former] .dev-st.feil::before,:root[data-former] .as-tall.feil::before,
 :root[data-former] .ctx-stat[data-flag="fault"]::before,:root[data-former] .alarm-til.bad::before{content:'◆ '}
 :root[data-former] .dev-st.warn::before,:root[data-former] .vgroup-head .dev-flag.warn::before,:root[data-former] .as-tall.warn::before,
@@ -5653,11 +5653,11 @@ button.vsub-knapp[aria-expanded=false] .prot-chev{transform:rotate(180deg)}
 .tp-status,.tp-graf-svg{animation:tp-fade .35s ease both}
 .tp-sum.v-alarm .tp-lys .tp-gl{animation:tp-puls 1.6s ease-in-out infinite;transform-box:fill-box;transform-origin:center}
 .tp-srad.v-alarm .tp-lys .tp-gl{animation:tp-puls 1.9s ease-in-out infinite;transform-box:fill-box;transform-origin:center}
-.tp-flis.s-alarm{animation:tp-glod 2.4s ease-out infinite}
+.tp-flis.s-alarm{animation:tp-glod 2.4s ease-out 3}
 .tp-flis.s-alarm.ny{animation:tp-pop .55s cubic-bezier(.2,.9,.3,1.3) both}
 .tp-gn{animation:tp-nod .5s cubic-bezier(.2,.9,.3,1.2) both;transform-box:fill-box;transform-origin:center}
 .tp-gn:nth-of-type(7n+1){animation-delay:.02s}.tp-gn:nth-of-type(7n+2){animation-delay:.06s}.tp-gn:nth-of-type(7n+3){animation-delay:.1s}.tp-gn:nth-of-type(7n+4){animation-delay:.14s}.tp-gn:nth-of-type(7n+5){animation-delay:.18s}.tp-gn:nth-of-type(7n+6){animation-delay:.22s}.tp-gn:nth-of-type(7n){animation-delay:.26s}
-.tp-gn.s-alarm,.tp-gn.s-feil{animation:tp-nod .5s both,tp-ring 2.2s .6s ease-out infinite}
+.tp-gn.s-alarm,.tp-gn.s-feil{animation:tp-nod .5s both,tp-ring 2.2s .6s ease-out 3}
 .tp-gh circle{transition:r .15s,stroke .15s}
 .tp-gh:hover circle{stroke:var(--accent)}
 .tp-gl-l,.tp-gs-l{animation:tp-fade .6s ease both}
@@ -5698,7 +5698,7 @@ body.uten-bevegelse .tp-radar{animation:tp-rot 2.2s linear infinite!important}
 .tp-graf-svg.inn .tp-gn{animation:tp-nod .5s cubic-bezier(.2,.9,.3,1.2) both}
 .tp-graf-svg.inn .tp-gl-l,.tp-graf-svg.inn .tp-gs-l{animation:tp-fade .8s ease both}
 .tp-graf-svg .tp-gn.ny{animation:tp-nod .6s cubic-bezier(.2,.9,.3,1.3) both}
-.tp-graf-svg .tp-gn.s-alarm,.tp-graf-svg .tp-gn.s-feil{animation:tp-ring 2.2s ease-out infinite}
+.tp-graf-svg .tp-gn.s-alarm,.tp-graf-svg .tp-gn.s-feil{animation:tp-ring 2.2s ease-out 3}
 .tp-verktoy{display:none;position:absolute;right:14px;top:14px;z-index:3;flex-direction:column;border:1px solid var(--line);border-radius:10px;background:color-mix(in srgb,var(--panel) 92%,transparent);backdrop-filter:blur(6px);overflow:hidden}
 .tp-spredt .tp-verktoy{display:flex}
 .tp-verktoy button{width:32px;height:32px;border:0;border-bottom:1px solid var(--line);background:transparent;color:var(--fg-2);font:500 15px var(--sans,inherit);cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background .15s,color .15s}
@@ -5718,16 +5718,19 @@ body.uten-bevegelse .tp-radar{animation:tp-rot 2.2s linear infinite!important}
 .tp-start .tp-modal .tp-sted,.tp-start .tp-modal .tp-kort,.tp-start .tp-modal .tp-srad,.tp-start .tp-modal .tp-pc,.tp-start .tp-modal .tp-sum{animation:tp-inn .45s cubic-bezier(.2,.8,.3,1) both}
 .tp-start .tp-modal .tp-status,.tp-start .tp-modal .tp-graf-svg{animation:tp-fade .35s ease both}
 .tp-start .tp-modal .tp-sted:nth-child(2),.tp-start .tp-modal .tp-srad:nth-child(2){animation-delay:.07s}.tp-start .tp-modal .tp-sted:nth-child(n+3),.tp-start .tp-modal .tp-srad:nth-child(n+3){animation-delay:.14s}
-.tp-graf-svg path{vector-effect:non-scaling-stroke}
+.tp-graf-f path{vector-effect:non-scaling-stroke}
+.tp-graf-f{pointer-events:none;z-index:0}
+#tpGraf{z-index:1}
+.tp-graf-f,#tpGraf{will-change:transform}
 .tp-graf-svg .tp-nett{stroke-width:1.6px}
 .tp-graf-svg .tp-flyt{stroke-width:2.8px;stroke-dasharray:2 15;animation:tp-flyt-px 1.2s linear infinite;stroke:var(--fg-3)}
 .tp-graf-svg .tp-flyt.p-bacnet{stroke:var(--prot-bacnet)}.tp-graf-svg .tp-flyt.p-modbus{stroke:var(--prot-modbus)}.tp-graf-svg .tp-flyt.p-knx{stroke:var(--prot-knx)}
 .tp-skanner .tp-graf-svg .tp-flyt{animation-duration:.5s}
 @keyframes tp-flyt-px{to{stroke-dashoffset:-34}}
-.tp-graf-svg .tp-gl-l{stroke-width:.9px}
+.tp-graf-svg .tp-gl-l{stroke-width:calc(var(--dl,11px)*.082)}
 .tp-graf-svg .tp-gs-l{stroke-width:1.8px}
 .tp-lerret path.tp-flyt{stroke-dasharray:2 14}
-.tp-gb{fill:var(--err);stroke:var(--panel);stroke-width:.8;pointer-events:none}
+.tp-gb{fill:var(--err);stroke:var(--panel);stroke-width:.5;pointer-events:none}
 .tp-graf-svg.n-kort .tp-gb,.tp-graf-svg.n-kort .tp-gt{display:none!important}
 .tp-graf-svg.n-kort .tp-gn{opacity:0;pointer-events:none}
 .tp-graf-svg .tp-dk{display:none;cursor:pointer}
@@ -5779,7 +5782,6 @@ body.uten-bevegelse .tp-radar{animation:tp-rot 2.2s linear infinite!important}
 .tp-graf-svg .tp-dk text.k,.tp-graf-svg .tp-dk .d2 text{font-weight:400;font-size:10.5px;fill:var(--fg-3)}
 .tp-graf-svg .tp-dk .d2 text:first-child{fill:var(--fg);font-weight:500}
 .tp-dk .str{display:none}
-.tp-graf-svg.beveger *{animation-play-state:paused!important}
 .tp-graf-svg.beveger text{paint-order:normal;stroke:none}
 .tp-graf-svg.beveger .tp-gt{display:none}
 .tp-graf-svg.beveger{shape-rendering:optimizeSpeed;text-rendering:optimizeSpeed}
@@ -6252,7 +6254,7 @@ td.c-val.dod{text-decoration:underline double color-mix(in srgb,var(--warn) 70%,
 #avvikOverlay .sp-tab td:first-child{width:100%}
 
 /* Alarm er en bjelle, ikke en trekant. Samme form som ord og tall står ved siden av, så fargen er aldri alene. */
-:root{--bjelle:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M8 1.6c-2.4 0-4 1.8-4 4.2v2.4L2.6 10.8v.9h10.8v-.9L12 8.2V5.8C12 3.4 10.4 1.6 8 1.6z'/%3E%3Cpath d='M6.4 13h3.2c0 .9-.7 1.6-1.6 1.6S6.4 13.9 6.4 13z'/%3E%3C/svg%3E")}
+:root{--bjelle:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M8 1.1a1 1 0 0 1 1 1v.4c1.9.4 3.2 2.1 3.2 4v2.4l1.5 2.2v.9H2.3v-.9l1.5-2.2V6.5c0-1.9 1.3-3.6 3.2-4v-.4a1 1 0 0 1 1-1z'/%3E%3Cpath d='M6.2 13.4h3.6a1.8 1.8 0 0 1-3.6 0z'/%3E%3C/svg%3E")}
 .bjelle,:root[data-former] .ctx-stat[data-flag="in-alarm"]::before{display:inline-block;width:.95em;height:.95em;vertical-align:-.12em;background:currentColor;-webkit-mask:var(--bjelle) center/contain no-repeat;mask:var(--bjelle) center/contain no-repeat}
 :root[data-former] .ctx-stat[data-flag="in-alarm"]::before{content:'';margin-right:4px}
 .as-form .bjelle{width:11px;height:11px;vertical-align:-2px}
@@ -6293,4 +6295,15 @@ body.har-popup *:not(.gs-overlay):not(.gs-overlay *):not(.menu-pop):not(.menu-po
   background:color-mix(in srgb,var(--vc,var(--fg-2)) 10%,transparent);
   border:1px solid color-mix(in srgb,var(--vc,var(--fg-2)) 34%,transparent)}
 .vgroup-name .lev-logo{font-size:10px;padding:3px 7px 2px}
+/* Leverandørlogo som maske: én farge, appens egen tekstfarge, lys og mørk visning følger av seg selv */
+.lev-ikon{display:inline-block;height:var(--lh,13px);aspect-ratio:var(--ar,1);max-width:68px;vertical-align:-2px;background:currentColor;color:var(--fg-2);opacity:.9;
+  -webkit-mask:var(--li) center/contain no-repeat;mask:var(--li) center/contain no-repeat;-webkit-mask-source-type:luminance;mask-mode:luminance}
+.vgroup-name .lev-ikon{--lh:15px;max-width:80px}
+.dev-lev .lev-ikon{--lh:11px;max-width:54px}
+.lev-ikon:hover{opacity:1}
+/* Systemtagger: hvilke systemer en enhet har punkter i. Tekst og ramme, ingen farge som bærer noe. */
+.dev-l3{display:block;margin-top:5px}
+.systags{display:flex;flex-wrap:wrap;gap:4px}
+.systag{font-style:normal;font-size:10px;line-height:1;color:var(--fg-3);padding:3px 7px 2px;border:1px solid var(--line);border-radius:var(--r-pill,999px);white-space:nowrap}
+.systag b{font-family:var(--mono);font-weight:600;color:var(--fg-2)}
 .dev-lev .lev-logo{font-size:8px;padding:2px 5px 1px}

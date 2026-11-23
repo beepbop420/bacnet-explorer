@@ -338,7 +338,12 @@ def royktest():
               "    && !t('x >20', 'inactive') && sokTreff('rt401', sokeOrd('rt401'), {}) && sokeOrd('-5') && sokeOrd('-5').nei[0] === '5'"
               "    && sokeOrd('>20').ja.length === 0; })(),"
               " excel: typeof exportXlsx === 'function' && !!document.getElementById('xlsxBtn'),"
-              " levlogo: typeof levLogo === 'function' && /BECKHOFF/.test(levLogo('Beckhoff')) && /aria-label=.Beckhoff./.test(levLogo('Beckhoff')) && levLogo('Ukjent <x>') === 'Ukjent &lt;x&gt;' && /JCI/.test(levLogo('Johnson C.')),"
+              " levlogo: typeof levLogo === 'function' && /lev-i-beckhoff/.test(levLogo('Beckhoff')) && /aria-label=.Beckhoff./.test(levLogo('Beckhoff')) && levLogo('Ukjent <x>') === 'Ukjent &lt;x&gt;' && /JCI/.test(levLogo('Johnson C.')),"
+              " bjelle: /svg/.test(getComputedStyle(document.documentElement).getPropertyValue('--bjelle')) && (() => { const e = document.createElement('i'); e.className = 'bjelle'; document.body.appendChild(e);"
+              "    const ok = parseFloat(getComputedStyle(e).width) > 4; e.remove(); return ok; })() && typeof levLogoCss === 'function',"
+              " systemer: typeof systemerAv === 'function' && systemerAv([{name: '360.001-RT401'}, {name: 'A_320_002_X'}, {name: '563.100-A'}, {name: 'Spjeld'}]).join() === '320,360'"
+              "    && /360/.test(systemTagger(['360'])) && systemTagger([]) === '' && systemerAv([]).length === 0,"
+              " logoer: typeof LEV_LOGO === 'object' && Object.keys(LEV_LOGO).length >= 10 && Object.values(LEV_LOGO).every(v => /^<svg[^>]*viewBox=/.test(v) && !/<(script|image|text)/i.test(v)),"
               " popupro: typeof updateValueCells === 'function' && (() => { document.body.classList.add('har-popup'); window.__verdiStale = false; updateValueCells(['x']);"
               "    const ok = window.__verdiStale === true; document.body.classList.remove('har-popup'); window.__verdiStale = false; return ok; })(),"
               " skannbygg: typeof skannBygg === 'function' && typeof window.skannBygg === 'function',"
@@ -576,6 +581,16 @@ def sommertid():
     drift = ident.get("clock-drift")
     sjekk("enhet med klokka en time frem gir klokkeavvik på 3600 s",
           isinstance(drift, int) and abs(drift - 3600) <= 60, f"drift={drift}")
+
+
+def systemer_husket():
+    """The systems a device has points in are remembered, so the phone can show them without reading the points itself."""
+    kall("/api/sites", {"ranges": ["10.250.0.0/24"], "name": "selvtest-systemer",
+                        "devices": [{"address": "127.0.0.6", "device_instance": 9004, "object_name": "SIM-AVVIK", "vendor": "x"}]})
+    sites = kall("/api/sites").get("sites", {})
+    enh = (sites.get("10.250.0.0/24") or {}).get("enheter") or [{}]
+    sjekk("anleggsminnet gir hver enhet en liste med systemer", isinstance(enh[0].get("systemer"), list), str(enh[0]))
+    kall("/api/sites/delete", {"key": "10.250.0.0/24"})
 
 
 def trafikklogg():
@@ -2265,6 +2280,7 @@ def kjor_tester():
     sjekk("live svarer med COV-telling", isinstance(p.get("cov"), int), f"cov={p.get('cov')}")
     cov_vakt()
     sommertid()
+    systemer_husket()
     trafikklogg()
     modbus()
     knx()
@@ -2336,7 +2352,7 @@ def kjor_tester():
     # Last: it silences the simulated device on 127.0.0.6.
     mine_uten_kontakt()
 
-    for fil in ("nabe-start", "nabe-verktoy", "nabe-felt", "nabe-moro", "nabe-finn", "nabe-skann", "nabe-anlegg", "nabe-bunn", "nabe-graf", "nabe-tunnel", "nabe-sammen", "nabe-flyt", "nabe-peker", "nabe-pekere", "nabe-skrift", "nabo", "nabo-brodre", "nabo-fasit", "nabe-garderobe", "nabe-opptak", "nabe-trafikk", "nabe-forslag", "nabe-storm", "nabe-regler", "nabe-drift", "nabe-punktlogg", "nabe-arbeidsliste", "nabe-laer", "nabe-status", "nabe-alarmvei", "nabe-lokal", "nabe-qr", "nabe-mobil", "nabe-popup", "nabe-dialoger-igang", "nabe-nett", "nabe-alarmhist", "nabe-grenser", "nabe-sat", "nabe-stotte", "nabe-kart-eksport", "nabe-modbus", "nabe-knx", "nabe-rediger", "nabe-besok", "nabe-runde", "nabe-skjema-ordbok", "nabe-skjema", "nabe-flater", "nabe-fortsett", "nabe-simulator", "nabe-oppdatering", "nabe-bakover", "nabe-kart", "nabe-syn", "nabe-raad", "nabe-dialoger-innhold", "nabe-dialoger-mer", "nabe-dialoger", "nabe-tilbehor", "nabe-kunnskap", "nabe-spor"):
+    for fil in ("nabe-start", "nabe-verktoy", "nabe-felt", "nabe-moro", "nabe-finn", "nabe-skann", "nabe-anlegg", "nabe-bunn", "nabe-graf", "nabe-tunnel", "nabe-sammen", "nabe-flyt", "nabe-peker", "nabe-pekere", "nabe-skrift", "nabe-lev", "nabe-lev-logo", "nabo", "nabo-brodre", "nabo-fasit", "nabe-garderobe", "nabe-opptak", "nabe-trafikk", "nabe-forslag", "nabe-storm", "nabe-regler", "nabe-drift", "nabe-punktlogg", "nabe-arbeidsliste", "nabe-laer", "nabe-status", "nabe-alarmvei", "nabe-lokal", "nabe-qr", "nabe-mobil", "nabe-popup", "nabe-dialoger-igang", "nabe-nett", "nabe-alarmhist", "nabe-grenser", "nabe-sat", "nabe-stotte", "nabe-kart-eksport", "nabe-modbus", "nabe-knx", "nabe-rediger", "nabe-besok", "nabe-runde", "nabe-skjema-ordbok", "nabe-skjema", "nabe-flater", "nabe-fortsett", "nabe-simulator", "nabe-oppdatering", "nabe-bakover", "nabe-kart", "nabe-syn", "nabe-raad", "nabe-dialoger-innhold", "nabe-dialoger-mer", "nabe-dialoger", "nabe-tilbehor", "nabe-kunnskap", "nabe-spor"):
         try:
             with urllib.request.urlopen(f"{BASE}/js/{fil}.js", timeout=5) as rr:
                 ok = rr.status == 200

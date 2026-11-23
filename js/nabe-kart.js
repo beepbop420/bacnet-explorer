@@ -10,6 +10,8 @@
 
 (function topologi() {
   const VISNING = (() => { try { return localStorage.getItem('nabe.topologi') || 'samlet'; } catch { return 'samlet'; } })();
+  const RC = {t: 0, r: null};
+  const rute = (sv) => { const n = performance.now(); if (!RC.r || n - RC.t > 400) { RC.r = sv.getBoundingClientRect(); RC.t = n; } return RC.r; };
   const KT = {kort: [], anlegg: [], perKort: {}, timer: 0, valgt: null, utvid: new Set(), sett: new Set(), sig: '', filter: '', bare: false, skann: null, forste: true, apen: new Set(), visning: VISNING, vb: null};
 
   const lag = document.createElement('div');
@@ -144,10 +146,15 @@
   const almMerke = (d) => (d._alm ? `<span class="tp-alm" title="${esc(T(`${d._alm} alarm på enheten`, d._alm === 1 ? '1 alarm on the device' : `${d._alm} alarms on the device`))}">${glyf('alarm')}</span>` : '');
   const GLYF = {
     ok: '<circle cx="6" cy="6" r="3.6"/>',
-    alarm: '<path d="M6 1.4 11 10.4H1Z"/>',
+    alarm: '<path d="M6 .8a.8.8 0 0 1 .8.8v.3c1.4.3 2.4 1.5 2.4 3v1.9l1.1 1.6v.7H1.7v-.7l1.1-1.6V4.9c0-1.5 1-2.7 2.4-3v-.3A.8.8 0 0 1 6 .8zM4.6 10.1h2.8a1.4 1.4 0 0 1-2.8 0z"/>',
     feil: '<path d="M6 1 11 6 6 11 1 6Z"/>',
     over: '<circle cx="6" cy="6" r="3.2" class="ring"/>',
     stille: '<path d="M2 6h8" class="line"/>',
+  };
+  /* Niagara-bjellen som en sti rundt (x, y), i skala s, for noder som tegnes direkte i kartet */
+  const bjelleSti = (x, y, s = 1) => {
+    const n = (v) => +(v * s).toFixed(2);
+    return `M${x.toFixed(1)},${(y - 6.9 * s).toFixed(1)}a${n(1)} ${n(1)} 0 0 1 ${n(1)} ${n(1)}v${n(.4)}c${n(1.9)} ${n(.4)} ${n(3.2)} ${n(2.1)} ${n(3.2)} ${n(4)}v${n(2.4)}l${n(1.5)} ${n(2.2)}v${n(.9)}h${n(-11.4)}v${n(-.9)}l${n(1.5)} ${n(-2.2)}v${n(-2.4)}c0 ${n(-1.9)} ${n(1.3)} ${n(-3.6)} ${n(3.2)} ${n(-4)}v${n(-.4)}a${n(1)} ${n(1)} 0 0 1 ${n(1)} ${n(-1)}zm${n(-1.8)} ${n(12.3)}h${n(3.6)}a${n(1.8)} ${n(1.8)} 0 0 1 ${n(-3.6)} 0z`;
   };
   const glyf = (s) => `<svg class="tp-gl s-${s}" viewBox="0 0 12 12" aria-hidden="true">${GLYF[s]}</svg>`;
   const STAT_TXT = () => ({ok: T('i orden', 'fine'), alarm: T('alarm', 'alarm'), feil: T('feil', 'fault'), over: T('overstyrt', 'overridden'), stille: T('stille', 'quiet')});
@@ -300,11 +307,20 @@
     KT.forste = false;
     rail();
     detalj();
-    requestAnimationFrame(() => { if (!KT.manuell) samletTilpass(); else samletBruk(); });
+    requestAnimationFrame(() => { if (!KT.manuell) samletTilpass(); else samletBruk(); lenkerFolg(lag.classList.contains('tp-start') ? 900 : 0); });
     $('tpFot').textContent = ute ? $('tpFot').textContent : T('Dra for å flytte, rull for å zoome', 'Drag to move, scroll to zoom');
   }
 
   /* The links are measured from the boxes after they have been laid out, so they follow whatever size the text ended up with. */
+  /* Kortene glir inn med en liten forskyvning når visningen byttes. Linjene måles derfor på nytt hvert bilde til de står stille,
+     ellers ender de åtte piksler fra kortene og blir stående slik. */
+  function lenkerFolg(ms) {
+    cancelAnimationFrame(KT.lF);
+    if (!ms) return;
+    const t0 = performance.now();
+    const f = (t) => { lenker(); if (t - t0 < ms) KT.lF = requestAnimationFrame(f); };
+    KT.lF = requestAnimationFrame(f);
+  }
   function lenker() {
     const rot = $('tpKol'), sv = $('tpLenker');
     if (!rot || !sv) return;
@@ -316,13 +332,13 @@
     const pc = $('tpPc');
     let ut = '';
     const aktive = new Set((S.kort || []).map(k => k.ip));
-    for (const k of rot.querySelectorAll('[data-kortid]')) {
+    for (const k of rot.querySelectorAll('.tp-kort[data-kortid]')) {
       const paa = aktive.has(k.dataset.kortid);
       ut += `<path class="tp-nett${paa ? ' paa' : ''}" d="${bue(pos(pc, true), pos(k, false), 0)}"/>`;
       if (paa) ut += `<path class="tp-flyt" d="${bue(pos(pc, true), pos(k, false), 0)}"/>`;
     }
     for (const s of rot.querySelectorAll('[data-stedid]')) {
-      const fra = [...rot.querySelectorAll('[data-kortid]')].find(k => k.dataset.kortid === s.dataset.kort);
+      const fra = [...rot.querySelectorAll('.tp-kort[data-kortid]')].find(k => k.dataset.kortid === s.dataset.kort);
       const a = fra ? pos(fra, true) : pos(pc, true), b = pos(s.querySelector('.tp-sted-h'), false);
       const lastet = s.classList.contains('lastet');
       ut += `<path class="tp-nett${lastet ? ' paa' : ''}${lastet ? '' : ' ledig'}" d="${bue(a, b, 0)}"/>`;
@@ -347,6 +363,7 @@
     const vekt = (st) => Math.max(3, st.dev.length);
     const tot = gruppe.reduce((a, g) => a + g.s.reduce((b, st) => b + vekt(st), 0), 0) || 1;
     const C = 19;                                               // spacing of the dots in a cluster
+    let lenkF = '';
     let a0 = Math.PI - (gruppe.length ? gruppe[0].s.reduce((b, st) => b + vekt(st), 0) / tot * Math.PI : 0), noder = '', lenk = '', faste = '';
     for (const g of gruppe) {
       const gv = g.s.reduce((b, st) => b + vekt(st), 0), ga = (gv / tot) * Math.PI * 2;
@@ -385,7 +402,7 @@
       const kx = Math.cos(g.a) * g.rK, ky = Math.sin(g.a) * g.rK;
       if (g.k) {
         const igang = aktive.has(g.k.ip);
-        lenk += `<path class="tp-nett${igang ? ' paa' : ''}" d="M0,0 L${kx},${ky}"/>${igang ? `<path class="tp-flyt" d="M0,0 L${kx},${ky}"/>` : ''}`;
+        lenkF += `<path class="tp-nett${igang ? ' paa' : ''}" d="M0,0 L${kx},${ky}"/>${igang ? `<path class="tp-flyt" d="M0,0 L${kx},${ky}"/>` : ''}`;
         faste += fast('tp-gk' + (igang ? '' : ' av'), kx, ky, `<rect x="-42" y="-12" width="84" height="24" rx="6"/><text y="4" text-anchor="middle">${esc(g.k.ip)}</text>`,
           `data-tp="kort" data-kortid="${esc(g.k.ip)}" data-tip="t:${esc(g.k.interface + ' · ' + g.k.cidr)}"`);
       }
@@ -393,14 +410,14 @@
       for (const st of g.s) {
         const ca = Math.cos(st.a), sa = Math.sin(st.a), hx = ca * g.rS, hy = sa * g.rS, gr = [hx, hy, hx, hy];
         const nr = si++;
-        lenk += `<path class="tp-nett paa" d="M${g.k ? kx : 0},${g.k ? ky : 0} L${hx},${hy}" data-s="${nr}"/><path class="tp-flyt" d="M${g.k ? kx : 0},${g.k ? ky : 0} L${hx},${hy}" data-s="${nr}"/>`;
+        lenkF += `<path class="tp-nett paa" d="M${g.k ? kx : 0},${g.k ? ky : 0} L${hx},${hy}" data-s="${nr}"/><path class="tp-flyt" d="M${g.k ? kx : 0},${g.k ? ky : 0} L${hx},${hy}" data-s="${nr}"/>`;
         const bx = ca * (g.rS + st.mR + 60), by = sa * (g.rS + st.mR + 60), tx = -sa, ty = ca;
         let off = -st.W / 2;
         for (const x of st.sub) {
           off += x.R + 8;
           const cx = bx + tx * off, cy = by + ty * off, sx = cx - ca * (x.R + 8), sy = cy - sa * (x.R + 8);
           off += x.R + 8;
-          lenk += `<path class="tp-gs-l p-${x.q}" d="M${hx},${hy} L${sx.toFixed(1)},${sy.toFixed(1)}" data-s="${nr}"/><path class="tp-flyt p-${x.q}" d="M${hx},${hy} L${sx.toFixed(1)},${sy.toFixed(1)}" data-s="${nr}"/>`;
+          lenkF += `<path class="tp-gs-l p-${x.q}" d="M${hx},${hy} L${sx.toFixed(1)},${sy.toFixed(1)}" data-s="${nr}"/><path class="tp-flyt p-${x.q}" d="M${hx},${hy} L${sx.toFixed(1)},${sy.toFixed(1)}" data-s="${nr}"/>`;
           x.list.forEach((d, i) => {
             const r = C * Math.sqrt(i + .5), t = i * 2.39996 + st.a;
             const px = cx + Math.cos(t) * r, py = cy + Math.sin(t) * r, sl = d._tp;
@@ -408,12 +425,12 @@
             lenk += `<path class="tp-gl-l p-${x.q}" d="M${sx.toFixed(1)},${sy.toFixed(1)} L${px.toFixed(1)},${py.toFixed(1)}" data-s="${nr}"/>`;
             const ny = !KT.sett.has(d.address) && !KT.forste;
             const at = `class="tp-gn p-${x.q} s-${sl}${ny ? ' ny' : ''}${KT.valgt === 'e:' + d.address ? ' valgt' : ''}" data-s="${nr}" data-tp="enhet" data-adr="${esc(d.address)}" data-tip="d:${esc(d.address)}"`;
-            if (sl === 'alarm') noder += `<polygon ${at} points="${px.toFixed(1)},${(py - 6.5).toFixed(1)} ${(px + 6.5).toFixed(1)},${(py + 5.5).toFixed(1)} ${(px - 6.5).toFixed(1)},${(py + 5.5).toFixed(1)}"/>`;
+            if (sl === 'alarm') noder += `<path ${at} d="${bjelleSti(px, py, .95)}"/>`;
             else if (sl === 'feil') noder += `<polygon ${at} points="${px.toFixed(1)},${(py - 7).toFixed(1)} ${(px + 7).toFixed(1)},${py.toFixed(1)} ${px.toFixed(1)},${(py + 7).toFixed(1)} ${(px - 7).toFixed(1)},${py.toFixed(1)}"/>`;
             else noder += `<circle ${at} cx="${px.toFixed(1)}" cy="${py.toFixed(1)}" r="${sl === 'stille' ? 4 : 5.5}"/>`;
             const nm = (d.object_name || kort0(d.address)) + (dupl(d) && ipSuff(d) ? ' ' + ipSuff(d) : '');
             if (sl !== 'ok' && sl !== 'stille') noder += `<text class="tp-gt fs" x="${(px + 9).toFixed(1)}" y="${(py + 3.5).toFixed(1)}">${esc(nm.length > 24 ? nm.slice(0, 23) + '…' : nm)}</text>`;
-            if (d._alm) noder += `<polygon class="tp-gb" data-s="${nr}" points="${(px + 4.5).toFixed(1)},${(py - 10).toFixed(1)} ${(px + 9.5).toFixed(1)},${(py - 2).toFixed(1)} ${(px - .5).toFixed(1)},${(py - 2).toFixed(1)}"/>`;
+            if (d._alm) noder += `<path class="tp-gb" data-s="${nr}" d="${bjelleSti(px + 6, py - 7, .6)}"/>`;
             KT.punkter.push({d, x: px, y: py, q: x.q, nr, sl});
           });
           faste += fast('tp-gs p-' + x.q, sx, sy, `<circle r="5.5"/><text y="-12" text-anchor="middle">${PROT_NAVN[x.q]}${x.lev ? ' · ' + esc(x.lev) : ''} ${x.n}</text>`, `data-s="${nr}"`);
@@ -429,7 +446,10 @@
     }
     faste += fast('tp-gp', 0, 0, `<circle r="24"/><text y="4" text-anchor="middle">PC</text>`);
     KT.fit = [minx - 40, miny - 40, maxx - minx + 80, maxy - miny + 80];
+    const ovF = $('tpGrafF');
+    if (ovF) ovF.innerHTML = `<g class="tp-gl-lag">${lenkF}</g>`;
     sv.innerHTML = `<g class="tp-gl-lag">${lenk}</g><g class="tp-gn-lag">${noder}</g><g class="tp-dyn-lag" id="tpDyn"></g><g class="tp-f-lag">${faste}</g>`;
+    RC.r = null;
     KT.fastEls = [...sv.querySelectorAll('.tp-f-lag .tp-k')].map(g => [g, false]);
     KT.dynEls = []; KT.dynNiv = ''; KT.dynR = null;
     KT.sc0 = 0;
@@ -447,7 +467,7 @@
     const {d, x, y, q, nr, sl} = pt, kk = slag(d), nm = (d.object_name || kort0(d.address)) + (dupl(d) && ipSuff(d) ? ' ' + ipSuff(d) : '');
     const adr = `data-s="${nr}" data-tp="enhet" data-adr="${esc(d.address)}" data-tip="d:${esc(d.address)}"`;
     return fastT(`tp-gy p-${q} s-${sl}${KT.valgt === 'e:' + d.address ? ' valgt' : ''}`, x, y,
-      `<circle r="11"/><g class="ik" transform="translate(-8,-8)">${IK[kk.k] || IK.regulator}</g>${d._alm ? '<polygon class="am" points="8,-14 14,-4 2,-4"/>' : ''}<text class="gn" x="18" y="4">${esc(trk(nm, 24))}</text>`, adr, sk);
+      `<circle r="11"/><g class="ik" transform="translate(-8,-8)">${IK[kk.k] || IK.regulator}</g>${d._alm ? `<path class="am" d="${bjelleSti(10, -9, .62)}"/>` : ''}<text class="gn" x="18" y="4">${esc(trk(nm, 24))}</text>`, adr, sk);
   }
   function kortHtml(pt, sk) {
     const {d, x, y, q, nr, sl} = pt, kk = slag(d), gl = gruppeFor(d), pk = (S.cache[d.address] || []).length;
@@ -486,7 +506,7 @@
 
   /* The view box that fits a rectangle in the window, with the window's own proportions. */
   function tilpass(b) {
-    const sv = $('tpGraf'), ar = (sv.clientWidth || 800) / (sv.clientHeight || 500);
+    const sv = $('tpGraf'), ru = rute(sv), ar = (ru.width || 800) / (ru.height || 500);
     const cx = (b[0] + b[2] / 2), cy = (b[1] + b[3] / 2);
     const w = Math.max(b[2], b[3] * ar), h = w / ar;
     return [cx - w / 2, cy - h / 2, w, h];
@@ -519,7 +539,10 @@
   function bruk() {
     const sv = $('tpGraf');
     if (!sv || !KT.vb) return;
-    sv.setAttribute('viewBox', KT.vb.map(v => +v.toFixed(2)).join(' '));
+    const vbTekst = KT.vb.map(v => +v.toFixed(2)).join(' ');
+    sv.setAttribute('viewBox', vbTekst);
+    const ovF = $('tpGrafF');
+    if (ovF) ovF.setAttribute('viewBox', vbTekst);
     sv.classList.add('beveger');
     clearTimeout(KT.rT);
     KT.rT = setTimeout(() => sv.classList.remove('beveger'), 140);
@@ -528,7 +551,7 @@
   function maal() {
     const sv = $('tpGraf');
     if (!sv || !KT.vb) return;
-    const sc = Math.min((sv.clientWidth || 1) / KT.vb[2], (sv.clientHeight || 1) / KT.vb[3]) || 1;
+    const ru = rute(sv), sc = Math.min((ru.width || 1) / KT.vb[2], (ru.height || 1) / KT.vb[3]) || 1;
     KT.sc = sc;
     if (Math.abs(sc - (KT.sc0 || 0)) > 1e-4 * sc && (!KT.raf || performance.now() - (KT.tfT || 0) > 45)) {
       KT.sc0 = sc; KT.tfT = performance.now();
@@ -554,8 +577,8 @@
     const kand = [];
     const alle = sv.querySelectorAll('.tp-gh text:not(.u), .tp-gs text, .tp-gt, .tp-gy text');
     if (alle.length > 420) return;
+    alle.forEach((el) => { if (el.hasAttribute('data-skjul')) el.removeAttribute('data-skjul'); });
     alle.forEach((el) => {
-      el.removeAttribute('data-skjul');
       if (!el.getClientRects().length) return;
       const pri = el.closest('.tp-gh') ? 0 : el.closest('.tp-gs') ? 1 : 2;
       const rang = pri === 2 ? (() => { const n = el.closest('.tp-gy') || el.previousElementSibling; return n ? ({'s-alarm': 0, 's-feil': 1, 's-over': 2}[[...n.classList].find(c => c.startsWith('s-'))] ?? 3) : 3; })() : 0;
@@ -565,14 +588,17 @@
     const tatt = [], pad = 3;
     const sr = sv.getBoundingClientRect();
     // The dots themselves count too, so a name does not sit on top of a neighbour's dot when it can be helped
+    for (const k of kand) k.r = k.el.getBoundingClientRect();
+    const skjul = [];
     for (const k of kand) {
-      const r = k.el.getBoundingClientRect();
+      const r = k.r;
       const b = {x: r.left - pad, y: r.top - pad, w: r.width + 2 * pad, h: r.height + 2 * pad};
       const ute = b.x < sr.left || b.y < sr.top || b.x + b.w > sr.right || b.y + b.h > sr.bottom;
       const treff = tatt.some(t => b.x < t.x + t.w && b.x + b.w > t.x && b.y < t.y + t.h && b.y + b.h > t.y);
-      if (treff || (ute && k.pri === 2)) k.el.setAttribute('data-skjul', '1'); else tatt.push(b);
-      if (k.pri === 0 && treff) k.el.removeAttribute('data-skjul');
+      if (k.pri === 0 && treff) continue;
+      if (treff || (ute && k.pri === 2)) skjul.push(k.el); else tatt.push(b);
     }
+    for (const el of skjul) el.setAttribute('data-skjul', '1');
   }
   function steg(t) {
     KT.raf = 0;
@@ -597,7 +623,7 @@
     if (!KT.raf) { KT.sist = 0; KT.raf = requestAnimationFrame(steg); }
   }
   function zoomOm(f, cx, cy) {
-    const sv = $('tpGraf'), [x, y, w, h] = KT.mal || KT.vb, r = sv.getBoundingClientRect();
+    const sv = $('tpGraf'), [x, y, w, h] = KT.mal || KT.vb, r = rute(sv);
     const fx = cx === undefined ? .5 : (cx - r.left) / r.width, fy = cy === undefined ? .5 : (cy - r.top) / r.height;
     const nw = w * f, nh = h * f;
     mot([x + (w - nw) * fx, y + (h - nh) * fy, nw, nh]);
@@ -606,7 +632,7 @@
   function flyPunkt(adr) {
     const q = KT.pos && KT.pos[adr];
     if (!q) return;
-    const sv = $('tpGraf'), ar = (sv.clientWidth || 800) / (sv.clientHeight || 500), w = Math.min((KT.mal || KT.vb)[2], 340), h = w / ar;
+    const sv = $('tpGraf'), ru = rute(sv), ar = (ru.width || 800) / (ru.height || 500), w = Math.min((KT.mal || KT.vb)[2], 340), h = w / ar;
     mot([q[0] - w / 2, q[1] - h / 2, w, h]);
   }
   function grafInteraksjon() {
@@ -631,7 +657,7 @@
         return;
       }
       if (!dra) return;
-      const r = sv.getBoundingClientRect();
+      const r = rute(sv);
       if (!dra.flyttet && Math.abs(e.clientX - dra.x) + Math.abs(e.clientY - dra.y) > 4) { dra.flyttet = true; sv.classList.add('drar'); }
       if (!dra.flyttet) return;
       // Flyttingen er hvor langt pekeren gikk siden sist, lagt på både der bildet er og der det er på vei.
@@ -642,7 +668,7 @@
       const s0 = Math.min(r.width / vb[2], r.height / vb[3]), sm = Math.min(r.width / mal[2], r.height / mal[3]);
       vb[0] -= dx / s0; vb[1] -= dy / s0;
       if (mal !== vb) { mal[0] -= dx / sm; mal[1] -= dy / sm; }
-      bruk();
+      if (!KT.dragRaf) KT.dragRaf = requestAnimationFrame(() => { KT.dragRaf = 0; bruk(); });
     });
     const slutt = (e) => {
       pek.delete(e.pointerId);
@@ -662,13 +688,14 @@
     sv.addEventListener('mouseover', (e) => {
       const n = e.target.closest ? e.target.closest('[data-s]') : null, v = n ? n.dataset.s : null;
       if (v === KT.fokus) return;
-      sv.querySelectorAll('.hel').forEach(x => x.classList.remove('hel'));
+      const lagene = [sv, $('tpGrafF')].filter(Boolean);
+      lagene.forEach(l => l.querySelectorAll('.hel').forEach(x => x.classList.remove('hel')));
       KT.fokus = v;
-      sv.classList.toggle('fokus', v !== null);
-      if (v !== null) sv.querySelectorAll(`[data-s="${v}"]`).forEach(x => x.classList.add('hel'));
+      lagene.forEach(l => l.classList.toggle('fokus', v !== null));
+      if (v !== null) lagene.forEach(l => l.querySelectorAll(`[data-s="${v}"]`).forEach(x => x.classList.add('hel')));
     });
-    sv.addEventListener('mouseleave', () => { KT.fokus = null; sv.classList.remove('fokus'); sv.querySelectorAll('.hel').forEach(x => x.classList.remove('hel')); });
-    if (window.ResizeObserver) new ResizeObserver(() => { if (KT.vb && KT.visning === 'spredt') maal(); }).observe(sv);
+    sv.addEventListener('mouseleave', () => { KT.fokus = null; [sv, $('tpGrafF')].filter(Boolean).forEach(l => { l.classList.remove('fokus'); l.querySelectorAll('.hel').forEach(x => x.classList.remove('hel')); }); });
+    if (window.ResizeObserver) new ResizeObserver(() => { RC.r = null; if (KT.vb && KT.visning === 'spredt') maal(); }).observe(sv);
   }
 
   /* ------------------------------------------------------------ the list of remembered sites */
@@ -851,7 +878,7 @@
           <input id="tpSok" class="field" type="search" placeholder="${esc(T('Søk etter anlegg', 'Search sites'))}" aria-label="${esc(T('Søk etter anlegg', 'Search sites'))}">
           <div id="tpListe" class="tp-liste"></div><div id="tpRutere" class="tp-rutere" hidden></div></aside>
         <section id="tpKol" class="tp-lerret"><div id="tpStatus" class="tp-status"></div>
-          <div class="tp-verktoy" role="toolbar" aria-label="${esc(T('Zoom', 'Zoom'))}"><button type="button" data-tp="z-pluss" aria-label="${esc(T('Zoom inn', 'Zoom in'))}" title="${esc(T('Zoom inn (+)', 'Zoom in (+)'))}">+</button><button type="button" data-tp="z-minus" aria-label="${esc(T('Zoom ut', 'Zoom out'))}" title="${esc(T('Zoom ut (-)', 'Zoom out (-)'))}">−</button><button type="button" data-tp="z-fit" aria-label="${esc(T('Tilpass til vinduet', 'Fit to the window'))}" title="${esc(T('Tilpass til vinduet (0)', 'Fit to the window (0)'))}"><svg viewBox="0 0 16 16" class="tp-ik"><path d="M2.5 6V2.5H6M10 2.5h3.5V6M13.5 10v3.5H10M6 13.5H2.5V10"/></svg></button><button type="button" data-tp="z-navn" aria-label="${esc(T('Vis alle navn', 'Show every name'))}" title="${esc(T('Vis alle navn', 'Show every name'))}">Aa</button></div><svg id="tpGraf" class="tp-graf-svg" role="img" aria-label="${esc(T('Topologi, spredt', 'Topology, spread'))}"></svg><svg id="tpLenker" class="tp-lenker" aria-hidden="true"></svg>
+          <div class="tp-verktoy" role="toolbar" aria-label="${esc(T('Zoom', 'Zoom'))}"><button type="button" data-tp="z-pluss" aria-label="${esc(T('Zoom inn', 'Zoom in'))}" title="${esc(T('Zoom inn (+)', 'Zoom in (+)'))}">+</button><button type="button" data-tp="z-minus" aria-label="${esc(T('Zoom ut', 'Zoom out'))}" title="${esc(T('Zoom ut (-)', 'Zoom out (-)'))}">−</button><button type="button" data-tp="z-fit" aria-label="${esc(T('Tilpass til vinduet', 'Fit to the window'))}" title="${esc(T('Tilpass til vinduet (0)', 'Fit to the window (0)'))}"><svg viewBox="0 0 16 16" class="tp-ik"><path d="M2.5 6V2.5H6M10 2.5h3.5V6M13.5 10v3.5H10M6 13.5H2.5V10"/></svg></button><button type="button" data-tp="z-navn" aria-label="${esc(T('Vis alle navn', 'Show every name'))}" title="${esc(T('Vis alle navn', 'Show every name'))}">Aa</button></div><svg id="tpGrafF" class="tp-graf-svg tp-graf-f" aria-hidden="true"></svg><svg id="tpGraf" class="tp-graf-svg" role="img" aria-label="${esc(T('Topologi, spredt', 'Topology, spread'))}"></svg><svg id="tpLenker" class="tp-lenker" aria-hidden="true"></svg>
           <div class="tp-rad-pc"><div id="tpPc" class="tp-pc"></div><div id="tpInnhold" class="tp-innhold"></div></div></section>
         <aside id="tpDetalj" class="tp-detalj" hidden></aside>
       </div>

@@ -22,7 +22,7 @@ Object.assign(DIA_INNHOLD, {
   ]},
   kartApnet: {pause: 900000, kans: 0.7, l: [
     'Kartet. PC-en til venstre, anleggene til høyre, og kortene imellom. Slik ser jeg det. | The map. The PC on the left, the plants on the right, the adapters in between. That is how I see it.',
-    'Hver prikk er en enhet. Trekanter er alarm. Jeg bryr meg om trekantene. | Each dot is a device. Triangles are alarms. I care about the triangles.',
+    'Hver prikk er en enhet. Bjeller er alarm. Jeg bryr meg om bjellene. | Each dot is a device. Bells are alarms. I care about the bells.',
     'Topologi. Det eneste kartet der alle veier faktisk fører et sted. | A topology map. The only map where every road actually leads somewhere.',
     'O: topologi | topology',
   ]},
@@ -142,7 +142,7 @@ DIA_PRAT.push(
   ['O: jeg liker å tagge ventiler | i like tagging valves', 'N: Hvorfor? | Why?', 'O: de har alltid en klar mening | they always have a clear opinion', 'N: Åpen eller lukket. | Open or closed.'],
   ['N: Hva gjør du når alle bryteren står på auto? | What do you do when all the switches are on auto?', 'O: håper | hope', 'N: Det er det samme som jeg gjør. | That is what I do.'],
   ['O: en regulator spurte om jeg var ekte | a controller asked if i was real', 'N: Hva svarte du | What did you answer', 'O: I-Am | I-Am', 'N: Pent. | Nicely done.'],
-  ['N: Trenger vi flere farger? | Do we need more colours?', 'O: fargeblind-modus | colour-blind mode', 'N: Vi har fire. | We have four.', 'O: og former | and shapes', 'N: Trekanter. Jeg liker trekanter. | Triangles. I like triangles.'],
+  ['N: Trenger vi flere farger? | Do we need more colours?', 'O: fargeblind-modus | colour-blind mode', 'N: Vi har fire. | We have four.', 'O: og former | and shapes', 'N: Bjeller. Jeg liker bjeller. | Bells. I like bells.'],
   ['O: noen ba om en funksjon som ikke fantes | someone asked for a feature that did not exist', 'N: Hva svarte vi | What did we answer', 'O: at vi tenkte på det | that we were thinking about it', 'N: Det var sant. Ti sekunder. | It was true. Ten seconds.'],
   ['N: Vi er best når ingen merker oss. | We are best when nobody notices us.', 'O: da er vi veldig gode | then we are very good', 'N: Vi er fantastiske. | We are excellent.'],
   ['O: ser du den lampen | do you see that lamp', 'N: Hvilken? | Which one?', 'O: den som blinker i teknisk rom | the one blinking in the plant room', 'N: Den har blinket siden 2014. | It has blinked since 2014.'],

@@ -65,138 +65,7 @@ const S = {
 const MAX_HIST = 40;
 const SEL_HIST = 90;
 
-/* Brand-tinted identification for the controllers we actually meet in the
-   field. Matched loosely against the vendor-name the device reports, so
-   "Beckhoff Automation GmbH" and "Beckhoff" both resolve. */
-/* Recognising the maker matters in practice: it tells you what to expect from
-   a controller before you have read a single point - a JCI refuses 12 objects
-   in one request, a Tridium answers happily, a WAGO ships with its clock
-   unset. Matched on vendor-name first, which the device states in plain text.
-
-   Colour here is identity, not state, so it is deliberately confined to the
-   2x2 px vendor mark at low opacity. The full-height rail on the row belongs
-   to state - see devState(). Anything unrecognised gets a neutral tone rather
-   than an invented brand colour. */
-const VENDOR_GREY = '#5a636e';
-const VENDORS = [
-  // Nordic and European building automation - the ones met most often here
-  [/beckhoff/i,                        'Beckhoff',      '#d4332f'],
-  [/wago/i,                            'WAGO',          '#6ec800'],
-  [/siemens/i,                         'Siemens',       '#009999'],
-  [/honeywell/i,                       'Honeywell',     '#ee3124'],
-  [/alerton/i,                         'Alerton',       '#ee3124'],
-  [/novar|trend\s*control/i,           'Trend',         '#0072ce'],
-  [/schneider|(^|\W)tac(\W|$)|invensys|satchwell|andover/i, 'Schneider', '#3dcd58'],
-  [/johnson\s*controls|(^|\W)jci(\W|$)|metasys/i, 'Johnson C.', '#3b6fb6'],
-  [/tridium|niagara/i,                 'Tridium',       '#f68b1f'],
-  [/sauter/i,                          'Sauter',        '#e2001a'],
-  [/priva/i,                           'Priva',         '#f39200'],
-  [/regin/i,                           'Regin',         '#e30613'],
-  [/fidelix/i,                         'Fidelix',       '#00a0df'],
-  [/ouman/i,                           'Ouman',         '#e30613'],
-  [/kieback|k[\s&-]*p\b/i,             'Kieback&Peter', '#005ca9'],
-  [/loytec/i,                          'LOYTEC',        '#009ee0'],
-  [/saia|burgess/i,                    'Saia-Burgess',  '#e2001a'],
-  [/phoenix\s*contact/i,               'Phoenix C.',    '#00a2e1'],
-  [/deos/i,                            'DEOS',          '#004f9f'],
-  [/neuberger/i,                       'Neuberger',     VENDOR_GREY],
-  [/wurm/i,                            'Wurm',          VENDOR_GREY],
-  [/gfr\b/i,                           'GFR',           VENDOR_GREY],
-  [/delta\s*controls/i,                'Delta Controls','#0093d0'],
-  [/distech/i,                         'Distech',       '#00a3e0'],
-  [/automated\s*logic|(^|\W)alc(\W|$)|webctrl/i, 'Automated Logic', '#0072bc'],
-  [/reliable\s*controls/i,             'Reliable C.',   '#006341'],
-  [/kmc\b/i,                           'KMC',           '#7a1f2b'],
-  [/belimo/i,                          'Belimo',        '#e2001a'],
-  [/produal/i,                         'Produal',       VENDOR_GREY],
-  [/thermokon/i,                       'Thermokon',     VENDOR_GREY],
-  [/s\+s|regeltechnik/i,               'S+S',           VENDOR_GREY],
-  [/vaisala/i,                         'Vaisala',       '#005eb8'],
-
-  // Ventilation and plant equipment that speaks BACnet directly
-  [/swegon/i,                          'Swegon',        '#0093d0'],
-  [/systemair/i,                       'Systemair',     '#e30613'],
-  [/fl[aä]kt/i,                        'FläktGroup',    '#0069b4'],
-  [/iv\s*produkt/i,                    'IV Produkt',    VENDOR_GREY],
-  [/exhausto/i,                        'Exhausto',      VENDOR_GREY],
-  [/enervent/i,                        'Enervent',      VENDOR_GREY],
-  [/halton/i,                          'Halton',        VENDOR_GREY],
-  [/lindab/i,                          'Lindab',        '#005ca9'],
-  [/nibe/i,                            'NIBE',          '#e30613'],
-  [/danfoss/i,                         'Danfoss',       '#e2000f'],
-  [/grundfos/i,                        'Grundfos',      '#0068b3'],
-  [/(^|\W)abb(\W|$)|auto-?matrix|cylon/i, 'ABB',        '#ff000f'],
-  [/carrier/i,                         'Carrier',       '#00539b'],
-  [/trane/i,                           'Trane',         '#ba0c2f'],
-  [/daikin/i,                          'Daikin',        '#0097e0'],
-  [/mitsubishi/i,                      'Mitsubishi',    '#e60012'],
-  [/(^|\W)lg(\W|$)/i,                  'LG',            '#a50034'],
-  [/samsung/i,                         'Samsung',       '#1428a0'],
-  [/yokogawa/i,                        'Yokogawa',      '#00a0e9'],
-  [/bosch/i,                           'Bosch',         '#e20015'],
-  [/viessmann/i,                       'Viessmann',     '#e2001a'],
-  [/vaillant/i,                        'Vaillant',      '#00754a'],
-  [/oj\s*electronics/i,                'OJ Electronics', VENDOR_GREY],
-  // Funnet paa et hotellanlegg 20.08.2026 - ventilasjonsaggregater og gatewayer
-  // som svarer paa BACnet direkte.
-  [/komfovent|amalva/i,                'Komfovent',     '#0072bc'],
-  [/embedded\s*systems/i,              'Embedded Sys.', VENDOR_GREY],
-  // Protokoll-gatewayer: dukker opp som egne BACnet-enheter og er ofte det
-  // som staar mellom deg og utstyret du egentlig leter etter.
-  [/fieldserver|sierra\s*monitor|(^|\W)msa(\W|$)/i, 'FieldServer', VENDOR_GREY],
-  [/intesis|hms\s*(networks|industrial)/i, 'Intesis',   VENDOR_GREY],
-  [/anybus/i,                          'Anybus',        VENDOR_GREY],
-  [/babel\s*buster|control\s*solutions/i, 'Babel Buster', VENDOR_GREY],
-  [/chipkin/i,                         'Chipkin',       VENDOR_GREY],
-  [/(^|\W)exor(\W|$)/i,                'Exor',          VENDOR_GREY],
-  [/wexi|wexiodisk/i,                  'Wexiödisk',     VENDOR_GREY],
-  [/bastec/i,                          'Bastec',        VENDOR_GREY],
-  [/webeasy|abelko/i,                  'Abelko',        VENDOR_GREY],
-  [/tour\s*&?\s*andersson|(^|\W)ta(\W|$)/i, 'TA Hydronics', VENDOR_GREY],
-  [/micro\s*matic/i,                   'Micro Matic',   VENDOR_GREY],
-];
-
-/* Leverandørens navn som en liten merkeplate i NABE-stil: ordmerket med merkets farge, uten bilder å laste.
-   Bare leverandører NABE kjenner får den; resten står som vanlig tekst. Navnet står i aria-label og title. */
-const LEV_KORT = {'Johnson C.': 'JCI', 'Kieback&Peter': 'K&P', 'Automated Logic': 'ALC', 'Delta Controls': 'DELTA', 'Saia-Burgess': 'SAIA',
-  'Phoenix C.': 'PHOENIX', 'Reliable C.': 'RELIABLE', 'Embedded Sys.': 'EMBEDDED', 'OJ Electronics': 'OJ', 'TA Hydronics': 'TA',
-  'Babel Buster': 'BABEL', 'Micro Matic': 'MICRO MATIC', 'Trend': 'TREND', 'Delta': 'DELTA'};
-function levLogo(label, farge) {
-  const navn = String(label || '');
-  if (!Object.prototype.hasOwnProperty.call(VENDOR_COLOR, navn)) return esc(navn);
-  const tekst = (LEV_KORT[navn] || navn).toUpperCase();
-  return `<span class="lev-logo" role="img" aria-label="${esc(navn)}" title="${esc(navn)}" style="--vc:${farge || VENDOR_COLOR[navn]}">${esc(tekst)}</span>`;
-}
-
-/* Registered BACnet vendor identifiers, used only when vendor-name is missing
-   or says nothing we recognise. The number comes from the device itself and is
-   assigned by ASHRAE, so it is the more reliable of the two - but a wrong entry
-   here would mislabel a controller, so it is kept as a fallback behind the
-   name and covers only vendors whose id was checked against the published
-   register (bacnet.org/assigned-vendor-ids). */
-const VENDOR_IDS = {
-  2: 'Trane', 3: 'Daikin', 5: 'Johnson C.', 6: 'ABB', 7: 'Siemens',
-  8: 'Delta Controls', 9: 'Siemens', 10: 'Schneider', 16: 'Carrier',
-  17: 'Honeywell', 18: 'Alerton', 24: 'Automated Logic', 28: 'KMC',
-  35: 'Reliable C.', 36: 'Tridium', 53: 'Daikin', 80: 'Sauter',
-  82: 'Mitsubishi', 89: 'Saia-Burgess', 91: 'Trend', 105: 'Priva',
-  127: 'ABB', 129: 'Carrier', 171: 'ABB', 178: 'LOYTEC', 190: 'Danfoss',
-  196: 'Yokogawa', 217: 'Samsung', 222: 'WAGO', 226: 'Phoenix C.',
-  227: 'Grundfos', 264: 'Regin', 284: 'Belimo', 332: 'Distech',
-  335: 'Schneider', 339: 'Vaisala', 364: 'Distech', 415: 'Beckhoff',
-  423: 'Belimo', 432: 'LG',
-};
-const VENDOR_COLOR = Object.fromEntries(VENDORS.map(([, navn, farge]) => [navn, farge]));
-
-function vendorOf(name, id) {
-  const raw = String(name == null ? '' : name).trim();
-  for (const [re, label, color] of VENDORS) if (re.test(raw)) return {label, color};
-  // Nothing matched the text: fall back to the registered id, which many
-  // controllers report even when their vendor-name is blank or generic.
-  const fraId = VENDOR_IDS[Number(id)];
-  if (fraId) return {label: fraId, color: VENDOR_COLOR[fraId] || VENDOR_GREY};
-  return {label: raw || 'Ukjent', color: VENDOR_GREY};
-}
+/* Leverandørene (VENDORS, vendorOf, levLogo) ligger i js/nabe-lev.js, som mobilsiden bruker også. */
 
 /* Mirrors VALUE_TYPES on the server: the types that carry a live value and
    therefore make it into the table unless "alle objekttyper" is on. */
@@ -459,7 +328,7 @@ function nabeDialog(tekst, o = {}) {
       ${kort ? `<div class="dlg-topp"><span class="dlg-glyph">${DLG_GLYPH[art] || ''}</span><div class="dlg-titler"><div class="dlg-tittel"></div><div class="dlg-under"></div></div></div>${dlgKortHtml(kort)}`
         : (tittel ? `<div class="dlg-topp"><span class="dlg-glyph">${DLG_GLYPH[art] || (harFelt ? DLG_GLYPH.sporsmaal : '')}</span><div class="dlg-titler"><div class="dlg-tittel"></div></div></div>` : '')}
       <div class="dlg-tekst"></div>${harFelt ? '<input class="field dlg-felt" type="text" autocomplete="off" spellcheck="false">' : ''}
-      ${kort && kort.advarsel ? '<div class="dlg-advarsel"><span aria-hidden="true">⚠</span><span class="dlg-advarsel-tekst"></span></div>' : ''}
+      ${kort && kort.advarsel ? '<div class="dlg-advarsel"><span aria-hidden="true">!</span><span class="dlg-advarsel-tekst"></span></div>' : ''}
       ${sno ? `<div class="dlg-sno${sno.hvem === 'nabo' ? ' nabo' : ''}"><span class="dlg-ansikt">${String(ansikt).replace(/width="\d+" height="\d+"/, 'width="20" height="20"')}</span><span class="dlg-sno-tekst"></span></div>` : ''}
       <div class="op-knapper"><button type="button" class="btn" data-d="nei">${esc(o.avbryt || T('Avbryt', 'Cancel'))}</button>
       <button type="button" class="btn primary" data-d="ja">${esc(okTekst)}</button></div></div>`;
@@ -1317,7 +1186,7 @@ function renderSiteWarnings() {
   if (!seksjoner.length || (!apen && S._anKompakt)) { el.hidden = true; el.innerHTML = ''; return; }
   el.hidden = false;
 
-  const ikon = seksjoner.length === 1 && seksjoner[0].nokkel === 'klokke' ? '⏱' : '▲';
+  const ikon = seksjoner.length === 1 && seksjoner[0].nokkel === 'klokke' ? '⏱' : '<i class="bjelle"></i>';
   const hode = `<button class="warn-head${alvorlige ? ' severe' : ''}" id="warnToggle"
       aria-expanded="${apen}" title="${apen ? T('Skjul detaljer', 'Hide details') : T('Vis detaljer', 'Show details')}">
     <span class="warn-ikon" aria-hidden="true">${ikon}</span>
@@ -1621,6 +1490,8 @@ function kortFelt(d) {
 function renderDevices() {
   // A name being typed in a heading must not be wiped by the next background redraw.
   if (S._redigerNavn) { S._renderUtsatt = true; return; }
+  // Bak en åpen popup ses ikke listen: den tegnes én gang når popupen lukkes (popupRo, nabe-verktoy.js).
+  if (window.nabePopupAapen && window.nabePopupAapen()) { window.__devStale = true; return; }
   BORTE_NAA = new Set();
   $('devCount').textContent = S.devices.length;
   if ($('devRescan')) $('devRescan').hidden = !S.devices.length;
@@ -1694,6 +1565,7 @@ function renderDevices() {
             ? `<em class="dev-pkt">${S.cache[d.address].length} pkt</em>`
             : `<em class="dev-pkt" title="${esc(T('Enheten svarte, men har ingen objekter med verdi. Slå på «alle objekttyper» under Filter for å se det den har.', 'The device answered, but has no objects with a value. Turn on "all object types" under Filter to see what it has.'))}">${T('ingen punkter', 'no points')}</em>`) : ''}
       </span>
+      ${(() => { const sy = systemerAv(S.cache[d.address]); return sy.length ? `<span class="dev-l3">${systemTagger(sy)}</span>` : ''; })()}
     </button>${window.nabeProtHint ? window.nabeProtHint(d) : ''}`;
   };
 

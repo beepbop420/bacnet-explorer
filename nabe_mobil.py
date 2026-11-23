@@ -534,6 +534,15 @@ def lag_app():
                 sett_cookie(svar, tok)
         return svar
 
+    # Leverandørlogoene og navnene er de samme som i appen: samme filer, så en enhet heter det samme begge steder.
+    @app.get("/m/lev.js")
+    def lev_js():
+        return hode(Response(content=(HER / "js" / "nabe-lev.js").read_text(encoding="utf-8"), media_type="application/javascript"))
+
+    @app.get("/m/lev-logo.js")
+    def lev_logo_js():
+        return hode(Response(content=(HER / "js" / "nabe-lev-logo.js").read_text(encoding="utf-8"), media_type="application/javascript"))
+
     @app.get("/m/manifest.webmanifest")
     def manifest():
         return hode(Response(content=json.dumps(MANIFEST), media_type="application/manifest+json"))

@@ -100,6 +100,14 @@ button.celle:active{background:var(--hev)}
 .ct1{font-size:17px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .ct2{font-size:13px;color:var(--fg2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .ct2.mono{font-family:var(--mono);font-size:12px}
+.suff{font-family:var(--mono);font-size:.62em;color:var(--fg2);font-weight:400}
+.systags{display:flex;flex-wrap:wrap;gap:5px;margin-top:6px}
+.stor-under + .systags{margin:2px 16px 12px}
+.systag{font-style:normal;font-size:11.5px;color:var(--fg2);padding:2px 8px;border:1px solid var(--line,rgba(128,128,128,.35));border-radius:999px;white-space:nowrap}
+.systag b{font-family:var(--mono);font-weight:600;color:var(--fg)}
+.lev-ikon{display:inline-block;height:11px;aspect-ratio:var(--ar,1);max-width:56px;vertical-align:-1px;background:currentColor;color:var(--fg2);
+  -webkit-mask:var(--li) center/contain no-repeat;mask:var(--li) center/contain no-repeat;-webkit-mask-source-type:luminance;mask-mode:luminance}
+.lev-logo{font:700 9px/1 var(--mono);letter-spacing:.08em;padding:2px 5px 1px;border-radius:4px;border:1px solid currentColor;color:var(--fg2);white-space:nowrap}
 .cv{margin-left:auto;color:var(--fg2);font-variant-numeric:tabular-nums;white-space:nowrap;font-size:17px;padding-left:8px}
 .cv small{font-size:13px;color:var(--fg3);margin-left:2px}
 .chev{width:8px;height:14px;color:var(--fg3);flex:none;margin-left:2px}
@@ -311,6 +319,8 @@ body{padding-bottom:calc(112px + env(safe-area-inset-bottom))}
 </head>
 <body>
 <div id="rot"></div>
+<script src="/m/lev-logo.js"></script>
+<script src="/m/lev.js"></script>
 <script>
 'use strict';
 const NO = /^(nb|no|nn)/i.test(navigator.language || 'nb');
@@ -392,7 +402,7 @@ function kobling(ok) {
   S.borte = true;
   let e = $('borte');
   if (!e) { e = document.createElement('div'); e.id = 'borte'; e.className = 'hud borte'; e.setAttribute('role', 'status'); document.body.appendChild(e); }
-  e.innerHTML = `<b aria-hidden="true">▲</b><span>${T('Mistet kontakten med PC-en. Prøver igjen. Det du har satt slippes av seg selv.', 'Lost contact with the PC. Retrying. What you set is released by itself.')}</span>`;
+  e.innerHTML = `<b aria-hidden="true">!</b><span>${T('Mistet kontakten med PC-en. Prøver igjen. Det du har satt slippes av seg selv.', 'Lost contact with the PC. Retrying. What you set is released by itself.')}</span>`;
   requestAnimationFrame(() => e.classList.add('vis'));
   hapt([40, 50, 40]);
   if (S.test && !$('ark').hidden) tegTest();
@@ -533,7 +543,7 @@ function pille() {
   if (!p) return;
   p.textContent = S.skriv ? T('Skriving på', 'Writing on') : T('Bare lesing', 'Read only');
   p.className = 'pille' + (S.skriv ? ' skriv' : '');
-  $('banner').innerHTML = S.readonly ? `<div class="merknad"><span aria-hidden="true">⚠</span>${T('NABE står i lesemodus på PC-en. Ingenting kan skrives.', 'NABE is in read-only mode on the PC. Nothing can be written.')}</div>` : '';
+  $('banner').innerHTML = S.readonly ? `<div class="merknad"><span aria-hidden="true">!</span>${T('NABE står i lesemodus på PC-en. Ingenting kan skrives.', 'NABE is in read-only mode on the PC. Nothing can be written.')}</div>` : '';
 }
 
 function teg() {
@@ -629,10 +639,20 @@ async function lastEnheter() {
     for (const d of (s.enheter || [])) {
       if (!d.address || sett.has(d.address + d.device_instance)) continue;
       sett.add(d.address + d.device_instance);
-      ut.push({address: d.address, instans: d.device_instance, navn: d.object_name || ('Device ' + d.device_instance), vendor: d.vendor || '', anlegg: s.name || n});
+      // Samme navn som appen: anleggets eget navn, ellers navnene på de to første regulatorene, ellers området
+      const navnListe = (s.enheter || []).map(x => x.object_name).filter(Boolean);
+      const anleggNavn = s.navn || (navnListe.length ? navnListe.slice(0, 2).join(', ') + (navnListe.length > 2 ? ' +' + (navnListe.length - 2) : '') : '') || n;
+      ut.push({address: d.address, instans: d.device_instance, navn: d.object_name || ('Device ' + d.device_instance), vendor: (typeof vendorOf === 'function' && d.vendor) ? vendorOf(d.vendor).label : (d.vendor || ''), anlegg: anleggNavn, systemer: d.systemer || []});
     }
   }
   ut.sort((a, b) => a.address.localeCompare(b.address, undefined, {numeric: true}));
+  // Samme navn på flere enheter (Beckhoff_0 og Beckhoff_0): siste del av adressen skiller dem, som i appen
+  const antallNavn = new Map();
+  for (const d of ut) antallNavn.set(d.navn, (antallNavn.get(d.navn) || 0) + 1);
+  for (const d of ut) {
+    const m = /(\d+)(?::\d+)?$/.exec(String(d.address));
+    d.suffiks = antallNavn.get(d.navn) > 1 && m ? '.' + m[1] : '';
+  }
   S.enheter = ut;
 }
 
@@ -658,7 +678,7 @@ function tegEnhetListe(ny) {
   const el = $('enhetListe');
   if (!el) return;
   const celle = d => `<button class="celle med-ikon" data-i="${S.enheter.indexOf(d)}"><span class="ik enhet">${SVG('<rect x="6" y="6" width="12" height="12" rx="2"/><path d="M9 2v4M15 2v4M9 18v4M15 18v4M2 9h4M2 15h4M18 9h4M18 15h4"/>')}</span>
-      <span class="ct"><span class="ct1">${esc(d.navn)}</span><span class="ct2 mono">${esc(d.address)} · ${T('enhet', 'device')} ${esc(d.instans)}${d.vendor ? ' · ' + esc(d.vendor) : ''}</span></span>${CHEV}</button>`;
+      <span class="ct"><span class="ct1">${esc(d.navn)}${d.suffiks ? ` <small class="suff">${esc(d.suffiks)}</small>` : ''}</span><span class="ct2 mono">${esc(d.address)} · ${T('enhet', 'device')} ${esc(d.instans)}${d.vendor ? ' · ' + (typeof levLogo === 'function' ? levLogo(d.vendor) : esc(d.vendor)) : ''}</span>${systemTagger(d.systemer)}</span>${CHEV}</button>`;
   // Bygg først: en igangkjøring er ett bygg om gangen. Bare ett bygg gir ingen overskrifter.
   const bygg = new Map();
   for (const d of l) { const k = d.anlegg || '—'; if (!bygg.has(k)) bygg.set(k, []); bygg.get(k).push(d); }
@@ -719,7 +739,9 @@ function tegPunkter() {
   const m = $('innhold');
   const d = S.enhet;
   navTilstand(d.navn, TITLER().enheter);
-  m.innerHTML = `<h1 class="stor-tittel">${esc(d.navn)}</h1><div class="stor-under">${esc(d.address)} · ${T('enhet', 'device')} ${esc(d.instans)}${d.vendor ? ' · ' + esc(d.vendor) : ''}</div>
+  const detaljSys = [...new Set(S.punkter.map(sysNr).filter(Boolean).map(x => x.slice(0, 3)))].sort();
+  m.innerHTML = `<h1 class="stor-tittel">${esc(d.navn)}${d.suffiks ? ` <small class="suff">${esc(d.suffiks)}</small>` : ''}</h1><div class="stor-under">${esc(d.address)} · ${T('enhet', 'device')} ${esc(d.instans)}${d.vendor ? ' · ' + (typeof levLogo === 'function' ? levLogo(d.vendor) : esc(d.vendor)) : ''}</div>
+    ${systemTagger(detaljSys.length ? detaljSys : d.systemer)}
     <div class="seg" id="seg">${[['alle', T('Alle', 'All')], ['pad', T('Pådrag', 'Outputs')], ['mal', T('Målinger', 'Inputs')]].map(([k, t]) => `<button data-ty="${k}" aria-pressed="${S.typer === k}">${t}</button>`).join('')}</div>
     <div class="sok">${SOK_IKON}<input type="search" id="pq" placeholder="${T('Søk punkt', 'Search point')}" value="${esc(S.pFilter)}" autocomplete="off" autocapitalize="off" spellcheck="false" aria-label="${T('Søk punkt', 'Search point')}"></div>
     <div class="seg grvelger" id="grSeg" aria-label="${T('Grupper etter', 'Group by')}">${[['system', T('System', 'System')], ['type', T('Type', 'Type')], ['ingen', T('Ingen', 'None')]].map(([k, t]) => `<button data-gr2="${k}" aria-pressed="${(S.gruppe || (new Set(S.punkter.map(sysNr).filter(Boolean)).size > 1 ? 'system' : 'ingen')) === k}">${t}</button>`).join('')}</div>
@@ -734,8 +756,6 @@ function tegPunkter() {
 }
 
 /* Systemnummeret etter NS 3451 står i punktnavnet: A_360_001_RT401, 320.012-RT402. Uten det havner punktet under «Annet». */
-const SYSTEMTYPE = {'310': ['Sanitær', 'Plumbing'], '320': ['Varme', 'Heating'], '330': ['Brannslokking', 'Fire fighting'], '340': ['Gass og trykkluft', 'Gas and compressed air'],
-  '350': ['Prosesskjøling', 'Process cooling'], '360': ['Luftbehandling', 'Air handling'], '370': ['Kjøling', 'Cooling'], '380': ['Vannbehandling', 'Water treatment']};
 function sysNr(p) {
   const m = /(?:^|[^0-9])(\d{3})[._-](\d{3})(?![0-9])/.exec(String(p.name || '')) || /(?:^|[^0-9])(\d{3})[._-](\d{3})(?![0-9])/.exec(String(p.description || ''));
   return m ? m[1] + '.' + m[2] : '';
@@ -905,7 +925,7 @@ function bekreft(tekst, knapp, o = {}) {
     const b = document.createElement('div');
     b.className = 'as'; b.setAttribute('role', 'alertdialog'); b.setAttribute('aria-modal', 'true');
     b.innerHTML = `<div class="as-kort"><div class="as-topp"><h3>${esc(tittel)}</h3>${o.under ? `<div class="under">${esc(o.under)}</div>` : ''}${broed ? `<div class="tekst">${esc(broed)}</div>` : ''}</div>${kort}
-      ${o.advarsel ? `<div class="advarsel"><span aria-hidden="true">⚠</span>${esc(o.advarsel)}</div>` : ''}
+      ${o.advarsel ? `<div class="advarsel"><span aria-hidden="true">!</span>${esc(o.advarsel)}</div>` : ''}
       <button class="as-knapp prim" id="bJa">${esc(knapp || 'OK')}</button></div>
       <div class="as-avbryt"><button class="as-knapp" id="bNei">${T('Avbryt', 'Cancel')}</button></div>`;
     document.body.appendChild(b);

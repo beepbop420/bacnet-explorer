@@ -33,7 +33,7 @@
 
   /* Test oppsettet: kabel, port, brannmur, hotspot og telefonoppslag, hver med hva du kan gjøre.
      Tilstand står med symbol og ord (✓ ▲ ✕ –), aldri med farge alene. */
-  const MERKE = {ok: '✓', merk: '▲', feil: '✕', ukjent: '–'};
+  const MERKE = {ok: '✓', merk: '!', feil: '✕', ukjent: '–'};
   const FIKS = {start: ['start', 'Slå på', 'Turn on'], brannmur: ['brannmur', 'Åpne', 'Open'], hotspot: ['hotspot-paa', 'Slå på', 'Turn on'], lokal: ['lokal', 'Koble direkte', 'Connect directly']};
   const nb = (par) => (Array.isArray(par) ? T(par[0], par[1]) : '');
 
@@ -155,7 +155,7 @@
         ${d.hotspot && d.hotspot.paa ? `<div class="lk-rad"><span>${T('Hotspot er på', 'Hotspot is on')}: <b>${esc(d.hotspot.ssid || '')}</b></span><span class="lk-dempet">${T('passord', 'password')} <span class="lk-mono">${esc(d.hotspot.passord || '')}</span></span></div>
             <div class="lk-handling"><button class="btn" data-mb="hotspot-av"${d.hotspotVenter ? ' disabled' : ''}>${d.hotspotVenter ? T('Slår av…', 'Turning off…') : T('Slå av hotspot', 'Turn off hotspot')}</button></div>`
           : (d.hotspot_sperret
-            ? `<div class="lk-feil" style="color:var(--warn)">▲ ${T('Hotspot er sperret på denne PC-en (IT-regler).', 'The hotspot is blocked on this PC (IT rules).')}</div>
+            ? `<div class="lk-feil" style="color:var(--warn)">! ${T('Hotspot er sperret på denne PC-en (IT-regler).', 'The hotspot is blocked on this PC (IT rules).')}</div>
               <div class="lk-handling"><button class="btn" data-mb="hotspot">${T('Se innstillingene', 'See the settings')}</button></div>`
             : `<div class="lk-handling"><button class="btn primary" data-mb="hotspot-paa"${d.hotspotVenter ? ' disabled' : ''}>${d.hotspotVenter ? T('Starter hotspot…', 'Starting hotspot…') : T('Slå på hotspot', 'Turn on hotspot')}</button>
             <button class="btn" data-mb="hotspot">${T('Innstillinger', 'Settings')}</button></div>
@@ -169,7 +169,7 @@
           const off = d.wifi_profil && d.wifi_profil.kat === 'Public';
           return `<div class="lk-blokk"><div class="lk-feil" style="color:var(--warn)">${off
             ? T(`✕ Windows slipper ikke telefonen inn. Nettet «${esc(d.wifi_profil.navn)}» er offentlig, og da er alt utenfra stengt til det finnes en regel.`, `✕ Windows does not let the phone in. The network “${esc(d.wifi_profil.navn)}” is public, and then everything from outside is shut until there is a rule.`)
-            : T('▲ Windows-brannmuren kan stoppe telefonen.', '▲ The Windows firewall may block the phone.')}</div>
+            : T('! Windows-brannmuren kan stoppe telefonen.', '! The Windows firewall may block the phone.')}</div>
           <div class="lk-handling"><button class="btn${off ? ' primary' : ''}" data-mb="brannmur">${T('Åpne for lokalt nett', 'Open for the local network')}</button></div>
           <div class="lk-liten">${T('Regelen gjelder bare det lokale nettet og bare porten til NABE. Windows spør om administrator.', 'The rule covers only the local network and only the NABE port. Windows asks for an administrator.')}</div></div>`;
         })() : ''}

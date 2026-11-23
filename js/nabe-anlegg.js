@@ -171,6 +171,7 @@ function tegnAnlegg() {
   tegnAnleggNu();
 }
 function tegnAnleggNu() {
+  if (window.nabePopupAapen && window.nabePopupAapen()) { window.__anStale = true; return; }
   anSist = performance.now();
   let el = $('anleggStatus');
   if (!el) {
@@ -269,7 +270,7 @@ function tegnAnleggNu() {
     || `<span class="as-k rolig">${t.ferdig ? T('ingen alarmer', 'no alarms') : T('leser…', 'reading…')}</span>`;
   // The warnings (wrong clock, same name, did not answer) ride on this line while both are folded.
   const v = !apen && !loadPrefs().warnOpen ? S._varsel : null;
-  const varsel = v ? `<button type="button" class="as-varsel${v.alvorlig ? ' severe' : ''}" data-varsel title="${esc(v.tittel)}" aria-label="${esc(v.tittel)}"><span aria-hidden="true">${v.klokke ? '⏱' : '▲'}</span><b>${v.n}</b></button>` : '';
+  const varsel = v ? `<button type="button" class="as-varsel${v.alvorlig ? ' severe' : ''}" data-varsel title="${esc(v.tittel)}" aria-label="${esc(v.tittel)}"><span aria-hidden="true">${v.klokke ? '⏱' : '<i class="bjelle"></i>'}</span><b>${v.n}</b></button>` : '';
   const html = !apen
     ? `<div class="as-linje as-kompakt">
         <button type="button" class="as-vis" data-vis aria-expanded="false" title="${esc(T('Vis detaljer', 'Show details'))}">

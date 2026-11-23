@@ -235,7 +235,7 @@ def t(nb: str, en: str) -> str:
     return en if SPRAAK_VAR.get() == "en" else nb
 
 
-VERSJON = "2.37"
+VERSJON = "2.38"
 app.version = VERSJON
 app.description = ("NABE sitt eget grensesnitt. Det som leser fra anlegget (enheter, punkter, ukeprogram, trend) kan brukes fra Python, Excel eller curl mens NABE kjører. "
                    "Dokumentasjonen (Swagger) laster fra internett.")
@@ -2818,6 +2818,10 @@ async def _load_points(job, bacnet_app, body: "LoadPointsBody"):
         except COMM_ERRORS:
             pass
     points = [bc.shape_point(o, raw.get(o, {})) for o in wanted]
+    try:
+        _systemer_husk(body.address, body.device_instance, points)
+    except Exception:
+        pass
 
     def _points_result(partial: bool) -> Dict[str, Any]:
         # A point we never got an answer for is not the same as one that has
@@ -3887,6 +3891,48 @@ def _save_sites() -> bool:
         return False
 
 
+# Hvilke systemer (NS 3451: 310 til 380) en enhet har punkter i, lest av punktnavnene. Det kommer fra det som er lest av enheten,
+# så en enhet NABE aldri har åpnet har ingen. Lagres for seg slik at mobilen kan vise dem uten å lese punktene selv.
+SYSTEMER_FIL = DATA_DIR / "systemer.json"
+SYSTEMER: Dict[str, List[str]] = {}
+SYSTEMER_MAKS = 4000
+_SYSTEM_RE = re.compile(r"(?:^|[^0-9])(3[1-8]0)[._-][0-9]{3}(?![0-9])")
+
+
+def _systemer_av(punkter: List[Dict[str, Any]]) -> List[str]:
+    funnet = set()
+    for p in punkter:
+        m = _SYSTEM_RE.search(str(p.get("name") or "")) or _SYSTEM_RE.search(str(p.get("description") or ""))
+        if m:
+            funnet.add(m.group(1))
+    return sorted(funnet)
+
+
+def _systemer_last() -> None:
+    try:
+        d = json.loads(SYSTEMER_FIL.read_text(encoding="utf-8"))
+        if isinstance(d, dict):
+            SYSTEMER.update({str(k): [str(x) for x in v][:12] for k, v in d.items() if isinstance(v, list)})
+    except (OSError, ValueError):
+        pass
+
+
+def _systemer_husk(adresse: str, instans: Any, punkter: List[Dict[str, Any]]) -> None:
+    ny = _systemer_av(punkter)
+    nokkel = f"{adresse}#{instans}"
+    if SYSTEMER.get(nokkel, None) == ny or (not ny and nokkel not in SYSTEMER):
+        return
+    SYSTEMER[nokkel] = ny
+    while len(SYSTEMER) > SYSTEMER_MAKS:
+        SYSTEMER.pop(next(iter(SYSTEMER)))
+    tmp = SYSTEMER_FIL.with_suffix(".tmp")
+    try:
+        tmp.write_text(json.dumps(SYSTEMER, ensure_ascii=False), encoding="utf-8")
+        os.replace(tmp, SYSTEMER_FIL)
+    except OSError:
+        pass
+
+
 class SiteBody(BaseModel):
     ranges: List[str]
     devices: List[Dict[str, Any]] = []
@@ -3906,7 +3952,13 @@ def _site_key(ranges: List[str]) -> str:
 
 @app.get("/api/sites")
 async def sites_list():
-    return {"status": "done", "sites": SITES}
+    ut = {}
+    for k, s in SITES.items():
+        s2 = dict(s)
+        s2["enheter"] = [dict(d, systemer=SYSTEMER.get(f"{d.get('address')}#{d.get('device_instance')}") or [])
+                         for d in (s.get("enheter") or [])]
+        ut[k] = s2
+    return {"status": "done", "sites": ut}
 
 
 @app.post("/api/sites")
@@ -4717,6 +4769,7 @@ class NoteBody(BaseModel):
 @app.on_event("startup")
 async def _sites_startup():
     _load_sites()
+    _systemer_last()
 
 
 @app.on_event("startup")

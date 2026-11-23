@@ -162,11 +162,17 @@ function sisteBesok(k) {
     if (na === siste) return;
     siste = na;
     document.body.classList.toggle('har-popup', na);
-    if (!na && window.__verdiStale) {
-      window.__verdiStale = false;
-      try { if (typeof updateValueCells === 'function' && S.pointIndex) updateValueCells([...S.pointIndex.keys()]); } catch { /* neste svar tegner dem */ }
+    if (!na) {
+      // Listen og anleggslinja ble ikke tegnet mens popupen sto; de tegnes én gang nå.
+      if (window.__devStale) { window.__devStale = false; try { renderDevices(); } catch { /* neste svar tegner dem */ } }
+      if (window.__anStale) { window.__anStale = false; try { tegnAnleggNu(); } catch { /* neste svar tegner dem */ } }
+      if (window.__verdiStale) {
+        window.__verdiStale = false;
+        try { if (typeof updateValueCells === 'function' && S.pointIndex) updateValueCells([...S.pointIndex.keys()]); } catch { /* neste svar tegner dem */ }
+      }
     }
   }
+  window.nabePopupAapen = aapen;
   const planlegg = () => { if (!t) t = setTimeout(sjekk, 60); };
   new MutationObserver(planlegg).observe(document.body, {subtree: true, attributes: true, attributeFilter: ['hidden']});
   new MutationObserver(planlegg).observe(document.body, {childList: true});
