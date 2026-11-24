@@ -6536,7 +6536,7 @@ function cachePoints(ip, points) {
   S.cache[ip] = points;
 }
 
-function globalMatches(term) {
+function globalMatches(term, maks = 300) {
   const out = [];
   // Flag mode answers a different question from the search box: not "where is
   // this point" but "is anything still forced anywhere on this site". It is
@@ -6548,7 +6548,7 @@ function globalMatches(term) {
       for (const p of pts) {
         if (hasFlag(p, S.gsFlag)) {
           out.push({ip, dev, p});
-          if (out.length >= 300) return out;
+          if (out.length >= maks) return out;
         }
       }
     }
@@ -6569,7 +6569,7 @@ function globalMatches(term) {
     for (const p of pts) {
       if (sokTreff(hayFor(p) + devHay, ord, p)) {
         out.push({ip, dev, p});
-        if (out.length >= 300) return out;
+        if (out.length >= maks) return out;
       }
     }
   }
@@ -6616,9 +6616,12 @@ function renderGlobal() {
   const dekning = loaded < total
     ? T(`søker i ${loaded} av ${total} enheter (åpne en enhet for å ta den med)`, `searching ${loaded} of ${total} devices (open a device to include it)`)
     : T(`alle ${total} enheter`, `all ${total} devices`);
-  $('gsMeta').textContent = S.gsFlag
+  const metaTekst = S.gsFlag
     ? `${hits.length} punkter ${FLAGS[S.gsFlag].label} · ${dekning}`
     : `${hits.length} treff · ${dekning}`;
+  $('gsMeta').innerHTML = `<span>${esc(metaTekst)}</span>`
+    + (hits.length ? `<button type="button" class="gs-eks" id="gsEks" title="${esc(T('Hver enhet med treff får sine egne EDE-filer med bare de punktene, i en mappe per enhet', 'Each device with a match gets its own EDE files with only those points, in a folder per device'))}">${T('Eksporter EDE', 'Export EDE')}</button>` : '');
+  if ($('gsEks')) $('gsEks').onclick = exportGlobalEde;
 
   const box = $('gsResults');
   // Kaskaden hoerer til apninga. Lista bygges om paa hvert tastetrykk, og en
@@ -9373,6 +9376,19 @@ function exportEDE() {
   const dev = S.activeDev;
   if (!dev) return;
   const rows = actionRows();
+  const {filer, st} = byggEde(dev, rows);
+  // Chrome drops downloads fired in the same tick as a popup burst.
+  filer.forEach(([tekst, navn], i) =>
+    setTimeout(() => downloadText(tekst, navn, false), i * 350));
+
+  toast(T(`${rows.length} punkter eksportert som EDE i ${filer.length} filer`, `${rows.length} points exported as EDE in ${filer.length} files`)
+    + (st.tabell.length ? T(` · ${st.tabell.length} tilstandslister`, ` · ${st.tabell.length} state lists`) : '')
+    + (selectedVisible().length ? T(' (kun valgte)', ' (selected only)') : ''));
+}
+
+/* Filene for én enhet: EDE, tilstandstekster og de to oppslagstabellene. Punktene får enhetens egen instans og sine egne
+   objektnummer, så en fil er alltid riktig for akkurat den enheten, uansett hvor punktene ble funnet. */
+function byggEde(dev, rows, navnDel) {
   const st = buildStateTexts(rows);
 
   /* EDE is a semicolon file with no quoting at all - the delimiter is simply
@@ -9446,7 +9462,7 @@ function exportEDE() {
   // it: "<basis>_EDE.csv" alongside "<basis>_StateTexts.csv" is how YABE and
   // Beckhoff name them, and it is how a reader pairs them up.
   const dato = new Date().toISOString().slice(0, 10);
-  const basis = `Device${dev.device_instance}_${dato}`;
+  const basis = `Device${dev.device_instance}${navnDel ? '_' + navnDel : ''}_${dato}`;
   // No BOM: the reference files have none, and a BOM ahead of
   // "#Engineering-Data-Exchange" turns the format marker into an unknown line.
   const filer = [[lines.join('\r\n') + '\r\n', `${basis}_EDE.csv`]];
@@ -9481,14 +9497,57 @@ function exportEDE() {
   Object.entries(EDE_UNIT).sort((a, b) => a[1] - b[1])
     .forEach(([navn, kode]) => enh.push(`${kode};${navn.replace(/-/g, '_')}`));
   filer.push([enh.join('\r\n') + '\r\n', `${basis}_Units.csv`]);
+  return {filer, st};
+}
 
-  // Chrome drops downloads fired in the same tick as a popup burst.
-  filer.forEach(([tekst, navn], i) =>
-    setTimeout(() => downloadText(tekst, navn, false), i * 350));
+/* ZIP uten komprimering: nok til å samle filer i én nedlasting uten et bibliotek. */
+const CRC_TABELL = (() => { const t = new Uint32Array(256); for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; } return t; })();
+function crc32(b) { let c = 0xFFFFFFFF; for (let i = 0; i < b.length; i++) c = CRC_TABELL[(c ^ b[i]) & 255] ^ (c >>> 8); return (c ^ 0xFFFFFFFF) >>> 0; }
+function lagZip(poster) {
+  const enc = new TextEncoder(), deler = [], sentral = [];
+  let pos = 0;
+  for (const [navn, tekst] of poster) {
+    const n = enc.encode(navn), d = enc.encode(tekst), crc = crc32(d);
+    const lh = new Uint8Array(30 + n.length), v = new DataView(lh.buffer);
+    v.setUint32(0, 0x04034b50, true); v.setUint16(4, 20, true); v.setUint16(6, 0x0800, true); v.setUint16(8, 0, true);
+    v.setUint16(10, 0, true); v.setUint16(12, 0x21, true); v.setUint32(14, crc, true); v.setUint32(18, d.length, true);
+    v.setUint32(22, d.length, true); v.setUint16(26, n.length, true); v.setUint16(28, 0, true); lh.set(n, 30);
+    const ch = new Uint8Array(46 + n.length), c = new DataView(ch.buffer);
+    c.setUint32(0, 0x02014b50, true); c.setUint16(4, 20, true); c.setUint16(6, 20, true); c.setUint16(8, 0x0800, true); c.setUint16(10, 0, true);
+    c.setUint16(12, 0, true); c.setUint16(14, 0x21, true); c.setUint32(16, crc, true); c.setUint32(20, d.length, true); c.setUint32(24, d.length, true);
+    c.setUint16(28, n.length, true); c.setUint32(42, pos, true); ch.set(n, 46);
+    deler.push(lh, d); sentral.push(ch);
+    pos += lh.length + d.length;
+  }
+  const sLen = sentral.reduce((a, x) => a + x.length, 0), slutt = new Uint8Array(22), e = new DataView(slutt.buffer);
+  e.setUint32(0, 0x06054b50, true); e.setUint16(8, poster.length, true); e.setUint16(10, poster.length, true); e.setUint32(12, sLen, true); e.setUint32(16, pos, true);
+  return new Blob([...deler, ...sentral, slutt], {type: 'application/zip'});
+}
 
-  toast(T(`${rows.length} punkter eksportert som EDE i ${filer.length} filer`, `${rows.length} points exported as EDE in ${filer.length} files`)
-    + (st.tabell.length ? T(` · ${st.tabell.length} tilstandslister`, ` · ${st.tabell.length} state lists`) : '')
-    + (selectedVisible().length ? T(' (kun valgte)', ' (selected only)') : ''));
+/* Søket i anlegget kan eksporteres: hver enhet med treff får sine egne EDE-filer med bare de punktene, i en mappe per enhet i én zip. */
+function exportGlobalEde() {
+  const hits = globalMatches($('gsInput').value, Infinity);
+  if (!hits.length) return;
+  const per = new Map();
+  for (const h of hits) { if (!h.dev) continue; if (!per.has(h.ip)) per.set(h.ip, {dev: h.dev, rows: []}); per.get(h.ip).rows.push(h.p); }
+  const trygt = (t) => String(t || '').replace(/[^A-Za-z0-9ÆØÅæøå_.-]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 40);
+  const poster = [];
+  let antall = 0;
+  for (const {dev, rows} of per.values()) {
+    const mappe = `${trygt(dev.object_name) || 'Device'}_${dev.device_instance}`;
+    const del = trygt(dev.object_name);
+    // Samme rekkefølge som i enheten: etter objekttype og instans
+    rows.sort((a, b) => String(a.type).localeCompare(String(b.type)) || (a.instance ?? 0) - (b.instance ?? 0));
+    const {filer} = byggEde(dev, rows, del);
+    for (const [tekst, navn] of filer) poster.push([`${mappe}/${navn}`, tekst]);
+    antall += rows.length;
+  }
+  const blob = lagZip(poster), a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `NABE_sok_EDE_${new Date().toISOString().slice(0, 10)}.zip`;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  toast(T(`${antall} punkter fra ${per.size} enheter eksportert som EDE, en mappe per enhet`, `${antall} points from ${per.size} devices exported as EDE, one folder per device`));
 }
 
 function downloadText(text, filename, bom = true) {

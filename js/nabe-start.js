@@ -206,6 +206,9 @@ const FAKTA = [
   ['COV betyr at regulatoren sier fra selv. Mindre spørring, mer ro.', 'COV means the controller speaks up itself. Less asking, more peace.'],
 ];
 const NYTT = {
+  '2.39': [
+    ['Søket i anlegget kan eksporteres som EDE: hver enhet med treff får sine egne EDE-filer med bare de punktene, i en mappe per enhet i én zip. Enhetsnummer og objektnummer er enhetens egne, så filene stemmer med riktig enhet', 'The plant search can be exported as EDE: each device with a match gets its own EDE files with only those points, in a folder per device in one zip. Device and object numbers are the device own, so the files match the right device'],
+  ],
   '2.38': [
     ['Leverandørlogoer i NABE-stil: Beckhoff, Siemens og flere vises med sin egen logo i én farge, i appens tekstfarge, så de følger lys og mørk visning. Leverandører uten logo står som ordmerke. Nye logoer legges i logoer/, og lag_logoer.py gjør dem klare', 'Vendor logos in the NABE style: Beckhoff, Siemens and more show their own logo in one colour, in the text colour of the app, so they follow light and dark. Vendors without a logo stay as a wordmark. New logos go in logoer/, and lag_logoer.py prepares them'],
     ['Alarm er en bjelle overalt, ikke en trekant: i kartet, på anleggslinja, i ventelinja og i figurene', 'An alarm is a bell everywhere, not a triangle: in the map, on the plant line, in the wait line and in the shapes'],

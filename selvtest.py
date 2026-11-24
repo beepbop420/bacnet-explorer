@@ -344,6 +344,7 @@ def royktest():
               " systemer: typeof systemerAv === 'function' && systemerAv([{name: '360.001-RT401'}, {name: 'A_320_002_X'}, {name: '563.100-A'}, {name: 'Spjeld'}]).join() === '320,360'"
               "    && /360/.test(systemTagger(['360'])) && systemTagger([]) === '' && systemerAv([]).length === 0,"
               " logoer: typeof LEV_LOGO === 'object' && Object.keys(LEV_LOGO).length >= 10 && Object.values(LEV_LOGO).every(v => /^<svg[^>]*viewBox=/.test(v) && !/<(script|image|text)/i.test(v)),"
+              " globalede: typeof exportGlobalEde === 'function' && crc32(new TextEncoder().encode('123456789')) === 0xCBF43926 && lagZip([['a/b.txt', 'hei']]).size === 115,"
               " popupro: typeof updateValueCells === 'function' && (() => { document.body.classList.add('har-popup'); window.__verdiStale = false; updateValueCells(['x']);"
               "    const ok = window.__verdiStale === true; document.body.classList.remove('har-popup'); window.__verdiStale = false; return ok; })(),"
               " skannbygg: typeof skannBygg === 'function' && typeof window.skannBygg === 'function',"
