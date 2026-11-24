@@ -1295,6 +1295,7 @@ body.dense table{font-size:11px}
 .wf{display:flex;flex-direction:column;gap:6px;padding:8px 10px}
 .wf-row{display:flex;gap:6px;align-items:center}
 .wf-row .field{flex:1;min-width:0}
+.wf-hint{font-size:10px;line-height:1.55;color:var(--fg-3);padding:0 2px}
 .warn-box{
   font-size:10px;color:var(--warn);background:color-mix(in srgb,var(--warn) 8%,transparent);
   border:1px solid color-mix(in srgb,var(--warn) 25%,transparent);border-radius:var(--radius);padding:5px 7px;line-height:1.4;
@@ -5083,6 +5084,42 @@ tbody tr.fault td.c-act::before{content:'';position:absolute;left:0;top:2px;bott
 .statusbar.sb-ny #sbSim{color:var(--warn);font-weight:600;letter-spacing:.08em;font-size:10px;cursor:pointer}
 .tr-modal{width:min(1000px,96vw)}
 .op-modal.op-bred{width:min(640px,94vw)}
+/* Igangkjøring: IO-lista mot enheten, med avkrysning */
+.ig-modal{width:min(900px,95vw)}
+.ig-kropp{padding:14px 16px 16px;display:flex;flex-direction:column;gap:12px;max-height:calc(100vh - 140px)}
+.ig-prot{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.ig-protnavn{max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ig-prot .field{width:auto;min-width:140px}
+.ig-fyll{border-top:1px solid var(--line);padding-top:10px}
+.ig-fyll summary{cursor:pointer;font-size:12px;color:var(--fg-2)}
+.ig-fyll[open] summary{margin-bottom:10px}
+.ig-fyllrad{display:flex;gap:12px;margin-bottom:8px}
+.ig-fyllrad label{display:flex;flex-direction:column;gap:4px;font-size:11px;color:var(--fg-3);flex:1}
+.ig-fyllrad label:first-child{flex:0 0 110px}
+.ig-valg{display:flex;align-items:flex-start;gap:8px;font-size:12px;color:var(--fg-2);margin:6px 0;line-height:1.4}
+.ig-valg input{margin-top:2px}
+.ig-lista summary{cursor:pointer;font-size:12px;color:var(--fg-2)}
+.ig-lista textarea{width:100%;margin:8px 0;font-family:var(--mono);font-size:11px;resize:vertical;box-sizing:border-box}
+.ig-fil{cursor:pointer}
+.ig-filtre{display:flex;flex-wrap:wrap;gap:6px}
+.ig-chip{font:inherit;font-size:12px;color:var(--fg-2);background:none;border:1px solid var(--line-2);border-radius:99px;padding:3px 11px;cursor:pointer}
+.ig-chip b{font-weight:500;color:var(--fg-3);margin-left:2px}
+.ig-chip:hover{background:var(--hover)}
+.ig-chip.paa{color:var(--accent);border-color:var(--accent-edge);background:var(--accent-dim)}
+.ig-kropp{overflow:hidden}
+.ig-kropp>*{flex:none}
+.ig-kropp>.ig-tabell{flex:1 1 auto;min-height:120px;overflow:auto}
+.ig-art{white-space:normal!important;overflow:visible!important;text-overflow:clip!important}
+.ig-tabell{overflow:auto;min-height:120px}
+.ig-navn small,.ig-art small,.ig-sjekk small{display:block;margin-top:1px}
+.ig-navn a{cursor:pointer;color:var(--fg-1)}
+.ig-navn a:hover{color:var(--accent)}
+.ig-art.funn{color:var(--warn)}
+.ig-sjekk{white-space:nowrap}
+.ig-k{font:inherit;font-size:11px;height:22px;padding:0 9px;margin-right:4px;color:var(--fg-2);background:none;border:1px solid var(--line-2);border-radius:var(--radius);cursor:pointer}
+.ig-k:hover{background:var(--hover)}
+.ig-k.ok{color:var(--accent);border-color:var(--accent-edge);background:var(--accent-dim)}
+.ig-k.avvik{color:var(--warn);border-color:var(--warn);background:none}
 .pe-rad{display:flex;flex-direction:column;gap:2px;padding:8px 0;border-bottom:1px solid var(--line);font-size:12px}
 .pe-rad.sloyfe .pe-dom,.pe-rad.ulik .pe-dom{color:var(--warn)}
 .pe-dom{color:var(--fg-2)}
@@ -5736,7 +5773,7 @@ body.uten-bevegelse .tp-radar{animation:tp-rot 2.2s linear infinite!important}
 .tp-flyt-lag.fokus [data-s]:not(.hel){opacity:.16;transition:opacity .25s}
 .tp-flyt-lag.fokus .hel{opacity:1}
 .tp-graf-f{pointer-events:none;z-index:0}
-#tpGraf{z-index:1}
+#tpGraf{z-index:1}
 .tp-graf-svg .tp-nett{stroke-width:1.6px}
 .tp-graf-svg .tp-flyt{stroke-width:2.8px;stroke-dasharray:2 15;animation:tp-flyt-px 1.2s steps(12) infinite;stroke:var(--fg-3)}
 .tp-graf-svg .tp-flyt.p-bacnet{stroke:var(--prot-bacnet)}.tp-graf-svg .tp-flyt.p-modbus{stroke:var(--prot-modbus)}.tp-graf-svg .tp-flyt.p-knx{stroke:var(--prot-knx)}

@@ -40,10 +40,11 @@ import json
 import math
 import os
 import socket
+import urllib.parse
 import urllib.request
 import time
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from fastapi import FastAPI, Form, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -4538,6 +4539,93 @@ def lag_xlsx(body: XlsxBody):
     return Response(nabe_xlsx.skriv_xlsx(body.ark),
                     media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                     headers={"Content-Disposition": f'attachment; filename="{navn}.xlsx"'})
+
+
+# ---------------------------------------------------------------- igangkjøringsprotokoll
+# En protokoll fra FastEL (Excel-bok med makroer) lastes opp én gang og ligger i datamappa, så den finnes igjen
+# etter omstart. Originalen røres aldri: utfylling gir alltid en ny kopi.
+IGANG_DIR = DATA_DIR / "igang"
+
+
+class IgangFyllBody(BaseModel):
+    id: str
+    fyllinger: List[Dict[str, Any]]
+
+
+def _igang_fil(id_: str) -> Tuple[Path, Dict[str, Any]]:
+    if not re.fullmatch(r"[0-9a-f]{12}", id_ or ""):
+        raise ValueError(t("Ugyldig protokoll-id.", "Invalid protocol id."))
+    fil, meta = IGANG_DIR / f"{id_}.bin", IGANG_DIR / f"{id_}.json"
+    if not fil.exists():
+        raise ValueError(t("Protokollen finnes ikke lenger. Åpne fila på nytt.", "The protocol is gone. Open the file again."))
+    try:
+        info = json.loads(meta.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        info = {}
+    return fil, info
+
+
+def _igang_svar(data: bytes, id_: str, navn: str) -> Dict[str, Any]:
+    import nabe_igang
+    r = nabe_igang.les(data)
+    for a in r["ark"]:
+        a.pop("sti", None)
+    return {"status": "done", "id": id_, "navn": navn, **r}
+
+
+@app.post("/api/igang/les")
+async def igang_les(request: Request, navn: str = "protokoll.xlsm"):
+    data = await request.body()
+    if len(data) > 30_000_000 or data[:2] != b"PK":
+        return {"status": "error", "error": t("Det ser ikke ut som en Excel-fil (.xlsm eller .xlsx).", "That does not look like an Excel file (.xlsm or .xlsx).")}
+    navn = re.sub(r"[^\w.\- ]", "_", navn)[:120] or "protokoll.xlsm"
+    id_ = hashlib.sha1(data).hexdigest()[:12]
+    try:
+        svar = _igang_svar(data, id_, navn)
+    except Exception as e:
+        return {"status": "error", "error": t("Fikk ikke lest fila som en Excel-bok: ", "Could not read the file as a workbook: ") + str(e)[:120]}
+    if not svar["ark"]:
+        return {"status": "error", "error": t("Fant ingen igangkjøringsark i fila (de har kolonnene Kanalnr., Systemnr. og Prog.-funksjon).",
+                                              "Found no commissioning sheets in the file (they have the columns Kanalnr., Systemnr. and Prog.-funksjon).")}
+    IGANG_DIR.mkdir(parents=True, exist_ok=True)
+    (IGANG_DIR / f"{id_}.bin").write_bytes(data)
+    (IGANG_DIR / f"{id_}.json").write_text(json.dumps({"navn": navn}, ensure_ascii=False), encoding="utf-8")
+    # Kopier eldre enn to måneder ryddes bort
+    for f in IGANG_DIR.glob("*.*"):
+        try:
+            if time.time() - f.stat().st_mtime > 60 * 86400:
+                f.unlink()
+        except OSError:
+            pass
+    return svar
+
+
+@app.get("/api/igang/hent")
+def igang_hent(id: str):
+    try:
+        fil, info = _igang_fil(id)
+        return _igang_svar(fil.read_bytes(), id, info.get("navn") or "protokoll.xlsm")
+    except ValueError as e:
+        return {"status": "error", "error": str(e)}
+
+
+@app.post("/api/igang/fyll")
+def igang_fyll(body: IgangFyllBody):
+    """En kopi av protokollen med feltene fylt inn. Bare tomme celler i navngitte felt skrives."""
+    import nabe_igang
+    try:
+        fil, info = _igang_fil(body.id)
+        ut, tall = nabe_igang.fyll(fil.read_bytes(), body.fyllinger[:20000])
+    except ValueError as e:
+        return JSONResponse({"status": "error", "error": str(e)}, status_code=400)
+    navn = info.get("navn") or "protokoll.xlsm"
+    stamme, _, ende = navn.rpartition(".")
+    ende = ende.lower() if ende.lower() in ("xlsm", "xlsx") else "xlsm"
+    nytt = f"{stamme or navn}_NABE_{datetime.date.today().isoformat()}.{ende}"
+    return Response(ut, media_type="application/vnd.ms-excel.sheet.macroEnabled.12" if ende == "xlsm"
+                    else "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    headers={"Content-Disposition": f'attachment; filename="{nytt}"', "X-Nabe-Fylt": str(tall["fylt"]), "X-Nabe-Hoppet": str(tall["hoppet"]),
+                             "X-Nabe-Filnavn": urllib.parse.quote(nytt)})
 
 
 @app.post("/api/pendling")

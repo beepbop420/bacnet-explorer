@@ -281,12 +281,12 @@ const DLG_GLYPH = {
 function dlgKortHtml(k) {
   const chip = (t) => `<span class="dlg-chip">${esc(t)}</span>`;
   const enhet = k.enhet ? ' ' + esc(k.enhet) : '';
-  const prio = chip(T('Prioritet ', 'Priority ') + k.prio);
+  const prio = chip(k.prio === null || k.prio === undefined ? T('Uten prioritet', 'No priority') : T('Prioritet ', 'Priority ') + k.prio);
   if (k.art === 'skriv') {
     return `<div class="dlg-diff"><div><span class="dlg-merke">${T('Nå', 'Now')}</span><b>${esc(k.naa)}${enhet}</b></div>
       <span class="dlg-pil" aria-hidden="true">→</span>
       <div class="dlg-ny"><span class="dlg-merke">${T('Ny', 'New')}</span><b>${esc(k.ny)}${enhet}</b></div></div>
-      <div class="dlg-chips">${prio}${chip(k.auto ? T('Slippes automatisk etter ' + k.auto + ' min', 'Released automatically after ' + k.auto + ' min') : T('Blir stående til du frigir den', 'Stays until you release it'))}</div>`;
+      <div class="dlg-chips">${prio}${chip(k.auto ? T('Slippes automatisk etter ' + k.auto + ' min', 'Released automatically after ' + k.auto + ' min') : (k.prio === null || k.prio === undefined) ? T('Vanlig endring', 'Plain change') : T('Blir stående til du frigir den', 'Stays until you release it'))}</div>`;
   }
   if (k.art === 'frigi') {
     return `<div class="dlg-diff"><div><span class="dlg-merke">${T('Nå', 'Now')}</span><b>${esc(k.naa)}${enhet}</b></div>
@@ -4779,6 +4779,7 @@ function commands() {
   add('Visning', 'Fullskjerm', () => { closeCmd(); byttFullskjerm(); });
   add('Handling', 'Spør NABE…', () => { closeCmd(); aapneSpor(); });
   add('Handling', 'Opptak av punkter…', () => { closeCmd(); aapneOpptak(); });
+  add('Handling', 'Igangkjøring…', () => { closeCmd(); aapneIgang(); }, {when: () => !!S.activeDev});
   add('Handling', 'Trafikklogg…', () => { closeCmd(); aapneTrafikk(); });
   add('Handling', 'Mobil…', () => { closeCmd(); aapneMobil(); });
   add('Handling', 'Modbus…', () => { closeCmd(); aapneModbus(); });
@@ -7600,7 +7601,8 @@ function writeForm(p, d) {
   return `<div class="sect"><div class="sect-head">Skriv verdi</div>
     <div class="wf">
       <div class="wf-row">${input}
-        <select id="wPri" class="field" style="flex:0 0 96px" title="Prioritet">
+        <select id="wPri" class="field" style="flex:0 0 96px" title="${T('Prioritet. «uten pri» sender ingen prioritet: en vanlig endring av verdien som ikke står som overstyrt.', 'Priority. “no pri” sends no priority: a plain change of the value that does not stand as an override.')}">
+          <option value="">${T('uten pri', 'no pri')}</option>
           ${[...Array(16)].map((_, i) => `<option value="${i + 1}"${i + 1 === 8 ? ' selected' : ''}>pri ${i + 1}</option>`).join('')}
         </select>
       </div>
@@ -7618,15 +7620,34 @@ function writeForm(p, d) {
         <button id="wSend" class="btn primary" style="flex:1">Skriv</button>
         <button id="wRel" class="btn" title="Skriv Null: frigjør prioriteten">Frigi</button>
       </div>
+      <div class="wf-hint" id="wHint"></div>
       <div class="warn-box">Skriving påvirker et anlegg i drift. Kontroller punkt og prioritet før du sender.</div>
     </div></div>`;
 }
 
-function wireWriteForm(p) {
+/* Hva som skjer med punktet, lest fra prioritetstabellen slik den står nå. Svarer på det man lurer på midt i en test:
+   skriver jeg 2 og så 3 på samme prioritet, erstatter 3 den forrige, og frigir jeg, går punktet til det som ligger under
+   (en lavere prioritet, ellers grunnverdien), aldri til 1 eller 2 bare fordi det var det jeg skrev før. */
+function skrivHint(d, pri) {
+  if (!pri) return T('Uten prioritet: en vanlig endring av verdien. Enheten legger den selv på laveste prioritet (16), og ingenting står som overstyrt. Programmet i enheten kan skrive over den igjen.',
+    'No priority: a plain change of the value. The device puts it at the lowest priority (16) itself, and nothing stands as an override. The program in the device can write over it again.');
+  const pa = Array.isArray(d['priority-array']) ? d['priority-array'] : null;
+  if (!pa) return T('Punktet har ingen prioritetstabell. Skriv uten prioritet.', 'The point has no priority array. Write without a priority.');
+  const vis = (v) => (Array.isArray(d['state-text']) && typeof v === 'number' && d['state-text'][v - 1] ? `${v}, ${d['state-text'][v - 1]}` : String(v));
+  const igjen = pa.map((v, i) => ({p: i + 1, v})).filter(x => x.p !== pri && x.v !== null && x.v !== undefined);
+  const rd = d['relinquish-default'];
+  const til = igjen.length ? T(`pri ${igjen[0].p} (${vis(igjen[0].v)})`, `pri ${igjen[0].p} (${vis(igjen[0].v)})`)
+    : (rd !== null && rd !== undefined && rd !== '' ? T(`grunnverdien (${vis(rd)})`, `the default (${vis(rd)})`) : T('anleggets eget', 'the plant’s own'));
+  return T(`Ny skriving på pri ${pri} erstatter forrige på samme prioritet. Frigi pri ${pri} gir ${til}.`,
+    `A new write at pri ${pri} replaces the previous one at that priority. Releasing pri ${pri} gives ${til}.`);
+}
+
+function wireWriteForm(p, d) {
+  d = d || {};
   const send = async release => {
     const raw = $('wVal').value;
-    const pri = parseInt($('wPri').value, 10);
-    const autoMin = release ? null : (parseFloat($('wAuto').value) || null);
+    const pri = $('wPri').value === '' ? null : parseInt($('wPri').value, 10);
+    const autoMin = (release || pri === null) ? null : (parseFloat($('wAuto').value) || null);
     let value = null;
     if (!release) {
       value = raw;
@@ -7637,26 +7658,28 @@ function wireWriteForm(p) {
     // what you are about to overwrite, so show the current value too.
     const nowTxt = fmtVal(p.value).t + (p.unit_symbol || '');
     const NL = String.fromCharCode(10);
-    const head = release ? T('Frigi prioritet ' + pri, 'Release priority ' + pri) : T('Skriv verdi @ prioritet ' + pri, 'Write value @ priority ' + pri);
+    const priTxt = pri === null ? T('uten prioritet', 'no priority') : T('prioritet ' + pri, 'priority ' + pri);
+    const head = release ? T('Frigi ' + priTxt, 'Release ' + priTxt) : T('Skriv verdi, ' + priTxt, 'Write value, ' + priTxt);
     const naaOrd = T('Nå: ', 'Now: '), nyOrd = T('Ny: ', 'New: ');
     const detail = release
       ? (NL + NL + naaOrd + nowTxt)
       : (NL + NL + naaOrd + nowTxt + NL + nyOrd + raw + (p.unit_symbol || ''));
     const tail = release ? ''
       : (NL + NL + (autoMin ? T('Frigis automatisk etter ' + autoMin + ' min.', 'Released automatically after ' + autoMin + ' min.')
+                            : pri === null ? T('Vanlig endring, ikke overstyring.', 'Plain change, not an override.')
                             : T('Blir stående til du frigir den.', 'Stays until you release it.')));
     const msg = head + NL + NL + (p.name || p.objid) + NL + S.activeDev.address
               + detail + tail + NL + NL + T('Dette endrer et anlegg i drift. Fortsette?', 'This changes a plant in operation. Continue?');
     const kortInfo = {art: release ? 'frigi' : 'skriv', navn: p.name || p.objid, adresse: S.activeDev.address, naa: fmtVal(p.value).t, ny: raw,
       enhet: String(p.unit_symbol || '').trim(), prio: pri, auto: autoMin,
       advarsel: T('Dette endrer et anlegg i drift.', 'This changes a plant in operation.')};
-    if (!await nabeBekreft(msg, {kort: kortInfo, tittel: release ? T('Frigir prioritet ' + pri, 'Releasing priority ' + pri) : T('Skriver til anlegget', 'Writing to the plant')})) return;
+    if (!await nabeBekreft(msg, {kort: kortInfo, tittel: release ? T('Frigir ' + priTxt, 'Releasing ' + priTxt) : T('Skriver til anlegget', 'Writing to the plant')})) return;
     const r = await api('/api/write', {
       address: S.activeDev.address, objid: p.objid,
       value, priority: pri, release, auto_release_min: autoMin,
     });
     if (r.status === 'done') {
-      toast(release ? T('Prioritet frigitt', 'Priority released')
+      toast(release ? (pri === null ? T('Frigitt', 'Released') : T('Prioritet frigitt', 'Priority released'))
         : (r.auto_release_min ? T('Skrevet - frigis om ' + r.auto_release_min + ' min', 'Written - released in ' + r.auto_release_min + ' min') : T('Skrevet', 'Written')));
       skriveEffekt(p.objid);
       merkSkriving(p.objid);
@@ -7675,7 +7698,12 @@ function wireWriteForm(p) {
     const vis = felt.tagName === 'SELECT' ? (felt.selectedOptions[0]?.textContent || v).trim() : v;
     knapp.disabled = !v;
     knapp.classList.toggle('primary', !!v);
-    knapp.textContent = v ? `Skriv ${vis} på pri ${pri.value}` : 'Skriv';
+    knapp.textContent = v ? (pri.value === '' ? `Skriv ${vis}` : `Skriv ${vis} på pri ${pri.value}`) : 'Skriv';
+    // Uten prioritet finnes ingen overstyring som kan slippes av seg selv
+    const auto = $('wAuto');
+    if (auto) { auto.disabled = pri.value === ''; auto.style.opacity = pri.value === '' ? '.4' : ''; }
+    const hint = $('wHint');
+    if (hint) hint.textContent = skrivHint(d, pri.value === '' ? null : parseInt(pri.value, 10));
   };
   felt.addEventListener('input', synk);
   felt.addEventListener('change', synk);
@@ -11081,6 +11109,7 @@ const ORDBOK = {
   'Formulerer svar ut fra oppslagsverket. Kjører på denne PC-en, og laster ned 5 GB': 'Words answers from the reference. Runs on this PC, and downloads 5 GB',
   'Spør NABE…': 'Ask NABE…',
   'Opptak av punkter…': 'Recording points…',
+  'Igangkjøring…': 'Commissioning…',
   'Avvik fra settpunkt…': 'Deviation from setpoint…',
   'Forslag til service…': 'Service suggestions…',
   'API og dokumentasjon…': 'API and documentation…',
