@@ -206,6 +206,10 @@ const FAKTA = [
   ['COV betyr at regulatoren sier fra selv. Mindre spørring, mer ro.', 'COV means the controller speaks up itself. Less asking, more peace.'],
 ];
 const NYTT = {
+  '2.41': [
+    ['Igangkjøring: åpne protokollen fra FastEL (.xlsm), og hver rad kobles til punktet i enheten. Kryss av OK eller Avvik med verdi og klokkeslett, og lag en utfylt kopi: bare tomme felt fylles, originalen og makroene røres ikke. IO-lista kan også limes inn fra Excel og sammenlignes med enheten. Under ⋯-menyen', 'Commissioning: open the protocol from FastEL (.xlsm) and every row is linked to the point in the device. Tick OK or Differs with value and time, and make a filled copy: only empty fields are filled, the original and its macros are not touched. The IO list can also be pasted from Excel and compared with the device. Under the ⋯ menu'],
+    ['Skriv uten prioritet: valget «uten pri» i skriveskjemaet er en vanlig endring av verdien, ikke overstyring. Under skjemaet står hva frigi gir, lest fra prioritetstabellen', 'Write without priority: the “no pri” choice in the write form is a plain change of the value, not an override. Under the form it says what release gives, read from the priority array'],
+  ],
   '2.40': [
     ['Systemtaggene kjenner også Beckhoff-skrivemåten S36026 (og s36026, 36026) ved siden av 360.026 og A_360_001, i appen, på mobil og i anleggsminnet', 'The system tags also know the Beckhoff spelling S36026 (and s36026, 36026) next to 360.026 and A_360_001, in the app, on the phone and in the site memory'],
     ['Leverandørlogoer i topologi: i Samlet står logoen ved hver leverandør og i sidepanelet, i Spredt over protokollnavnet', 'Vendor logos in the topology: in Grouped the logo sits at each vendor and in the side panel, in Spread above the protocol name'],
