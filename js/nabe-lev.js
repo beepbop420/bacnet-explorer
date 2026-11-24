@@ -150,14 +150,17 @@ function levLogo(label, farge) {
    Fargen bærer ingenting: nummeret og navnet står i teksten. */
 const SYSTEMTYPE = {'310': ['Sanitær', 'Plumbing'], '320': ['Varme', 'Heating'], '330': ['Brannslokking', 'Fire fighting'], '340': ['Gass og trykkluft', 'Gas and compressed air'],
   '350': ['Prosesskjøling', 'Process cooling'], '360': ['Luftbehandling', 'Air handling'], '370': ['Kjøling', 'Cooling'], '380': ['Vannbehandling', 'Water treatment']};
-const SYS_RE = /(?:^|[^0-9])(3[1-8]0)[._-][0-9]{3}(?![0-9])/;
+/* To skrivemåter: med skilletegn (360.026, 360_026, A_360_001) og kompakt (S36026, s36026, 36026), der en bokstav foran bare kan være S.
+   Den kompakte må stå først i ordet, ellers ville RT36012 bli lest som system 360. */
+const SYS_RE = /(?:^|[^0-9])(3[1-8]0)[._-][0-9]{3}(?![0-9])|(?:^|[^0-9A-Za-z])[Ss]?(3[1-8]0)[0-9]{2,3}(?![0-9])/;
+const sysFra = (m) => (m ? (m[1] || m[2]) : '');
 const SYS_MINNE = new WeakMap();
 function systemerAv(punkter) {
   if (!punkter || !punkter.length) return [];
   let r = SYS_MINNE.get(punkter);
   if (r && r.n === punkter.length) return r.v;
   const s = new Set();
-  for (const p of punkter) { const m = SYS_RE.exec(p.name || '') || SYS_RE.exec(p.description || ''); if (m) s.add(m[1]); }
+  for (const p of punkter) { const nr = sysFra(SYS_RE.exec(p.name || '') || SYS_RE.exec(p.description || '')); if (nr) s.add(nr); }
   r = {n: punkter.length, v: [...s].sort()};
   SYS_MINNE.set(punkter, r);
   return r.v;

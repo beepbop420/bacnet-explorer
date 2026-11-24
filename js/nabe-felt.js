@@ -146,7 +146,9 @@ function systemAv(p) {
   // Three digits, a separator, three digits, and no digits either side -
   // so 360.003 and 360_003 count, and 563100 inside a longer number does not.
   const m = /(?:^|\D)(\d{3})[._\-](\d{3})(?!\d)/.exec(p.name || '');
-  return m ? `${m[1]}.${m[2]}` : '';
+  if (m) return `${m[1]}.${m[2]}`;
+  const k = /(?:^|[^0-9A-Za-z])[Ss]?(3[1-8]0)([0-9]{2,3})(?!\d)/.exec(p.name || '');   // S36026: system 360, nummer 026
+  return k ? `${k[1]}.${k[2].padStart(3, '0')}` : '';
 }
 function grupperEtterSystem(rader) {
   // Stable: within a system the user's own sort order is kept.

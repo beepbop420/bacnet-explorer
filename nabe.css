@@ -6316,6 +6316,14 @@ body.har-popup *:not(.gs-overlay):not(.gs-overlay *):not(.menu-pop):not(.menu-po
 .vgroup-name .lev-ikon{--lh:15px;max-width:80px}
 .dev-lev .lev-ikon{--lh:11px;max-width:54px}
 .lev-ikon:hover{opacity:1}
+/* Logo over protokollnavnet i spredt visning, med samme synlighet som navnet */
+.tp-graf-svg .tp-gs .tp-fo{display:none;overflow:visible;pointer-events:none}
+.tp-graf-svg.n-proto .tp-gs .tp-fo{display:block}
+.tp-fo-i{display:flex;justify-content:center;align-items:flex-end;height:100%}
+.tp-fo .lev-ikon{--lh:13px;max-width:100px;color:var(--fg-2)}
+.tp-lev .lev-ikon{--lh:12px;max-width:64px}
+.tp-levh .lev-ikon{--lh:11px;max-width:56px;vertical-align:-1px}
+.tp-d-h + * .lev-ikon,.tp-detalj .lev-ikon{--lh:11px;max-width:54px}
 /* Systemtagger: hvilke systemer en enhet har punkter i. Tekst og ramme, ingen farge som bærer noe. */
 .dev-l3{display:block;margin-top:5px}
 .systags{display:flex;flex-wrap:wrap;gap:4px}

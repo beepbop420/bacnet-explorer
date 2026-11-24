@@ -119,6 +119,10 @@
     const l = (gruppeFor(d).label || '').replace(/^Modbus\s*·\s*/, '');
     return !l || /^(ukjent|unknown|modbus)$/i.test(l) ? T('Ukjent', 'Unknown') : l;
   };
+  /* Leverandøren som logo der NABE har en, ellers navnet. Merket er HTML (CSS-maske), så det ligger i SVG-en via foreignObject. */
+  const levMerke = (lv) => (lv && typeof levLogo === 'function' ? levLogo(lv) : esc(lv));
+  const harLogo = (lv) => typeof LOGO_AV === 'object' && typeof LEV_LOGO === 'object' && !!LOGO_AV[lv] && !!LEV_LOGO[LOGO_AV[lv]];
+  const svgLogo = (lv) => (harLogo(lv) ? `<foreignObject class="tp-fo" x="-60" y="-42" width="120" height="17"><div xmlns="http://www.w3.org/1999/xhtml" class="tp-fo-i">${levLogo(lv)}</div></foreignObject>` : '');
   const IK = {
     aggregat: '<circle cx="8" cy="8" r="1.5"/><path d="M8 6.5C7 3.5 8.5 2 10 2.6 11.5 3.3 10.5 5.5 8 6.5Z"/><path d="M9.3 8.7C12 10.3 12 12.4 10.4 13 8.8 13.5 8.2 11 9.3 8.7Z"/><path d="M6.7 8.7C4 10.3 3 9 3.3 7.5 3.7 6 5.8 6.4 6.7 8.7Z"/>',
     kjoler: '<path d="M8 2v12M2.8 5l10.4 6M2.8 11l10.4-6"/><path d="M6.5 2.8 8 4.3l1.5-1.5M6.5 13.2 8 11.7l1.5 1.5"/>',
@@ -209,8 +213,8 @@
     };
     // One vendor: the tiles directly. Several: a small heading per vendor, each with its own tiles, so Beckhoff and Regin do not run together
     const inn = sek.length === 1 ? rut(l, st.key + '|' + p, MAKS_FLIS)
-      : sek.map(([lv, lst]) => `<div class="tp-lev"><b>${esc(lv)}</b><span class="tp-ant">${lst.length}</span>${merker(lst)}</div>${rut(lst, st.key + '|' + p + '|' + lv, 6)}`).join('');
-    const levH = sek.length === 1 && sek[0][0] ? `<span class="tp-levh">· ${esc(sek[0][0])}</span>` : '';
+      : sek.map(([lv, lst]) => `<div class="tp-lev"><b>${levMerke(lv)}</b><span class="tp-ant">${lst.length}</span>${merker(lst)}</div>${rut(lst, st.key + '|' + p + '|' + lv, 6)}`).join('');
+    const levH = sek.length === 1 && sek[0][0] ? `<span class="tp-levh">· ${levMerke(sek[0][0])}</span>` : '';
     return `<div class="tp-bane p-${p}${bad ? ' har-feil' : ''}"><div class="tp-bane-h"><i></i><b>${PROT_NAVN[p]}</b>${levH}<span class="tp-ant">${l.length}</span>${merker(l)}</div>${inn}</div>`;
   }
 
@@ -436,7 +440,7 @@
             if (d._alm) noder += `<path class="tp-gb" data-s="${nr}" d="${bjelleSti(px + 6, py - 7, .6)}"/>`;
             KT.punkter.push({d, x: px, y: py, q: x.q, nr, sl});
           });
-          faste += fast('tp-gs p-' + x.q, sx, sy, `<circle r="5.5"/><text y="-12" text-anchor="middle">${PROT_NAVN[x.q]}${x.lev ? ' · ' + esc(x.lev) : ''} ${x.n}</text>`, `data-s="${nr}"`);
+          faste += fast('tp-gs p-' + x.q, sx, sy, `<circle r="5.5"/>${svgLogo(x.lev)}<text y="-12" text-anchor="middle">${PROT_NAVN[x.q]}${x.lev && !harLogo(x.lev) ? ' · ' + esc(x.lev) : ''} ${x.n}</text>`, `data-s="${nr}"`);
           se(cx, cy, x.R + 20, gr);
         }
         const navn = st.navn || stedKey(st.key).join(', ');
@@ -850,7 +854,7 @@
     const per = PROT.filter(p => st.per[p].length).map(p => `<span class="tp-prot p-${p}"><i></i>${PROT_NAVN[p]} ${st.per[p].length}</span>`).join(' ');
     const inne = st.lastet, innen = !!a.naabar && a.svarer !== false;
     const rad = (n, v) => (v ? `<tr><td>${n}</td><td>${v}</td></tr>` : '');
-    const lev = (a.leverandorer || []).filter(([n]) => n && !/^(ukjent|unknown)$/i.test(n)).map(([n, c]) => `${esc(n)} ${c}`).join(', ');
+    const lev = (a.leverandorer || []).filter(([n]) => n && !/^(ukjent|unknown)$/i.test(n)).map(([n, c]) => `${levMerke(n)} ${c}`).join(', ');
     const tell = inne ? ['alarm', 'feil', 'over', 'stille'].filter(s => st.tell[s]).map(s => `${st.tell[s]} ${STAT_TXT()[s]}`).join(' · ') : '';
     return `<div class="tp-d-h"><span class="tp-ikon stor">${ikon('sentral')}</span><div class="tp-tekst"><b>${esc(navn)}</b><small>${inne ? T('Åpent nå', 'Open now') : innen ? T('Innen rekkevidde', 'Within reach') : T('Utenfor rekkevidde', 'Out of reach')}</small></div>
         <button type="button" class="tp-x" data-tp="lukk-d" aria-label="${esc(T('Lukk', 'Close'))}">✕</button></div>

@@ -235,7 +235,7 @@ def t(nb: str, en: str) -> str:
     return en if SPRAAK_VAR.get() == "en" else nb
 
 
-VERSJON = "2.39"
+VERSJON = "2.40"
 app.version = VERSJON
 app.description = ("NABE sitt eget grensesnitt. Det som leser fra anlegget (enheter, punkter, ukeprogram, trend) kan brukes fra Python, Excel eller curl mens NABE kjører. "
                    "Dokumentasjonen (Swagger) laster fra internett.")
@@ -3896,7 +3896,7 @@ def _save_sites() -> bool:
 SYSTEMER_FIL = DATA_DIR / "systemer.json"
 SYSTEMER: Dict[str, List[str]] = {}
 SYSTEMER_MAKS = 4000
-_SYSTEM_RE = re.compile(r"(?:^|[^0-9])(3[1-8]0)[._-][0-9]{3}(?![0-9])")
+_SYSTEM_RE = re.compile(r"(?:^|[^0-9])(3[1-8]0)[._-][0-9]{3}(?![0-9])|(?:^|[^0-9A-Za-z])[Ss]?(3[1-8]0)[0-9]{2,3}(?![0-9])")
 
 
 def _systemer_av(punkter: List[Dict[str, Any]]) -> List[str]:
@@ -3904,7 +3904,7 @@ def _systemer_av(punkter: List[Dict[str, Any]]) -> List[str]:
     for p in punkter:
         m = _SYSTEM_RE.search(str(p.get("name") or "")) or _SYSTEM_RE.search(str(p.get("description") or ""))
         if m:
-            funnet.add(m.group(1))
+            funnet.add(m.group(1) or m.group(2))
     return sorted(funnet)
 
 

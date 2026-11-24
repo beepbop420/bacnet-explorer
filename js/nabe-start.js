@@ -206,6 +206,10 @@ const FAKTA = [
   ['COV betyr at regulatoren sier fra selv. Mindre spørring, mer ro.', 'COV means the controller speaks up itself. Less asking, more peace.'],
 ];
 const NYTT = {
+  '2.40': [
+    ['Systemtaggene kjenner også Beckhoff-skrivemåten S36026 (og s36026, 36026) ved siden av 360.026 og A_360_001, i appen, på mobil og i anleggsminnet', 'The system tags also know the Beckhoff spelling S36026 (and s36026, 36026) next to 360.026 and A_360_001, in the app, on the phone and in the site memory'],
+    ['Leverandørlogoer i topologi: i Samlet står logoen ved hver leverandør og i sidepanelet, i Spredt over protokollnavnet', 'Vendor logos in the topology: in Grouped the logo sits at each vendor and in the side panel, in Spread above the protocol name'],
+  ],
   '2.39': [
     ['Søket i anlegget kan eksporteres som EDE: hver enhet med treff får sine egne EDE-filer med bare de punktene, i en mappe per enhet i én zip. Enhetsnummer og objektnummer er enhetens egne, så filene stemmer med riktig enhet', 'The plant search can be exported as EDE: each device with a match gets its own EDE files with only those points, in a folder per device in one zip. Device and object numbers are the device own, so the files match the right device'],
   ],

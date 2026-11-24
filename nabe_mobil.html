@@ -757,8 +757,13 @@ function tegPunkter() {
 
 /* Systemnummeret etter NS 3451 står i punktnavnet: A_360_001_RT401, 320.012-RT402. Uten det havner punktet under «Annet». */
 function sysNr(p) {
-  const m = /(?:^|[^0-9])(\d{3})[._-](\d{3})(?![0-9])/.exec(String(p.name || '')) || /(?:^|[^0-9])(\d{3})[._-](\d{3})(?![0-9])/.exec(String(p.description || ''));
-  return m ? m[1] + '.' + m[2] : '';
+  const les = (t) => {
+    const m = /(?:^|[^0-9])(\d{3})[._-](\d{3})(?![0-9])/.exec(t);
+    if (m) return m[1] + '.' + m[2];
+    const k = /(?:^|[^0-9A-Za-z])[Ss]?(3[1-8]0)([0-9]{2,3})(?![0-9])/.exec(t);   // S36026: system 360, nummer 026
+    return k ? k[1] + '.' + k[2].padStart(3, '0') : '';
+  };
+  return les(String(p.name || '')) || les(String(p.description || ''));
 }
 const sysTittel = (nr) => { const t = SYSTEMTYPE[nr.slice(0, 3)]; return `<b>${esc(nr)}</b>${t ? ' · ' + esc(T(t[0], t[1])) : ''}`; };
 const TYPENAVN = (t) => TYPEGRUPPE.pad.includes(t) ? T('Pådrag', 'Outputs') : T('Målinger', 'Inputs');
