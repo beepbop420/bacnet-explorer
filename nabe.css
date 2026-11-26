@@ -4846,7 +4846,9 @@ html.peker-egen *:not(input):not(textarea):not(select):not(.splitter):not([conte
 .op-tekst{margin:0;font-size:12px;line-height:1.5;color:var(--fg-3)}
 .op-knapper{display:flex;justify-content:flex-end;gap:8px}
 .sp-modal{width:min(760px,94vw)}
-.sp-kropp{padding:12px 16px 16px;display:flex;flex-direction:column;gap:10px;min-height:0}
+.sp-kropp{padding:12px 16px 16px;display:flex;flex-direction:column;gap:10px;min-height:0;overflow-y:auto;overscroll-behavior:contain}
+/* Modbus og KNX har lange lister: delene skal ikke klemmes sammen, hele innholdet ruller */
+.mb-modal .sp-kropp>*{flex:none}
 .sp-topp{display:flex;align-items:center;justify-content:space-between;font-size:12px;color:var(--fg-3)}
 .sp-topp .field{width:110px}
 .sp-rull{overflow:auto;max-height:min(62vh,560px)}

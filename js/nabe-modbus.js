@@ -54,12 +54,25 @@
       : T('Finner enheter på port 502 og hva som svarer bak dem. Bare lesing.', 'Finds devices on port 502 and what answers behind them. Read only.');
   const enhetsliste = (t) => { const ut = new Set(); for (const del of String(t || '').split(/[,;\s]+/)) { const m = /^(\d+)(?:-(\d+))?$/.exec(del); if (!m) continue; const a = +m[1], b = +(m[2] || m[1]); for (let i = Math.max(1, a); i <= Math.min(247, b) && ut.size < 247; i++) ut.add(i); } return [...ut]; };
 
-  let tcpEnheter = '';
+  let tcpEnheter = '', skannId = null;
 
-  function tegn() {
+  /* Enhetslista tegnes for seg, så den kan fylles mens skannet går uten at resten av vinduet (feltene du skriver i,
+     og der du har rullet til) rører seg. */
+  function enhetsDel() {
     const enheter = modbusEnheter();
     const kartValg = (adr) => `<option value="">${T('Ingen (rå registre)', 'None (raw registers)')}</option>`
       + kart.map(k => `<option value="${esc(k.id)}"${tilordning[adr] === k.id ? ' selected' : ''}>${esc(k.name)} (${k.points})</option>`).join('');
+    return `<div class="mb-tittel">${T('Enheter', 'Devices')} <span class="sp-meta">${enheter.length}</span></div>
+          ${enheter.length ? `<table class="sp-tab"><thead><tr><th>${T('Enhet', 'Device')}</th><th>${T('Adresse', 'Address')}</th><th>${T('Registerkart', 'Register map')}</th><th></th></tr></thead><tbody>
+            ${enheter.map(d => `<tr><td>${esc(d.object_name || '')}</td><td class="tr-mono">${esc(d.ip)}:${d.port} #${d.unit}</td>
+              <td><select class="field mb-kart" data-adr="${esc(d.address)}">${kartValg(d.address)}</select></td>
+              <td style="white-space:nowrap"><button type="button" class="btn" data-mb="utforsk" data-adr="${esc(d.address)}" title="${esc(T('Modbus har ingen liste over hva enheten inneholder. Dette finner hvilke registre som svarer, så du kan gi dem navn.', 'Modbus has no list of what a device holds. This finds which registers answer, so you can name them.'))}">${T('Utforsk', 'Explore')}</button>
+                <button type="button" class="btn" data-mb="aapne" data-adr="${esc(d.address)}">${T('Åpne', 'Open')}</button></td></tr>`).join('')}</tbody></table>`
+            : `<div class="sp-meta">${opptatt ? T('Enhetene legges inn her etter hvert som de svarer.', 'The devices appear here as they answer.') : T('Ingen Modbus-enheter ennå. Skann over, eller gi en adresse direkte.', 'No Modbus devices yet. Scan above, or give an address directly.')}</div>`}`;
+  }
+
+  function tegn() {
+    const rullet = lag.querySelector('.sp-kropp')?.scrollTop || 0;
     lag.innerHTML = `<div class="gs-modal sp-modal mb-modal"><div class="gs-head"><span class="gd-tittel">Modbus</span>
       <button class="gs-close" style="margin-left:auto"><span class="lbl">${T('Lukk', 'Close')}</span> ✕</button></div>
       <div class="sp-kropp">
@@ -75,15 +88,10 @@
           <div class="mb-rad mb-tcp"${transport === 'ser' ? ' hidden' : ''}><input class="field" id="mbOmraade" placeholder="10.0.0.0/24" value="${esc(localStorage.getItem('nabe.mbOmraade') || ($('rangeInput') ? $('rangeInput').value.split(/[\\s,;]+/)[0] : ''))}" spellcheck="false">
             <input class="field mb-port" id="mbPort" value="502" inputmode="numeric" aria-label="Port">
             <input class="field mb-port" id="mbTcpEnheter" value="${esc(tcpEnheter)}" placeholder="${T('alle ID', 'all IDs')}" aria-label="${T('Enhets-ID', 'Unit IDs')}" title="${esc(T('Enhets-ID, f.eks. 16 eller 1-64. Tomt: de vanligste, og alle 1–247 når det står en gateway der', 'Unit IDs, e.g. 16 or 1-64. Empty: the common ones, and all 1–247 when there is a gateway'))}" spellcheck="false">
-            <button type="button" class="btn primary" data-mb="skann"${opptatt ? ' disabled' : ''}>${opptatt ? T('Skanner …', 'Scanning …') : T('Skann', 'Scan')}</button></div>
+            ${opptatt ? `<button type="button" class="btn" data-mb="stopp" title="${esc(T('Enhetene som er funnet blir stående', 'The devices found so far are kept'))}">${T('Stopp', 'Stop')}</button>`
+              : `<button type="button" class="btn primary" data-mb="skann">${T('Skann', 'Scan')}</button>`}</div>
           <div class="sp-meta" id="mbMelding">${esc(melding)}</div></div>
-        <div class="mb-sek"><div class="mb-tittel">${T('Enheter', 'Devices')} <span class="sp-meta">${enheter.length}</span></div>
-          ${enheter.length ? `<table class="sp-tab"><thead><tr><th>${T('Enhet', 'Device')}</th><th>${T('Adresse', 'Address')}</th><th>${T('Registerkart', 'Register map')}</th><th></th></tr></thead><tbody>
-            ${enheter.map(d => `<tr><td>${esc(d.object_name || '')}</td><td class="tr-mono">${esc(d.ip)}:${d.port} #${d.unit}</td>
-              <td><select class="field mb-kart" data-adr="${esc(d.address)}">${kartValg(d.address)}</select></td>
-              <td style="white-space:nowrap"><button type="button" class="btn" data-mb="utforsk" data-adr="${esc(d.address)}" title="${esc(T('Modbus har ingen liste over hva enheten inneholder. Dette finner hvilke registre som svarer, så du kan gi dem navn.', 'Modbus has no list of what a device holds. This finds which registers answer, so you can name them.'))}">${T('Utforsk', 'Explore')}</button>
-                <button type="button" class="btn" data-mb="aapne" data-adr="${esc(d.address)}">${T('Åpne', 'Open')}</button></td></tr>`).join('')}</tbody></table>`
-            : `<div class="sp-meta">${T('Ingen Modbus-enheter ennå. Skann over, eller gi en adresse direkte.', 'No Modbus devices yet. Scan above, or give an address directly.')}</div>`}</div>
+        <div class="mb-sek" id="mbEnhetSek">${enhetsDel()}</div>
         <div class="mb-sek"><div class="mb-tittel">${T('Registerkart', 'Register maps')} <span class="sp-meta">${kart.length}</span></div>
           <div class="sp-meta">${T('Et registerkart gir registrene navn, type, skalering og enhet. CSV, Excel (.xlsx), JSON, Regin EXOL-lister og Niagara-eksport av Modbus-punkter.', 'A register map gives the registers a name, type, scale and unit. CSV, Excel (.xlsx), JSON, Regin EXOL lists and Niagara exports of Modbus points.')}</div>
           ${kart.length ? `<table class="sp-tab"><tbody>${kart.map(k => `<tr><td>${esc(k.name)}</td><td class="sp-meta">${k.points} ${T('punkter', 'points')}</td>
@@ -99,11 +107,15 @@
             <button type="button" class="btn primary" data-mb="importer">${T('Importer registerkart …', 'Import register map …')}</button></div>
           <input type="file" id="mbFil" accept=".csv,.xlsx,.json,.txt,text/csv,application/json,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden></div>
       </div></div>`;
+    const kropp = lag.querySelector('.sp-kropp');
+    if (kropp) kropp.scrollTop = rullet;
   }
+  function tegnEnheter() { const sek = $('mbEnhetSek'); if (sek) sek.innerHTML = enhetsDel(); }
 
   function sett(msg) { melding = msg; const e = $('mbMelding'); if (e) e.textContent = msg; }
 
   async function skann() {
+    if (opptatt) return;                    // Enter i adressefeltet mens et skann går
     const ser = transport === 'ser';
     const omr = ser ? ($('mbCom').value || '') : ($('mbOmraade').value || '').trim();
     const port = ser ? 0 : (parseInt($('mbPort').value, 10) || 502);
@@ -121,14 +133,30 @@
         ? await api2('/api/modbus/serial/skann', {port: omr, baud, parity: par[0], stopbits: par === 'N2' ? 2 : 1, units: enheter})
         : await api2('/api/modbus/scan', {subnet: omr, port, framing: transport === 'rtu' ? 'rtu' : 'tcp', units: enheter});
       if (start.status !== 'started') throw new Error(start.error || T('Skann feilet', 'Scan failed'));
+      skannId = start.job_id;
+      let vist = 0;
       for (;;) {
         await new Promise(r => setTimeout(r, 400));
         const j = await api2('/api/job/' + start.job_id);
+        // Nye enheter inn i lista (her og til venstre) så snart de har svart
+        if (j.devices && j.devices.length > vist) {
+          vist = j.devices.length;
+          mergeDevices(j.devices, omr);
+          renderDevices();
+          if (j.devices.some(d => d.forslag && d.forslag.brukt)) await hentKart();
+          tegnEnheter();
+        }
         if (j.status === 'running') {
-          sett(`${j.phase || ''} ${j.done || 0}/${j.total || 0}${j.found ? ' · ' + j.found + ' ' + T('enheter', 'units') : ''}`.trim());
+          const maskiner = (j.total || 0) > 1 ? T(`${j.done || 0} av ${j.total} maskiner ferdig`, `${j.done || 0} of ${j.total} hosts done`) : '';
+          sett([vist ? T(`${vist} funnet`, `${vist} found`) : '', j.phase || '', maskiner].filter(Boolean).join(' · '));
           continue;
         }
         if (j.status === 'error') throw new Error(j.error || T('Skann feilet', 'Scan failed'));
+        if (j.status === 'cancelled') {
+          funnet = j.devices || [];
+          sett(T(`Stoppet. ${funnet.length} enheter er funnet og står i lista.`, `Stopped. ${funnet.length} units were found and are in the list.`));
+          break;
+        }
         funnet = (j.result && j.result.devices) || [];
         mergeDevices(funnet, omr);
         renderDevices();
@@ -142,7 +170,12 @@
         break;
       }
     } catch (e) { sett(e.message); }
-    opptatt = false; tegn();
+    opptatt = false; skannId = null; tegn();
+  }
+  async function stoppSkann() {
+    if (!skannId) return;
+    sett(T('Stopper …', 'Stopping …'));
+    try { await api2('/api/job/' + skannId + '/cancel', {}); } catch { /* det går til ende av seg selv */ }
   }
 
   /* Finding the registers. Modbus has no list of what a device holds, so the only way is to try the addresses and keep
@@ -253,6 +286,7 @@
     if (!b) return;
     const k = b.dataset.mb;
     if (k === 'skann') skann();
+    else if (k === 'stopp') stoppSkann();
     else if (k === 'importer') { oppdaterNavn = ''; $('mbFil').click(); }
     else if (k === 'last') lastNed(b.dataset.id);
     else if (k === 'oppdater') { oppdaterNavn = (kart.find(m => m.id === b.dataset.id) || {}).name || ''; $('mbFil').click(); }
@@ -317,7 +351,7 @@
     if (window.renderDevices) renderDevices();
     toast(T('Registerkartet er koblet til enheten', 'The register map is linked to the device'));
   }
-  window.nabeMbHjelp = {kartId: (adr) => tilordning[adr] || '', lastNed, forslag, bruk, kartNavn, klar: () => klar, harKart: (adr) => !!tilordning[adr], importer: velgFilFor, utforsk, avbryt: avbrytUtforsk, utforskStatus: (adr) => utf[adr] || null, aapneSom, importFil};
+  window.nabeMbHjelp = {kartId: (adr) => tilordning[adr] || '', lastNed, forslag, bruk, kartNavn, klar: () => klar, harKart: (adr) => !!tilordning[adr], skanner: () => opptatt, importer: velgFilFor, utforsk, avbryt: avbrytUtforsk, utforskStatus: (adr) => utf[adr] || null, aapneSom, importFil};
   hentKart().then(() => { klar = true; if (window.renderDevices) renderDevices(); });
 
   window.aapneModbus = async () => {

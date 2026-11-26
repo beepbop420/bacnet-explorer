@@ -206,6 +206,11 @@ const FAKTA = [
   ['COV betyr at regulatoren sier fra selv. Mindre spørring, mer ro.', 'COV means the controller speaks up itself. Less asking, more peace.'],
 ];
 const NYTT = {
+  '2.43': [
+    ['Modbus-skannet legger enhetene i lista etter hvert som de svarer, de laveste enhets-ID-ene først, og har en stoppknapp. Det som er funnet blir stående', 'The Modbus scan puts the devices in the list as they answer, the lowest unit IDs first, and has a stop button. What was found stays'],
+    ['Modbus- og KNX-vinduet kan rulles når lista er lang', 'The Modbus and KNX windows scroll when the list is long'],
+    ['Modbus-enheter uten registerkart leses ikke lenger i bakgrunnen, så bussen er ledig for enheten du åpner', 'Modbus devices without a register map are no longer read in the background, so the bus is free for the device you open'],
+  ],
   '2.42': [
     ['Modbus TCP: skannet finner alle enhetene bak en seriell gateway. Tidligere ble bare ni faste enhets-ID-er spurt; nå går det gjennom 1–247 når det står en gateway der, og spør flere ganger fordi gatewayen mister spørsmål. Det tar et par minutter. Eget felt for enhets-ID når du vet den', 'Modbus TCP: the scan finds every unit behind a serial gateway. Before, only nine fixed unit IDs were asked; now it goes through 1–247 when there is a gateway, and asks more than once because the gateway loses questions. It takes a couple of minutes. A field of its own for the unit ID when you know it'],
     ['Registerkart fra Excel med en blokk per punkt (Display Point, Point Name, BACnet Obj/Modbus Reg) leses direkte, med adresser som teller fra 1', 'Register maps from Excel with one block per point (Display Point, Point Name, BACnet Obj/Modbus Reg) are read as they are, with addresses counting from 1'],

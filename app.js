@@ -1838,12 +1838,20 @@ function prefetchStop() {
   renderPrefetchStatus();
 }
 
+/* Modbus uten registerkart leses ikke i bakgrunnen: rå registre sier lite, tar lang tid, og bak en seriell gateway
+   deler de bussen med skannet og med enheten du faktisk vil åpne. Mens et Modbus-skann går venter også de andre. */
+function skalForhaandsleses(d) {
+  const mb = window.nabeMbHjelp;
+  return !(d.protocol === 'modbus' && mb && (!mb.harKart(d.address) || mb.skanner()));
+}
+
 function prefetchNextDevice() {
   // Never the device on screen. The foreground load claims S.job only once
   // its request comes back, and a tick landing in that window would start a
   // second read of the very controller the user is waiting for.
   const aktiv = S.activeDev && S.activeDev.address;
   return S.devices.find(d => !S.cache[d.address]
+                          && skalForhaandsleses(d)
                           && !PRE.failed.has(d.address)
                           && !PRE.jobs.has(d.address)
                           && d.address !== aktiv);
@@ -1899,10 +1907,11 @@ async function prefetchOne(dev) {
 function renderPrefetchStatus() {
   const el = $('sbPre');
   if (!el) return;
-  const total = S.devices.length;
+  const med = S.devices.filter(d => S.cache[d.address] || skalForhaandsleses(d));
+  const total = med.length;
   if (!total || !PRE.on) { el.hidden = true; return; }
-  const lest = S.devices.filter(d => S.cache[d.address]).length;
-  const feilet = S.devices.filter(d => PRE.failed.has(d.address)).length;
+  const lest = med.filter(d => S.cache[d.address]).length;
+  const feilet = med.filter(d => PRE.failed.has(d.address)).length;
   const html = (lest + feilet >= total)
     ? T(`<b>${lest}</b> av ${total} enheter lest`, `<b>${lest}</b> of ${total} devices read`) + (feilet ? T(` · ${feilet} svarte ikke`, ` · ${feilet} did not answer`) : '')
     : `leser anlegget: <b>${lest}</b> av ${total}`;

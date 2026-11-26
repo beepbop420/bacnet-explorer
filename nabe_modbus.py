@@ -395,22 +395,23 @@ async def probe_unit2(client: ModbusClient, unit: int, quick: bool = False):
 
 
 async def scan_host(host: str, port: int = MODBUS_PORT, units: Optional[Iterable[int]] = None, timeout: float = 1.0,
-                    framing: str = "tcp", progress=None) -> List[Dict[str, Any]]:
+                    framing: str = "tcp", progress=None, on_found=None) -> List[Dict[str, Any]]:
     """The units that answer on one host. A device that ignores the unit and answers the same for all of them
     is reported once, not nine times. `framing` is "tcp" (Modbus TCP) or "rtu" (RTU bytes in a TCP socket).
     Without `units` a few common ids are asked first, and behind a gateway then every id 1-247.
-    `progress(unit, round, found)` is told what is being asked."""
+    `progress(unit, round, found)` is told what is being asked, and `on_found(device)` gets each unit as soon as it
+    answers, since the whole range takes minutes."""
     client = ModbusClient(host, port, timeout) if framing != "rtu" else RtuClient(host, port, timeout)
-    return await _scan_units(client, units, timeout, lambda f: device_record(host, port, f, "mr" if framing == "rtu" else "mb"), progress)
+    return await _scan_units(client, units, timeout, lambda f: device_record(host, port, f, "mr" if framing == "rtu" else "mb"), progress, on_found)
 
 
 async def scan_serial(port: str, baud: int = 19200, parity: str = "N", stopbits: int = 1, units: Optional[Iterable[int]] = None,
-                      timeout: float = 0.6) -> List[Dict[str, Any]]:
+                      timeout: float = 0.6, progress=None, on_found=None) -> List[Dict[str, Any]]:
     """The units that answer on a serial bus, one question at a time: a serial bus has one master and a slow line."""
     client = RtuClient("", 0, timeout, serial_port=port, baud=baud, parity=parity, stopbits=stopbits)
     await client.connect()                 # a port that cannot be opened is said, not taken for an empty bus
     await client.close()
-    return await _scan_units(client, units or range(1, 33), timeout, lambda f: serial_record(port, baud, parity, stopbits, f))
+    return await _scan_units(client, units or range(1, 33), timeout, lambda f: serial_record(port, baud, parity, stopbits, f), progress, on_found)
 
 
 async def _answers(client: ModbusClient, unit: int, kind: str) -> Optional[str]:
@@ -424,7 +425,8 @@ async def _answers(client: ModbusClient, unit: int, kind: str) -> Optional[str]:
         return None
 
 
-async def _scan_units(client: ModbusClient, units: Optional[Iterable[int]], timeout: float, make, progress=None) -> List[Dict[str, Any]]:
+async def _scan_units(client: ModbusClient, units: Optional[Iterable[int]], timeout: float, make, progress=None,
+                      on_found=None) -> List[Dict[str, Any]]:
     """Which units answer behind one connection. Without `units` the common ids are asked first. When there turns out to
     be more than one unit, or a gateway, the whole range 1-247 is asked: a plant puts its units on whatever ids it likes.
     A list given by the caller is asked in full.
@@ -440,6 +442,14 @@ async def _scan_units(client: ModbusClient, units: Optional[Iterable[int]], time
 
     def alike() -> bool:
         return len({(f.get("vendor"), f.get("product_code"), f.get("product_name"), f.get("via")) for f in found}) == 1
+
+    meldt: set = set()
+
+    def meld() -> None:
+        for f in found:
+            if on_found and f["unit"] not in meldt:
+                meldt.add(f["unit"])
+                on_found(make(f))
 
     try:
         await client.connect()
@@ -458,6 +468,8 @@ async def _scan_units(client: ModbusClient, units: Optional[Iterable[int]], time
                 stille += 1
             else:
                 stille = 0
+            if getattr(client, "bak_gateway", False):
+                meld()          # behind a gateway each unit is its own device and can be told of at once
             # The common ids only: two silences in a row after something answered, or three with nothing found, and the
             # rest of them would only be more waiting. A list asked for is asked in full, and so is a gateway.
             if auto and not getattr(client, "bak_gateway", False) and ((found and stille >= 2) or (not found and stille >= 3)):
@@ -465,14 +477,24 @@ async def _scan_units(client: ModbusClient, units: Optional[Iterable[int]], time
         gateway = getattr(client, "bak_gateway", False)
         # A plain device that ignores the unit id answers everything alike: there is nothing more to look for
         svarer_alt = not gateway and len(units) >= 3 and len(found) == len(units) and alike()
+        if not svarer_alt:
+            meld()
         if not svarer_alt and (gateway or (auto and len(found) >= 2)):
-            alle = list(range(1, 248)) if auto else units
             # A gateway says "nobody there" within a second; waiting longer keeps a slow unit from being taken for none
             client.timeout = max(voksent_tid, 1.5) if gateway else min(voksent_tid, 0.5)
-            for runde, kind in enumerate(("holding", "input", "holding", "input") if gateway else ("holding",), 1):
+            slag = ("holding", "input", "holding", "input") if gateway else ("holding",)
+            # The low ids first, with all their rounds: that is where units are, so they are in the list within the first
+            # minute. The rest of the range after, with two rounds.
+            if not auto:
+                plan = [(units, slag)]
+            elif gateway:
+                plan = [(range(1, 65), slag), (range(65, 248), slag[:2])]
+            else:
+                plan = [(range(1, 248), slag)]
+            for ider, runde, kind in [(ider, r, k) for ider, ks in plan for r, k in enumerate(ks, 1)]:
                 har = {f["unit"] for f in found}
-                for u in alle:
-                    if u in har or (runde == 1 and u in units) or (runde > 2 and auto and u > 64):
+                for u in ider:
+                    if u in har or (runde == 1 and u in units):
                         continue
                     if progress:
                         progress(u, runde + 1, len(found))
@@ -486,6 +508,7 @@ async def _scan_units(client: ModbusClient, units: Optional[Iterable[int]], time
                             pass
                         found.append({"unit": u, "rtt_ms": round((time.monotonic() - t0) * 1000), **ident,
                                       "via": "device_identification" if ident else via})
+                        meld()
     except ModbusError:
         pass
     finally:

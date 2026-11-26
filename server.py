@@ -236,7 +236,7 @@ def t(nb: str, en: str) -> str:
     return en if SPRAAK_VAR.get() == "en" else nb
 
 
-VERSJON = "2.42"
+VERSJON = "2.43"
 app.version = VERSJON
 app.description = ("NABE sitt eget grensesnitt. Det som leser fra anlegget (enheter, punkter, ukeprogram, trend) kan brukes fra Python, Excel eller curl mens NABE kjører. "
                    "Dokumentasjonen (Swagger) laster fra internett.")
@@ -7243,6 +7243,7 @@ async def modbus_scan(body: ModbusScanBody):
     if len(hosts) > 2048:
         return {"status": "error", "error": t("Maks 2048 adresser i en Modbus-skanning", "At most 2048 addresses in a Modbus scan")}
     port = max(1, min(65535, body.port))
+    _MB_NETTOPP_BRUKT.clear()
     job = _new_job("modbus-scan")
     job["phase"] = f"tcp {port}"
     job["total"] = len(hosts)
@@ -7254,15 +7255,16 @@ async def modbus_scan(body: ModbusScanBody):
             devices: List[Dict[str, Any]] = []
             job["done"] = 0
             sem = asyncio.Semaphore(24)
+            funnet = _modbus_funnet(job)
 
             async def one(h: str):
                 async with sem:
                     # Behind a gateway the whole unit range takes a few minutes, so the job says which unit it is on
-                    def framdrift(u: int, runde: int, funnet: int):
-                        job["phase"] = t(f"{h}: spør enhet {u}, {funnet} funnet ·", f"{h}: asking unit {u}, {funnet} found ·")
-                    devices.extend(await nm.scan_host(h, port, body.units, max(0.3, min(5.0, body.timeout)), "rtu" if body.framing == "rtu" else "tcp", framdrift))
+                    def framdrift(u: int, runde: int, antall: int):
+                        job["phase"] = t(f"{h}: spør enhet {u}", f"{h}: asking unit {u}")
+                    devices.extend(await nm.scan_host(h, port, body.units, max(0.3, min(5.0, body.timeout)), "rtu" if body.framing == "rtu" else "tcp",
+                                                      framdrift, funnet))
                 job["done"] += 1
-                job["found"] = len(devices)
             await asyncio.gather(*[one(h) for h in open_hosts])
             # The MAC address of each host that is on the PC's own network (a host behind a router has none to give)
             loop = asyncio.get_running_loop()
@@ -7310,13 +7312,17 @@ async def modbus_serial_skann(body: ModbusSerialBody):
         return {"status": "error", "error": t("Ugyldig port eller innstilling", "Invalid port or setting")}
     baud = body.baud if body.baud in (1200, 2400, 4800, 9600, 19200, 38400, 57600, 115200) else 19200
     units = [u for u in (body.units or range(1, 33)) if 1 <= u <= 247][:247]
+    _MB_NETTOPP_BRUKT.clear()
     job = _new_job("modbus-scan")
     job["phase"] = f"{body.port} {baud}"
     job["total"] = len(units)
 
     async def run():
         try:
-            devices = await nm.scan_serial(body.port, baud, body.parity, body.stopbits, units, max(0.3, min(3.0, body.timeout)))
+            def framdrift(u: int, runde: int, antall: int):
+                job["phase"] = t(f"{body.port}: spør enhet {u}", f"{body.port}: asking unit {u}")
+            devices = await nm.scan_serial(body.port, baud, body.parity, body.stopbits, units, max(0.3, min(3.0, body.timeout)),
+                                           framdrift, _modbus_funnet(job))
             _modbus_kjente(devices)
             job["result"] = {"status": "done", "subnet": body.port, "mode": "modbus-rtu", "hosts_scanned": 1, "open_hosts": [body.port],
                              "count": len(devices), "devices": devices, "note": None}
@@ -7334,6 +7340,22 @@ async def modbus_serial_skann(body: ModbusSerialBody):
     return {"status": "started", "job_id": job["id"]}
 
 
+_MB_NETTOPP_BRUKT: set = set()      # adresser som fikk et kjent kart i det skannet som går nå
+
+
+def _modbus_funnet(job: Dict[str, Any]):
+    """Hver enhet legges i jobben så snart den svarer, så den står i lista mens resten av skannet går."""
+    underveis: Dict[str, Dict[str, Any]] = {}
+
+    def funnet(d: Dict[str, Any]) -> None:
+        d = dict(d)
+        _modbus_kjente([d])
+        underveis[d["address"]] = d
+        job["devices"] = sorted(underveis.values(), key=lambda x: (str(x.get("ip") or ""), x.get("unit") or 0))
+        job["found"] = len(underveis)
+    return funnet
+
+
 def _modbus_kjente(devices: List[Dict[str, Any]]) -> None:
     """A device of a kind that has had a register map before gets it again, with a note on the device saying so."""
     tilordnet = MODBUS_KART.assignments()
@@ -7341,9 +7363,10 @@ def _modbus_kjente(devices: List[Dict[str, Any]]) -> None:
         mid = MODBUS_KART.profile_for(d.get("vendor_name", ""), d.get("model_name", ""))
         if not mid:
             continue
-        brukt = d["address"] not in tilordnet
-        if brukt:
+        brukt = d["address"] not in tilordnet or d["address"] in _MB_NETTOPP_BRUKT
+        if d["address"] not in tilordnet:
             MODBUS_KART.assign(d["address"], mid)
+            _MB_NETTOPP_BRUKT.add(d["address"])
         d["forslag"] = {"kart": mid, "navn": (MODBUS_KART.load_map(mid) or {}).get("name", mid), "brukt": brukt}
 
 
