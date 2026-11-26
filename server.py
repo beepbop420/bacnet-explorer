@@ -236,7 +236,7 @@ def t(nb: str, en: str) -> str:
     return en if SPRAAK_VAR.get() == "en" else nb
 
 
-VERSJON = "2.44"
+VERSJON = "2.45"
 app.version = VERSJON
 app.description = ("NABE sitt eget grensesnitt. Det som leser fra anlegget (enheter, punkter, ukeprogram, trend) kan brukes fra Python, Excel eller curl mens NABE kjører. "
                    "Dokumentasjonen (Swagger) laster fra internett.")
@@ -812,6 +812,51 @@ def mobil_brannmur():
     if not r.get("ok"):
         return {"status": "avbrutt" if r.get("avbrutt") else "error", "error": r.get("feil") or t("Avbrutt.", "Cancelled.")}
     return nmo.status()
+
+
+class MobilAktivBody(BaseModel):
+    address: str = ""
+    device_instance: Optional[int] = None
+    navn: str = ""
+
+
+@app.post("/api/mobil/aktiv")
+def mobil_aktiv(body: MobilAktivBody):
+    """Enheten som er åpen på PC-en, så telefonen kan tilby den øverst."""
+    nmo.M["aktiv"] = {"address": body.address[:120], "instans": body.device_instance, "navn": body.navn[:80], "t": int(time.time())} if body.address else None
+    return {"status": "done"}
+
+
+class MobilApneBody(BaseModel):
+    hva: str
+
+
+# Bare disse kan åpnes herfra: faste Windows-sider og nedlastingssiden for reserven
+_MOBIL_APNE = {"wifi": "ms-availablenetworks:", "bluetooth": "ms-settings:bluetooth", "tailscale-last": "https://tailscale.com/download/windows"}
+
+
+@app.post("/api/mobil/apne")
+def mobil_apne(body: MobilApneBody):
+    try:
+        if body.hva == "pan":                       # «Enheter og skrivere»: Koble til via tilgangspunkt (Bluetooth-nett)
+            subprocess.Popen(["control.exe", "printers"])
+        elif body.hva in _MOBIL_APNE:
+            os.startfile(_MOBIL_APNE[body.hva])  # type: ignore[attr-defined]
+        else:
+            return {"status": "error", "error": t("Ukjent side", "Unknown page")}
+    except OSError as e:
+        return {"status": "error", "error": str(e)}
+    return {"status": "done"}
+
+
+@app.post("/api/mobil/lokk")
+def mobil_lokk():
+    """Åpner Windows-siden der man velger hva som skjer når lokket lukkes."""
+    try:
+        subprocess.Popen(["control.exe", "/name", "Microsoft.PowerOptions", "/page", "pageGlobalSettings"])
+    except OSError as e:
+        return {"status": "error", "error": str(e)}
+    return {"status": "done"}
 
 
 @app.post("/api/mobil/hotspot")

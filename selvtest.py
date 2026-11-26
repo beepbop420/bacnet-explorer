@@ -1344,6 +1344,89 @@ def mobil_fil():
           and qd.get("h") == "0ead653403441de8033db544f99cd782a03070f7", str(qd) + node.stderr[:100])
     sjekk("qr: Wi-Fi-kode skjermer spesialtegn, SVG tegnes, og for lang tekst gir feil",
           qd.get("w") == 'WIFI:T:WPA;S:Mitt \\"nett\\"\\; 2;P:p\\;q;;' and qd.get("s") == "<svg" and "lang" in str(qd.get("feil")), str(qd))
+    # ---- ute i felt: Tailscale, telefonens delte nett, våken PC, auto-av og brannmur
+    kort = [{"navn": "Wi-Fi", "opp": True, "virtuell": False, "adresser": [{"ip": "192.168.1.95", "prefix": 24}]},
+            {"navn": "Tailscale", "opp": True, "virtuell": True, "adresser": [{"ip": "100.64.0.5", "prefix": 32}]},
+            {"navn": "Cellular", "opp": True, "virtuell": True, "adresser": [{"ip": "10.11.219.255", "prefix": 21}]},
+            {"navn": "wg-123", "opp": True, "virtuell": True, "adresser": [{"ip": "10.252.254.214", "prefix": 32}]}]
+    a = nm.adresser(8093, kort)
+    sjekk("mobil: Tailscale tilbys sist som reserve, PC-ens mobilkort og VPN-tunneler tilbys ikke", [(x["type"], x["ip"]) for x in a] == [("lan", "192.168.1.95"), ("tailscale", "100.64.0.5")], str(a))
+    bt = nm.adresser(8093, [{"navn": "Bluetooth Network Connection", "opp": True, "virtuell": True, "adresser": [{"ip": "172.20.10.4", "prefix": 28}]},
+                            {"navn": "Wi-Fi", "opp": True, "virtuell": False, "adresser": [{"ip": "192.168.1.9", "prefix": 24}]}])
+    sjekk("mobil: telefonens nett over Bluetooth tas med selv om kortet ellers er virtuelt, og står først", [(x["type"], x.get("vei")) for x in bt] == [("delt", "bluetooth"), ("lan", None)], str(bt))
+    sjekk("mobil: VPN som tar trafikken til telefonen oppdages", nm.rute_utenom(bt, lambda ip: "10.9.9.9") == "10.9.9.9" and nm.rute_utenom(bt, lambda ip: "172.20.10.4") is None)
+    sjekk("mobil: veien en forespørsel kom inn kjennes igjen", nm.vei_inn("172.20.10.1", bt) == "delt" and nm.vei_inn("192.168.1.20", bt) == "lan" and nm.vei_inn("127.0.0.1", bt) is None
+          and nm.vei_inn("100.90.1.2", a) == "tailscale" and nm.fast_adresse(8093).endswith(".local:8093"))
+    delt = nm.adresser(8093, [{"navn": "Wi-Fi", "opp": True, "virtuell": False, "adresser": [{"ip": "172.20.10.3", "prefix": 28}]},
+                              {"navn": "Ethernet 4", "opp": True, "virtuell": False, "adresser": [{"ip": "192.168.42.17", "prefix": 24}]}, kort[1]])
+    sjekk("mobil: telefonens delte nett (iPhone og Android) kjennes igjen og står først", [x["type"] for x in delt] == ["delt", "delt", "tailscale"] and {x["vei"] for x in delt[:2]} == {"usb", "wifi"}, str(delt))
+    ts = nm.tolk_tailscale(json.dumps({"BackendState": "Running", "Self": {"TailscaleIPs": ["100.64.0.5", "fd7a::1"], "DNSName": "pc.tail1.ts.net."},
+        "Peer": {"a": {"HostName": "localhost", "DNSName": "iphone-test.tail1.ts.net.", "OS": "iOS", "Online": False, "LastSeen": "2026-10-03T23:20:29Z"},
+                 "b": {"HostName": "server", "OS": "linux", "Online": True}, "c": {"HostName": "Pixel", "OS": "android", "Online": True, "CurAddr": "1.2.3.4:5"}}}))
+    sjekk("tailscale: bare telefoner tas med, den som er på først, og localhost får DNS-navnet",
+          [(t["navn"], t["paa"], t["direkte"]) for t in ts["telefoner"]] == [("Pixel", True, True), ("iphone-test", False, False)] and ts["ip"] == "100.64.0.5" and ts["navn"] == "pc.tail1.ts.net", str(ts))
+    fakta = {"kort": [], "mobil_paa": True, "port": 8093, "nar": {"100.64.0.5": True}, "skriv": False, "brannmur": True, "hotspot": {}, "arp": 1, "wifi": None,
+             "adr_typer": ["tailscale"], "mobilkort": True, "lokk": {"strom": 0, "batteri": 1}, "tailscale": dict(ts, telefoner=[ts["telefoner"][1]])}
+    r_ = {x["id"]: x for x in nm.sjekkliste(fakta)}
+    sjekk("oppsett: telefonen av i Tailscale, mobilkortet og lokket forklares med hva du gjør",
+          r_["tailscale"]["status"] == "ok" and r_["telefon"]["status"] == "merk" and "iphone-test" in r_["telefon"]["detalj"][0] and "2026-10-03" in r_["telefon"]["detalj"][0]
+          and r_["mobilkort"]["status"] == "merk" and "tvillingsim" in r_["mobilkort"]["detalj"][0] and r_["lokk"]["fiks"] == "lokk" and "batteri" in r_["lokk"]["detalj"][0], json.dumps(r_, ensure_ascii=False)[:400])
+    r2 = {x["id"]: x for x in nm.sjekkliste(dict(fakta, adr_typer=["delt"], tailscale={"installert": True, "paa": False, "telefoner": [], "helse": []}))}
+    sjekk("oppsett: på telefonens delte nett er Tailscale av og mobilkortet ikke noe å bry seg om", r2["delt"]["status"] == "ok" and r2["tailscale"]["status"] == "ok" and "mobilkort" not in r2, str(list(r2)))
+    r3 = {x["id"]: x for x in nm.sjekkliste(dict(fakta, tailscale={"installert": True, "paa": False, "telefoner": [], "helse": []}))}
+    sjekk("oppsett: reserven av er et merke, ikke en feil", r3["tailscale"]["status"] == "merk")
+    r4 = {x["id"]: x for x in nm.sjekkliste(dict(fakta, adr_typer=["lan"], utenom="10.9.9.9"))}
+    sjekk("oppsett: uten telefonens nett vises hovedveien, og et VPN i veien er en feil", r4["delt"]["status"] == "merk" and r4["utenom"]["status"] == "feil" and "10.9.9.9" in r4["utenom"]["detalj"][0])
+    sjekk("mobil: brannmurregelen dekker lokalt nett og Tailscale", "-RemoteAddress LocalSubnet,100.64.0.0/10" in nm.brannmur_skript(8093))
+    # auto-av forlenges mens en telefon er i bruk, men har et tak
+    gml = {k: nm.M.get(k) for k in ("server", "til", "start", "okter")}
+    try:
+        naa = time.time()
+        nm.M.update(server=object(), start=naa - 4 * 3600, til=naa + 60, okter={})
+        tok_ = nm._ny_okt("10.1.1.1", "iPhone")
+        nm.okt_for(tok_)
+        forlenget = nm.M["til"] - naa
+        nm.M.update(start=naa - nm.MAKS_PAA + 120, til=naa + 60)
+        nm.okt_for(tok_)
+        tak = nm.M["til"] - naa
+        sjekk("mobil: porten holdes oppe mens telefonen brukes, men ikke lenger enn taket", forlenget >= nm.FORLENG - 2 and tak <= 122, f"{forlenget:.0f} {tak:.0f}")
+    finally:
+        nm.M.update({k: v for k, v in gml.items() if v is not None})
+        if gml.get("start") is None:
+            nm.M.pop("start", None)
+    # huskning på Tailscale-identitet
+    import tempfile as _tf2
+    gml_par, gml_srv = nm.PAR_FIL, nm.M["server"]
+    with _tf2.TemporaryDirectory() as d_:
+        try:
+            nm.PAR_FIL, nm.M["server"], nm.M["okter"] = Path(d_) / "par.json", object(), {}
+            os.environ["NABE_MOBIL_TS_TEST"] = "100.101.102.103=nTESTNODE:iPhone,100.101.102.104=nANNEN:iPhone"
+            t_ = nm._ny_okt("100.101.102.103", "iPhone")
+            r_p = nm.par_ny(nm.okt_id(t_))
+            hemmelig = nm.M["okter"][t_].get("gi_enhet") or ""
+            nm.M["okter"] = {}
+            sjekk("par: telefonens egen nøkkel slipper den inn fra et nytt delt nett, uten Tailscale og MAC", len(hemmelig) > 30 and nm.auto_logg_inn("172.20.10.1", "", hemmelig) is not None
+                  and nm.auto_logg_inn("172.20.10.1", "", hemmelig + "x") is None and hemmelig not in nm.PAR_FIL.read_text(encoding="utf-8"))
+            sjekk("par: på vanlig nett godtas nøkkelen bare når PC-eieren har tillatt det", nm.auto_logg_inn("192.168.1.50", "", hemmelig) is None)
+            nm.M["okter"] = {}
+            sjekk("par: en telefon over Tailscale huskes på identiteten og slipper inn uten kode, også etter at porten har vært av",
+                  r_p["ok"] and r_p["enhet"]["ts"] == "nTESTNODE" and "mac" not in r_p["enhet"] and nm.auto_logg_inn("100.101.102.103") is not None, str(r_p))
+            sjekk("par: en annen enhet i Tailscale eller en vanlig adresse slipper ikke inn", nm.auto_logg_inn("100.101.102.104") is None and nm.auto_logg_inn("10.0.0.9") is None
+                  and nm.par_status()["liste"][0]["mac"] == "Tailscale")
+        finally:
+            os.environ.pop("NABE_MOBIL_TS_TEST", None)
+            nm.PAR_FIL, nm.M["server"], nm.M["okter"] = gml_par, gml_srv, {}
+    html = (HER / "nabe_mobil.html").read_text(encoding="utf-8")
+    sjekk("mobil: telefonsiden har frist på forespørsler, ber ikke to ganger samtidig og sier fra ved usikker skriving",
+          all(x in html for x in ("hentMedFrist", "pollGaar", "Usikkert om det kom fram", "kontaktTips", "pollNeste")) and "setInterval(() => { pollVerdier" not in html)
+    sjekk("mobil: telefonsiden har snarveier, trend på åpent punkt og steg for settpunkt",
+          all(x in html for x in ("Åpent på PC-en", "Sist brukt", "function tegSpor", 'id="arkSpor"', "data-steg", "function finnEnhet")))
+    pc = (HER / "js" / "nabe-mobil.js").read_text(encoding="utf-8")
+    ki = pc[pc.index("function kiTekst"):pc.index("const nb = (par)")]
+    sjekk("mobil: veiviseren har telefonens nett først og Tailscale som reserve",
+          all(x in pc for x in ("function telefonVei", "function tailscaleVei", "function annenVei", "meldAktiv")) and 0 <= pc.find("['telefon', ") < pc.find("['tailscale', "))
+    sjekk("mobil: hjelpeteksten til KI inneholder verken konto, adresser eller navn", not any(x in ki for x in (".konto", ".ip}", ".navn", "d.fast", "adresser")), ki[:200])
+
     # Replikkene for igangkjøring følger husreglene: begge språk, ingen tankestrek, ingen utrop
     tekst = (HER / "js" / "nabe-dialoger-igang.js").read_text(encoding="utf-8")
     hend = re.findall(r"^  (\w+): \{pause:", tekst, re.M)
@@ -1424,7 +1507,8 @@ def mobil_fil():
         nm.mac_for = lambda ip: ""
         nm.M["server"] = object()
         tok1 = nm._ny_okt("192.168.137.9", "Mobil")
-        sjekk("par: finner NABE ikke MAC-adressen, huskes ingenting", nm.par_ny(nm.okt_id(tok1))["ok"] is False)
+        r_u = nm.par_ny(nm.okt_id(tok1))
+        sjekk("par: finner NABE ikke MAC-adressen, huskes telefonen på sin egen nøkkel", r_u["ok"] and "mac" not in r_u["enhet"] and r_u["enhet"]["nokkel"], str(r_u))
         sjekk("par: navn fra nettleseren", nm.navn_fra_ua("Mozilla/5.0 (iPhone; CPU iPhone OS 17_0)") == "iPhone"
               and nm.navn_fra_ua("Mozilla/5.0 (Linux; Android 14; Pixel 8 Pro) Chrome/120") == "Pixel 8 Pro" and nm.navn_fra_ua("") == "Mobil")
         sjekk("par: MAC-adresser normaliseres, og skrot avvises", nm.mac_normaliser("AA-BB-CC-DD-EE-FF") == "aa:bb:cc:dd:ee:ff" and nm.mac_normaliser("xyz") == "")
@@ -1572,6 +1656,9 @@ def mobil_fil():
         sjekk("svar: pådraget slippes til slutt", d.get("sluppet") is True and kall("/api/writelog")["entries"][0].get("action") == "release", str(d.get("feil")))
         c, a = g("/api/test/svar", {"address": addr, "padrag": "binary-value,1", "maaling": "analog-input,0"})
         sjekk("svar: bare analoge pådrag", a.get("status") == "error")
+        with urllib.request.urlopen(urllib.request.Request(G + "/m/lev-logo.js", headers={"Accept-Encoding": "gzip"}), timeout=30) as rr:
+            pakket, rå = rr.headers.get("content-encoding"), rr.read()
+        sjekk("mobil: store svar komprimeres, så de går fort over mobilnettet", pakket == "gzip" and len(rå) < 0.6 * (HER / "js" / "nabe-lev-logo.js").stat().st_size, f"{pakket} {len(rå)}")
         for sti, typ in (("/m/manifest.webmanifest", "manifest"), ("/m/ikon/180.png", "image/png"), ("/m/ikon/512.png", "image/png")):
             try:
                 with urllib.request.urlopen(G + sti, timeout=30) as rr:
@@ -1599,7 +1686,12 @@ def mobil_fil():
         sjekk("par: å huske den gir en oppføring og merker økten", len(pst["par"]["liste"]) == 1 and pst["okter"][0]["par"] is True, str(pst.get("par"))[:200])
         sjekk("par: en ny nettleser slipper ikke inn utenfor hotspotet", ny_leser("/m/me")[0] == 401)
         kall("/api/mobil/par/lan", {"tillat": True})
+        kall("/api/mobil/aktiv", {"address": "10.9.9.9", "device_instance": 7, "navn": "US1"})
         c_, d_ = ny_leser("/m/me")
+        sjekk("mobil: telefonen får vite hvilken enhet som er åpen på PC-en", (d_.get("aktiv") or {}).get("address") == "10.9.9.9" and d_["aktiv"].get("instans") == 7, str(d_.get("aktiv")))
+        kall("/api/mobil/aktiv", {"address": ""})
+        sjekk("mobil: ingen åpen enhet gir ingen snarvei, og ukjent Windows-side åpnes ikke",
+              ny_leser("/m/me")[1].get("aktiv") is None and kall("/api/mobil/apne", {"hva": "cmd.exe"}).get("status") == "error")
         sjekk("par: med «vanlig Wi-Fi» på slipper den husket telefonen inn uten kode", c_ == 200 and d_.get("kjent") is True, f"{c_} {d_}")
         kall("/api/mobil/par/glem", {"id": pst["par"]["liste"][0]["id"]})
         sjekk("par: etter at den er glemt er den ute igjen", ny_leser("/m/me")[0] == 401 and kall("/api/mobil")["par"]["liste"] == [])

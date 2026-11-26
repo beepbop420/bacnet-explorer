@@ -21,6 +21,8 @@ kan testes uten nett.
 """
 import asyncio
 import collections
+import shutil
+import ipaddress
 import hashlib
 import hmac
 import json
@@ -46,6 +48,9 @@ AV_ETTER = int(os.environ.get("NABE_MOBIL_AV_S", "") or 4 * 3600)
 MAKS_MIN_STD = 10
 MAKS_OKTER = 5
 BRANNMUR_NAVN = "NABE mobil"
+# Så lenge en telefon er i bruk holdes porten oppe minst så lenge til, men aldri mer enn MAKS_PAA fra den ble slått på.
+FORLENG = min(3600, AV_ETTER)
+MAKS_PAA = max(14 * 3600, AV_ETTER)
 
 M: Dict[str, Any] = {
     "server": None, "tradd": None, "port": PORT_STD, "hoved": 8092,
@@ -122,20 +127,183 @@ def regler(metode: str, sti: str, body: Optional[Dict[str, Any]], skriv: bool, m
     return {"ok": False, "status": 403, "feil": "Ikke tillatt fra mobil"}
 
 
-def adresser(port: int) -> List[Dict[str, Any]]:
-    """Adressene telefonen kan prøve, hotspot først: den virker uten noe annet nett."""
+# Nett som telefonen selv deler ut: iPhone (Del internett, også med USB) og Android (hotspot og USB-deling)
+DELT_NETT = ("172.20.10.", "192.168.42.", "192.168.43.")
+TS_NETT = ipaddress.ip_network("100.64.0.0/10")        # adressene Tailscale deler ut
+
+
+def er_tailscale_ip(ip: str) -> bool:
+    try:
+        return ipaddress.ip_address(ip) in TS_NETT
+    except ValueError:
+        return False
+
+
+def delt_vei(kortnavn: str) -> str:
+    """Hvordan PC-en henger på telefonens nett, lest av navnet på nettverkskortet."""
+    n = kortnavn.lower()
+    return "bluetooth" if "bluetooth" in n else "wifi" if re.search(r"wi-?fi|wlan|wireless|trådl", n) else "usb"
+
+
+def adresser(port: int, kort: Optional[List[Dict[str, Any]]] = None) -> List[Dict[str, Any]]:
+    """Adressene telefonen kan prøve, hovedveien først: telefonens delte nett (Wi-Fi, Bluetooth eller USB) trenger
+    ingenting installert. Så PC-ens hotspot og samme nett. Tailscale er reserven og står sist. PC-ens eget mobilkort
+    står aldri her: adressen ligger bak operatøren og kan normalt ikke nås, heller ikke med tvillingsim."""
     ut = []
-    for k in ln.kort_liste():
-        if not k["opp"] or k["virtuell"]:
+    for k in (ln.kort_liste() if kort is None else kort):
+        if not k["opp"]:
             continue
+        ts = bool(re.search(r"tailscale", k["navn"], re.I))
         for a in k["adresser"]:
-            if ln.er_linklokal(a["ip"]) or a["prefix"] >= 31:
+            ip = a["ip"]
+            delt = ip.startswith(DELT_NETT)
+            # Bluetooth-nettet regnes ellers som et virtuelt kort; her er det telefonens nett
+            if ln.er_linklokal(ip) or (k["virtuell"] and not ts and not delt) or (ts and not er_tailscale_ip(ip)) or (not ts and a["prefix"] >= 31):
                 continue
-            hot = a["ip"].startswith("192.168.137.")
-            ut.append({"kort": k["navn"], "ip": a["ip"], "type": "hotspot" if hot else "lan",
-                       "url": f"http://{a['ip']}:{port}"})
-    ut.sort(key=lambda x: (x["type"] != "hotspot", x["kort"]))
+            typ = "tailscale" if ts else "delt" if delt else "hotspot" if ip.startswith("192.168.137.") else "lan"
+            rad = {"kort": k["navn"], "ip": ip, "prefix": a["prefix"], "type": typ, "url": f"http://{ip}:{port}"}
+            if delt:
+                rad["vei"] = delt_vei(k["navn"])
+            ut.append(rad)
+    rang = {"delt": 0, "hotspot": 1, "lan": 2, "tailscale": 3}
+    ut.sort(key=lambda x: (rang[x["type"]], x["kort"]))
     return ut
+
+
+def rute_utenom(adr: List[Dict[str, Any]], kilde=None) -> Optional[str]:
+    """Svarer Windows telefonen en annen vei enn gjennom telefonens nett? Det skjer når et VPN på PC-en tar all trafikk.
+    Spør Windows hvilken egen adresse det ville brukt mot en nabo i det delte nettet. Ingenting sendes."""
+    def vanlig(ip: str) -> Optional[str]:
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sk:
+                sk.connect((ip, 9))
+                return sk.getsockname()[0]
+        except OSError:
+            return None
+    egne = {a["ip"] for a in adr}
+    for a in adr:
+        if a["type"] != "delt":
+            continue
+        nett = ipaddress.ip_network(f"{a['ip']}/{a.get('prefix') or 24}", strict=False)
+        nabo = str(nett.network_address + 1)
+        if nabo == a["ip"]:
+            nabo = str(nett.network_address + 2)
+        valgt = (kilde or vanlig)(nabo)
+        if valgt and valgt not in egne:
+            return valgt
+    return None
+
+
+def vei_inn(ip: str, adr: List[Dict[str, Any]]) -> Optional[str]:
+    """Hvilken vei en forespørsel fra `ip` kom: typen til PC-ens adresse i samme nett. None for PC-en selv."""
+    if ip.startswith("127.") or any(a["ip"] == ip for a in adr):
+        return None
+    if er_tailscale_ip(ip) and any(a["type"] == "tailscale" for a in adr):
+        return "tailscale"
+    for a in adr:
+        try:
+            if a["type"] != "tailscale" and ipaddress.ip_address(ip) in ipaddress.ip_network(f"{a['ip']}/{a.get('prefix') or 24}", strict=False):
+                return a["type"]
+        except ValueError:
+            continue
+    return "lan"
+
+
+def fast_adresse(port: int) -> str:
+    """PC-ens navn på nettet. Windows svarer på det selv, så adressen er den samme uansett hvilket nett PC-en står på."""
+    navn = re.sub(r"[^A-Za-z0-9-]", "", socket.gethostname())
+    return f"http://{navn}.local:{port}" if navn else ""
+
+
+# --------------------------------------------------------------- Tailscale
+
+def tailscale_exe() -> Optional[str]:
+    kandidater = [shutil.which("tailscale"), r"C:\Program Files\Tailscale\tailscale.exe", r"C:\Program Files (x86)\Tailscale\tailscale.exe"]
+    return next((c for c in kandidater if c and os.path.exists(c)), None)
+
+
+def tolk_tailscale(tekst: str) -> Dict[str, Any]:
+    """`tailscale status --json` til det NABE trenger: går det, hvilken adresse har PC-en, og er en telefon på?"""
+    d = json.loads(tekst)
+    selv = d.get("Self") or {}
+    telefoner = []
+    for p in (d.get("Peer") or {}).values():
+        os_ = str(p.get("OS") or "").lower()
+        if os_ not in ("ios", "android"):
+            continue
+        navn = str(p.get("HostName") or "")
+        if navn.lower() in ("", "localhost"):              # iPhoner kaller seg ofte bare localhost
+            navn = str(p.get("DNSName") or "").split(".")[0] or ("iPhone" if os_ == "ios" else "Android")
+        paa = bool(p.get("Online"))
+        telefoner.append({"navn": navn, "os": "iPhone" if os_ == "ios" else "Android", "paa": paa,
+                          "direkte": paa and bool(p.get("CurAddr")), "sist": None if paa else p.get("LastSeen")})
+    telefoner.sort(key=lambda t: (not t["paa"], t["navn"]))
+    konto = ((d.get("User") or {}).get(str(selv.get("UserID"))) or {}).get("LoginName")
+    return {"installert": True, "konto": str(konto or ""), "paa": d.get("BackendState") == "Running", "tilstand": str(d.get("BackendState") or ""),
+            "ip": next((x for x in selv.get("TailscaleIPs") or [] if "." in str(x)), None),
+            "navn": str(selv.get("DNSName") or "").rstrip("."), "telefoner": telefoner,
+            "helse": [str(x) for x in (d.get("Health") or [])][:3]}
+
+
+def _tailscale_kjor(argumenter: List[str], tid: float = 8.0) -> Optional[str]:
+    exe = tailscale_exe()
+    if not exe:
+        return None
+    try:
+        r = subprocess.run([exe, *argumenter], capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=tid,
+                           creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return r.stdout if r.returncode == 0 else None
+
+
+def tailscale_status() -> Dict[str, Any]:
+    """Bare lesing: NABE slår aldri Tailscale av eller på og endrer ingenting i det. Hurtigbuffret noen sekunder."""
+    t, v = M.get("tailscale", (0.0, None))
+    if time.time() - t < 4 and v is not None:
+        return v
+    prove = os.environ.get("NABE_TAILSCALE_STATUS")       # selvtesten: en fil med ferdig svar i stedet for Tailscale
+    try:
+        if prove:
+            v = tolk_tailscale(Path(prove).read_text(encoding="utf-8"))
+        elif not tailscale_exe():
+            v = {"installert": False, "paa": False, "telefoner": [], "helse": [], "ip": None}
+        else:
+            ut = _tailscale_kjor(["status", "--json"])
+            v = tolk_tailscale(ut) if ut else {"installert": True, "paa": False, "tilstand": "", "telefoner": [], "helse": [], "ip": None}
+    except (OSError, ValueError):
+        v = {"installert": True, "paa": False, "tilstand": "", "telefoner": [], "helse": [], "ip": None}
+    M["tailscale"] = (time.time(), v)
+    return v
+
+
+_TS_HVEM: Dict[str, Tuple[float, Optional[Dict[str, str]]]] = {}
+
+
+def ts_node(ip: str) -> Optional[Dict[str, str]]:
+    """Hvilken enhet i Tailscale-nettet har denne adressen? Tailscale knytter adressen til enhetens nøkkel, så den kan
+    ikke lånes bort slik en MAC-adresse kan. None for alt annet."""
+    # NABE_MOBIL_TS_TEST="127.0.0.1=nTEST:iPhone" lar selvtesten gi loopback en Tailscale-enhet.
+    for par in (os.environ.get("NABE_MOBIL_TS_TEST") or "").split(","):
+        if "=" in par and par.split("=", 1)[0].strip() == ip:
+            nid, _, navn = par.split("=", 1)[1].partition(":")
+            return {"id": nid.strip(), "navn": navn.strip() or "iPhone"}
+    if not er_tailscale_ip(ip):
+        return None
+    t, v = _TS_HVEM.get(ip, (0.0, None))
+    if time.time() - t < 60:
+        return v
+    v = None
+    ut = _tailscale_kjor(["whois", "--json", ip], 5.0)
+    if ut:
+        try:
+            n = (json.loads(ut) or {}).get("Node") or {}
+            if n.get("StableID"):
+                v = {"id": str(n["StableID"]), "navn": str(n.get("ComputedName") or "")}
+        except ValueError:
+            pass
+    _TS_HVEM[ip] = (time.time(), v)
+    return v
 
 
 def okt_id(token: str) -> str:
@@ -303,17 +471,39 @@ def _ny_okt(ip: str, navn: str, ua: str = "", naa: Optional[float] = None) -> st
     return token
 
 
-def auto_logg_inn(ip: str, ua: str = "") -> Optional[str]:
-    """En økt for en husket telefon, uten kode. Bare når mobiltilgang er på og adressen er kjent."""
+ENHET_LEVETID = 180 * 86400                 # hvor lenge telefonens egen nøkkel i nettleseren varer
+
+
+def nokkel_hash(nokkel: str) -> str:
+    return hashlib.sha256(("enhet:" + nokkel).encode()).hexdigest()
+
+
+def trygt_nett(ip: str) -> bool:
+    """Nett der telefonens nøkkel godtas uten videre: telefonens delte nett og PC-ens hotspot er private, og Tailscale
+    er kryptert. På annet nett (kontor, gjest) må PC-eieren ha slått det på, siden trafikken ikke er kryptert."""
+    return ip.startswith(DELT_NETT) or ip.startswith(HOTSPOT_NETT) or er_tailscale_ip(ip)
+
+
+def auto_logg_inn(ip: str, ua: str = "", enhet: str = "") -> Optional[str]:
+    """En økt for en husket telefon, uten kode. Bare når mobiltilgang er på og telefonen er kjent igjen: på nøkkelen
+    den har i nettleseren, på Tailscale-identiteten, eller på MAC-adressen."""
     if not M["server"]:
         return None
     d = par_les()
     if not d["enheter"]:
         return None
-    if not str(ip).startswith(HOTSPOT_NETT) and not d.get("lan"):
-        return None
-    mac = mac_for(ip)
-    treff = next((e for e in d["enheter"] if mac and e.get("mac") == mac), None)
+    treff = None
+    if enhet and (trygt_nett(str(ip)) or d.get("lan")):
+        h = nokkel_hash(enhet)
+        treff = next((e for e in d["enheter"] if e.get("nokkel") and hmac.compare_digest(e["nokkel"], h)), None)
+    if not treff and any(e.get("ts") for e in d["enheter"]):
+        node = ts_node(ip)
+        treff = next((e for e in d["enheter"] if node and e.get("ts") == node["id"]), None)
+    if not treff:
+        if not str(ip).startswith(HOTSPOT_NETT) and not d.get("lan"):
+            return None
+        mac = mac_for(ip)
+        treff = next((e for e in d["enheter"] if mac and e.get("mac") == mac), None)
     if not treff:
         return None
     with LAAS:
@@ -321,22 +511,30 @@ def auto_logg_inn(ip: str, ua: str = "") -> Optional[str]:
         logg(okt_id(token), f"Kjente igjen {treff.get('navn')} og logget inn")
     treff["sist"], treff["ip"] = int(time.time()), ip
     par_skriv(d)
+    M["okter"][token]["enhet_id"] = treff["id"]
     return token
 
 
 def par_ny(id_: str) -> Dict[str, Any]:
-    """Husk telefonen bak en innlogget økt, på MAC-adressen den har nå."""
+    """Husk telefonen bak en innlogget økt: på Tailscale-identiteten når den kommer derfra, ellers på MAC-adressen."""
     with LAAS:
         tok = next((t for t in M["okter"] if okt_id(t) == id_), None)
         o = M["okter"].get(tok) if tok else None
     if not o:
         return {"ok": False, "feil": "Fant ikke telefonen. Den må være koblet til nå."}
-    mac = mac_for(o["ip"])
-    if not mac:
-        return {"ok": False, "feil": "Fant ikke MAC-adressen til telefonen. Prøv igjen når den er på hotspotet eller samme Wi-Fi."}
+    node = ts_node(o["ip"])
+    mac = "" if node else mac_for(o["ip"])
     d = par_les()
-    ny_ = {"id": hashlib.sha1(mac.encode()).hexdigest()[:8], "navn": o["navn"], "mac": mac, "laget": int(time.time()), "sist": int(time.time()), "ip": o["ip"]}
-    d["enheter"] = [e for e in d["enheter"] if e.get("mac") != mac] + [ny_]
+    # Telefonen får en egen nøkkel som nettleseren tar vare på. Den virker uansett hvilken vei telefonen kommer.
+    hemmelig = secrets.token_urlsafe(32)
+    ny_ = {"id": secrets.token_hex(4), "navn": o["navn"], "nokkel": nokkel_hash(hemmelig), "laget": int(time.time()), "sist": int(time.time()), "ip": o["ip"]}
+    if node:
+        ny_["ts"] = node["id"]
+    if mac:
+        ny_["mac"] = mac
+    samme = lambda e: (node and e.get("ts") == node["id"]) or (mac and e.get("mac") == mac) or (o.get("enhet_id") and e.get("id") == o["enhet_id"])
+    d["enheter"] = [e for e in d["enheter"] if not samme(e)] + [ny_]
+    o["gi_enhet"], o["enhet_id"] = hemmelig, ny_["id"]      # sendes til telefonen med neste svar
     par_skriv(d)
     logg("pc", f"Husket {o['navn']}")
     return {"ok": True, "enhet": ny_}
@@ -360,7 +558,7 @@ def par_status() -> Dict[str, Any]:
     naa = time.time()
     levende = {o["ip"] for o in M["okter"].values() if o["til"] > naa}
     maskert = lambda m: m[:2] + ":••:••:••:" + m[-5:] if len(m) == 17 else m
-    return {"liste": [{"id": e["id"], "navn": e.get("navn", "Mobil"), "mac": maskert(e.get("mac", "")), "sist": e.get("sist", 0),
+    return {"liste": [{"id": e["id"], "navn": e.get("navn", "Mobil"), "mac": "Tailscale" if e.get("ts") else maskert(e["mac"]) if e.get("mac") else "", "sist": e.get("sist", 0),
                        "tilkoblet": e.get("ip") in levende} for e in d["enheter"]], "lan": bool(d.get("lan"))}
 
 
@@ -396,6 +594,9 @@ def okt_for(token: Optional[str]) -> Optional[Dict[str, Any]]:
         if not o or o["til"] < naa or not M["server"]:
             return None
         o["sist"] = naa
+        # I bruk: porten skal ikke slå seg av midt i arbeidet, men heller ikke stå i dager
+        if M["til"] - naa < FORLENG:
+            M["til"] = max(M["til"], min(naa + FORLENG, (M.get("start") or naa) + MAKS_PAA))
         return o
 
 
@@ -493,9 +694,28 @@ MANIFEST = {
 def lag_app():
     from fastapi import FastAPI, Request
     from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
+    from fastapi.middleware.gzip import GZipMiddleware
 
     app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
+    # Punktlister og logoer går over mobilnettet: komprimert er de en brøkdel så store
+    app.add_middleware(GZipMiddleware, minimum_size=900)
     COOKIE = "nabe_mobil"
+    ENHET = "nabe_mobil_enhet"
+
+    @app.middleware("http")
+    async def nadd(request: Request, kall_neste):
+        # Alt som kommer inn utenfra, også uten innlogging, viser at nettveien og brannmuren er i orden
+        ip = request.client.host if request.client else ""
+        if ip:
+            M.setdefault("nadd", {})[ip] = time.time()
+        return await kall_neste(request)
+
+    def gi_enhet(r, token):
+        o = M["okter"].get(token or "")
+        hemmelig = o.pop("gi_enhet", None) if o else None
+        if hemmelig:
+            r.set_cookie(ENHET, hemmelig, max_age=ENHET_LEVETID, httponly=True, samesite="strict", path="/")
+        return r
 
     def hode(r):
         r.headers["Cache-Control"] = "no-store"
@@ -529,7 +749,7 @@ def lag_app():
             html = "<p>nabe_mobil.html mangler</p>"
         svar = hode(HTMLResponse(html))
         if not okt_for(request.cookies.get(COOKIE)):
-            tok = auto_logg_inn(klient(request), request.headers.get("user-agent", ""))
+            tok = auto_logg_inn(klient(request), request.headers.get("user-agent", ""), request.cookies.get(ENHET, ""))
             if tok:
                 sett_cookie(svar, tok)
         return svar
@@ -573,14 +793,15 @@ def lag_app():
         o = okt_for(request.cookies.get(COOKIE))
         ny_tok = None
         if not o:
-            ny_tok = auto_logg_inn(klient(request), request.headers.get("user-agent", ""))
+            ny_tok = auto_logg_inn(klient(request), request.headers.get("user-agent", ""), request.cookies.get(ENHET, ""))
             o = okt_for(ny_tok)
         if not o:
             return hode(JSONResponse({"ok": False}, status_code=401))
-        svar = hode(JSONResponse({"ok": True, "skriv": M["skriv"], "maks_min": M["maks_min"], "navn": o["navn"], "kjent": bool(ny_tok)}))
+        svar = hode(JSONResponse({"ok": True, "skriv": M["skriv"], "maks_min": M["maks_min"], "navn": o["navn"], "kjent": bool(ny_tok),
+                                  "aktiv": M.get("aktiv")}))
         if ny_tok:
             sett_cookie(svar, ny_tok)
-        return svar
+        return gi_enhet(svar, ny_tok or request.cookies.get(COOKIE))
 
     @app.api_route("/api/{rest:path}", methods=["GET", "POST"])
     async def proxy(request: Request, rest: str):
@@ -638,8 +859,10 @@ def start(hoved_port: int, port: Optional[int] = None) -> Dict[str, Any]:
     M["hoved"] = hoved_port
     M["port"] = port or PORT_STD
     M["kode"], M["kode_til"] = ny_kode(), time.time() + KODE_LEVETID
-    M["til"] = time.time() + AV_ETTER
+    M["start"] = time.time()
+    M["til"] = M["start"] + AV_ETTER
     M["okter"].clear()
+    M["nadd"] = {}
     M["feil_alle"] = []
     M["feil_ip"] = {}
 
@@ -685,13 +908,44 @@ def stopp() -> Dict[str, Any]:
     return status()
 
 
+def hold_vaken(paa: bool) -> bool:
+    """Ber Windows la være å sove av seg selv så lenge porten er oppe (gjelder tråden som spør, og slippes av den).
+    Lukket lokk og av-knappen styrer Windows fortsatt: det sier oppsettsjekken fra om."""
+    if not ln.er_windows():
+        return False
+    try:
+        import ctypes
+        return bool(ctypes.windll.kernel32.SetThreadExecutionState(0x80000001 if paa else 0x80000000))
+    except Exception:
+        return False
+
+
 def _vakt() -> None:
-    """Slår porten av når tiden er ute, så den ikke blir stående åpen over natta."""
-    while M["server"]:
-        if time.time() > M["til"]:
-            stopp()
-            return
-        time.sleep(min(15, max(0.2, AV_ETTER / 4)))
+    """Slår porten av når tiden er ute, så den ikke blir stående åpen over natta, og holder PC-en våken imens."""
+    M["vaken"] = hold_vaken(True)
+    try:
+        while M["server"]:
+            if time.time() > M["til"]:
+                stopp()
+                return
+            time.sleep(min(15, max(0.2, AV_ETTER / 4)))
+    finally:
+        hold_vaken(False)
+        if not M["server"]:
+            M["vaken"] = False
+
+
+def lokk_valg() -> Optional[Dict[str, int]]:
+    """Hva Windows gjør når lokket lukkes (0 ingenting, 1 sov, 2 dvale, 3 slå av), på strøm og på batteri."""
+    if not ln.er_windows():
+        return None
+    try:
+        r = subprocess.run(["powercfg", "/qh", "SCHEME_CURRENT", "SUB_BUTTONS", "LIDACTION"], capture_output=True, text=True,
+                           errors="replace", timeout=10, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+    except (OSError, subprocess.SubprocessError):
+        return None
+    tall = re.findall(r"0x([0-9a-fA-F]{8})", r.stdout)       # de to siste er innstillingen nå, uansett språk i Windows
+    return {"strom": int(tall[-2], 16), "batteri": int(tall[-1], 16)} if len(tall) >= 2 else None
 
 
 HOTSPOT_SETT_PS = r"""param([string]$Handling = 'paa', [switch]$Torr)
@@ -995,7 +1249,7 @@ def brannmur_skript(port: int) -> str:
     return ("$ErrorActionPreference = 'Stop'\n"
             f"Get-NetFirewallRule -DisplayName '{BRANNMUR_NAVN}' -ErrorAction SilentlyContinue | Remove-NetFirewallRule\n"
             f"New-NetFirewallRule -DisplayName '{BRANNMUR_NAVN}' -Direction Inbound -Protocol TCP -LocalPort {int(port)} "
-            "-Action Allow -RemoteAddress LocalSubnet -Profile Any | Out-Null\n")
+            "-Action Allow -RemoteAddress LocalSubnet,100.64.0.0/10 -Profile Any | Out-Null\n")
 
 
 # ------------------------------------------------------------- test oppsettet
@@ -1024,6 +1278,14 @@ def sjekkliste(f: Dict[str, Any]) -> List[Dict[str, Any]]:
         legg("kabel", "merk", ("Ingen kabel tilkoblet", "No cable connected"),
              ("Det går fint med Wi-Fi, men på en igangkjøring er kabel til enheten tryggest.", "Wi-Fi works, but on a commissioning a cable to the device is safest."))
 
+    ts = f.get("tailscale")
+    ts_klar = bool(ts and ts.get("paa") and any(t_.get("paa") for t_ in ts.get("telefoner") or []))
+    delt = "delt" in (f.get("adr_typer") or [])
+    if f.get("utenom"):
+        legg("utenom", "feil", ("Et VPN på PC-en tar trafikken til telefonen", "A VPN on the PC takes the traffic to the phone"),
+             (f"Windows ville svart telefonen fra {f['utenom']}. Koble fra VPN-et mens telefonen brukes, eller be IT slå på tilgang til lokalt nett (delt tunnel).",
+              f"Windows would answer the phone from {f['utenom']}. Disconnect the VPN while using the phone, or ask IT to enable local network access (split tunnel)."))
+
     paa = bool(f.get("mobil_paa"))
     if paa:
         legg("mobil", "ok", ("Mobiltilgang er på", "Mobile access is on"), (f"Port {f.get('port')}", f"Port {f.get('port')}"))
@@ -1047,6 +1309,51 @@ def sjekkliste(f: Dict[str, Any]) -> List[Dict[str, Any]]:
                 legg("nar", "ok", ("Porten svarer på PC-ens adresser", "The port answers on the PC's addresses"),
                      (", ".join(nar), ", ".join(nar)))
 
+    if delt:
+        legg("delt", "ok", ("PC-en er på telefonens delte nett", "The PC is on the phone's shared network"),
+             ("Da når de hverandre direkte, uten noe annet.", "Then they reach each other directly, with nothing else."))
+    elif "adr_typer" in f:
+        legg("delt", "merk", ("PC-en er ikke på telefonens nett", "The PC is not on the phone's network"),
+             ("Hovedveien: slå på internettdeling på telefonen og koble PC-en til med Wi-Fi, Bluetooth eller USB.",
+              "The main way: turn on the hotspot on the phone and join the PC with Wi-Fi, Bluetooth or USB."))
+    if ts is not None:
+        if not ts.get("installert"):
+            legg("tailscale", "ok", ("Reserve: Tailscale er ikke installert", "Backup: Tailscale is not installed"),
+                 ("Trengs bare når telefonen ikke kan dele nett.", "Only needed when the phone cannot share its network."))
+        elif not ts.get("paa"):
+            legg("tailscale", "ok" if delt else "merk", ("Reserve: Tailscale er av eller logget ut på PC-en", "Backup: Tailscale is off or signed out on the PC"),
+                 ("Skal reserven brukes: åpne Tailscale nede ved klokka og logg inn.", "To use the backup: open Tailscale by the clock and sign in."))
+        else:
+            legg("tailscale", "ok", ("Tailscale er på", "Tailscale is on"), (str(ts.get("ip") or ""), str(ts.get("ip") or "")))
+            telefoner = ts.get("telefoner") or []
+            paa_ = next((x for x in telefoner if x.get("paa")), None)
+            if paa_:
+                vei = ("direkte", "directly") if paa_.get("direkte") else ("via Tailscales relé, litt tregere", "via a Tailscale relay, a little slower")
+                legg("telefon", "ok", ("Telefonen er på i Tailscale", "The phone is on in Tailscale"), (f"{paa_['navn']}, {vei[0]}", f"{paa_['navn']}, {vei[1]}"))
+            elif telefoner:
+                sist = str(telefoner[0].get("sist") or "")[:10]
+                legg("telefon", "ok" if delt else "merk", ("Telefonen er ikke på i Tailscale", "The phone is not on in Tailscale"),
+                     (f"Åpne Tailscale på {telefoner[0]['navn']} og slå den på." + (f" Sist sett {sist}." if sist else ""),
+                      f"Open Tailscale on {telefoner[0]['navn']} and turn it on." + (f" Last seen {sist}." if sist else "")))
+            else:
+                legg("telefon", "ok" if delt else "merk", ("Ingen telefon i Tailscale-nettet", "No phone in the Tailscale network"),
+                     ("Installer Tailscale på telefonen og logg inn med samme konto som PC-en.", "Install Tailscale on the phone and sign in with the same account as the PC."))
+            for i, m_ in enumerate(ts.get("helse") or []):
+                legg(f"ts_helse{i}", "merk", ("Tailscale melder", "Tailscale reports"), (m_, m_))
+    if f.get("mobilkort") and not delt and not ts_klar:
+        legg("mobilkort", "merk", ("Telefonen når ikke PC-ens mobilnett", "The phone cannot reach the PC's mobile network"),
+             ("Hver SIM får sin egen adresse bak operatøren, også tvillingsim, og den kan normalt ikke nås utenfra. Sett PC-en på telefonens delte nett (Wi-Fi, Bluetooth eller USB). Tailscale er reserven.",
+              "Each SIM gets its own address behind the operator, twin SIMs too, and it normally cannot be reached from outside. Put the PC on the phone's shared network (Wi-Fi, Bluetooth or USB). Tailscale is the backup."))
+    lokk = f.get("lokk")
+    if lokk:
+        if lokk.get("strom") or lokk.get("batteri"):
+            hvor = ("på batteri" if not lokk.get("strom") else "på strøm" if not lokk.get("batteri") else "", "on battery" if not lokk.get("strom") else "on mains" if not lokk.get("batteri") else "")
+            legg("lokk", "merk", ("Lukker du lokket, sover PC-en", "Closing the lid puts the PC to sleep"),
+                 (f"Da mister telefonen kontakten{' ' + hvor[0] if hvor[0] else ''}. Velg «Ikke gjør noe» om PC-en skal stå i bilen med lokket igjen.",
+                  f"Then the phone loses contact{' ' + hvor[1] if hvor[1] else ''}. Choose “Do nothing” if the PC is to sit in the car with the lid shut."), "lokk")
+        else:
+            legg("lokk", "ok", ("Lokket kan lukkes", "The lid can be closed"))
+
     bm = f.get("brannmur")
     if bm is True:
         legg("brannmur", "ok", ("Brannmuren slipper inn lokalt", "The firewall lets the local network in"))
@@ -1058,7 +1365,7 @@ def sjekkliste(f: Dict[str, Any]) -> List[Dict[str, Any]]:
                   f"The network “{wp.get('navn') or ''}” is set as public, and then Windows shuts out everything from outside. Press Open and NABE makes a rule for the local network only. Windows asks for an administrator."), "brannmur")
         else:
             legg("brannmur", "merk", ("Ingen brannmurregel for NABE", "No firewall rule for NABE"),
-                 ("Windows kan stoppe telefonen første gang. Regelen gjelder bare det lokale nettet.", "Windows may stop the phone the first time. The rule only covers the local network."), "brannmur")
+                 ("Windows kan stoppe telefonen første gang. Regelen gjelder bare lokalt nett og Tailscale.", "Windows may stop the phone the first time. The rule covers only the local network and Tailscale."), "brannmur")
     else:
         legg("brannmur", "ukjent", ("Brannmuren ble ikke sjekket", "The firewall was not checked"),
              ("Windows ga ikke svar. Det går ofte bra likevel.", "Windows gave no answer. It often works anyway."))
@@ -1125,9 +1432,12 @@ def _naa(ip: str, port: int) -> bool:
 def samle_fakta() -> Dict[str, Any]:
     kort = ln.kort_liste()
     paa = bool(M["server"])
-    nar = {a["ip"]: _naa(a["ip"], M["port"]) for a in adresser(M["port"])} if paa else {}
+    adr = adresser(M["port"], kort)
+    nar = {a["ip"]: _naa(a["ip"], M["port"]) for a in adr} if paa else {}
     hot = hotspot_status() if ln.er_windows() else {}
-    return {"kort": kort, "mobil_paa": paa, "port": M["port"], "nar": nar, "skriv": bool(M["skriv"]),
+    mobilkort = any(k["opp"] and re.search(r"cellular|mobil|wwan", k["navn"], re.I) and any(not ln.er_linklokal(a["ip"]) for a in k["adresser"]) for k in kort)
+    return {"tailscale": tailscale_status(), "adr_typer": [a["type"] for a in adr], "mobilkort": mobilkort, "lokk": lokk_valg(), "utenom": rute_utenom(adr),
+            "kort": kort, "mobil_paa": paa, "port": M["port"], "nar": nar, "skriv": bool(M["skriv"]),
             "brannmur": brannmur_finnes() if paa else None, "hotspot": hot, "arp": len(arp_tabell()), "wifi": wifi_klient(),
             "wifi_profil": (nettprofil_hent() or {}).get(wifi_klient() or ""), "hotspot_sperret": bool(M.get("hotspot_sperret"))}
 
@@ -1146,17 +1456,30 @@ def status() -> Dict[str, Any]:
     kopi = gruppe_okter(kopi)
     # MAC-oppslaget kan ta et sekund, og skal ikke holde låsen mens telefoner prøver å logge inn.
     par_macs = {e.get("mac") for e in par_les()["enheter"]}
+    par_ts = {e.get("ts") for e in par_les()["enheter"]}
     okter = []
     for oid, o in kopi:
-        mac = mac_for(o["ip"])
+        node = ts_node(o["ip"])
+        mac = "" if node else mac_for(o["ip"])
+        husket = bool((node and node["id"] in par_ts) or (mac and mac in par_macs))
         okter.append({"id": oid, "navn": o["navn"], "ip": o["ip"], "sist": int(o["sist"]), "laget": int(o["laget"]),
-                      "par": bool(mac and mac in par_macs), "kan_pare": bool(mac and mac not in par_macs)})
+                      "par": husket, "kan_pare": bool((node or mac) and not husket), "tailscale": bool(node)})
+    ts = _ferske("tailscale_visning", lambda: M.__setitem__("tailscale_visning", (time.time(), tailscale_status())), 5) if paa else None
+    adr = adresser(M["port"]) if paa else []
+    nadd: Dict[str, int] = {}                      # vei -> sekunder siden noe sist kom inn den veien
+    for ip, tid in dict(M.get("nadd") or {}).items():
+        vei = vei_inn(ip, adr)
+        if vei:
+            nadd[vei] = min(nadd.get(vei, 10 ** 9), int(naa - tid))
+    for r in okter:
+        r["vei"] = vei_inn(r["ip"], adr)
     return {
         "status": "done", "paa": paa, "port": M["port"], "skriv": M["skriv"], "maks_min": M["maks_min"],
         "kode": M["kode"] if paa and M["kode"] and naa < M["kode_til"] else None,
         "kode_rest_s": max(0, int(M["kode_til"] - naa)) if paa else 0,
         "av_rest_s": max(0, int(M["til"] - naa)) if paa else 0,
-        "adresser": adresser(M["port"]) if paa else [],
+        "adresser": adr, "nadd": nadd, "utenom": rute_utenom(adr) if paa else None, "fast": fast_adresse(M["port"]) if paa else "",
+        "tailscale": ts, "vaken": bool(M.get("vaken")) if paa else False,
         "okter": okter, "par": par_status(), "logg": list(M["logg"])[-40:][::-1],
         "brannmur": _ferske("brannmur", brannmur_finnes, 20) if paa else None,
         "hotspot": _ferske("hotspot", hotspot_status, 3) if paa else None,

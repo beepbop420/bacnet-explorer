@@ -6110,6 +6110,7 @@ td.c-val.dod{text-decoration:underline double color-mix(in srgb,var(--warn) 70%,
 .mb-urlrad{flex-direction:column;align-items:flex-start;gap:2px}
 .mb-url{word-break:break-all}
 .mb-valg span{min-width:0}
+.mb-valg input[type=checkbox]+span{margin-right:auto}
 
 .mb-kode.liten{font-size:20px;letter-spacing:.25em;color:var(--fg-2);margin:0}
 
@@ -6394,3 +6395,38 @@ body.har-popup *:not(.gs-overlay):not(.gs-overlay *):not(.menu-pop):not(.menu-po
 .sv-av{flex:none;font-size:11px;color:var(--fg-3)}
 .sv-valg.paa .sv-av{color:var(--accent)}
 .sv-spor{display:flex;align-items:flex-start;gap:8px;margin:4px 0 6px;font-size:11px;line-height:1.4;color:var(--fg-3)}
+
+/* Mobil: hvordan telefonen kommer inn, og om den er på */
+.mb-veier{display:inline-flex;flex-wrap:wrap;gap:4px;margin:2px 0 10px;padding:3px;border:1px solid var(--line-2);border-radius:99px}
+.mb-veier button{font:inherit;font-size:11px;height:24px;padding:0 12px;color:var(--fg-2);background:none;border:0;border-radius:99px;cursor:pointer}
+.mb-veier button:hover{background:var(--hover)}
+.mb-veier button.sel{color:var(--fg);background:var(--accent-dim)}
+.mb-veitekst{margin:4px 0 2px;line-height:1.45}
+.mb-tlf{margin:4px 0 2px;font-size:12px;color:var(--warn);line-height:1.45}
+.mb-tlf.paa{color:var(--fg-2)}
+
+/* Mobil: veiviseren */
+.mb-metoder{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;margin:0 0 12px;padding:4px;border:1px solid var(--line-2);border-radius:14px}
+.mb-metoder button{display:flex;flex-direction:column;align-items:center;gap:1px;font:inherit;font-size:12px;color:var(--fg-2);background:none;border:0;border-radius:10px;padding:7px 6px;cursor:pointer}
+.mb-metoder button small{font-size:10px;color:var(--fg-3)}
+.mb-metoder button:hover{background:var(--hover)}
+.mb-metoder button.sel{color:var(--fg);background:var(--accent-dim)}
+.mb-metoder button.sel small{color:var(--accent)}
+.mb-stegliste{list-style:none;margin:6px 0 10px;padding:0}
+.mb-steg{display:flex;gap:12px;padding:10px 0;border-top:1px solid var(--line)}
+.mb-nr{flex:none;width:22px;height:22px;display:grid;place-items:center;border-radius:50%;border:1px solid var(--line-2);font-size:11px;color:var(--fg-3)}
+.mb-steg.naa .mb-nr{border-color:var(--accent);color:var(--accent)}
+.mb-steg.ok .mb-nr{border-color:var(--accent-edge);background:var(--accent-dim);color:var(--accent)}
+.mb-stegt{flex:1;min-width:0}
+.mb-stegt>b{display:block;font-size:12.5px;font-weight:600;color:var(--fg-2);line-height:22px}
+.mb-steg.naa .mb-stegt>b{color:var(--fg)}
+.mb-stegt .mb-veier{margin:8px 0 2px}
+.mb-hjelp{margin:6px 0;font-size:12px;line-height:1.5;color:var(--fg-3)}
+.mb-steg .lk-handling{margin:8px 0 2px}
+.mb-kodelinje{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:8px 0}
+.mb-kodelinje .mb-kode{margin:0}
+.mb-feilsok{margin:8px 0;font-size:12px;color:var(--fg-3)}
+.mb-feilsok summary{cursor:pointer;color:var(--fg-2)}
+.mb-feilsok ul{margin:8px 0 0;padding-left:18px;line-height:1.55}
+.mb-feilsok li{margin:3px 0}
+.skjult-sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}

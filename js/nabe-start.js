@@ -206,6 +206,13 @@ const FAKTA = [
   ['COV betyr at regulatoren sier fra selv. Mindre spørring, mer ro.', 'COV means the controller speaks up itself. Less asking, more peace.'],
 ];
 const NYTT = {
+  '2.45': [
+    ['Mobil med veiviser: hovedveien er at telefonen deler nettet sitt til PC-en (Wi-Fi, Bluetooth eller USB), uten noe å installere. Stegene hakes av etter det NABE ser', 'Mobile with a guide: the main way is the phone sharing its network with the PC (Wi-Fi, Bluetooth or USB), nothing to install. The steps tick off as NABE sees them'],
+    ['Tailscale som reserve, med egen veiviser, egen konto per tekniker og en hjelpetekst du kan gi til en KI. Mangler brannmurregelen, kan teksten til IT kopieres', 'Tailscale as a backup, with its own guide, an account per technician and a help prompt for an AI. If the firewall rule is missing, the text for IT can be copied'],
+    ['En husket telefon slipper inn uten kode også på et nytt nett. Telefonen viser enheten som er åpen på PC-en og sist brukte, en liten trend på punktet, og steg opp og ned for settpunkt', 'A remembered phone gets in without a code on a new network too. The phone shows the device open on the PC and recent ones, a small trend on the point, and step buttons for setpoints'],
+    ['PC-en holdes våken mens mobiltilgangen er på, porten blir stående mens telefonen er i bruk, og Test oppsettet sier fra om lokket og Tailscale', 'The PC is kept awake while mobile access is on, the port stays open while the phone is in use, and Check the setup reports the lid and Tailscale'],
+    ['Telefonsiden tåler dårlig dekning: frist på alle forespørsler, ingen opphopning, beskjed om hva som kan være galt, og tydelig varsel når det er usikkert om en skriving kom fram', 'The phone page copes with poor coverage: a deadline on every request, no pile-up, a hint at what is wrong, and a clear warning when it is not certain a write got through'],
+  ],
   '2.44': [
     ['Modbus og KNX står i samme bygg som BACnet-enhetene på samme adresse eller i samme område, også når du skannet med bare gatewayens IP', 'Modbus and KNX sit in the same building as the BACnet devices on the same address or in the same range, also when you scanned with only the gateway IP'],
     ['Språkbytte tar med alt som står på skjermen, også systemlappene og tooltipene, uten omstart', 'Switching language takes everything on screen with it, the system tags and tooltips too, without a restart'],

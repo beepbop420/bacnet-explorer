@@ -199,13 +199,27 @@ button.celle:active{background:var(--hev)}
 .advarsel{display:flex;gap:8px;align-items:center;font-size:13px;color:var(--fg2)}.advarsel span{color:var(--warn);font-size:15px}
 
 /* ---- melding øverst, som en kapsel */
-.hud{position:fixed;top:calc(env(safe-area-inset-top) + 8px);left:50%;transform:translate(-50%,-160%);z-index:80;max-width:calc(100% - 32px);
+.hud{position:fixed;top:calc(env(safe-area-inset-top) + 8px);left:50%;transform:translate(-50%,-160%);z-index:80;width:max-content;max-width:calc(100% - 32px);
   background:#000;color:#fff;padding:11px 18px;border-radius:99px;font-size:14px;font-weight:600;text-align:center;line-height:1.3;
   box-shadow:0 8px 28px rgba(0,0,0,.35);border:.5px solid rgba(255,255,255,.14);opacity:0;transition:transform .5s cubic-bezier(.2,1.25,.3,1),opacity .2s;pointer-events:none}
 .hud.vis{transform:translate(-50%,0);opacity:1}
 /* Mistet kontakten: blir stående til PC-en svarer igjen, under vanlige meldinger. Tegn og ord, ikke farge alene. */
-.hud.borte{top:calc(env(safe-area-inset-top) + 58px);z-index:79;display:flex;gap:8px;align-items:center;border-color:rgba(255,184,0,.55)}
+.hud.borte{top:calc(env(safe-area-inset-top) + 58px);z-index:79;display:flex;gap:10px;align-items:center;border-color:rgba(255,184,0,.55);
+  left:12px;right:12px;width:auto;max-width:520px;margin:0 auto;border-radius:18px;padding:12px 14px;transform:translateY(-160%)}
+.hud.borte.vis{transform:none}
+/* Trendkurven på punktet som er åpent, og steg-knappene for settpunkt */
+.spor{margin:2px 16px 4px;color:var(--tint)}
+.spor svg{display:block;width:100%;height:46px}
+.spor div{display:flex;justify-content:space-between;font-size:11px;color:var(--fg2);font-variant-numeric:tabular-nums}
+.steg-rad{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:0 16px 12px}
+.steg-rad button{min-height:44px;border-radius:12px;border:0;background:var(--felt);color:var(--fg,inherit);font:inherit;font-size:16px;font-weight:600;font-variant-numeric:tabular-nums}
+.steg-rad button:active{opacity:.6}
+.hud.borte .borte-t{flex:1;min-width:0}
 .hud.borte b{color:var(--warn);font-weight:700}
+.hud.borte .borte-t{display:flex;flex-direction:column;gap:2px;text-align:left}
+.hud.borte small{font-size:12px;opacity:.75}
+.hud.borte button{flex:none;font:inherit;font-size:13px;font-weight:600;color:var(--accent,#0a84ff);background:none;border:0;padding:8px 4px 8px 8px;cursor:pointer}
+.hud.borte.vis{pointer-events:auto}
 
 /* ---- test, graf og resultat */
 svg.graf{width:100%;height:130px;display:block;background:var(--gruppe);border-radius:12px}
@@ -385,9 +399,25 @@ const hapt = m => { try { if (navigator.vibrate && navigator.userActivation && n
 // Kontakten med PC-en. To bom på rad og siden sier fra; første svar etterpå og den sier fra igjen. Pollingen
 // gjør at den prøver av seg selv, og alt som er skrevet slippes av PC-en uansett, så ingenting henger igjen.
 let bomTeller = 0;
+/* Hva som oftest er galt når PC-en ikke svarer, avhengig av veien telefonen går. */
+function kontaktTips(vert) {
+  if (/\.ts\.net$/.test(vert) || /^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./.test(vert)) return T('Sjekk at Tailscale er på på telefonen.', 'Check that Tailscale is on on the phone.');
+  if (/^(172\.20\.10\.|192\.168\.4[23]\.)/.test(vert)) return T('Sjekk at «Del internett» er på, og at PC-en er koblet til.', 'Check that the hotspot is on and the PC is connected.');
+  if (/^192\.168\.137\./.test(vert)) return T('Sjekk at telefonen er på PC-ens hotspot.', 'Check that the phone is on the PC hotspot.');
+  return T('Sjekk at telefonen er på samme nett som PC-en, og at PC-en ikke sover.', 'Check that the phone is on the same network as the PC, and that the PC is awake.');
+}
+let sistSvar = Date.now(), borteTikk = 0;
+function borteAlder() {
+  const e = document.querySelector('#borte small');
+  if (!e) return;
+  const s = Math.max(0, Math.round((Date.now() - sistSvar) / 1000));
+  e.textContent = (s < 120 ? T(`Sist svar for ${s} s siden. `, `Last answer ${s} s ago. `) : T(`Sist svar for ${Math.round(s / 60)} min siden. `, `Last answer ${Math.round(s / 60)} min ago. `)) + kontaktTips(location.hostname);
+}
 function kobling(ok) {
   if (ok) {
     bomTeller = 0;
+    sistSvar = Date.now();
+    clearInterval(borteTikk);
     if (S.borte) {
       S.borte = false;
       const e = $('borte');
@@ -402,7 +432,11 @@ function kobling(ok) {
   S.borte = true;
   let e = $('borte');
   if (!e) { e = document.createElement('div'); e.id = 'borte'; e.className = 'hud borte'; e.setAttribute('role', 'status'); document.body.appendChild(e); }
-  e.innerHTML = `<b aria-hidden="true">!</b><span>${T('Mistet kontakten med PC-en. Prøver igjen. Det du har satt slippes av seg selv.', 'Lost contact with the PC. Retrying. What you set is released by itself.')}</span>`;
+  e.innerHTML = `<b aria-hidden="true">!</b><span class="borte-t"><span>${T('Mistet kontakten med PC-en. Prøver igjen. Det du har satt slippes av seg selv.', 'Lost contact with the PC. Retrying. What you set is released by itself.')}</span><small></small></span><button type="button">${T('Prøv nå', 'Retry')}</button>`;
+  e.querySelector('button').onclick = () => proevNaa();
+  borteAlder();
+  clearInterval(borteTikk);
+  borteTikk = setInterval(borteAlder, 1000);
   requestAnimationFrame(() => e.classList.add('vis'));
   hapt([40, 50, 40]);
   if (S.test && !$('ark').hidden) tegTest();
@@ -423,10 +457,24 @@ async function oppdaterVaken() {
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') oppdaterVaken(); });
 setInterval(oppdaterVaken, 5000);
 
+/* Mobilnettet kan bli hengende uten å si fra. Hver forespørsel har derfor en frist; en lesing prøves igjen av seg selv,
+   en skriving aldri, for den kan ha kommet fram selv om svaret ikke gjorde det. */
+async function hentMedFrist(sti, opt, frist) {
+  const stopp = new AbortController();
+  const t = setTimeout(() => stopp.abort(), frist);
+  try { return await fetch(sti, Object.assign({signal: stopp.signal}, opt)); } finally { clearTimeout(t); }
+}
+const SKRIVER = /^\/api\/(write|test\/svar)$/;
 async function api(sti, body) {
   const opt = body === undefined ? {headers: {'X-Sprak': H['X-Sprak']}} : {method: 'POST', headers: H, body: JSON.stringify(body)};
+  const skriving = body !== undefined && SKRIVER.test(sti);
   let r;
-  try { r = await fetch(sti, opt); } catch (e) { kobling(false); throw e; }
+  try { r = await hentMedFrist(sti, opt, skriving ? 30000 : 15000); }
+  catch (e) {
+    kobling(false);
+    if (skriving) return {status: 'usikkert', error: T('Usikkert om det kom fram. Sjekk verdien før du prøver igjen.', 'Not sure it got through. Check the value before you try again.')};
+    throw e;
+  }
   kobling(true);
   if (r.status === 401) { visLogin(); throw new Error('401'); }
   let j = {};
@@ -487,7 +535,8 @@ async function oppdaterSide() {
 
 /* ------------------------------------------------------------- innlogging */
 function visLogin(feil) {
-  clearInterval(S.lop);
+  S.inne = false;
+  clearTimeout(S.lop);
   document.body.classList.remove('skrullet');
   $('rot').innerHTML = `<div class="logg">${ANSIKT}<h1>NABE</h1>
     <p>${T('Skriv koden som står i NABE på PC-en, under «Mobil». Eller skann QR-koden, så slipper du.', 'Type the code shown in NABE on the PC, under “Mobile”. Or scan the QR code and skip this.')}</p>
@@ -499,10 +548,11 @@ function visLogin(feil) {
     if (sender) return;
     sender = true;
     try {
-      const r = await fetch('/m/logginn', {method: 'POST', headers: H, body: JSON.stringify({kode: $('kode').value})});
+      const r = await hentMedFrist('/m/logginn', {method: 'POST', headers: H, body: JSON.stringify({kode: $('kode').value})}, 15000);
       const j = await r.json().catch(() => ({}));
       if (j.ok) start(); else { $('lFeil').textContent = j.feil || T('Feil kode.', 'Wrong code.'); $('kode').select(); }
-    } finally { sender = false; }
+    } catch { $('lFeil').textContent = T('Får ikke kontakt med PC-en. ', 'Cannot reach the PC. ') + kontaktTips(location.hostname); }
+    finally { sender = false; }
   };
   $('lKnapp').onclick = gaa;
   $('kode').addEventListener('keydown', e => { if (e.key === 'Enter') gaa(); });
@@ -612,7 +662,36 @@ function oppdaterVerdier() {
   });
 }
 
+/* Over et tregt nett skal ikke forespørslene hope seg opp: én av gangen, og pausen mellom dem følger svartiden. */
+let pollGaar = false, pollTid = 0;
 async function pollVerdier() {
+  if (pollGaar) return;
+  pollGaar = true;
+  const t0 = Date.now();
+  try { await pollEn(); } finally { pollGaar = false; pollTid = Date.now() - t0; }
+}
+const pollPause = (svartid) => Math.min(8000, Math.max(2000, Math.round(svartid * 1.5)));
+function pollNeste() {
+  clearTimeout(S.lop);
+  if (!S.inne) return;
+  S.lop = setTimeout(async () => {
+    try {
+      // Skjermen av: ingen trafikk. Borte: spør etter livstegn selv om det ikke er noe å lese.
+      if (!document.hidden) { if (S.borte) await status(); await pollVerdier(); }
+    } catch {}
+    pollNeste();
+  }, S.borte ? 3000 : pollPause(pollTid));
+}
+async function proevNaa() {
+  if (!S.inne) return;
+  bomTeller = 0;
+  try { await status(); await pollVerdier(); await lastMine(); } catch {}
+}
+// Telefonen tas opp av lomma, eller dekningen er tilbake: spør med en gang
+document.addEventListener('visibilitychange', () => { if (!document.hidden) proevNaa(); });
+window.addEventListener('online', () => proevNaa());
+
+async function pollEn() {
   const mal = {};
   S.pins.forEach(p => { (mal[p.address] = mal[p.address] || []).push(p.objid); });
   if (S.apent) { (mal[S.apent.address] = mal[S.apent.address] || []).push(S.apent.objid); }
@@ -683,22 +762,43 @@ function tegEnhetListe(ny) {
   const bygg = new Map();
   for (const d of l) { const k = d.anlegg || '—'; if (!bygg.has(k)) bygg.set(k, []); bygg.get(k).push(d); }
   const medBygg = bygg.size > 1;
-  el.innerHTML = l.length ? (medBygg
+  // Snarveiene: det PC-en har åpent akkurat nå, og det du selv åpnet sist
+  const snar = [];
+  const cellerFor = (liste) => `<div class="liste">${liste.map(d => `<button class="celle med-ikon" data-snar="${esc(d.address)}"><span class="ik enhet">${SVG('<rect x="6" y="6" width="12" height="12" rx="2"/><path d="M9 2v4M15 2v4M9 18v4M15 18v4M2 9h4M2 15h4M18 9h4M18 15h4"/>')}</span>
+      <span class="ct"><span class="ct1">${esc(d.navn)}${d.suffiks ? ` <small class="suff">${esc(d.suffiks)}</small>` : ''}</span><span class="ct2 mono">${esc(d.address)}</span></span>${CHEV}</button>`).join('')}</div>`;
+  if (!q) {
+    const paaPc = S.aktiv && finnEnhet(S.aktiv);
+    if (paaPc) snar.push(`<div class="seksjon">${T('Åpent på PC-en', 'Open on the PC')}</div>${cellerFor([paaPc])}`);
+    const sist = (LS.les('sist') || []).map(finnEnhet).filter(d => d && (!paaPc || d.address !== paaPc.address)).slice(0, 3);
+    if (sist.length && S.enheter.length > 4) snar.push(`<div class="seksjon">${T('Sist brukt', 'Recently used')}</div>${cellerFor(sist)}`);
+    if (snar.length && !medBygg) snar.push(`<div class="seksjon">${T('Alle', 'All')}</div>`);
+  }
+  el.innerHTML = snar.join('') + (l.length ? (medBygg
       ? [...bygg].map(([k, ds]) => { const apen = !!q || !S.lukket.has('b:' + k);
           return seksjonHode('b:' + k, esc(k), ds.length, apen) + (apen ? `<div class="liste${ny ? ' ny' : ''}">${ds.map(celle).join('')}</div>` : ''); }).join('')
       : `<div class="liste${ny ? ' ny' : ''}">${l.map(celle).join('')}</div>`)
-    : tom(q ? T('Ingen treff', 'No match') : T('Ingen enheter ennå', 'No devices yet'),
-      q ? T('Prøv et annet ord, eller en del av IP-en.', 'Try another word, or part of the IP.') : T('La PC-en skanne et område først. Jeg er bare telefonen.', 'Let the PC scan a range first. I am only the phone.'));
+    : snar.length ? '' : tom(q ? T('Ingen treff', 'No match') : T('Ingen enheter ennå', 'No devices yet'),
+      q ? T('Prøv et annet ord, eller en del av IP-en.', 'Try another word, or part of the IP.') : T('La PC-en skanne et område først. Jeg er bare telefonen.', 'Let the PC scan a range first. I am only the phone.')));
   if (ny && l.length) el.querySelectorAll('.liste').forEach(x => stagger(x));
   el.onclick = e => {
     const g = e.target.closest('[data-gr]');
     if (g) { const k = g.dataset.gr; S.lukket.has(k) ? S.lukket.delete(k) : S.lukket.add(k); tegEnhetListe(false); return; }
+    const sn = e.target.closest('[data-snar]');
+    if (sn) { const d = finnEnhet({address: sn.dataset.snar}) || (S.aktiv && S.aktiv.address === sn.dataset.snar ? finnEnhet(S.aktiv) : null); if (d) apneEnhet(d); return; }
     const b = e.target.closest('[data-i]'); if (b) apneEnhet(S.enheter[+b.dataset.i]);
   };
 }
 
+/* En snarvei kan peke på en enhet som ikke ligger i anleggsminnet ennå (PC-en har den bare åpen): da holder det den sier. */
+function finnEnhet(s) {
+  if (!s || !s.address) return null;
+  const d = S.enheter.find(x => x.address === s.address && (s.instans == null || x.instans == null || x.instans === s.instans)) || S.enheter.find(x => x.address === s.address);
+  return d || (s.navn !== undefined ? {address: s.address, instans: s.instans, navn: s.navn || s.address, vendor: '', anlegg: '', systemer: [], suffiks: ''} : null);
+}
+
 async function apneEnhet(d) {
   S.enhet = d; S.punkter = []; S.pFilter = ''; S.typer = 'alle';
+  LS.skriv('sist', [{address: d.address, instans: d.instans, navn: d.navn}, ...(LS.les('sist') || []).filter(x => x.address !== d.address)].slice(0, 6));
   window.scrollTo(0, 0);
   const tilbake = (melding) => { if (melding) toast(melding); if (S.enhet === d) { S.enhet = null; if (S.tab === 'enheter') { tegEnheter(); animer('tilbake'); } } };
   navTilstand(d.navn, TITLER().enheter);
@@ -946,6 +1046,26 @@ function oppdaterArkVerdi() {
   if (!el || !p) return;
   const v = (S.vals[p.address] || {})[p.objid];
   el.innerHTML = esc(fmt(v === undefined ? p.verdi : v)) + `<small>${esc(p.sym || '')}</small>`;
+  tegSpor(v === undefined ? p.verdi : v);
+}
+
+/* Hva verdien har gjort siden du åpnet punktet: står den, stiger den, eller pendler den? */
+let spor = {nokkel: '', punkter: []};
+function tegSpor(v) {
+  const el = $('arkSpor'), p = S.apent;
+  if (!el || !p || typeof v !== 'number') return;
+  const nokkel = pinNokkel(p);
+  if (spor.nokkel !== nokkel) spor = {nokkel, punkter: []};
+  const naa = Date.now(), sist = spor.punkter[spor.punkter.length - 1];
+  if (!sist || naa - sist[0] > 1500) spor.punkter.push([naa, v]);
+  if (spor.punkter.length > 150) spor.punkter.shift();
+  if (spor.punkter.length < 3) return;
+  const verdier = spor.punkter.map(x => x[1]), lo = Math.min(...verdier), hi = Math.max(...verdier), t0 = spor.punkter[0][0], dt = Math.max(1, naa - t0), d = Math.max(hi - lo, Math.abs(hi) * 0.002, 0.1);
+  const midt = (hi + lo) / 2;
+  const xy = spor.punkter.map(([t, y]) => `${((t - t0) / dt * 300).toFixed(1)},${(23 - (y - midt) / d * 40).toFixed(1)}`).join(' ');
+  const s = Math.round(dt / 1000);
+  el.innerHTML = `<svg viewBox="0 0 300 46" preserveAspectRatio="none" aria-hidden="true"><polyline points="${xy}" fill="none" stroke="currentColor" stroke-width="2" vector-effect="non-scaling-stroke" stroke-linejoin="round"/></svg>
+    <div><span>${s < 120 ? s + ' s' : Math.round(s / 60) + ' min'}</span><span>${lo === hi ? T('uendret', 'unchanged') : esc(fmt(lo)) + ' – ' + esc(fmt(hi)) + ' ' + esc(p.sym || '')}</span></div>`;
 }
 
 const erAnalog = t => t === 'analog-output' || t === 'analog-value';
@@ -964,7 +1084,10 @@ function apneArk(p) {
   } else if (kanSkrive) {
     let inn = '';
     if (erAnalog(p.type)) {
-      inn = `<div class="seg" id="hurtig" style="margin-top:0">${[0, 25, 50, 75, 100].map(v => `<button data-q="${v}" aria-pressed="false">${v}</button>`).join('')}</div>
+      // Et pådrag i prosent får 0 til 100. Alt annet (settpunkt i grader, trykk) får steg opp og ned fra det som står.
+      const prosent = p.sym === '%' || (!p.sym && p.type === 'analog-output');
+      inn = `${prosent ? `<div class="seg" id="hurtig" style="margin-top:0">${[0, 25, 50, 75, 100].map(v => `<button data-q="${v}" aria-pressed="false">${v}</button>`).join('')}</div>`
+        : `<div class="steg-rad">${[-1, -0.5, 0.5, 1].map(v => `<button type="button" data-steg="${v}">${v > 0 ? '+' : '−'}${String(Math.abs(v)).replace('.', T(',', '.'))}</button>`).join('')}</div>`}
         <div class="liste"><label class="celle"><span>${T('Verdi', 'Value')}</span><input id="skrivV" type="number" inputmode="decimal" step="any" placeholder="${T('Skriv et tall', 'Enter a number')}"></label></div>
         <button class="knapp-stor" id="settP">${T('Sett', 'Set')}</button>`;
     } else if (erBinaer(p.type)) {
@@ -989,7 +1112,7 @@ function apneArk(p) {
   }
   $('arkInn').innerHTML = arkHode(`<button class="tekstknapp" id="festP">${festet ? T('Løsne', 'Unpin') : T('Fest', 'Pin')}</button>`, p.name || p.objid, p.enhet || p.address,
       `<button class="tekstknapp fet" id="lukkP">${T('Ferdig', 'Done')}</button>`)
-    + `<div class="ark-kropp"><div class="verdi-stor" id="arkVerdi"></div><div class="verdi-under">${esc(p.objid)}</div>${p.beskrivelse ? `<div class="verdi-besk">${esc(p.beskrivelse)}</div>` : ''}${skriv}</div>`;
+    + `<div class="ark-kropp"><div class="verdi-stor" id="arkVerdi"></div><div class="spor" id="arkSpor"></div><div class="verdi-under">${esc(p.objid)}</div>${p.beskrivelse ? `<div class="verdi-besk">${esc(p.beskrivelse)}</div>` : ''}${skriv}</div>`;
   $('arkInn').scrollTop = 0;
   $('ark').hidden = false;
   oppdaterArkVerdi();
@@ -1006,6 +1129,12 @@ function apneArk(p) {
     $('skrivV').value = b.dataset.q;
     document.querySelectorAll('#hurtig button').forEach(x => x.setAttribute('aria-pressed', String(x === b)));
     segTommel($('hurtig'));
+  });
+  document.querySelectorAll('[data-steg]').forEach(b => b.onclick = () => {
+    // Fra det som står i feltet, ellers fra verdien nå. Ingenting sendes før du trykker Sett.
+    const naa = (S.vals[p.address] || {})[p.objid];
+    const fra = $('skrivV').value !== '' ? parseFloat($('skrivV').value) : (typeof naa === 'number' ? naa : typeof p.verdi === 'number' ? p.verdi : 0);
+    $('skrivV').value = Math.round((fra + parseFloat(b.dataset.steg)) * 10) / 10;
   });
   document.querySelectorAll('[data-b]').forEach(b => b.onclick = () => skrivVerdi(p, b.dataset.b));
   if ($('settP')) $('settP').onclick = () => { const v = $('skrivV').value; if (v === '') return toast(T('Skriv en verdi først', 'Enter a value first')); skrivVerdi(p, erAnalog(p.type) || /^multi/.test(p.type) ? parseFloat(v) : v); };
@@ -1332,25 +1461,44 @@ async function status() {
   try {
     const r = await api('/api/readonly');
     S.readonly = !!r.enabled;
-    const m = await fetch('/m/me').then(x => x.json()).catch(() => ({}));
-    if (m.ok) { S.skriv = !!m.skriv; S.maks = m.maks_min || 10; }
+    const m = await hentMedFrist('/m/me', {}, 10000).then(x => x.json()).catch(() => ({}));
+    if (m.ok) {
+      S.skriv = !!m.skriv; S.maks = m.maks_min || 10;
+      const foer = (S.aktiv || {}).address;
+      S.aktiv = m.aktiv || null;
+      // Byttet enhet på PC-en: snarveien følger med mens lista står oppe
+      if (foer !== (S.aktiv || {}).address && S.tab === 'enheter' && !S.enhet && $('enhetListe')) tegEnhetListe(false);
+    }
   } catch {}
   pille();
 }
 
+let startTikk = 0, faste = false;
 async function start() {
-  const me = await fetch('/m/me');
+  clearTimeout(startTikk);
+  let me;
+  try { me = await hentMedFrist('/m/me', {}, 10000); }
+  catch {
+    // Ingen kontakt ved åpning (dårlig dekning, Tailscale av): si hva som kan være galt, og prøv igjen
+    $('rot').innerHTML = `<div class="logg">${ANSIKT}<h1>NABE</h1><p>${T('Får ikke kontakt med PC-en. Prøver igjen.', 'Cannot reach the PC. Retrying.')}</p><p>${kontaktTips(location.hostname)}</p><button type="button" class="knapp-stor" id="startIgjen">${T('Prøv nå', 'Retry')}</button></div>`;
+    $('startIgjen').onclick = start;
+    startTikk = setTimeout(start, 4000);
+    return;
+  }
   if (me.status !== 401) {
+    S.inne = true;
     ramme();
     await status();
     try { await lastEnheter(); } catch {}
     teg();
     lastMine();
     pollVerdier();
-    clearInterval(S.lop);
-    S.lop = setInterval(() => { pollVerdier(); }, 2000);
-    setInterval(lastMine, 15000);
-    setInterval(status, 10000);
+    pollNeste();
+    if (!faste) {
+      faste = true;
+      setInterval(() => { if (S.inne && !document.hidden) lastMine(); }, 15000);
+      setInterval(() => { if (S.inne && !document.hidden) status(); }, 10000);
+    }
     oppdaterVaken();
   } else {
     visLogin(new URLSearchParams(location.search).get('feil') ? T('Feil kode, eller koden er utløpt.', 'Wrong code, or the code has expired.') : '');
