@@ -236,7 +236,7 @@ def t(nb: str, en: str) -> str:
     return en if SPRAAK_VAR.get() == "en" else nb
 
 
-VERSJON = "2.41"
+VERSJON = "2.42"
 app.version = VERSJON
 app.description = ("NABE sitt eget grensesnitt. Det som leser fra anlegget (enheter, punkter, ukeprogram, trend) kan brukes fra Python, Excel eller curl mens NABE kjører. "
                    "Dokumentasjonen (Swagger) laster fra internett.")
@@ -7257,7 +7257,10 @@ async def modbus_scan(body: ModbusScanBody):
 
             async def one(h: str):
                 async with sem:
-                    devices.extend(await nm.scan_host(h, port, body.units, max(0.3, min(5.0, body.timeout)), "rtu" if body.framing == "rtu" else "tcp"))
+                    # Behind a gateway the whole unit range takes a few minutes, so the job says which unit it is on
+                    def framdrift(u: int, runde: int, funnet: int):
+                        job["phase"] = t(f"{h}: spør enhet {u}, {funnet} funnet ·", f"{h}: asking unit {u}, {funnet} found ·")
+                    devices.extend(await nm.scan_host(h, port, body.units, max(0.3, min(5.0, body.timeout)), "rtu" if body.framing == "rtu" else "tcp", framdrift))
                 job["done"] += 1
                 job["found"] = len(devices)
             await asyncio.gather(*[one(h) for h in open_hosts])

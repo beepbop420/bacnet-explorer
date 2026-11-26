@@ -352,18 +352,24 @@ async def probe_unit2(client: ModbusClient, unit: int, quick: bool = False):
     ignores a unit it is not does so by saying nothing, and every silence costs a timeout, so a quick probe asks
     once with a short wait instead of three times with a long one."""
     stille = False
+    uten43 = False
     try:
         ident = await client.device_identification(unit)
         if ident:
             return {"via": "device_identification", **ident}, False
         return {"via": "device_identification"}, False
     except ModbusException as e:
-        if e.code in GATEWAY_NO_DEVICE:
+        if e.code == 0x0A:                  # the gateway has no path to this unit
             return None, False
+        # 0x0B, "target failed to respond", is also what some gateways say when the unit is there but ignores
+        # function 43: a plain register read decides. Server ID is no better question, so it is not asked.
+        uten43 = e.code == 0x0B
+        if uten43:
+            client.bak_gateway = True       # only a gateway says that
         # Function 43 is optional; a device that refuses it with another exception is still a device.
     except ModbusError:
         stille = True
-    if not quick:
+    if not quick and not uten43:
         try:
             sid = await client.server_id(unit)
             return {"via": "report_server_id", "product_name": sid.get("text") or ""}, False
@@ -372,23 +378,30 @@ async def probe_unit2(client: ModbusClient, unit: int, quick: bool = False):
                 return None, False
         except ModbusError:
             pass
-    try:
-        await client.read_registers(unit, "holding", 0, 1)
-        return {"via": "holding_read"}, False
-    except ModbusException as e:
-        if e.code in GATEWAY_NO_DEVICE:
-            return None, False
-        return {"via": "exception_response"}, False     # a device that says "no such register" is alive
-    except ModbusError:
-        return None, stille or True
+    # Behind a busy serial gateway a unit that is there answers 0x0B now and then, so that answer is asked twice.
+    for forsok in range(2):
+        try:
+            await client.read_registers(unit, "holding", 0, 1)
+            return {"via": "holding_read"}, False
+        except ModbusException as e:
+            if e.code == 0x0B and not forsok:
+                continue
+            if e.code in GATEWAY_NO_DEVICE:
+                return None, False
+            return {"via": "exception_response"}, False     # a device that says "no such register" is alive
+        except ModbusError:
+            return None, stille or True
+    return None, False
 
 
 async def scan_host(host: str, port: int = MODBUS_PORT, units: Optional[Iterable[int]] = None, timeout: float = 1.0,
-                    framing: str = "tcp") -> List[Dict[str, Any]]:
+                    framing: str = "tcp", progress=None) -> List[Dict[str, Any]]:
     """The units that answer on one host. A device that ignores the unit and answers the same for all of them
-    is reported once, not nine times. `framing` is "tcp" (Modbus TCP) or "rtu" (RTU bytes in a TCP socket)."""
+    is reported once, not nine times. `framing` is "tcp" (Modbus TCP) or "rtu" (RTU bytes in a TCP socket).
+    Without `units` a few common ids are asked first, and behind a gateway then every id 1-247.
+    `progress(unit, round, found)` is told what is being asked."""
     client = ModbusClient(host, port, timeout) if framing != "rtu" else RtuClient(host, port, timeout)
-    return await _scan_units(client, units, timeout, lambda f: device_record(host, port, f, "mr" if framing == "rtu" else "mb"))
+    return await _scan_units(client, units, timeout, lambda f: device_record(host, port, f, "mr" if framing == "rtu" else "mb"), progress)
 
 
 async def scan_serial(port: str, baud: int = 19200, parity: str = "N", stopbits: int = 1, units: Optional[Iterable[int]] = None,
@@ -400,17 +413,43 @@ async def scan_serial(port: str, baud: int = 19200, parity: str = "N", stopbits:
     return await _scan_units(client, units or range(1, 33), timeout, lambda f: serial_record(port, baud, parity, stopbits, f))
 
 
-async def _scan_units(client: ModbusClient, units: Optional[Iterable[int]], timeout: float, make) -> List[Dict[str, Any]]:
+async def _answers(client: ModbusClient, unit: int, kind: str) -> Optional[str]:
+    """One plain read of register 0: anything but silence and the gateway saying there is nobody means a unit is there."""
+    try:
+        await client.read_registers(unit, kind, 0, 1)
+        return f"{kind}_read"
+    except ModbusException as e:
+        return None if e.code in GATEWAY_NO_DEVICE else "exception_response"
+    except ModbusError:
+        return None
+
+
+async def _scan_units(client: ModbusClient, units: Optional[Iterable[int]], timeout: float, make, progress=None) -> List[Dict[str, Any]]:
+    """Which units answer behind one connection. Without `units` the common ids are asked first. When there turns out to
+    be more than one unit, or a gateway, the whole range 1-247 is asked: a plant puts its units on whatever ids it likes.
+    A list given by the caller is asked in full.
+
+    A serial bus behind a gateway loses questions: units that are there answer "nobody" one time in four to ten, whatever
+    the pace. So there the silent ids are asked again, with holding and input registers in turn: four times in all for
+    ids up to 64 (where units nearly always are, and for a list the caller gave), twice for the rest."""
+    auto = units is None
     units = [u for u in (units or COMMON_UNITS) if 1 <= int(u) <= 255]
     found: List[Dict[str, Any]] = []
     stille = 0
     voksent_tid = client.timeout
+
+    def alike() -> bool:
+        return len({(f.get("vendor"), f.get("product_code"), f.get("product_name"), f.get("via")) for f in found}) == 1
+
     try:
         await client.connect()
         for i, u in enumerate(units):
             t0 = time.monotonic()
             if i:
-                client.timeout = min(voksent_tid, 0.5)      # the first unit gets the full wait, the rest a short one
+                # The first unit gets the full wait, the rest a short one; longer behind a gateway with a serial bus.
+                client.timeout = min(voksent_tid, 1.0 if getattr(client, "bak_gateway", False) else 0.5)
+            if progress:
+                progress(u, 1, len(found))
             info, var_stille = await probe_unit2(client, u, quick=bool(i))
             if info is not None:
                 found.append({"unit": u, "rtt_ms": round((time.monotonic() - t0) * 1000), **info})
@@ -419,20 +458,42 @@ async def _scan_units(client: ModbusClient, units: Optional[Iterable[int]], time
                 stille += 1
             else:
                 stille = 0
-            # Two silences in a row after something answered (a device that ignores the units it is not), or three
-            # with nothing found: nobody else is home, and the rest of the list would only be more waiting.
-            if (found and stille >= 2) or (not found and stille >= 3):
+            # The common ids only: two silences in a row after something answered, or three with nothing found, and the
+            # rest of them would only be more waiting. A list asked for is asked in full, and so is a gateway.
+            if auto and not getattr(client, "bak_gateway", False) and ((found and stille >= 2) or (not found and stille >= 3)):
                 break
+        gateway = getattr(client, "bak_gateway", False)
+        # A plain device that ignores the unit id answers everything alike: there is nothing more to look for
+        svarer_alt = not gateway and len(units) >= 3 and len(found) == len(units) and alike()
+        if not svarer_alt and (gateway or (auto and len(found) >= 2)):
+            alle = list(range(1, 248)) if auto else units
+            # A gateway says "nobody there" within a second; waiting longer keeps a slow unit from being taken for none
+            client.timeout = max(voksent_tid, 1.5) if gateway else min(voksent_tid, 0.5)
+            for runde, kind in enumerate(("holding", "input", "holding", "input") if gateway else ("holding",), 1):
+                har = {f["unit"] for f in found}
+                for u in alle:
+                    if u in har or (runde == 1 and u in units) or (runde > 2 and auto and u > 64):
+                        continue
+                    if progress:
+                        progress(u, runde + 1, len(found))
+                    t0 = time.monotonic()
+                    via = await _answers(client, u, kind)
+                    if via:
+                        ident: Dict[str, Any] = {}
+                        try:
+                            ident = await client.device_identification(u) or {}
+                        except ModbusError:
+                            pass
+                        found.append({"unit": u, "rtt_ms": round((time.monotonic() - t0) * 1000), **ident,
+                                      "via": "device_identification" if ident else via})
     except ModbusError:
         pass
     finally:
         client.timeout = voksent_tid
         await client.close()
-    if len(units) >= 3 and len(found) == len(units):
-        sig = {(f.get("vendor"), f.get("product_code"), f.get("product_name"), f.get("via")) for f in found}
-        if len(sig) == 1:
-            found = [{**found[0], "answers_any_unit": True}]
-    return [make(f) for f in found]
+    if not getattr(client, "bak_gateway", False) and len(units) >= 3 and len(found) == len(units) and alike():
+        found = [{**found[0], "answers_any_unit": True}]
+    return [make(f) for f in sorted(found, key=lambda f: f["unit"])]
 
 
 def device_address(host: str, port: int, unit: int, scheme: str = "mb") -> str:
@@ -725,10 +786,50 @@ def _xlsx_dicts(rows: List[List[str]]) -> List[Dict[str, Any]]:
     return [{h: (r[i] if i < len(r) else "") for i, h in enumerate(head) if h} for r in rows[head_i + 1:]]
 
 
+def _blokk_rows(rows: List[List[str]]) -> List[Dict[str, Any]]:
+    """A list copied from a unit's own display pages: one block downwards for each point, not one row.
+
+        Display Point 8
+         Point Name              CAP_T       Pådrag 50/100%
+         Point Value             50
+         BACnet Obj/Modbus Reg   0x4007 W
+
+    A block without a name or a register is an empty slot and is left out. W marks a point the unit lets others write;
+    NABE only reads. The values are whole signed numbers."""
+    ut: List[Dict[str, Any]] = []
+    punkt: Dict[str, str] = {}
+    for r in rows:
+        etikett = re.sub(r"\s+", " ", (r[0] if r else "").strip().lower())
+        verdi = r[1].strip() if len(r) > 1 else ""
+        if etikett.startswith("display point"):
+            punkt = {}
+        elif etikett == "point name":
+            besk = r[2].strip() if len(r) > 2 else ""
+            punkt = {"name": verdi, "description": "" if besk.strip("- ") == "" else besk}
+        elif etikett.endswith("modbus reg"):
+            m = re.match(r"(?i)^(0x[0-9a-f]+|\d+)\s*(w)?$", verdi)
+            if m and punkt.get("name"):
+                tekst = f"{punkt['name']} {punkt['description']}"
+                enhet = ("°C" if re.search(r"(?i)temp|_[el]wt\b|ctrl_wt|ctrl_pnt|settpunkt|\bsp\b", tekst)
+                         else "%" if re.search(r"(?i)\bcap_|_lim\b|pådrag", tekst) else "")
+                ut.append({"function": "holding", "address": m.group(1), "type": "s16", "name": punkt["name"],
+                           "description": punkt["description"], "unit": enhet})
+            punkt = {}
+    return ut
+
+
 def parse_map_bytes(data: bytes, filename: str = "", base: Optional[int] = None, real_scale: float = 0.1) -> Dict[str, Any]:
     """A register map from the bytes of a file: Excel (.xlsx), or text (CSV, JSON, Regin EXOL, Niagara export)."""
     if data[:2] == b"PK":
-        tabell = _xlsx_dicts(read_xlsx(data))
+        ark = read_xlsx(data)
+        blokker = _blokk_rows(ark)
+        if blokker:
+            fra = 1 if base is None else base
+            notes = ["Excel-fil lest: en blokk per punkt (Display Point, Point Name, BACnet Obj/Modbus Reg), lest som holdingregistre, heltall med fortegn"]
+            if fra:
+                notes.append("Adressene i denne typen liste teller fra 1: 1 er trukket fra, så 0x4000 leses som 0x3FFF på ledningen. Sjekk mot et punkt du kjenner")
+            return _build_map(blokker, "", False, notes, fra, real_scale, "xlsx")
+        tabell = _xlsx_dicts(ark)
         rows = [_alias_row(r) for r in tabell]
         rows = [r for r in rows if any(str(v).strip() for v in r.values())]
         if tabell and not rows:
@@ -941,21 +1042,26 @@ async def read_points(client: ModbusClient, unit: int, points: Sequence[Dict[str
 async def _read_range(client: ModbusClient, unit: int, kind: str, start: int, count: int) -> Dict[int, Any]:
     """address -> register word or bit for what could be read. A range with an address the device does not have
     answers "illegal data address" for all of it, so it is split until the readable part is found."""
-    try:
-        if kind in ("coil", "discrete"):
-            data: List[Any] = await client.read_bits(unit, kind, start, count)
-        else:
-            data = await client.read_registers(unit, kind, start, count)
-        return {start + i: v for i, v in enumerate(data)}
-    except ModbusException as e:
-        if e.code in (0x02, 0x03) and count > 1:
-            half = count // 2
-            a = await _read_range(client, unit, kind, start, half)
-            b = await _read_range(client, unit, kind, start + half, count - half)
-            return {**a, **b}
-        return {}
-    except ModbusError:
-        return {}
+    for forsok in range(3):
+        try:
+            if kind in ("coil", "discrete"):
+                data: List[Any] = await client.read_bits(unit, kind, start, count)
+            else:
+                data = await client.read_registers(unit, kind, start, count)
+            return {start + i: v for i, v in enumerate(data)}
+        except ModbusException as e:
+            if e.code == 0x0B and forsok < 2:       # a busy serial gateway: the same question again usually gets an answer
+                await asyncio.sleep(0.2)
+                continue
+            if e.code in (0x02, 0x03) and count > 1:
+                half = count // 2
+                a = await _read_range(client, unit, kind, start, half)
+                b = await _read_range(client, unit, kind, start + half, count - half)
+                return {**a, **b}
+            return {}
+        except ModbusError:
+            return {}
+    return {}
 
 
 async def _discover_range(client: ModbusClient, unit: int, kind: str, start: int, count: int) -> Dict[int, Any]:

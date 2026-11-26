@@ -2136,6 +2136,52 @@ def modbus_import():
           and px["Tilluftstemperatur"]["address"] == 0 and px["Brannalarm"]["function"] == "discrete" and px["Tilluftstemperatur"]["unit"] == "°C", str(mx["notes"]))
     k = kall("/api/modbus/kart", {"navn": "Fra Excel", "innhold": base64.b64encode(arket).decode(), "filnavn": "liste.xlsx"})
     sjekk("modbus: Excel kan lastes opp gjennom API-et", k.get("status") == "done" and k.get("punkter") == 3 and k.get("format") == "xlsx", str(k))
+    blokker = xlsx([["Display Point 1"], [" Point Name", "CHIL_S_S", "start/stopp. 1=Start"], [" Point Value", "0"], [" BACnet Obj/Modbus Reg", "0x4000 W"],
+                    ["Display Point 2"], [" Point Name"], [" Point Value", "0"], [" BACnet Obj/Modbus Reg"],
+                    ["Display Point 3"], [" Point Name", "COOL_LWT", "temp isvann ut"], [" Point Value", "4.18"], [" BACnet Obj/Modbus Reg", "0x4016"],
+                    ["Display Point 4"], [" Point Name", "CAP_T", "--"], [" Point Value", "50"], [" BACnet Obj/Modbus Reg", "0x4007"]])
+    mb_ = nm.parse_map_bytes(blokker, "vp.xlsx")
+    pb = {x["name"]: x for x in mb_["points"]}
+    sjekk("modbus: en liste med en blokk per punkt (Display Point) leses, tomme plasser hoppes over, og adressene teller fra 1",
+          sorted(pb) == ["CAP_T", "CHIL_S_S", "COOL_LWT"] and mb_["base"] == 1 and pb["CHIL_S_S"]["address"] == 0x3FFF and pb["COOL_LWT"]["address"] == 0x4015
+          and pb["COOL_LWT"]["type"] == "s16" and pb["COOL_LWT"]["unit"] == "°C" and pb["CAP_T"]["unit"] == "%" and pb["CAP_T"]["description"] == "", str(mb_["points"])[:200])
+    sjekk("modbus: basen kan velges til 0 også for den", nm.parse_map_bytes(blokker, "vp.xlsx", base=0)["points"][0]["address"] == 0x4000)
+
+    # En seriell gateway slik den oppfører seg i et ekte anlegg: svarer 0x0B på identifikasjon, enhetene står spredt,
+    # og en enhet som finnes sier «ingen der» noen ganger før den svarer
+    import concurrent.futures, struct
+    async def gateway_skann(enheter, units=None):
+        mister = {u: n for u, n in enheter.items()}
+        async def klient(les, skriv):
+            try:
+                while True:
+                    hode = await les.readexactly(7)
+                    tx, _, lengde, u = struct.unpack("!HHHB", hode)
+                    pdu = await les.readexactly(lengde - 1)
+                    if pdu[0] in (3, 4) and u in mister and mister[u] <= 0:
+                        svar = bytes([pdu[0], 2, 0, 7])
+                    else:
+                        if pdu[0] in (3, 4) and u in mister:
+                            mister[u] -= 1
+                        svar = bytes([pdu[0] | 0x80, 0x0B])
+                    skriv.write(struct.pack("!HHHB", tx, 0, len(svar) + 1, u) + svar)
+                    await skriv.drain()
+            except (asyncio.IncompleteReadError, ConnectionError):
+                pass
+            finally:
+                skriv.close()
+        server = await asyncio.start_server(klient, "127.0.0.1", 0)
+        try:
+            return [d["unit"] for d in await nm.scan_host("127.0.0.1", server.sockets[0].getsockname()[1], units, 1.0)]
+        finally:
+            server.close()
+    def i_traad(coro):
+        with concurrent.futures.ThreadPoolExecutor() as ex:
+            return ex.submit(asyncio.run, coro).result(timeout=90)
+    funn = i_traad(gateway_skann({2: 0, 16: 0, 18: 3, 40: 2, 200: 1}))
+    sjekk("modbus: bak en gateway finnes alle enhetene 1-247, også de som ikke svarer på identifikasjon og mister spørsmål", funn == [2, 16, 18, 40, 200], str(funn))
+    funn = i_traad(gateway_skann({2: 0, 16: 3, 200: 0}, [16, 17]))
+    sjekk("modbus: oppgitte enhets-ID-er spørres flere ganger bak gateway, og bare dem", funn == [16], str(funn))
     feil = kall("/api/modbus/kart", {"navn": "x", "innhold": base64.b64encode(xlsx([["A", "B"], ["1", "2"]])).decode(), "filnavn": "x.xlsx"})
     sjekk("modbus: en Excel-fil uten adressekolonne sier hvilke kolonner den har", feil.get("status") == "error" and "no address column" in feil.get("error", ""), str(feil)[:120])
 

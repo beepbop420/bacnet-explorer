@@ -54,6 +54,8 @@
       : T('Finner enheter på port 502 og hva som svarer bak dem. Bare lesing.', 'Finds devices on port 502 and what answers behind them. Read only.');
   const enhetsliste = (t) => { const ut = new Set(); for (const del of String(t || '').split(/[,;\s]+/)) { const m = /^(\d+)(?:-(\d+))?$/.exec(del); if (!m) continue; const a = +m[1], b = +(m[2] || m[1]); for (let i = Math.max(1, a); i <= Math.min(247, b) && ut.size < 247; i++) ut.add(i); } return [...ut]; };
 
+  let tcpEnheter = '';
+
   function tegn() {
     const enheter = modbusEnheter();
     const kartValg = (adr) => `<option value="">${T('Ingen (rå registre)', 'None (raw registers)')}</option>`
@@ -72,6 +74,7 @@
             <input class="field mb-port" id="mbEnheter" value="1-32" aria-label="${T('Enhets-ID', 'Unit IDs')}" spellcheck="false"></div>
           <div class="mb-rad mb-tcp"${transport === 'ser' ? ' hidden' : ''}><input class="field" id="mbOmraade" placeholder="10.0.0.0/24" value="${esc(localStorage.getItem('nabe.mbOmraade') || ($('rangeInput') ? $('rangeInput').value.split(/[\\s,;]+/)[0] : ''))}" spellcheck="false">
             <input class="field mb-port" id="mbPort" value="502" inputmode="numeric" aria-label="Port">
+            <input class="field mb-port" id="mbTcpEnheter" value="${esc(tcpEnheter)}" placeholder="${T('alle ID', 'all IDs')}" aria-label="${T('Enhets-ID', 'Unit IDs')}" title="${esc(T('Enhets-ID, f.eks. 16 eller 1-64. Tomt: de vanligste, og alle 1–247 når det står en gateway der', 'Unit IDs, e.g. 16 or 1-64. Empty: the common ones, and all 1–247 when there is a gateway'))}" spellcheck="false">
             <button type="button" class="btn primary" data-mb="skann"${opptatt ? ' disabled' : ''}>${opptatt ? T('Skanner …', 'Scanning …') : T('Skann', 'Scan')}</button></div>
           <div class="sp-meta" id="mbMelding">${esc(melding)}</div></div>
         <div class="mb-sek"><div class="mb-tittel">${T('Enheter', 'Devices')} <span class="sp-meta">${enheter.length}</span></div>
@@ -107,12 +110,16 @@
     if (!omr) { sett(ser ? T('Velg en seriell port.', 'Choose a serial port.') : T('Skriv inn et IP-område.', 'Enter an IP range.')); return; }
     if (!ser) { try { localStorage.setItem('nabe.mbOmraade', omr); } catch { /* private window */ } }
     const par = ser ? $('mbParitet').value : 'N';
-    const enheter = ser ? enhetsliste($('mbEnheter').value) : null;
+    const tcpTekst = !ser && $('mbTcpEnheter') ? $('mbTcpEnheter').value.trim() : '';
+    tcpEnheter = tcpTekst;
+    // Leses før vinduet tegnes på nytt, ellers står baudraten tilbake på standard
+    const baud = ser ? parseInt($('mbBaud').value, 10) : 0;
+    const enheter = ser ? enhetsliste($('mbEnheter').value) : (tcpTekst ? enhetsliste(tcpTekst) : null);
     opptatt = true; sett(ser ? T('Spør bussen på ', 'Asking the bus on ') + omr + ' …' : T('Skanner port ', 'Scanning port ') + port + ' …'); tegn();
     try {
       const start = ser
-        ? await api2('/api/modbus/serial/skann', {port: omr, baud: parseInt($('mbBaud').value, 10), parity: par[0], stopbits: par === 'N2' ? 2 : 1, units: enheter})
-        : await api2('/api/modbus/scan', {subnet: omr, port, framing: transport === 'rtu' ? 'rtu' : 'tcp'});
+        ? await api2('/api/modbus/serial/skann', {port: omr, baud, parity: par[0], stopbits: par === 'N2' ? 2 : 1, units: enheter})
+        : await api2('/api/modbus/scan', {subnet: omr, port, framing: transport === 'rtu' ? 'rtu' : 'tcp', units: enheter});
       if (start.status !== 'started') throw new Error(start.error || T('Skann feilet', 'Scan failed'));
       for (;;) {
         await new Promise(r => setTimeout(r, 400));
