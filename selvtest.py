@@ -208,7 +208,39 @@ NYE_RYKTEST = r'''  urimelig: (() => {    const ai = (v, u, n) => ({type: 'analo
     return t.sys === '360' && t.nr === 1 && t.bokst === 'RT' && t.tall === 400 && k[0].p.name === '360.001_RT400' && k[1].p.name === '360.002_RT400'
       && k[2].p.name === '320.006_JP01_PaAv' && k[3].p.name === '320.006_JP01_Alarm' && k[4].art === 'mangler' && k[5].art === 'mangler'
       && felt(5, 'io') === 'OK' && felt(5, 'prog') === 'OK' && /\/MaLi$/.test(felt(5, 'testet')) && /Fant ikke punkt for Pumpe Alarm/.test(felt(6, 'merk'))
-      && felt(6, 'io') === undefined && f.some(x => x.topp === 'ansvarlig' && x.verdi === 'Ola') && !f.some(x => x.topp === 'ferdig'); })(),'''
+      && felt(6, 'io') === undefined && f.some(x => x.topp === 'ansvarlig' && x.verdi === 'Ola') && !f.some(x => x.topp === 'ferdig'); })(),
+  skannvalg: !!document.getElementById('skannValg') && document.getElementById('skannValg').hidden && typeof window.nabeProtKjorer === 'function'
+    && !window.nabeProtKjorer() && typeof skalForhaandsleses === 'function' && (() => { S._kunProt = 'knx'; const r = window.nabeProtPaa('knx') && !window.nabeProtPaa('bacnet') && !window.nabeProtPaa('modbus'); S._kunProt = ''; return r; })(),
+  sammebygg: typeof samleBygg === 'function' && (() => {
+    const foer = S.devices, foerR = S.scanRanges;
+    try {
+      const d = (address, protocol, ip, _range) => ({address, protocol, ip, _range});
+      S.scanRanges = ['10.1.0.0/24'];
+      S.devices = [d('10.1.0.5', undefined, undefined, '10.1.0.0/24'), d('mb:10.1.0.106:502/16', 'modbus', '10.1.0.106', '10.1.0.106'),
+                   d('kx:10.1.0.9:3671', 'knx', '10.1.0.9', '10.1.0.9'), d('mb:10.9.9.9:502/1', 'modbus', '10.9.9.9', '10.9.9.9'),
+                   d('10.2.0.7:47808', 'bacnet', undefined, '10.2.0.1-40'), d('mb:10.2.0.7:502/1', 'modbus', '10.2.0.7', '10.2.0.7'),
+                   d('2001:5', 'bacnet', undefined, '10.3.0.1-40'), d('mb:10.3.0.12:502/3', 'modbus', '10.3.0.12', '10.3.0.12')];
+      samleBygg();
+      const r = S.devices.map(x => x._range);
+      return r[1] === '10.1.0.0/24' && r[2] === '10.1.0.0/24' && r[3] === '10.9.9.9' && r[5] === '10.2.0.1-40' && r[7] === '10.3.0.1-40'
+        && ipIOmraade('10.0.0.15', '10.0.0.10-40') && !ipIOmraade('10.0.0.41', '10.0.0.10-40') && ipIOmraade('10.0.1.2', '10.0.0.200-10.0.1.5');
+    } finally { S.devices = foer; S.scanRanges = foerR; }
+  })(),
+  sprakbytte: typeof parTekst === 'function' && typeof tegnPaaNytt === 'function' && (() => {
+    const foer = SPRAAK;
+    try {
+      settSprak('nb', false);
+      const el = document.createElement('div'); el.id = 'sprProve'; document.body.append(el);
+      el.innerHTML = '<i title="' + T('Søk bare etter KNX i prøven', 'Look only for KNX in the test') + '">' + T('Prøveteksten her', 'The test text here') + '</i>' + systemTagger(['360']);
+      settSprak('en', false);
+      const en = el.textContent.includes('The test text here') && el.querySelector('i').title === 'Look only for KNX in the test';
+      el.insertAdjacentHTML('beforeend', '<u>Prøveteksten her</u>');
+      settSprak('nb', false);
+      const nb = el.textContent.includes('Prøveteksten her') && !el.textContent.includes('The test text') && el.querySelector('i').title === 'Søk bare etter KNX i prøven';
+      el.remove();
+      return en && nb && parTekst('  The test text here ', false) === '  Prøveteksten her ';
+    } finally { settSprak(foer, false); const e = document.getElementById('sprProve'); if (e) e.remove(); }
+  })(),'''
 
 
 def royktest():
@@ -2150,7 +2182,7 @@ def modbus_import():
     # En seriell gateway slik den oppfører seg i et ekte anlegg: svarer 0x0B på identifikasjon, enhetene står spredt,
     # og en enhet som finnes sier «ingen der» noen ganger før den svarer
     import concurrent.futures, struct
-    async def gateway_skann(enheter, units=None):
+    async def gateway_skann(enheter, units=None, first=None, meldt=None):
         mister = {u: n for u, n in enheter.items()}
         async def klient(les, skriv):
             try:
@@ -2172,7 +2204,8 @@ def modbus_import():
                 skriv.close()
         server = await asyncio.start_server(klient, "127.0.0.1", 0)
         try:
-            return [d["unit"] for d in await nm.scan_host("127.0.0.1", server.sockets[0].getsockname()[1], units, 1.0)]
+            return [d["unit"] for d in await nm.scan_host("127.0.0.1", server.sockets[0].getsockname()[1], units, 1.0, first=first,
+                                                          on_found=None if meldt is None else lambda d: meldt.append(d["unit"]))]
         finally:
             server.close()
     def i_traad(coro):
@@ -2182,6 +2215,9 @@ def modbus_import():
     sjekk("modbus: bak en gateway finnes alle enhetene 1-247, også de som ikke svarer på identifikasjon og mister spørsmål", funn == [2, 16, 18, 40, 200], str(funn))
     funn = i_traad(gateway_skann({2: 0, 16: 3, 200: 0}, [16, 17]))
     sjekk("modbus: oppgitte enhets-ID-er spørres flere ganger bak gateway, og bare dem", funn == [16], str(funn))
+    meldt = []
+    funn = i_traad(gateway_skann({2: 0, 16: 0, 200: 0, 255: 0}, first=[200, 16], meldt=meldt))
+    sjekk("modbus: enheter som svarte sist meldes først, og 255 vises ikke som egen enhet bak en gateway", meldt[:2] == [200, 16] and funn == [2, 16, 200] and 255 not in meldt, f"{meldt} {funn}")
     feil = kall("/api/modbus/kart", {"navn": "x", "innhold": base64.b64encode(xlsx([["A", "B"], ["1", "2"]])).decode(), "filnavn": "x.xlsx"})
     sjekk("modbus: en Excel-fil uten adressekolonne sier hvilke kolonner den har", feil.get("status") == "error" and "no address column" in feil.get("error", ""), str(feil)[:120])
 
@@ -2206,6 +2242,8 @@ def redigering():
     sjekk("modbus: en skala som ikke er et tall avvises", feil.get("status") == "error", str(feil))
     kall("/api/modbus/tilordne", {"address": adr, "kart": None})
     j2 = vent_jobb(kall("/api/modbus/scan", {"subnet": "127.0.0.1", "port": MBSIM.port, "units": [1], "timeout": 1.0})["job_id"])
+    husket = json.loads((Path(DATAMAPPE) / "modbus_enheter.json").read_text(encoding="utf-8"))
+    sjekk("modbus: serveren husker hvilke enheter som svarte på hver maskin", 1 in husket.get(f"127.0.0.1:{MBSIM.port}", []), str(husket))
     d2 = j2["result"]["devices"][0]
     sjekk("modbus: en enhet av en kjent type får kartet sitt igjen ved neste skann, og sier det", d2.get("forslag", {}).get("brukt") is True
           and d2["forslag"]["kart"] == k["id"], str(d2.get("forslag")))

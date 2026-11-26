@@ -6369,3 +6369,28 @@ body.har-popup *:not(.gs-overlay):not(.gs-overlay *):not(.menu-pop):not(.menu-po
 .systag{font-style:normal;font-size:10px;line-height:1;color:var(--fg-3);padding:3px 7px 2px;border:1px solid var(--line);border-radius:var(--r-pill,999px);white-space:nowrap}
 .systag b{font-family:var(--mono);font-weight:600;color:var(--fg-2)}
 .dev-lev .lev-logo{font-size:8px;padding:2px 5px 1px}
+
+/* Hent én protokoll om gangen, over enhetslista */
+.prot-hent{display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding:8px 10px 2px;font-size:11px;color:var(--fg-3)}
+.prot-hent[hidden]{display:none}
+.prot-hent button{display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 10px;font:inherit;color:var(--fg-2);background:none;border:1px solid var(--line-2);border-radius:99px;cursor:pointer}
+.prot-hent button:hover{background:var(--hover);color:var(--fg)}
+.prot-hent button:disabled{opacity:.45;cursor:default}
+.prot-hent button.gaar{color:var(--fg);border-color:var(--accent-edge);background:var(--accent-dim)}
+.prot-hent em{font-style:normal;color:var(--fg-3)}
+.prot-hent b{font-weight:500;color:var(--accent)}
+/* Hva skannet skal lete etter */
+.sv-modal{width:min(460px,94vw)}
+.sv-kropp{display:flex;flex-direction:column;gap:8px;padding:12px 18px 18px;overflow-y:auto}
+.sv-valg{display:flex;align-items:center;justify-content:space-between;gap:14px;width:100%;padding:11px 14px;text-align:left;font:inherit;color:var(--fg-2);background:none;border:1px solid var(--line-2);border-left:3px solid var(--line-2);border-radius:var(--radius);cursor:pointer}
+.sv-valg:hover{background:var(--hover)}
+.sv-valg.paa{color:var(--fg);background:var(--accent-dim)}
+.sv-valg.paa.p-bacnet{border-left-color:var(--prot-bacnet)}
+.sv-valg.paa.p-modbus{border-left-color:var(--prot-modbus)}
+.sv-valg.paa.p-knx{border-left-color:var(--prot-knx)}
+.sv-t{display:flex;flex-direction:column;gap:2px;min-width:0}
+.sv-t b{font-weight:600;font-size:13px}
+.sv-t small{font-size:11px;line-height:1.4;color:var(--fg-3)}
+.sv-av{flex:none;font-size:11px;color:var(--fg-3)}
+.sv-valg.paa .sv-av{color:var(--accent)}
+.sv-spor{display:flex;align-items:flex-start;gap:8px;margin:4px 0 6px;font-size:11px;line-height:1.4;color:var(--fg-3)}

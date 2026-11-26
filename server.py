@@ -44,7 +44,7 @@ import urllib.parse
 import urllib.request
 import time
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 from fastapi import FastAPI, Form, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -236,7 +236,7 @@ def t(nb: str, en: str) -> str:
     return en if SPRAAK_VAR.get() == "en" else nb
 
 
-VERSJON = "2.43"
+VERSJON = "2.44"
 app.version = VERSJON
 app.description = ("NABE sitt eget grensesnitt. Det som leser fra anlegget (enheter, punkter, ukeprogram, trend) kan brukes fra Python, Excel eller curl mens NABE kjører. "
                    "Dokumentasjonen (Swagger) laster fra internett.")
@@ -7262,8 +7262,17 @@ async def modbus_scan(body: ModbusScanBody):
                     # Behind a gateway the whole unit range takes a few minutes, so the job says which unit it is on
                     def framdrift(u: int, runde: int, antall: int):
                         job["phase"] = t(f"{h}: spør enhet {u}", f"{h}: asking unit {u}")
-                    devices.extend(await nm.scan_host(h, port, body.units, max(0.3, min(5.0, body.timeout)), "rtu" if body.framing == "rtu" else "tcp",
-                                                      framdrift, funnet))
+                    nokkel = f"{h}:{port}"
+                    sett: List[int] = []
+
+                    def meld(d: Dict[str, Any]):
+                        sett.append(d["unit"])
+                        funnet(d)
+                    try:
+                        devices.extend(await nm.scan_host(h, port, body.units, max(0.3, min(5.0, body.timeout)), "rtu" if body.framing == "rtu" else "tcp",
+                                                          framdrift, meld, _mb_husket().get(nokkel)))
+                    finally:
+                        _mb_husk(nokkel, sett)      # også når skannet stoppes
                 job["done"] += 1
             await asyncio.gather(*[one(h) for h in open_hosts])
             # The MAC address of each host that is on the PC's own network (a host behind a router has none to give)
@@ -7341,6 +7350,32 @@ async def modbus_serial_skann(body: ModbusSerialBody):
 
 
 _MB_NETTOPP_BRUKT: set = set()      # adresser som fikk et kjent kart i det skannet som går nå
+
+# Hvilke enhets-ID-er som har svart på hver maskin. Neste skann spør dem først, så anlegget står i lista med en gang.
+MB_ENHETER_FIL = DATA_DIR / "modbus_enheter.json"
+
+
+def _mb_husket() -> Dict[str, List[int]]:
+    try:
+        d = json.loads(MB_ENHETER_FIL.read_text(encoding="utf-8"))
+        return d if isinstance(d, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def _mb_husk(nokkel: str, enheter: Iterable[int]) -> None:
+    """Legger enhetene til dem som er kjent fra før. Ingen tas bort: en enhet kan bomme en hel runde og likevel finnes."""
+    alle = _mb_husket()
+    nye = sorted({int(u) for u in alle.get(nokkel, [])} | {int(u) for u in enheter if 1 <= int(u) <= 247})
+    if not nye or nye == alle.get(nokkel):
+        return
+    alle[nokkel] = nye
+    try:
+        tmp = MB_ENHETER_FIL.with_suffix(".tmp")
+        tmp.write_text(json.dumps(alle), encoding="utf-8")
+        os.replace(tmp, MB_ENHETER_FIL)
+    except OSError:
+        pass                              # uten fila går neste skann bare i vanlig rekkefølge
 
 
 def _modbus_funnet(job: Dict[str, Any]):

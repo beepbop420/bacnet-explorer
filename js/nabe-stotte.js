@@ -38,7 +38,7 @@
     }
     return rader.map((r) => r.map(celle).join(';')).join('\r\n');
   }
-  const KLIENT = ['flatMin', 'utenBevegelse', 'protBacnet', 'protModbus', 'protKnx', 'grenseLyd', 'anSkjult', 'tema'];
+  const KLIENT = ['flatMin', 'utenBevegelse', 'protBacnet', 'protModbus', 'protKnx', 'protSpor', 'grenseLyd', 'anSkjult', 'tema'];
   function klient() {
     const p = (() => { try { return loadPrefs(); } catch { return {}; } })();
     const ut = {spraak: typeof SPRAAK !== 'undefined' ? SPRAAK : '', nabeVersjon: typeof NABE_VERSJON !== 'undefined' ? NABE_VERSJON : ''};

@@ -206,6 +206,13 @@ const FAKTA = [
   ['COV betyr at regulatoren sier fra selv. Mindre spørring, mer ro.', 'COV means the controller speaks up itself. Less asking, more peace.'],
 ];
 const NYTT = {
+  '2.44': [
+    ['Modbus og KNX står i samme bygg som BACnet-enhetene på samme adresse eller i samme område, også når du skannet med bare gatewayens IP', 'Modbus and KNX sit in the same building as the BACnet devices on the same address or in the same range, also when you scanned with only the gateway IP'],
+    ['Språkbytte tar med alt som står på skjermen, også systemlappene og tooltipene, uten omstart', 'Switching language takes everything on screen with it, the system tags and tooltips too, without a restart'],
+    ['Et skann spør hva det skal lete etter: BACnet, Modbus, KNX eller alle. Valget huskes, og spørsmålet kan slås av. Knappene over enhetslista henter én protokoll om gangen', 'A scan asks what to look for: BACnet, Modbus, KNX or all. The choice is remembered, and the question can be switched off. The buttons above the device list fetch one protocol at a time'],
+    ['Skannet venter ikke lenger på Modbus: enhetene kommer i lista etter hvert, og søket går videre av seg selv med egen stoppknapp', 'The scan no longer waits for Modbus: devices come into the list as they answer, and the search goes on by itself with its own stop button'],
+    ['Modbus husker hvilke enheter som svarte på hver gateway og spør dem først, så anlegget står i lista på få sekunder neste gang. Adresse 255 vises ikke lenger som en egen enhet bak en gateway', 'Modbus remembers which units answered on each gateway and asks them first, so the plant is in the list within seconds next time. Address 255 is no longer shown as a unit of its own behind a gateway'],
+  ],
   '2.43': [
     ['Modbus-skannet legger enhetene i lista etter hvert som de svarer, de laveste enhets-ID-ene først, og har en stoppknapp. Det som er funnet blir stående', 'The Modbus scan puts the devices in the list as they answer, the lowest unit IDs first, and has a stop button. What was found stays'],
     ['Modbus- og KNX-vinduet kan rulles når lista er lang', 'The Modbus and KNX windows scroll when the list is long'],

@@ -2,7 +2,16 @@
 /* Norwegian or English, said where the text is written. Defined first, so
    code that runs while this file is still loading can use it too; until
    the language is set further down, that text is Norwegian. */
-const T = (nb, en) => { try { return SPRAAK === 'en' ? en : nb; } catch { return nb; } };
+/* Hvert par T har gitt ut huskes begge veier. Da kan tekst som alt står på skjermen, og tekst som ble regnet ut da en
+   fil ble lastet, følge med når språket byttes (se parTekst). */
+const T_PAR = new Map(), T_PAR_EN = new Map();
+const T = (nb, en) => {
+  if (nb !== en && typeof nb === 'string' && typeof en === 'string' && T_PAR.size < 20000) {
+    const a = nb.trim(), b = en.trim();
+    if (a && b && !T_PAR.has(a)) { T_PAR.set(a, b); if (!T_PAR_EN.has(b)) T_PAR_EN.set(b, a); }
+  }
+  try { return SPRAAK === 'en' ? en : nb; } catch { return nb; }
+};
 // The modules add to the core functions (scan, the device list, a poll) by
 // name, so each one wraps whatever is there by then. Buttons call the global
 // by name too (() => runScan()), so they always get the newest wrapping.
@@ -804,6 +813,45 @@ function mergeDevices(funnet, subnet) {
     }
   }
   if (iDenne) window.nabeNett.ferdigMed(iDenne);
+  if ((funnet || []).some(d => d.protocol === 'modbus')) sorterModbus();
+  samleBygg();
+}
+
+/* Står IP-adressen i området? Én adresse, 10.0.0.0/24, 10.0.0.10-40 eller 10.0.0.10-10.0.1.5. */
+function ipIOmraade(ip, omraade) {
+  const tall = (a) => a.split('.').reduce((s, x) => s * 256 + (+x), 0);
+  const kort = /^(\d+\.\d+\.\d+\.)(\d+)-(\d+)$/.exec(omraade);
+  if (kort) { const siste = ip.startsWith(kort[1]) ? +ip.slice(kort[1].length) : -1; return siste >= +kort[2] && siste <= +kort[3]; }
+  const lang = /^(\d+\.\d+\.\d+\.\d+)-(\d+\.\d+\.\d+\.\d+)$/.exec(omraade);
+  if (lang) return tall(ip) >= tall(lang[1]) && tall(ip) <= tall(lang[2]);
+  return iOmraade(ip, omraade);
+}
+
+/* Modbus og KNX hører til samme bygg som BACnet-enhetene på samme adresse, uansett hvilket område de ble funnet med:
+   skrev du bare gatewayens IP i Modbus-vinduet, skal den likevel stå sammen med resten av anlegget. Først en
+   BACnet-enhet på samme IP, så et skannet område som dekker adressen, så BACnet-enheter i samme /24. */
+function samleBygg() {
+  const erIp = (a) => /^\d+\.\d+\.\d+\.\d+$/.test(a || '');
+  const vert = (d) => String(d.address).split(':')[0];
+  const nett = (ip) => ip.split('.').slice(0, 3).join('.');
+  const bac = S.devices.filter(d => (!d.protocol || d.protocol === 'bacnet') && d._range);
+  const omr = [...new Set([...bac.map(d => d._range), ...(S.scanRanges || [])])];
+  for (const d of S.devices) {
+    if ((d.protocol !== 'modbus' && d.protocol !== 'knx') || !erIp(d.ip)) continue;      // en seriell buss har ingen adresse
+    const samme = bac.find(b => vert(b) === d.ip);
+    let bygg = samme ? samme._range : omr.find(r => ipIOmraade(d.ip, r));
+    if (!bygg) { const nabo = bac.find(b => erIp(vert(b)) && nett(vert(b)) === nett(d.ip)); bygg = nabo && nabo._range; }
+    if (bygg) d._range = bygg;
+  }
+}
+
+/* Modbus-enhetene kommer inn etter hvert som de svarer. De står likevel etter maskin og enhets-ID (6 foran 16),
+   på plassene Modbus-enhetene allerede har i lista. */
+function sorterModbus() {
+  const plass = [];
+  S.devices.forEach((d, i) => { if (d.protocol === 'modbus') plass.push(i); });
+  const ordnet = plass.map(i => S.devices[i]).sort((a, b) => String(a.ip).localeCompare(String(b.ip), undefined, {numeric: true}) || (a.unit || 0) - (b.unit || 0));
+  plass.forEach((i, k) => { S.devices[i] = ordnet[k]; });
 }
 
 async function runScan() {
@@ -815,7 +863,7 @@ async function runScan() {
   // through a flag instead.
   const auto = !!S._autoNeste; S._autoNeste = false;
   if (!auto) S._tomtForsok = false;
-  let proevIgjen = false;
+  let proevIgjen = false, protLopp = null;
   let raa = $('rangeInput').value.trim();
   if (window.nabeNavnTilOmraade) {
     const nn = window.nabeNavnTilOmraade(raa);
@@ -868,7 +916,7 @@ async function runScan() {
   if (!kun) S.scanRanges = omraader.slice();
   renderDevices();
   // Modbus and KNX are looked for at the same time as BACnet, not after it: a building is scanned once, in one go
-  const protLopp = (window.skannProtokoller && mode !== 'bbmd') ? window.skannProtokoller(omraader, null).catch(() => null) : null;
+  protLopp = (window.skannProtokoller && mode !== 'bbmd') ? window.skannProtokoller(omraader, null).catch(() => null) : null;
 
   document.body.classList.add('skanner');
   skannPing();
@@ -936,7 +984,7 @@ async function runScan() {
     };
 
     // BACnet is one of three things a scan looks for; with it switched off only Modbus and KNX are looked for
-    if (loadPrefs().protBacnet !== false || !window.skannProtokoller) {
+    if (!window.nabeProtPaa || window.nabeProtPaa('bacnet')) {
       // Et område som feiler stopper ikke de neste: bare Avbryt gjør det
       await Promise.all([...grupper.entries()].map(async ([kort, liste]) => {
         for (const [n, subnet] of liste) {
@@ -947,11 +995,13 @@ async function runScan() {
       }));
     }
     await refreshStatus();
-    // The same range is looked through for Modbus and KNX too, unless it was stopped or is a BBMD lookup
-    if (protLopp) { try { await protLopp; } catch { /* the BACnet result stands */ } }
+    // The same range is looked through for Modbus and KNX too, unless it was stopped or is a BBMD lookup. The scan waits
+    // a few seconds for their first answers and no more: a Modbus gateway takes minutes, and goes on by itself.
+    if (protLopp) { try { await Promise.race([protLopp, new Promise(r => setTimeout(r, 6000))]); } catch { /* the BACnet result stands */ } }
+    const protPagar = !!(window.nabeProtKjorer && window.nabeProtKjorer());
     // Modbus eller KNX svarte i et område der BACnet ikke fant noe: da er anlegget der, og BACnet bommet
     // (en tunnel som våkner mister de første pakkene). Én runde til for akkurat de områdene.
-    if (loadPrefs().protBacnet !== false && mode !== 'bbmd' && !LINJE.avbrutt) {
+    if ((!window.nabeProtPaa || window.nabeProtPaa('bacnet')) && mode !== 'bbmd' && !LINJE.avbrutt) {
       const bom = omraader.map((sn, n) => [n, sn]).filter(([n, sn]) => antallBac[n] === 0
         && S.devices.some(d => d._range === sn && d.protocol && d.protocol !== 'bacnet'));
       for (const [n, sn] of bom) {
@@ -971,14 +1021,14 @@ async function runScan() {
        som hoerer til - ikke enheter paa et helt annet nett. */
     S.sisteOmraader = kun ? (S.scanRanges || omraader) : omraader;
     // A scan you stopped found nothing because you stopped it - no advice for that.
-    S.tomtSkann = S.devices.length || LINJE.avbrutt ? null : {mode, omraader};
+    S.tomtSkann = S.devices.length || LINJE.avbrutt || protPagar ? null : {mode, omraader};
     // A tunnel that has sat idle drops its first packets while it wakes up, so a first
     // sweep can come back empty over a plant that answers a moment later. One more try,
     // quietly, before telling anyone nothing answered.
-    if (!S.devices.length && !LINJE.avbrutt && !S._tomtForsok && mode !== 'bbmd' && mode !== 'broadcast') {
+    if (!S.devices.length && !LINJE.avbrutt && !protPagar && !S._tomtForsok && mode !== 'bbmd' && mode !== 'broadcast') {
       S._tomtForsok = true; proevIgjen = true;
       status(T('Ingen svar ennå. Prøver en gang til…', 'No answer yet. Trying once more…'));
-    } else if (!S.devices.length && !LINJE.avbrutt) nabeTrist();
+    } else if (!S.devices.length && !LINJE.avbrutt && !protPagar) nabeTrist();
     nabeEtterSkann(S.devices.length);
     tell('skann'); tell('enheter', S.devices.length);
     if (S.devices.length) visRutere();
@@ -990,7 +1040,10 @@ async function runScan() {
   S.scanJob = null;
   // Remembered once the sweep is finished, not while it runs - a half-done
   // scan is not the list you want to come back to next month.
-  husk(S.scanRanges, S.devices.filter(d => !d._range || S.scanRanges.includes(d._range)));
+  // Modbus or KNX still looking: remembered when they are done, so what they find is in it
+  const omrNaa = (S.scanRanges || []).slice();
+  const huskNaa = () => { if (omrNaa.join() === (S.scanRanges || []).join()) husk(S.scanRanges, S.devices.filter(d => !d._range || omrNaa.includes(d._range))); };
+  if (window.nabeProtKjorer && window.nabeProtKjorer() && protLopp) protLopp.then(huskNaa, huskNaa); else huskNaa();
   // Not re-enabled when the backend is gone: pressing it again would only
   // produce the same failure.
   b.disabled = BACKEND_NEDE || !S.connected;
@@ -1491,7 +1544,7 @@ function renderDevices() {
   // A name being typed in a heading must not be wiped by the next background redraw.
   if (S._redigerNavn) { S._renderUtsatt = true; return; }
   // Bak en åpen popup ses ikke listen: den tegnes én gang når popupen lukkes (popupRo, nabe-verktoy.js).
-  if (window.nabePopupAapen && window.nabePopupAapen()) { window.__devStale = true; return; }
+  if (!window.__tegnNaa && window.nabePopupAapen && window.nabePopupAapen()) { window.__devStale = true; return; }
   BORTE_NAA = new Set();
   $('devCount').textContent = S.devices.length;
   if ($('devRescan')) $('devRescan').hidden = !S.devices.length;
@@ -1842,7 +1895,7 @@ function prefetchStop() {
    deler de bussen med skannet og med enheten du faktisk vil åpne. Mens et Modbus-skann går venter også de andre. */
 function skalForhaandsleses(d) {
   const mb = window.nabeMbHjelp;
-  return !(d.protocol === 'modbus' && mb && (!mb.harKart(d.address) || mb.skanner()));
+  return !(d.protocol === 'modbus' && mb && (!mb.harKart(d.address) || mb.skanner() || (window.nabeProtKjorer && window.nabeProtKjorer('modbus'))));
 }
 
 function prefetchNextDevice() {
@@ -11542,11 +11595,25 @@ function iDataSone(n) {
   return !!(el && el.closest && el.closest(DATA_SONE));
 }
 
-function sveipSprak(rot, tilEn) {
+/* En hel tekst som er den ene halvdelen av et par byttes til den andre. Mot norsk bare når teksten ikke også er norsk
+   i et annet par, så et ord som finnes på begge språk blir stående. */
+function parTekst(v, tilEn) {
+  const t = v.trim();
+  if (!t) return v;
+  const ny = tilEn ? T_PAR.get(t) : (T_PAR.has(t) ? undefined : T_PAR_EN.get(t));
+  return ny === undefined ? v : v.replace(t, () => ny);
+}
+/* `bareePar` brukes mens norsk står på: ordboka skal da ikke snu noe, bare tekst som er igjen på engelsk rettes. */
+const snuTekst = (v, tilEn, barePar) => {
+  const par = parTekst(v, tilEn);           // et helt par først: ordboka kan ellers bytte bare en del av teksten
+  return par !== v || barePar ? par : parTekst(oversettTekst(v, tilEn), tilEn);
+};
+
+function sveipSprak(rot, tilEn, barePar) {
   if (!rot) return;
   if (rot.nodeType === 3) {
     if (iDataSone(rot)) return;
-    const ny = oversettTekst(rot.nodeValue, tilEn);
+    const ny = snuTekst(rot.nodeValue, tilEn, barePar);
     if (ny !== rot.nodeValue) rot.nodeValue = ny;
     return;
   }
@@ -11571,7 +11638,7 @@ function sveipSprak(rot, tilEn) {
   const noder = [];
   while (tw.nextNode()) noder.push(tw.currentNode);
   for (const n of noder) {
-    const ny = oversettTekst(n.nodeValue, tilEn);
+    const ny = snuTekst(n.nodeValue, tilEn, barePar);
     if (ny !== n.nodeValue) n.nodeValue = ny;
   }
 
@@ -11583,24 +11650,25 @@ function sveipSprak(rot, tilEn) {
     for (const a of ATTR_SPRAAK) {
       const v = el.getAttribute(a);
       if (v == null) continue;
-      const ny = oversettTekst(v, tilEn);
+      const ny = snuTekst(v, tilEn, barePar);
       if (ny !== v) el.setAttribute(a, ny);
     }
   }
 }
 
-/* Anything the app renders after the switch has to be caught too. Only
+/* Anything the app renders after the switch has to be caught too, in both
+   directions. Only
    added nodes are swept, so the cost follows what was rendered rather than
    the size of the table. Text and attribute writes are not childList
    mutations, so this cannot feed itself. */
 let SPRAAK_OBS = null;
 let SKRIVER = false;
-function oversettAttr(el, navn, tilEn) {
+function oversettAttr(el, navn, tilEn, barePar) {
   if (!el || el.nodeType !== 1 || !navn) return;
   if (iDataSone(el)) return;
   const v = el.getAttribute(navn);
   if (v == null) return;
-  const ny = oversettTekst(v, tilEn);
+  const ny = snuTekst(v, tilEn, barePar);
   if (ny !== v) el.setAttribute(navn, ny);
 }
 
@@ -11610,9 +11678,10 @@ function startSprakObs() {
     if (SKRIVER) return;
     SKRIVER = true;
     try {
+      const en = SPRAAK === 'en';
       for (const m of muts) {
-        if (m.type === 'attributes') { oversettAttr(m.target, m.attributeName, true); continue; }
-        for (const n of m.addedNodes) sveipSprak(n, true);
+        if (m.type === 'attributes') { oversettAttr(m.target, m.attributeName, en, !en); continue; }
+        for (const n of m.addedNodes) sveipSprak(n, en, !en);
       }
     } finally { SKRIVER = false; }
   });
@@ -11635,12 +11704,14 @@ let SPRAAK = 'nb';
 
 function settSprak(kode, lagre) {
   const til = kode === 'en';
-  if ((SPRAAK === 'en') !== til) {
+  const byttet = (SPRAAK === 'en') !== til;
+  if (byttet) {
     stoppSprakObs();
     sveipSprak(document.body, til);
     SPRAAK = til ? 'en' : 'nb';
-    if (til) startSprakObs();
   }
+  startSprakObs();
+  if (byttet) tegnPaaNytt();
   if (lagre) savePrefs({sprak: SPRAAK});
   const b = $('langBtn');
   if (b) {
@@ -11650,6 +11721,33 @@ function settSprak(kode, lagre) {
   }
   document.documentElement.lang = til ? 'en' : 'no';
   if (window.nabeKartSprak) window.nabeKartSprak();
+}
+
+/* Det koden selv har tegnet (systemlappene, tooltips, lista, inspektøren) bygges på nytt på det nye språket.
+   Ved oppstart er det ikke noe å tegne ennå, så en visning som ikke er klar hoppes over. */
+function tegnPaaNytt() {
+  for (const navn of ['renderDevices', 'renderPoints', 'renderInspector', 'renderWatch', 'renderPrefetchStatus', 'tegnAnleggNu', 'oppdaterDiagKjapp', 'nabeProtMeny']) {
+    try { if (typeof window[navn] === 'function') window[navn](); } catch { /* ikke klar ennå */ }
+  }
+  // Skannefeltet ligger i en sone sveipet går utenom (adressene er data), så knappene og hjelpetekstene der tas for seg
+  const en = SPRAAK === 'en';
+  for (const id of ['rangeInput', 'scanBtn', 'scanMeny', 'devSok', 'lokalRad']) {
+    const rot = $(id);
+    if (!rot) continue;
+    for (const el of [rot, ...rot.querySelectorAll('*')]) {
+      for (const a of ATTR_SPRAAK) {
+        const v = el.getAttribute(a);
+        if (v == null) continue;
+        const ny = snuTekst(v, en);
+        if (ny !== v) el.setAttribute(a, ny);
+      }
+      for (const n of el.childNodes) {
+        if (n.nodeType !== 3) continue;
+        const ny = snuTekst(n.nodeValue, en);
+        if (ny !== n.nodeValue) n.nodeValue = ny;
+      }
+    }
+  }
 }
 
 (function sprakOppstart() {

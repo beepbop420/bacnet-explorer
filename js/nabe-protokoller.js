@@ -20,16 +20,18 @@
     return r.json();
   };
   const PROT = [['bacnet', 'BACnet'], ['modbus', 'Modbus'], ['knx', 'KNX']];
-  const paa = (p) => loadPrefs().protSok !== false && loadPrefs()['prot' + p[0].toUpperCase() + p.slice(1)] !== false;
+  const paa = (p) => S._kunProt ? p === S._kunProt
+    : loadPrefs().protSok !== false && loadPrefs()['prot' + p[0].toUpperCase() + p.slice(1)] !== false;
   const protAv = (d) => d.protocol === 'modbus' ? 'modbus' : d.protocol === 'knx' ? 'knx' : 'bacnet';
   let stopp = false;
 
   /* ------------------------------------------------ 1. what a scan looks for, beside the Scan button */
-  const BESKR = {
-    bacnet: [T('BACnet', 'BACnet'), T('Enheter som svarer på Who-Is', 'Devices that answer Who-Is')],
-    modbus: [T('Modbus', 'Modbus'), T('Modbus TCP på port 502, bare lesing', 'Modbus TCP on port 502, read only')],
-    knx: [T('KNX', 'KNX'), T('KNX-gatewayer på UDP 3671, kobler ikke til', 'KNX gateways on UDP 3671, connects to nothing')],
-  };
+  // Regnes ut når menyen tegnes, så den følger språket som står på da
+  const beskr = () => ({
+    bacnet: ['BACnet', T('Enheter som svarer på Who-Is', 'Devices that answer Who-Is')],
+    modbus: ['Modbus', T('Modbus TCP på port 502, bare lesing', 'Modbus TCP on port 502, read only')],
+    knx: ['KNX', T('KNX-gatewayer på UDP 3671, kobler ikke til', 'KNX gateways on UDP 3671, connects to nothing')],
+  });
   let pop = null, caret = null;
 
   function byggMeny() {
@@ -50,9 +52,12 @@
 
   function tegnMeny() {
     if (!pop) return;
+    const BESKR = beskr();
     pop.innerHTML = `<div class="scan-pop-t">${T('Skann etter', 'Scan for')}</div>
       ${PROT.map(([id]) => `<button type="button" class="menu-item scan-val${paa(id) ? ' on' : ''}" role="menuitemcheckbox" aria-checked="${paa(id)}" data-val="${id}">
         <span class="scan-val-t"><b>${esc(BESKR[id][0])}</b><small>${esc(BESKR[id][1])}</small></span><span class="scan-val-av">${paa(id) ? T('på', 'on') : T('av', 'off')}</span></button>`).join('')}
+      <button type="button" class="menu-item scan-val${loadPrefs().protSpor !== false ? ' on' : ''}" role="menuitemcheckbox" aria-checked="${loadPrefs().protSpor !== false}" data-spor>
+        <span class="scan-val-t"><b>${T('Spør hver gang', 'Ask every time')}</b><small>${T('Velg protokoller når du starter et skann', 'Choose protocols when you start a scan')}</small></span><span class="scan-val-av">${loadPrefs().protSpor !== false ? T('på', 'on') : T('av', 'off')}</span></button>
       <div class="menu-sep"></div>
       <div class="scan-pop-t">${T('Legg til selv', 'Add by hand')}</div>
       <button type="button" class="menu-item" role="menuitem" data-add="mb-ip">${T('Modbus-enhet (IP og port)', 'Modbus device (IP and port)')}</button>
@@ -89,10 +94,11 @@
       tegnMeny();
       return;
     }
-    const valg = e.target.closest('#scanPop [data-add]');
-    if (valg) {
+    if (e.target.closest('#scanPop [data-spor]')) { savePrefs({protSpor: loadPrefs().protSpor === false}); tegnMeny(); return; }
+    const tillegg = e.target.closest('#scanPop [data-add]');
+    if (tillegg) {
       lukkMeny();
-      const a = valg.dataset.add;
+      const a = tillegg.dataset.add;
       if (a === 'mb-ip') window.nabeMbHjelp.aapneSom('tcp');
       else if (a === 'mb-ser') window.nabeMbHjelp.aapneSom('ser');
       else if (a === 'kx-ip') window.aapneKnx();
@@ -105,45 +111,195 @@
   });
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape') lukkMeny(); });
 
-  /* One range for one protocol: start the job, follow it, return the devices it found. */
-  async function ett(sti, kropp, omr) {
+  /* Modbus and KNX run on their own, each with its own stop: a Modbus gateway takes minutes for its whole range,
+     and nothing else should wait for that. What is found goes into the list as it answers. */
+  const loep = {};          // protocol -> {stopp, jobb} while it runs
+  const vent = (ms) => new Promise(r => setTimeout(r, ms));
+  function stoppProt(p) {
+    const l = loep[p];
+    if (!l) return;
+    l.stopp = true;
+    delete loep[p];
+    if (l.jobb) api2('/api/job/' + l.jobb + '/cancel', {}).catch(() => {});
+    tegnHent();
+  }
+  const stoppAlle = () => { stoppProt('modbus'); stoppProt('knx'); };
+
+  /* One range for one protocol: start the job, follow it, put the devices in the list as they come. */
+  async function ett(l, sti, kropp, omr) {
     const start = await api2(sti, kropp);
     if (start.status !== 'started') return [];
-    for (let i = 0; i < 600 && !stopp; i++) {
-      await new Promise(r => setTimeout(r, 400));
+    l.jobb = start.job_id;
+    if (l.stopp) { api2('/api/job/' + start.job_id + '/cancel', {}).catch(() => {}); return []; }
+    let funnet = [];
+    while (!l.stopp) {
+      await vent(400);
       const j = await api2('/api/job/' + start.job_id);
-      if (j.status === 'running') continue;
-      if (j.status !== 'done') return [];
-      const funnet = (j.result && j.result.devices) || [];
-      mergeDevices(funnet, omr);
-      return funnet;
+      if (l.stopp) break;
+      const naa = j.status === 'done' ? (j.result && j.result.devices) || [] : j.devices || [];
+      if (naa.length && (naa.length > funnet.length || j.status === 'done')) {
+        funnet = naa;
+        mergeDevices(naa, omr);
+        renderDevices();
+      }
+      if (j.status !== 'running') break;
     }
-    return [];
+    return funnet;
   }
 
-  window.skannProtokoller = async function (omraader, melding) {
-    const mb = paa('modbus'), kx = paa('knx');
-    if (!omraader || !omraader.length || (!mb && !kx)) return {modbus: 0, knx: 0};
+  /* `bare` is one protocol asked for with its own button; without it, the ones switched on. */
+  window.skannProtokoller = async function (omraader, melding, bare) {
+    const vil = ['modbus', 'knx'].filter(p => bare ? p === bare : paa(p));
+    const antall = {modbus: 0, knx: 0};
+    let stoppet = false;
+    if (!omraader || !omraader.length || !vil.length) return antall;
     stopp = false;
-    let nMb = 0, nKx = 0;
     if (melding) melding(T('Søker også etter Modbus og KNX …', 'Also looking for Modbus and KNX …'));
-    for (const omr of omraader) {
-      if (stopp) break;
-      const [a, b] = await Promise.all([
-        mb ? ett('/api/modbus/scan', {subnet: omr, port: 502}, omr).catch(() => []) : [],
-        kx ? ett('/api/knx/scan', {subnet: omr, port: 3671, timeout: 2.0}, omr).catch(() => []) : [],
-      ]);
-      nMb += a.length; nKx += b.length;
-      if (a.length || b.length) renderDevices();
-    }
-    if (nMb || nKx) {
+    await Promise.all(vil.map(async (p) => {
+      stoppProt(p);
+      const l = loep[p] = {stopp: false, jobb: null};
+      tegnHent();
+      try {
+        for (const omr of omraader) {
+          if (l.stopp) break;
+          const kropp = p === 'modbus' ? {subnet: omr, port: 502} : {subnet: omr, port: 3671, timeout: 2.0};
+          const f = await ett(l, `/api/${p}/scan`, kropp, omr).catch(() => []);
+          antall[p] += f.length;
+        }
+      } finally { stoppet = stoppet || l.stopp; if (loep[p] === l) delete loep[p]; tegnHent(); }
+    }));
+    if (antall.modbus || antall.knx) {
       const deler = [];
-      if (nMb) deler.push(T(`${nMb} Modbus-enhet${nMb === 1 ? '' : 'er'}`, `${nMb} Modbus device${nMb === 1 ? '' : 's'}`));
-      if (nKx) deler.push(T(`${nKx} KNX-gateway${nKx === 1 ? '' : 'er'}`, `${nKx} KNX gateway${nKx === 1 ? '' : 's'}`));
-      toast(T('Fant også ', 'Also found ') + deler.join(T(' og ', ' and ')));
-    }
+      if (antall.modbus) deler.push(T(`${antall.modbus} Modbus-enhet${antall.modbus === 1 ? '' : 'er'}`, `${antall.modbus} Modbus device${antall.modbus === 1 ? '' : 's'}`));
+      if (antall.knx) deler.push(T(`${antall.knx} KNX-gateway${antall.knx === 1 ? '' : 'er'}`, `${antall.knx} KNX gateway${antall.knx === 1 ? '' : 's'}`));
+      toast(T('Fant ', 'Found ') + deler.join(T(' og ', ' and ')));
+    } else if (bare && !stoppet) toast(T(`Ingen ${bare === 'knx' ? 'KNX' : 'Modbus'}-enheter svarte`, `No ${bare === 'knx' ? 'KNX' : 'Modbus'} devices answered`), true);
     avtrykk();
-    return {modbus: nMb, knx: nKx};
+    return antall;
+  };
+  window.nabeProtKjorer = (p) => p ? !!loep[p] : Object.keys(loep).length > 0;
+  window.nabeProtPaa = (p) => paa(p);
+
+  /* ------------------------------------------------ fetch one protocol at a time, above the list */
+  let hentEl = null;
+  function tegnHent() {
+    const filter = $('protFilter');
+    if (!filter) return;
+    if (!hentEl) {
+      hentEl = document.createElement('div');
+      hentEl.id = 'protHent'; hentEl.className = 'prot-hent';
+      hentEl.setAttribute('role', 'group');
+      hentEl.setAttribute('aria-label', T('Hent én protokoll', 'Fetch one protocol'));
+      filter.before(hentEl);
+    }
+    const omr = (S.scanRanges || []).join(', ');
+    hentEl.hidden = !omr;
+    if (!omr) return;
+    const skanner = document.body.classList.contains('skanner');
+    const html = `<span>${T('Hent', 'Fetch')}</span>` + PROT.map(([p, navn]) => {
+      const gaar = !!loep[p];
+      const n = S.devices.filter(d => protAv(d) === p).length;
+      const tittel = gaar ? T(`Stopp søket etter ${navn}. Det som er funnet blir stående`, `Stop looking for ${navn}. What was found stays`)
+        : T(`Søk bare etter ${navn} i ${omr}`, `Look only for ${navn} in ${omr}`);
+      return `<button type="button" class="p-${p}${gaar ? ' gaar' : ''}" data-hent="${p}" title="${esc(tittel)}"${p === 'bacnet' && skanner ? ' disabled' : ''}>${
+        gaar ? `<i class="spin-lite" aria-hidden="true"></i>${esc(navn)} <em>${n}</em><b>${T('Stopp', 'Stop')}</b>` : esc(navn)}</button>`;
+    }).join('');
+    // Bare ved endring: lista tegnes ofte, og en knapp som bygges på nytt under pekeren mister trykket
+    if (hentEl._html !== html) { hentEl._html = html; hentEl.innerHTML = html; }
+  }
+  document.addEventListener('click', (e) => {
+    const b = e.target.closest('#protHent [data-hent]');
+    if (!b) return;
+    const p = b.dataset.hent;
+    if (loep[p]) { stoppProt(p); return; }
+    const omr = (S.scanRanges || []).slice();
+    if (!omr.length) return;
+    if (p === 'bacnet') {
+      if (document.body.classList.contains('skanner')) return;
+      S._kunProt = 'bacnet';
+      $('rangeInput').value = omr.join(', ');
+      runScan();
+    } else {
+      window.skannProtokoller(omr, null, p).then(() => {
+        if (omr.join() === (S.scanRanges || []).join()) husk(omr, S.devices.filter(d => !d._range || omr.includes(d._range)));
+      }).catch(() => {});
+    }
+  });
+
+  /* ------------------------------------------------ what to look for, asked when a scan starts */
+  const velger = document.createElement('div');
+  velger.id = 'skannValg'; velger.className = 'gs-overlay'; velger.setAttribute('role', 'dialog'); velger.setAttribute('aria-modal', 'true');
+  velger.setAttribute('aria-labelledby', 'svTittel'); velger.hidden = true;
+  document.body.append(velger);
+  let velgSvar = null, valg = {};
+  const HVA = {
+    bacnet: () => T('Who-Is. Noen sekunder', 'Who-Is. A few seconds'),
+    modbus: () => T('Port 502. Bak en gateway fylles lista underveis, hele området tar et par minutter', 'Port 502. Behind a gateway the list fills as it goes, the whole range takes a couple of minutes'),
+    knx: () => T('Gatewayer på UDP 3671. Noen sekunder', 'Gateways on UDP 3671. A few seconds'),
+  };
+  function tegnValg() {
+    const noen = PROT.some(([p]) => valg[p]);
+    const spor = $('svIkkeSpor')?.checked || false;
+    velger.innerHTML = `<div class="gs-modal sv-modal"><div class="gs-head"><span class="gd-tittel" id="svTittel">${T('Hva skal skannet lete etter?', 'What should the scan look for?')}</span>
+        <button class="gs-close" style="margin-left:auto"><span class="lbl">${T('Avbryt', 'Cancel')}</span> ✕</button></div>
+      <div class="sv-kropp">
+        <div class="sp-meta">${esc($('rangeInput').value.trim())}</div>
+        ${PROT.map(([p, navn]) => `<button type="button" class="sv-valg p-${p}${valg[p] ? ' paa' : ''}" data-sv="${p}" role="checkbox" aria-checked="${!!valg[p]}">
+          <span class="sv-t"><b>${esc(navn)}</b><small>${esc(HVA[p]())}</small></span><span class="sv-av">${valg[p] ? T('Ja', 'Yes') : T('Nei', 'No')}</span></button>`).join('')}
+        <label class="sv-spor"><input type="checkbox" id="svIkkeSpor"${spor ? ' checked' : ''}> ${T('Ikke spør igjen. Du kan endre det ved pila ved siden av Skann', 'Do not ask again. You can change it at the arrow beside Scan')}</label>
+        <div class="op-knapper"><button type="button" class="btn" data-sv="alle">${T('Skann alle', 'Scan all')}</button>
+          <button type="button" class="btn primary" data-sv="skann"${noen ? '' : ' disabled'}>${T('Skann', 'Scan')}</button></div>
+      </div></div>`;
+  }
+  function velgFerdig(ok) {
+    if (!velgSvar) return;
+    if (ok) {
+      savePrefs({protSok: true, protBacnet: !!valg.bacnet, protModbus: !!valg.modbus, protKnx: !!valg.knx, protSpor: !$('svIkkeSpor').checked});
+      tegnMeny();
+    }
+    const svar = velgSvar;
+    velgSvar = null;
+    velger.hidden = true;
+    svar(ok);
+  }
+  function velgProtokoller() {
+    return new Promise((svar) => {
+      velgSvar = svar;
+      valg = Object.fromEntries(PROT.map(([p]) => [p, paa(p)]));
+      velger.innerHTML = '';
+      tegnValg();
+      velger.hidden = false;
+      setTimeout(() => velger.querySelector('[data-sv="skann"]')?.focus(), 30);
+    });
+  }
+  velger.addEventListener('click', (e) => {
+    if (e.target === velger || e.target.closest('.gs-close')) { velgFerdig(false); return; }
+    const b = e.target.closest('[data-sv]');
+    if (!b) return;
+    const v = b.dataset.sv;
+    if (v === 'skann') velgFerdig(true);
+    else if (v === 'alle') { valg = {bacnet: true, modbus: true, knx: true}; velgFerdig(true); }
+    else { valg[v] = !valg[v]; tegnValg(); velger.querySelector(`[data-sv="${v}"]`).focus(); }
+  });
+  document.addEventListener('keydown', (e) => {
+    if (velger.hidden || !velgSvar) return;
+    if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); velgFerdig(false); }
+    // Enter skanner, uansett hva som har fokus: mellomrom slår en protokoll av og på
+    else if (e.key === 'Enter' && !e.repeat) { e.preventDefault(); e.stopPropagation(); if (PROT.some(([p]) => valg[p])) velgFerdig(true); }
+  }, true);
+
+  /* Et skann du starter spør først (om du ikke har slått det av). Det automatiske andre forsøket, «skann dette bygget»
+     og hent-knappene spør ikke. */
+  const _skannValg = runScan;
+  runScan = async function () {
+    const stille = S._autoNeste || S._kunOmraade || S._kunProt;
+    if (!stille && !document.body.classList.contains('skanner')) {
+      if (velgSvar) return;
+      if (loadPrefs().protSpor !== false && $('rangeInput').value.trim() && !(await velgProtokoller())) return;
+      stoppAlle();
+    }
+    try { return await _skannValg.apply(this, arguments); }
+    finally { S._kunProt = ''; tegnHent(); }
   };
 
   /* Who made a Modbus device that does not say: its own web page often does (the title, the Server header, the name a login
@@ -182,14 +338,16 @@
     }
   }
 
-  // Stopping the scan stops the wait for these two as well
+  // Stopping the scan stops these two as well
   const gammel = window.cancelScan;
-  if (typeof gammel === 'function') window.cancelScan = function () { stopp = true; return gammel.apply(this, arguments); };
+  if (typeof gammel === 'function') window.cancelScan = function () { stopp = true; stoppAlle(); return gammel.apply(this, arguments); };
 
   /* ------------------------------------------------ 2. filter above the list */
   let filter = 'alle';
   window.nabeProtOK = (d) => filter === 'alle' || protAv(d) === filter;
+  window.nabeProtMeny = () => tegnMeny();      // etter språkbytte
   window.nabeProtFilterTegn = function () {
+    tegnHent();
     const el = $('protFilter');
     if (!el) return;
     const tall = {bacnet: 0, modbus: 0, knx: 0};

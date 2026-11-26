@@ -142,7 +142,9 @@
         if (j.devices && j.devices.length > vist) {
           vist = j.devices.length;
           mergeDevices(j.devices, omr);
-          renderDevices();
+          // Lista til venstre tegnes med en gang, selv om dette vinduet ligger over den
+          window.__tegnNaa = true;
+          try { renderDevices(); } finally { window.__tegnNaa = false; }
           if (j.devices.some(d => d.forslag && d.forslag.brukt)) await hentKart();
           tegnEnheter();
         }
